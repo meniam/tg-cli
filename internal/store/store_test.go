@@ -21,6 +21,15 @@ func openTestDB(t *testing.T) *DB {
 	return db
 }
 
+func newestMigrationVersion(t *testing.T) int {
+	t.Helper()
+	migrations, err := listMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return migrations[len(migrations)-1].version
+}
+
 func TestOpenCreatesPrivateFileAndMigrates(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -69,8 +78,8 @@ func TestOpenCreatesPrivateFileAndMigrates(t *testing.T) {
 		t.Errorf("Path() = %q, want %q", db.Path(), path)
 	}
 	version, err := db.Version()
-	if err != nil || version != 1 {
-		t.Errorf("Version() = %d, %v, want 1", version, err)
+	if want := newestMigrationVersion(t); err != nil || version != want {
+		t.Errorf("Version() = %d, %v, want %d", version, err, want)
 	}
 	var table string
 	if err := db.read.QueryRow(`SELECT name FROM sqlite_master WHERE name='meta'`).Scan(&table); err != nil || table != "meta" {
@@ -99,7 +108,7 @@ func TestReopenPreservesData(t *testing.T) {
 	if err := second.read.QueryRow(`SELECT value FROM meta WHERE key='marker'`).Scan(&value); err != nil || value != "kept" {
 		t.Errorf("marker = %q, %v", value, err)
 	}
-	if version, err := second.Version(); err != nil || version != 1 {
+	if version, err := second.Version(); err != nil || version != newestMigrationVersion(t) {
 		t.Errorf("version = %d, %v", version, err)
 	}
 }
