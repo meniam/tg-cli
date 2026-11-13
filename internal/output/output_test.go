@@ -7,7 +7,7 @@ import (
 
 func TestSuccessShape(t *testing.T) {
 	var b bytes.Buffer
-	if err := Success(&b, map[string]any{"n": 1}); err != nil {
+	if err := Success(&b, FormatJSON, map[string]any{"n": 1}); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := b.String(), `{"ok":true,"data":{"n":1}}`+"\n"; got != want {
@@ -17,7 +17,7 @@ func TestSuccessShape(t *testing.T) {
 
 func TestSuccessNilDataIsNull(t *testing.T) {
 	var b bytes.Buffer
-	if err := Success(&b, nil); err != nil {
+	if err := Success(&b, FormatJSON, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := b.String(), `{"ok":true,"data":null}`+"\n"; got != want {
@@ -27,7 +27,7 @@ func TestSuccessNilDataIsNull(t *testing.T) {
 
 func TestFailureShape(t *testing.T) {
 	var b bytes.Buffer
-	if err := Failure(&b, "not_authorized", "log in first <now>"); err != nil {
+	if err := Failure(&b, FormatJSON, "not_authorized", "log in first <now>"); err != nil {
 		t.Fatal(err)
 	}
 	want := `{"ok":false,"error":{"code":"not_authorized","message":"log in first <now>"}}` + "\n"

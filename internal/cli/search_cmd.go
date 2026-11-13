@@ -22,7 +22,7 @@ func (a *app) searchCommand() *cobra.Command {
 			"--scope accepts repeated values or a comma-separated list. JSONL prints one hit\n" +
 			"per line in scope order.",
 		Args: cobra.ExactArgs(1), RunE: a.search,
-	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.SearchResult](), Args: []argSpec{{Name: "query", Required: true}}, Choices: append(formatChoices(), append(authorChoices(), scopeChoices()...)...), ItemPath: "hits"})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.SearchResult](), Args: []argSpec{{Name: "query", Required: true}}, Choices: append(authorChoices(), scopeChoices()...), ItemPath: "hits"})
 	cmd.SetFlagErrorFunc(func(*cobra.Command, error) error {
 		return fail(exitcode.Usage, "invalid search flags")
 	})
@@ -32,8 +32,6 @@ func (a *app) searchCommand() *cobra.Command {
 	cmd.Flags().Int("limit", 0, "hits per scope, default 20, maximum 100")
 	cmd.Flags().Bool("prefix", false, "match the last query term as a prefix")
 	cmd.Flags().Bool("deleted", false, "include messages marked deleted")
-	addFormatFlag(cmd)
-	cmd.Flags().Lookup("format").Usage = "output format: json envelope or jsonl (one hit per line)"
 	return cmd
 }
 
@@ -41,7 +39,7 @@ func (a *app) search(cmd *cobra.Command, args []string) error {
 	if strings.TrimSpace(args[0]) == "" {
 		return fail(exitcode.Usage, "search query must contain text")
 	}
-	f, err := format(cmd)
+	settings, err := a.outputSettingsFor(cmd)
 	if err != nil {
 		return err
 	}
@@ -65,5 +63,5 @@ func (a *app) search(cmd *cobra.Command, args []string) error {
 	if err := a.callOne(cmd, rpc.MethodSearch, p, &result); err != nil {
 		return err
 	}
-	return emitList(a, f, result, result.Hits, "")
+	return emitList(a, cmd, settings, result, result.Hits, "")
 }

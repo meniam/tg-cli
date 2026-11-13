@@ -58,11 +58,11 @@ func (a *app) authResend(cmd *cobra.Command, _ []string) error {
 	}
 	defer c.Close()
 	var res rpc.AuthResult
-	if err := a.call(cmd.Context(), c, rpc.MethodAuthResend, nil, &res); err != nil {
+	if err := a.call(cmd.Context(), cmd, c, rpc.MethodAuthResend, nil, &res); err != nil {
 		return err
 	}
-	fmt.Fprintln(a.deps.Stderr, codeHint(res))
-	return a.success(res)
+	a.warn(cmd, "%s", codeHint(res))
+	return a.success(cmd, res)
 }
 
 // authStatus is the account part of the daemon status.
@@ -81,10 +81,10 @@ func (a *app) authStatus(cmd *cobra.Command, _ []string) error {
 	}
 	defer c.Close()
 	var st rpc.StatusResult
-	if err := a.call(cmd.Context(), c, rpc.MethodStatus, nil, &st); err != nil {
+	if err := a.call(cmd.Context(), cmd, c, rpc.MethodStatus, nil, &st); err != nil {
 		return err
 	}
-	return a.success(authStatus{
+	return a.success(cmd, authStatus{
 		Profile:    st.Profile,
 		Connected:  st.Connected,
 		Authorized: st.Authorized,
@@ -100,10 +100,10 @@ func (a *app) authCancel(cmd *cobra.Command, _ []string) error {
 	}
 	defer c.Close()
 	var res rpc.AuthCancelResult
-	if err := a.call(cmd.Context(), c, rpc.MethodAuthCancel, nil, &res); err != nil {
+	if err := a.call(cmd.Context(), cmd, c, rpc.MethodAuthCancel, nil, &res); err != nil {
 		return err
 	}
-	return a.success(res)
+	return a.success(cmd, res)
 }
 
 // ask reads one answer. The read runs in its own goroutine so that an
@@ -186,7 +186,10 @@ func (a *app) authLogin(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	defer c.Close()
-	progress := func(format string, args ...any) { fmt.Fprintf(a.deps.Stderr, format+"\n", args...) }
+	// Progress lines are hints: --quiet silences them. The prompts below are
+	// not: the login cannot go on without an answer, so they always print.
+	progress := func(format string, args ...any) { a.warn(cmd, format, args...) }
+	quiet := a.settings(cmd).quiet
 
 	byQR, _ := cmd.Flags().GetBool("qr")
 	phone, _ := cmd.Flags().GetString("phone")
@@ -200,7 +203,7 @@ func (a *app) authLogin(cmd *cobra.Command, _ []string) error {
 	// the JSON, so reusing one value would keep stale ones from the last step.
 	step := func(method string, params any) (rpc.AuthResult, error) {
 		var res rpc.AuthResult
-		err := a.call(ctx, c, method, params, &res)
+		err := a.call(ctx, cmd, c, method, params, &res)
 		return res, err
 	}
 
@@ -225,9 +228,11 @@ func (a *app) authLogin(cmd *cobra.Command, _ []string) error {
 				progress("Open Telegram on your phone: Settings, Devices, Link Desktop Device, and scan this code (it refreshes by itself, Ctrl-C cancels):")
 			}
 			shownQR = true
-			if err := renderQR(a.deps.Stderr, res.QRURL, a.qrColor()); err != nil {
-				a.cancelLogin(c)
-				return fail(exitcode.Failure, "%v", err)
+			if !quiet {
+				if err := renderQR(a.deps.Stderr, res.QRURL, a.qrColor()); err != nil {
+					a.cancelLogin(c)
+					return fail(exitcode.Failure, "%v", err)
+				}
 			}
 			progress("%s", res.QRURL)
 			if res, err = step(rpc.MethodAuthWait, nil); err != nil {
@@ -266,7 +271,7 @@ func (a *app) authLogin(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	progress("Logged in%s.", accountLabel(res.User))
-	return a.success(res)
+	return a.success(cmd, res)
 }
 
 // accountLabel formats " as First Last (@username)" for a progress line.

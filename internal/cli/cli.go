@@ -13,7 +13,6 @@ import (
 
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
-	"tg-cli/internal/output"
 )
 
 // defaultCallTimeout bounds one RPC call, matching the daemon request deadline.
@@ -58,8 +57,9 @@ type app struct {
 	specs map[*cobra.Command]commandSpec
 }
 
-// Execute runs the command line and returns the process exit code. The result
-// is always one JSON envelope on stdout; logs and prompts go to stderr.
+// Execute runs the command line and returns the process exit code. A result is
+// one envelope on stdout in the chosen format, or one item per line for JSONL;
+// logs and prompts go to stderr.
 func Execute(ctx context.Context, args []string, deps Deps) int {
 	if deps.CallTimeout == 0 {
 		deps.CallTimeout = defaultCallTimeout
@@ -79,7 +79,9 @@ func Execute(ctx context.Context, args []string, deps Deps) int {
 	if errors.As(err, &ce) {
 		exit = ce.exit
 	}
-	_ = output.Failure(deps.Stdout, exitcode.Name(exit), withIDHint(err.Error(), args))
+	// The command that failed may be a subcommand, an unknown name or nothing at
+	// all: the format is read from wherever cobra stopped.
+	a.failure(root, exit, withIDHint(err.Error(), args))
 	return exit
 }
 
@@ -109,6 +111,7 @@ func (a *app) rootCommand() *cobra.Command {
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().String("profile", daemon.DefaultProfile, "account profile, each has its own session and daemon")
+	addOutputFlags(root)
 	root.AddCommand(
 		a.daemonCommand(),
 		a.authCommand(),
@@ -120,8 +123,4 @@ func (a *app) rootCommand() *cobra.Command {
 		a.schemaCommand(root),
 	)
 	return root
-}
-
-func (a *app) success(data any) error {
-	return output.Success(a.deps.Stdout, data)
 }

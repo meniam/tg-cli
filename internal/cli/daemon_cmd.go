@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 	"regexp"
@@ -99,7 +98,7 @@ func (a *app) credentials(cmd *cobra.Command, paths daemon.Paths) (daemon.Telegr
 			return cfg, fail(exitcode.Failure, "remember the client preset: %v", err)
 		}
 	}
-	fmt.Fprintf(a.deps.Stderr, "note: using the %q official client preset. Telegram puts accounts of unofficial clients under observation (opentele documentation, quoting Telegram's API terms); the risk for this tool is not assessed.\n", name)
+	a.warn(cmd, "note: using the %q official client preset. Telegram puts accounts of unofficial clients under observation (opentele documentation, quoting Telegram's API terms); the risk for this tool is not assessed.", name)
 	cfg.AppID, cfg.AppHash = creds.AppID, creds.AppHash
 	return cfg, nil
 }
@@ -176,12 +175,23 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		Profile:  profile,
 		Paths:    paths,
 		Telegram: tg,
-		Log:      slog.New(slog.NewTextHandler(a.deps.Stderr, nil)),
+		Log:      a.daemonLog(cmd),
 	})
 	if err != nil {
 		return fail(exitcode.Failure, "%v", err)
 	}
-	return a.success(daemonStartedResult{Stopped: true})
+	return a.success(cmd, daemonStartedResult{Stopped: true})
+}
+
+// daemonLog is the journal of the daemon on stderr. --quiet keeps it to the
+// lines that report a problem: the start and stop lines are the progress of the
+// command, a warning is not.
+func (a *app) daemonLog(cmd *cobra.Command) *slog.Logger {
+	level := slog.LevelInfo
+	if a.settings(cmd).quiet {
+		level = slog.LevelWarn
+	}
+	return slog.New(slog.NewTextHandler(a.deps.Stderr, &slog.HandlerOptions{Level: level}))
 }
 
 // daemonStartedResult is what `daemon start` prints when the daemon has stopped.
@@ -196,10 +206,10 @@ func (a *app) daemonStatus(cmd *cobra.Command, _ []string) error {
 	}
 	defer c.Close()
 	var st rpc.StatusResult
-	if err := a.call(cmd.Context(), c, rpc.MethodStatus, nil, &st); err != nil {
+	if err := a.call(cmd.Context(), cmd, c, rpc.MethodStatus, nil, &st); err != nil {
 		return err
 	}
-	return a.success(st)
+	return a.success(cmd, st)
 }
 
 func (a *app) daemonStop(cmd *cobra.Command, _ []string) error {
@@ -209,8 +219,8 @@ func (a *app) daemonStop(cmd *cobra.Command, _ []string) error {
 	}
 	defer c.Close()
 	var res rpc.ShutdownResult
-	if err := a.call(cmd.Context(), c, rpc.MethodShutdown, nil, &res); err != nil {
+	if err := a.call(cmd.Context(), cmd, c, rpc.MethodShutdown, nil, &res); err != nil {
 		return err
 	}
-	return a.success(res)
+	return a.success(cmd, res)
 }

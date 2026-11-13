@@ -37,7 +37,7 @@ func (a *app) noteCommand() *cobra.Command {
 			"to continue after a page. JSONL prints one note per line and no cursor line.\n" +
 			"For a negative chat id use --chat=-12345 (or --chat -12345 --).",
 		Args: cobra.NoArgs, RunE: a.noteList,
-	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.NoteListResult](), Choices: append(formatChoices(), authorChoices()...), ItemPath: "notes"})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.NoteListResult](), Choices: authorChoices(), ItemPath: "notes"})
 	list.Flags().String("chat", "", "filter by chat reference")
 	list.Flags().String("person", "", "filter by person reference")
 	list.Flags().Int64("message", 0, "filter one message id, requires --chat")
@@ -45,8 +45,6 @@ func (a *app) noteCommand() *cobra.Command {
 	list.Flags().String("tag", "", "filter by tag")
 	list.Flags().Int("limit", 0, "notes per page, default 50, maximum 500")
 	list.Flags().Int64("before-id", 0, "return notes with a smaller id")
-	addFormatFlag(list)
-	list.Flags().Lookup("format").Usage = "output format: json envelope or jsonl (one note per line, no cursor line)"
 
 	deleteCmd := a.annotate(&cobra.Command{
 		Use: "delete <id> | --author owner|ai --yes", Short: "Delete one note or all notes by author",
@@ -109,11 +107,11 @@ func (a *app) noteAdd(cmd *cobra.Command, args []string) error {
 	if err := a.callOne(cmd, rpc.MethodNoteAdd, p, &result); err != nil {
 		return err
 	}
-	return a.success(result)
+	return a.success(cmd, result)
 }
 
 func (a *app) noteList(cmd *cobra.Command, _ []string) error {
-	f, err := format(cmd)
+	settings, err := a.outputSettingsFor(cmd)
 	if err != nil {
 		return err
 	}
@@ -138,7 +136,7 @@ func (a *app) noteList(cmd *cobra.Command, _ []string) error {
 	if err := a.callOne(cmd, rpc.MethodNoteList, p, &result); err != nil {
 		return err
 	}
-	return emitList(a, f, result, result.Notes, "")
+	return emitList(a, cmd, settings, result, result.Notes, "")
 }
 
 func (a *app) noteDelete(cmd *cobra.Command, args []string) error {
@@ -158,7 +156,7 @@ func (a *app) noteDelete(cmd *cobra.Command, args []string) error {
 		if err := a.callOne(cmd, rpc.MethodNoteDeleteByAuthor, rpc.NoteDeleteByAuthorParams{Author: author}, &result); err != nil {
 			return err
 		}
-		return a.success(result)
+		return a.success(cmd, result)
 	}
 	if len(args) != 1 {
 		return fail(exitcode.Usage, "give a note id or --author owner|ai --yes")
@@ -174,5 +172,5 @@ func (a *app) noteDelete(cmd *cobra.Command, args []string) error {
 	if err := a.callOne(cmd, rpc.MethodNoteDelete, rpc.NoteDeleteParams{ID: id}, &result); err != nil {
 		return err
 	}
-	return a.success(result)
+	return a.success(cmd, result)
 }

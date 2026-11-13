@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"tg-cli/internal/output"
 )
 
 // safetyClass is what a command does outside its own process. An agent reads it
@@ -38,9 +40,13 @@ type flagChoices struct {
 	Values []string
 }
 
-// formatChoices are the allowed values of the --format flag of a list command.
-func formatChoices() []flagChoices {
-	return []flagChoices{{Flag: "format", Values: outputFormats()}}
+// formatNames turns a list of formats into the strings an agent types.
+func formatNames(formats []output.Format) []string {
+	names := make([]string, len(formats))
+	for i, f := range formats {
+		names[i] = string(f)
+	}
+	return names
 }
 
 // authorChoices are the allowed values of a --author flag that takes both.

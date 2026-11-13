@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"tg-cli/internal/exitcode"
+	"tg-cli/internal/output"
 	"tg-cli/internal/schema"
 )
 
@@ -50,10 +51,7 @@ func TestEveryCommandIsAnnotated(t *testing.T) {
 		}
 		// A command with JSONL says where the items live, and one without it
 		// does not pretend to have them.
-		hasJSONL := false
-		for _, c := range spec.Choices {
-			hasJSONL = hasJSONL || (c.Flag == "format" && slices.Contains(c.Values, "jsonl"))
-		}
+		hasJSONL := slices.Contains(commandFormats(spec), string(output.FormatJSONL))
 		if hasJSONL != (spec.ItemPath != "") {
 			t.Errorf("%s: format jsonl and item path %q disagree", path, spec.ItemPath)
 		}

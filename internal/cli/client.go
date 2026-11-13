@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -30,6 +31,9 @@ func (a *app) connect(ctx context.Context, cmd *cobra.Command) (*rpc.Client, err
 	if err != nil {
 		return nil, err
 	}
+	// The socket path names the profile and nothing secret: it is the one fact
+	// that tells a lost daemon from a wrong profile.
+	a.diagnose(cmd, "connect profile=%s socket=%s", profile, paths.Socket)
 	c, err := rpc.Dial(ctx, "unix", paths.Socket)
 	if err != nil {
 		if rpc.IsNotRunning(err) {
@@ -40,11 +44,16 @@ func (a *app) connect(ctx context.Context, cmd *cobra.Command) (*rpc.Client, err
 	return c, nil
 }
 
-// call runs one RPC and turns failures into command errors with exit codes.
-func (a *app) call(ctx context.Context, c *rpc.Client, method string, params, result any) error {
+// call runs one RPC and turns failures into command errors with exit codes. It
+// reports the call on stderr under --verbose.
+func (a *app) call(ctx context.Context, cmd *cobra.Command, c *rpc.Client, method string, params, result any) error {
 	ctx, cancel := context.WithTimeout(ctx, a.deps.CallTimeout)
 	defer cancel()
-	return translate(c.Call(ctx, method, params, result))
+	started := time.Now()
+	a.diagnose(cmd, "call method=%s", method)
+	err := translate(c.Call(ctx, method, params, result))
+	a.diagnose(cmd, "call method=%s took=%s failed=%t", method, time.Since(started).Round(time.Millisecond), err != nil)
+	return err
 }
 
 func translate(err error) error {

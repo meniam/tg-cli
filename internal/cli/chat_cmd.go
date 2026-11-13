@@ -14,10 +14,9 @@ func (a *app) chatCommand() *cobra.Command {
 		Short: "List chats, newest first (read only)",
 		Args:  cobra.NoArgs,
 		RunE:  a.chatList,
-	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.ChatListResult](), Choices: append(formatChoices(), chatTypeChoices()...), ItemPath: "chats"})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.ChatListResult](), Choices: chatTypeChoices(), ItemPath: "chats"})
 	list.Flags().Int("limit", 50, "maximum number of chats, 1 to 500")
 	list.Flags().String("type", "", "only chats of this type: user, bot, group, supergroup, channel")
-	addFormatFlag(list)
 
 	resolve := a.annotate(&cobra.Command{
 		Use:   "resolve <chat>",
@@ -43,7 +42,7 @@ func (a *app) chatCommand() *cobra.Command {
 }
 
 func (a *app) chatList(cmd *cobra.Command, _ []string) error {
-	f, err := format(cmd)
+	settings, err := a.outputSettingsFor(cmd)
 	if err != nil {
 		return err
 	}
@@ -53,5 +52,5 @@ func (a *app) chatList(cmd *cobra.Command, _ []string) error {
 	if err := a.callOne(cmd, rpc.MethodChatList, rpc.ChatListParams{Limit: limit, Type: chatType}, &res); err != nil {
 		return err
 	}
-	return emitList(a, f, res, res.Chats, "")
+	return emitList(a, cmd, settings, res, res.Chats, "")
 }

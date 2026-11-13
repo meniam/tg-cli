@@ -9,6 +9,7 @@ import (
 
 	"tg-cli/internal/buildinfo"
 	"tg-cli/internal/exitcode"
+	"tg-cli/internal/output"
 	"tg-cli/internal/schema"
 )
 
@@ -64,6 +65,9 @@ type commandDoc struct {
 	Dangerous bool `json:"dangerous"`
 	// Result is the Go type of data in the success envelope.
 	Result string `json:"result"`
+	// Formats are the --format values this command accepts: JSONL is left out
+	// for a command that returns no list.
+	Formats []string `json:"formats"`
 	// Fields are the paths of the result, for a command that returns an object.
 	Fields []schema.Field `json:"fields,omitempty"`
 	// Item is the list a JSONL line is taken from, for a command that prints
@@ -110,7 +114,7 @@ func schemaDocFor(root *cobra.Command, specs map[*cobra.Command]commandSpec) sch
 		SchemaVersion: schemaVersion,
 		Tool:          toolInfo{Name: root.Name(), Version: info.Version, Revision: info.Revision},
 		Output: outputDoc{
-			Formats: outputFormats(),
+			Formats: formatNames(output.Formats()),
 			Success: `{"ok":true,"data":...}`,
 			Failure: `{"ok":false,"error":{"code":"<name>","message":"..."}}`,
 		},
@@ -133,6 +137,7 @@ func commandDocFor(cmd *cobra.Command, path string, spec commandSpec) commandDoc
 		Safety:      string(spec.Safety),
 		Dangerous:   spec.Risk == dangerous,
 		Result:      resultName(spec.Result),
+		Formats:     commandFormats(spec),
 		Fields:      schema.Fields(spec.Result),
 		Item:        itemDocFor(spec),
 		Flags:       flagDocs(cmd.LocalFlags(), spec.Choices),
@@ -145,6 +150,15 @@ func commandDocFor(cmd *cobra.Command, path string, spec commandSpec) commandDoc
 		doc.Args = append(doc.Args, argDoc{Name: arg.Name, Required: arg.Required, Variadic: arg.Variadic})
 	}
 	return doc
+}
+
+// commandFormats are the --format values a command accepts: every format, or
+// every format but JSONL for a command that returns no list.
+func commandFormats(spec commandSpec) []string {
+	if spec.ItemPath == "" {
+		return formatNames(output.FormatsWithoutJSONL())
+	}
+	return formatNames(output.Formats())
 }
 
 // itemDocFor describes the JSONL line of a list command: the path of the list in
@@ -209,8 +223,8 @@ func (a *app) versionCommand() *cobra.Command {
 		Use:   "version",
 		Short: "Print the version of the tool and the revision it was built from (read only, no daemon needed)",
 		Args:  cobra.NoArgs,
-		RunE: func(*cobra.Command, []string) error {
-			return a.success(buildinfo.Get())
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return a.success(cmd, buildinfo.Get())
 		},
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[buildinfo.Info]()})
 }
@@ -222,8 +236,8 @@ func (a *app) schemaCommand(root *cobra.Command) *cobra.Command {
 		Use:   "schema",
 		Short: "Print the machine description of every command, argument, flag and exit code (read only, no daemon needed)",
 		Args:  cobra.NoArgs,
-		RunE: func(*cobra.Command, []string) error {
-			return a.success(schemaDocFor(root, a.specs))
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return a.success(cmd, schemaDocFor(root, a.specs))
 		},
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[schemaDoc]()})
 }

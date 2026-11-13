@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"io"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -10,35 +11,14 @@ import (
 	"tg-cli/internal/rpc"
 )
 
-// Output formats of the commands that return lists.
-const (
-	formatJSON  = "json"
-	formatJSONL = "jsonl"
-)
-
-// outputFormats returns every accepted --format value, in a fixed order.
-func outputFormats() []string { return []string{formatJSON, formatJSONL} }
-
-// addFormatFlag adds --format to a command that returns a list.
-func addFormatFlag(cmd *cobra.Command) {
-	cmd.Flags().String("format", formatJSON, "output format: json (one envelope) or jsonl (one item per line, then {\"next_cursor\":...} when more follow)")
-}
-
-// format reads and checks --format.
-func format(cmd *cobra.Command) (string, error) {
-	f, _ := cmd.Flags().GetString("format")
-	if f != formatJSON && f != formatJSONL {
-		return "", fail(exitcode.Usage, "--format must be json or jsonl, got %q", f)
+// emitList prints a list result: the envelope in the chosen format, or one item
+// per line for JSONL. The item lines are built only when they are asked for.
+func emitList[T any](a *app, cmd *cobra.Command, settings outputSettings, result any, items []T, nextCursor string) error {
+	var lines func(io.Writer) error
+	if settings.format == output.FormatJSONL {
+		lines = func(w io.Writer) error { return output.Lines(w, items, nextCursor) }
 	}
-	return f, nil
-}
-
-// emitList prints a list result: the JSON envelope, or JSONL for --format jsonl.
-func emitList[T any](a *app, f string, result any, items []T, nextCursor string) error {
-	if f == formatJSONL {
-		return output.Lines(a.deps.Stdout, items, nextCursor)
-	}
-	return a.success(result)
+	return a.emit(settings, result, lines)
 }
 
 // callOne connects to the daemon, runs one RPC and closes the connection.
@@ -48,7 +28,7 @@ func (a *app) callOne(cmd *cobra.Command, method string, params, result any) err
 		return err
 	}
 	defer c.Close()
-	return a.call(cmd.Context(), c, method, params, result)
+	return a.call(cmd.Context(), cmd, c, method, params, result)
 }
 
 func (a *app) chatResolve(cmd *cobra.Command, args []string) error {
@@ -56,7 +36,7 @@ func (a *app) chatResolve(cmd *cobra.Command, args []string) error {
 	if err := a.callOne(cmd, rpc.MethodChatResolve, rpc.ChatRefParams{Chat: args[0]}, &res); err != nil {
 		return err
 	}
-	return a.success(res)
+	return a.success(cmd, res)
 }
 
 func (a *app) chatInfo(cmd *cobra.Command, args []string) error {
@@ -64,7 +44,7 @@ func (a *app) chatInfo(cmd *cobra.Command, args []string) error {
 	if err := a.callOne(cmd, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: args[0]}, &res); err != nil {
 		return err
 	}
-	return a.success(res)
+	return a.success(cmd, res)
 }
 
 func (a *app) chatInviteInfo(cmd *cobra.Command, args []string) error {
@@ -72,7 +52,7 @@ func (a *app) chatInviteInfo(cmd *cobra.Command, args []string) error {
 	if err := a.callOne(cmd, rpc.MethodChatInviteInfo, rpc.ChatRefParams{Chat: args[0]}, &res); err != nil {
 		return err
 	}
-	return a.success(res)
+	return a.success(cmd, res)
 }
 
 func (a *app) messageCommand() *cobra.Command {
@@ -91,13 +71,12 @@ func (a *app) messageCommand() *cobra.Command {
 			"message sent exactly at that time.",
 		Args: cobra.ExactArgs(1),
 		RunE: a.messageHistory,
-	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: formatChoices(), ItemPath: "messages"})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, ItemPath: "messages"})
 	history.Flags().Int("limit", 0, "messages per page, 1 to 100 (default 20)")
 	history.Flags().String("since", "", "only messages sent at this time or later (RFC 3339)")
 	history.Flags().String("until", "", "only messages sent at this time or earlier (RFC 3339)")
 	history.Flags().Int("topic", 0, "read one topic of a forum chat, by the topic id")
 	history.Flags().String("cursor", "", "continue after a previous page, the value of next_cursor")
-	addFormatFlag(history)
 
 	get := a.annotate(&cobra.Command{
 		Use:   "get <chat> <id>",
@@ -111,16 +90,15 @@ func (a *app) messageCommand() *cobra.Command {
 		Short: "Read the pinned messages of a chat (read only)",
 		Args:  cobra.ExactArgs(1),
 		RunE:  a.messagePinned,
-	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: formatChoices(), ItemPath: "messages"})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, ItemPath: "messages"})
 	pinned.Flags().Int("limit", 0, "how many pinned messages, 1 to 100 (default 20)")
-	addFormatFlag(pinned)
 
 	cmd.AddCommand(history, get, pinned)
 	return cmd
 }
 
 func (a *app) messageHistory(cmd *cobra.Command, args []string) error {
-	f, err := format(cmd)
+	settings, err := a.outputSettingsFor(cmd)
 	if err != nil {
 		return err
 	}
@@ -135,7 +113,7 @@ func (a *app) messageHistory(cmd *cobra.Command, args []string) error {
 	if err := a.callOne(cmd, rpc.MethodMessageHistory, p, &res); err != nil {
 		return err
 	}
-	return emitList(a, f, res, res.Messages, res.NextCursor)
+	return emitList(a, cmd, settings, res, res.Messages, res.NextCursor)
 }
 
 func (a *app) messageGet(cmd *cobra.Command, args []string) error {
@@ -147,11 +125,11 @@ func (a *app) messageGet(cmd *cobra.Command, args []string) error {
 	if err := a.callOne(cmd, rpc.MethodMessageGet, rpc.MessageGetParams{Chat: args[0], ID: id}, &res); err != nil {
 		return err
 	}
-	return a.success(res)
+	return a.success(cmd, res)
 }
 
 func (a *app) messagePinned(cmd *cobra.Command, args []string) error {
-	f, err := format(cmd)
+	settings, err := a.outputSettingsFor(cmd)
 	if err != nil {
 		return err
 	}
@@ -161,5 +139,5 @@ func (a *app) messagePinned(cmd *cobra.Command, args []string) error {
 	if err := a.callOne(cmd, rpc.MethodMessagePinned, p, &res); err != nil {
 		return err
 	}
-	return emitList(a, f, res, res.Messages, "")
+	return emitList(a, cmd, settings, res, res.Messages, "")
 }

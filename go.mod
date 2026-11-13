@@ -5,6 +5,8 @@ go 1.27.4
 require (
 	github.com/gotd/td v0.166.0
 	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.9
+	github.com/toon-format/toon-go v1.0.1
 	golang.org/x/term v0.48.0
 	golang.org/x/text v0.44.0
 	modernc.org/sqlite v1.62.0
@@ -38,7 +40,6 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
-	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/yuin/goldmark v1.8.5 // indirect
 	go.opentelemetry.io/otel v1.45.0 // indirect
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect

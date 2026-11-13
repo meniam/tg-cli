@@ -1,0 +1,136 @@
+package cli
+
+import (
+	"fmt"
+	"io"
+
+	"github.com/spf13/cobra"
+
+	"tg-cli/internal/exitcode"
+	"tg-cli/internal/output"
+)
+
+// The output pipeline lives here: the global flags that choose a format and a
+// level of talking are declared once, read once, and every command prints
+// through app.emit and app.warn rather than writing to stdout or stderr itself.
+
+// outputSettings are the choices of one run: the format, and how much the
+// commands say on stderr.
+type outputSettings struct {
+	format output.Format
+	// quiet removes hints and progress lines; errors are never removed.
+	quiet bool
+	// verbose adds diagnostics about the call.
+	verbose bool
+}
+
+// addOutputFlags declares --format, --human, --quiet and --verbose on the root
+// command. They are persistent, so every command accepts them in any position.
+func addOutputFlags(root *cobra.Command) {
+	flags := root.PersistentFlags()
+	flags.String("format", string(output.FormatJSON),
+		"output format: json (one envelope, the default), jsonl (one item per line, list commands only), toon (the same envelope, compact) or human (for a person)")
+	flags.Bool("human", false, "short for --format human")
+	flags.Bool("quiet", false, "hide hints and progress on stderr; errors are still printed")
+	flags.Bool("verbose", false, "print diagnostics about the call on stderr")
+}
+
+// outputSettingsFor reads the global output flags of a command.
+//
+// The flags are read from the root command, so no subcommand can shadow them,
+// and they are accepted before or after the command name.
+func (a *app) outputSettingsFor(cmd *cobra.Command) (outputSettings, error) {
+	root := cmd.Root()
+	quiet, _ := root.PersistentFlags().GetBool("quiet")
+	verbose, _ := root.PersistentFlags().GetBool("verbose")
+	settings := outputSettings{quiet: quiet, verbose: verbose}
+	format, err := requestedFormat(root)
+	if err != nil {
+		return settings, err
+	}
+	settings.format = format
+	// A command that returns no list has nothing to print one item per line.
+	if format == output.FormatJSONL && a.specs[cmd].ItemPath == "" {
+		return settings, fail(exitcode.Usage, "--format jsonl is for commands that return a list, %q is not one", cmd.CommandPath())
+	}
+	return settings, nil
+}
+
+// requestedFormat reads --format and --human, which belong to the root command.
+// It does not look at the command itself, so a failure can ask for the format
+// without going through the rule that JSONL needs a list.
+func requestedFormat(root *cobra.Command) (output.Format, error) {
+	if human, _ := root.PersistentFlags().GetBool("human"); human {
+		return output.FormatHuman, nil
+	}
+	name, _ := root.PersistentFlags().GetString("format")
+	format, err := output.ParseFormat(name)
+	if err != nil {
+		return "", fail(exitcode.Usage, "%v", err)
+	}
+	return format, nil
+}
+
+// emit prints a success result: the envelope in the chosen format, or the items
+// one per line for JSONL. lines is nil for a command that returns one object;
+// such a command cannot be asked for JSONL, because outputSettingsFor refuses it.
+func (a *app) emit(settings outputSettings, data any, lines func(io.Writer) error) error {
+	if settings.format == output.FormatJSONL {
+		return lines(a.deps.Stdout)
+	}
+	return output.Success(a.deps.Stdout, settings.format, data)
+}
+
+// success prints a result that has no items, so it can never be JSONL.
+func (a *app) success(cmd *cobra.Command, data any) error {
+	settings, err := a.outputSettingsFor(cmd)
+	if err != nil {
+		return err
+	}
+	return a.emit(settings, data, nil)
+}
+
+// warn writes a hint or a progress line to stderr, unless --quiet asked for
+// silence. An error never goes through here: it reaches the agent as a failure
+// envelope whatever the flags say.
+func (a *app) warn(cmd *cobra.Command, format string, args ...any) {
+	if a.settings(cmd).quiet {
+		return
+	}
+	fmt.Fprintf(a.deps.Stderr, format+"\n", args...)
+}
+
+// settings returns the output settings of a command for a path that prints no
+// result: --quiet and --verbose still hold when --format is wrong, so a hint is
+// silenced rather than printed because a later error will be reported.
+func (a *app) settings(cmd *cobra.Command) outputSettings {
+	settings, err := a.outputSettingsFor(cmd)
+	if err != nil && settings.format == "" {
+		settings.format = output.FormatJSON
+	}
+	return settings
+}
+
+// diagnose writes a diagnostic line to stderr under --verbose. It reports the
+// shape of a call (method, socket path, how long it took), never what the call
+// returned: no message text, no chat title, no name, no phone, no secret.
+func (a *app) diagnose(cmd *cobra.Command, format string, args ...any) {
+	if cmd == nil || !a.settings(cmd).verbose {
+		return
+	}
+	fmt.Fprintf(a.deps.Stderr, "debug: "+format+"\n", args...)
+}
+
+// failure prints the failure envelope in the format the run asked for, falling
+// back to JSON when the flag value itself is the problem or the command never
+// got far enough to know its formats.
+func (a *app) failure(cmd *cobra.Command, exit int, message string) {
+	format, err := requestedFormat(cmd.Root())
+	if err != nil {
+		format = output.FormatJSON // the flag value itself is the problem
+	}
+	// A write error on stdout cannot be reported anywhere else, and it must not
+	// replace the command's own failure: the exit code already tells the agent
+	// that something went wrong.
+	_ = output.Failure(a.deps.Stdout, format, exitcode.Name(exit), message)
+}
