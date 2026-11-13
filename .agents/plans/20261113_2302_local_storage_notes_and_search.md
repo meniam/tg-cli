@@ -10,7 +10,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-13
-- Next safe step: шаг 6b (запись «по пути» из ответов Telegram), исполнитель Codex, проверяет Claude.
+- Next safe step: шаг 7 (команды `note` и `search` в CLI), исполнитель Codex, проверяет Claude.
 
 ## Context and sources
 
@@ -93,7 +93,7 @@ Daemon запоминает всё, что загрузил из Telegram (ча�
 - [x] 3. Схема версии 1 и FTS (`chats_fts`, `people_fts`, `messages_fts`, `notes_fts`) с триггерами синхронизации. Тесты: вставка, правка, удаление дают нужный результат поиска; `ё` и регистр.
 - [x] 4. API хранилища для данных Telegram: `UpsertChats`, `UpsertPeople`, `UpsertMessages` (повтор без изменений ничего не плодит; смена текста пишет прежний в `message_versions`; сырой JSON), `MarkMessagesDeleted`, чтение. Тесты, в том числе повторная загрузка не затрагивает пометки.
 - [x] 5. Пометки (`AddNote`, `ListNotes`, `DeleteNote`) и поиск (`Search` по областям `chats`, `people`, `messages`, `notes`, фильтр автора, лимит, сниппет, ранжирование `bm25`). Тесты, включая то, что пометки AI отфильтровываются.
-- [ ] 6. (делится на 6a: открытие базы, `daemon.Paths.Database`, методы `note.*` и `search`; 6b: запись «по пути» из ответов Telegram) Daemon: открытие базы при старте, `daemon.Paths.Database`, запись «по пути» после ответов `chat.list`, `chat.resolve`, `chat.info`, `message.history`, `message.get`, `message.pinned`; методы RPC `note.add`, `note.list`, `note.delete`, `search`. Тесты на подмене Telegram: данные сохраняются, повторная загрузка не плодит дубли, сбой базы не ломает ответ, поиск работает при `Telegram`, который ничего не отвечает.
+- [x] 6. (делится на 6a: открытие базы, `daemon.Paths.Database`, методы `note.*` и `search`; 6b: запись «по пути» из ответов Telegram) Daemon: открытие базы при старте, `daemon.Paths.Database`, запись «по пути» после ответов `chat.list`, `chat.resolve`, `chat.info`, `message.history`, `message.get`, `message.pinned`; методы RPC `note.add`, `note.list`, `note.delete`, `search`. Тесты на подмене Telegram: данные сохраняются, повторная загрузка не плодит дубли, сбой базы не ломает ответ, поиск работает при `Telegram`, который ничего не отвечает.
 - [ ] 7. CLI: `note add|list|delete`, `search` (флаги `--scope`, `--author`, `--limit`, `--format`), ответы по общему конверту, коды выхода. Тесты по образцу `internal/cli`.
 - [ ] 8. Документы: `AGENTS.md` (раздел Running, схема), `FEATURES.md` (статусы 10.x и пометки через `docwriter`), решения в `.agents/decisions/`.
 - [ ] 9. Живая проверка Claude на аккаунте владельца: `chat list` и `message history`, затем `search` и `note` без обращения к Telegram; вывод фильтруется до формы.
@@ -151,6 +151,8 @@ Daemon запоминает всё, что загрузил из Telegram (ча�
 - Следствие шага 6: `internal/daemon` импортирует `internal/store`, поэтому `internal/cli` зависит от `store` транзитивно через `daemon`. Тест границы проверяет прямой импорт `store` в `cli` и по-прежнему запрещает транзитивные `tgclient` и gotd.
 
 - Шаг 6a принят (2026-11-14): Daemon открывает базу до сокета, методы `note.add|list|delete|delete_by_author` и `search` не требуют входа и соединения, имена `@username` ищутся сначала в базе. Граница `cli` и `store` записана решением [cli зависит от store только через daemon](../decisions/20261114_0005_cli_may_reach_the_store_only_through_the_daemon.md).
+
+- Шаг 6b принят (2026-11-14) с исправлением: Codex передавал число участников 0 как явное значение, и оно стирало настоящее (в `chat.info` ноль означает «не знаем»); теперь `positiveIntPointer`, тест Codex, закреплявший старое поведение, исправлен, добавлен тест `TestChatInfoWithoutMemberCountKeepsTheStoredOne`. Запись идёт синхронно перед возвратом ответа, ошибка базы только логируется без данных из ответа.
 
 ## Open questions
 
