@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/peers"
@@ -48,10 +47,12 @@ type Client struct {
 	ready     chan struct{}
 	readyOnce sync.Once
 
-	mgr       *peers.Manager // resolves chat references to Telegram peers
-	mgrMu     sync.Mutex
-	mgrReady  bool
-	preloaded atomic.Bool // the first dialogs were read to fill the peer cache
+	mgr         *peers.Manager // resolves chat references to Telegram peers
+	mgrMu       sync.Mutex
+	mgrReady    bool
+	preloadMu   sync.Mutex
+	preloadDone chan struct{}
+	preloaded   bool // the first dialogs were read to fill the peer cache
 }
 
 // New creates a client. It does not connect until Run is called.
@@ -98,6 +99,10 @@ func (c *Client) Self(ctx context.Context) (*rpc.User, error) {
 // Every dialog read also teaches the peer cache, so that references to these
 // chats by id resolve later.
 func (c *Client) Chats(ctx context.Context, limit int, chatType string) ([]rpc.Chat, error) {
+	return c.chats(ctx, limit, chatType, false)
+}
+
+func (c *Client) chats(ctx context.Context, limit int, chatType string, requireCache bool) ([]rpc.Chat, error) {
 	m, err := c.manager(ctx)
 	if err != nil {
 		return nil, err
@@ -136,7 +141,9 @@ func (c *Client) Chats(ctx context.Context, limit int, chatType string) ([]rpc.C
 		userList = append(userList, u)
 	}
 	// A failed cache update must not fail the listing.
-	_ = m.Apply(ctx, userList, groups)
+	if err := m.Apply(ctx, userList, groups); err != nil && requireCache {
+		return nil, mapError(err)
+	}
 	return chats, nil
 }
 

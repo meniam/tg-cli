@@ -92,11 +92,41 @@ func (c *Client) resolve(ctx context.Context, ref chatref.Ref) (peers.Peer, erro
 // preloadDialogs reads the first dialogs once, which fills the peer cache. It
 // reports whether it did something new.
 func (c *Client) preloadDialogs(ctx context.Context) bool {
-	if !c.preloaded.CompareAndSwap(false, true) {
-		return false
+	for {
+		c.preloadMu.Lock()
+		if c.preloaded {
+			c.preloadMu.Unlock()
+			return false
+		}
+		if done := c.preloadDone; done != nil {
+			c.preloadMu.Unlock()
+			select {
+			case <-done:
+				c.preloadMu.Lock()
+				loaded := c.preloaded
+				c.preloadMu.Unlock()
+				if loaded {
+					return true // this lookup can retry with the new cache
+				}
+				continue // the first attempt failed
+			case <-ctx.Done():
+				return false
+			}
+		}
+		done := make(chan struct{})
+		c.preloadDone = done
+		c.preloadMu.Unlock()
+
+		_, err := c.chats(ctx, preloadLimit, "", true)
+		c.preloadMu.Lock()
+		if err == nil {
+			c.preloaded = true
+		}
+		c.preloadDone = nil
+		close(done)
+		c.preloadMu.Unlock()
+		return err == nil
 	}
-	_, err := c.Chats(ctx, preloadLimit, "")
-	return err == nil
 }
 
 // toChatOf converts a resolved peer.
