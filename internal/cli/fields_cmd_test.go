@@ -48,6 +48,52 @@ func TestFieldsNarrowsEveryFormat(t *testing.T) {
 	wantFailure(t, e.run("chat", "list", "--fields", "chats..id"), exitcode.Usage)
 }
 
+// A short path names a list item in every format. A result field keeps its
+// top-level meaning even when item fields are selected alongside it.
+func TestFieldsShortListPathsAndResultField(t *testing.T) {
+	e := loggedInEnv(t)
+	const short = "id,title"
+	const full = "chats.id,chats.title"
+	const wantJSON = `{"ok":true,"data":{"chats":[{"id":1,"title":"Ann"},{"id":-2,"title":"Family"},{"id":-1000000000003,"title":"News"}]}}` + "\n"
+	const wantJSONL = `{"id":1,"title":"Ann"}` + "\n" + `{"id":-2,"title":"Family"}` + "\n" + `{"id":-1000000000003,"title":"News"}` + "\n"
+	for _, format := range []string{"json", "jsonl", "toon", "human"} {
+		t.Run(format, func(t *testing.T) {
+			got := e.run("chat", "list", "--fields", short, "--format", format)
+			prefixed := e.run("chat", "list", "--fields", full, "--format", format)
+			if got.code != exitcode.OK || prefixed.code != exitcode.OK || got.stdout != prefixed.stdout {
+				t.Fatalf("short: exit %d, %q; full: exit %d, %q", got.code, got.stdout, prefixed.code, prefixed.stdout)
+			}
+			switch format {
+			case "json":
+				if got.stdout != wantJSON {
+					t.Errorf("got %q, want %q", got.stdout, wantJSON)
+				}
+			case "jsonl":
+				if got.stdout != wantJSONL {
+					t.Errorf("got %q, want %q", got.stdout, wantJSONL)
+				}
+			default:
+				if !strings.Contains(got.stdout, "Ann") || !strings.Contains(got.stdout, "Family") || strings.Contains(got.stdout, "type") {
+					t.Errorf("selected chat fields missing or extra: %q", got.stdout)
+				}
+			}
+		})
+	}
+
+	for _, format := range []string{"json", "toon", "human"} {
+		t.Run("cursor_"+format, func(t *testing.T) {
+			got := e.run("message", "history", "@teamchat", "--limit", "2", "--fields", "id,next_cursor", "--format", format)
+			prefixed := e.run("message", "history", "@teamchat", "--limit", "2", "--fields", "messages.id,next_cursor", "--format", format)
+			if got.code != exitcode.OK || prefixed.code != exitcode.OK || got.stdout != prefixed.stdout {
+				t.Fatalf("short: exit %d, %q; full: exit %d, %q", got.code, got.stdout, prefixed.code, prefixed.stdout)
+			}
+			if !strings.Contains(got.stdout, "CURSOR-AFTER") {
+				t.Errorf("top-level cursor missing: %q", got.stdout)
+			}
+		})
+	}
+}
+
 // TestFieldsNeverShowsMoreThanTheResult checks the other half: --fields cannot
 // bring a value that the command did not return. A path of the schema that this
 // response does not have (a nullable field, a map) adds nothing.

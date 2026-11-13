@@ -2,7 +2,10 @@ package output
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
+
+	"tg-cli/internal/schema"
 )
 
 // TestSelectKeepsOnlyTheChosenPaths is the contract of --fields from the
@@ -68,6 +71,25 @@ func TestSelectKeepsOnlyTheChosenPaths(t *testing.T) {
 				t.Errorf("got  %s\nwant %s", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestResultPathsUsesSchemaForListAndTopLevelFields(t *testing.T) {
+	type item struct {
+		ID    int    `json:"id"`
+		Title string `json:"title"`
+		Name  string `json:"name,omitempty"`
+	}
+	type result struct {
+		Chats      []item `json:"chats"`
+		Title      string `json:"title,omitempty"`
+		NextCursor string `json:"next_cursor,omitempty"`
+	}
+	paths := []string{"id", "title", "next_cursor", "chats.name", "absent"}
+	want := []string{"chats.id", "title", "next_cursor", "chats.name", "absent"}
+	got := ResultPaths(paths, "chats", schema.Fields(reflect.TypeOf(result{})))
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 

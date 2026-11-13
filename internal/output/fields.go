@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 	"unicode"
+
+	"tg-cli/internal/schema"
 )
 
 // Select writes a success envelope with only the chosen paths of data.
@@ -133,9 +135,7 @@ func FilterData(value any, paths []string) (any, error) {
 // ItemPaths turns the paths of a result into the paths of one element of the
 // list at itemPath, so that a JSONL line keeps the same fields as the envelope.
 //
-// A path is written the way the schema writes it, from data: "chats.id" is the
-// id of a chat both in the envelope and in a line. There is no second, shorter
-// spelling: one way of naming a field is easier to get right than two.
+// Both "chats.id" and "id" name the id of a chat in a JSONL line.
 func ItemPaths(paths []string, itemPath string) []string {
 	if itemPath == "" {
 		return paths
@@ -149,6 +149,27 @@ func ItemPaths(paths []string, itemPath string) []string {
 			out = append(out, strings.TrimPrefix(path, itemPath+"."))
 		default:
 			out = append(out, path)
+		}
+	}
+	return out
+}
+
+// ResultPaths expands item-relative paths for a list result. A path already
+// present in the result schema wins, so a result field such as next_cursor
+// stays at the top level. Unknown paths stay unchanged and select nothing.
+func ResultPaths(paths []string, itemPath string, fields []schema.Field) []string {
+	if len(paths) == 0 || itemPath == "" {
+		return paths
+	}
+	known := make(map[string]bool, len(fields))
+	for _, field := range fields {
+		known[field.Path] = true
+	}
+	out := make([]string, len(paths))
+	for i, path := range paths {
+		out[i] = path
+		if !known[path] && known[itemPath+"."+path] {
+			out[i] = itemPath + "." + path
 		}
 	}
 	return out
