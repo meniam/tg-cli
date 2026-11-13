@@ -3,7 +3,7 @@
 @.agents/rules/AGENTS.md
 @.agents/rules/project/AGENTS.md
 
-A console tool for a personal Telegram account. Its main user is an AI agent, and it has a persistent Daemon. The name is not chosen; the working name of the directory and the Go module is `tg-cli`. The repository holds a package skeleton and a `justfile`; the first plan is in progress. Run commands through `just` (help: `just`, and `-h` on any recipe) and run `just check` before a commit.
+A console tool for a personal Telegram account. Its main user is an AI agent, and it has a persistent Daemon. The name is not chosen; the working name of the directory and the Go module is `tg-cli`. The repository holds a working daemon and CLI (login, read-only chat and message commands) and a `justfile`; plans 1 and 2 are done. Run commands through `just` (help: `just`, and `-h` on any recipe) and run `just check` before a commit.
 
 This file is an index: what every task needs. Details live in the documents and decisions linked below, read them when the task touches them.
 
@@ -29,7 +29,7 @@ Decisions with their alternatives live in [`.agents/decisions/`](.agents/decisio
 
 Plans live in `.agents/plans/` and follow [`plans.md`](.agents/rules/plans.md). First: [walking skeleton, phone login, Daemon, chat list](.agents/plans/20261113_2055_walking_skeleton_login_daemon_chat_list.md) (`done`, branch `feature/20261113_2055_walking_skeleton_login_daemon_chat_list`, not merged yet). The owner has no `api_id` and will not get one: login goes through a client preset. Automated tests run without Telegram.
 
-Second: [read messages by chat reference](.agents/plans/20261113_2128_read_messages_by_chat_reference.md) (`draft`, waits for the owner's approval).
+Second: [read messages by chat reference](.agents/plans/20261113_2128_read_messages_by_chat_reference.md) (`done`, live check passed on 2026-11-13).
 
 ## Layout
 
@@ -93,4 +93,4 @@ Check the status of libraries and analogues with `gh api` or `crates.io`, not fr
 
 ## Git
 
-The repository is initialized, the default branch is `main`, there are no commits yet; the first plan's work is uncommitted on its branch. Work happens on a plan branch. Make commits with the `git-commit` skill, in English, with no signatures or footers in the message.
+The repository is initialized, the default branch is `main`, work of plans 1 and 2 is committed on the plan 2 branch. Work happens on a plan branch. Make commits with the `git-commit` skill, in English, with no signatures or footers in the message.
