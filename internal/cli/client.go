@@ -51,7 +51,9 @@ func (a *app) call(ctx context.Context, cmd *cobra.Command, c *rpc.Client, metho
 	defer cancel()
 	started := time.Now()
 	a.diagnose(cmd, "call method=%s", method)
-	err := translate(c.Call(ctx, method, params, result))
+	milliseconds, callErr := c.CallWithThrottle(ctx, method, params, result)
+	a.throttledMS += milliseconds
+	err := translate(callErr)
 	a.diagnose(cmd, "call method=%s took=%s failed=%t", method, time.Since(started).Round(time.Millisecond), err != nil)
 	return err
 }

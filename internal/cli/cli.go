@@ -54,7 +54,8 @@ func fail(exit int, format string, args ...any) *cmdError {
 }
 
 type app struct {
-	deps Deps
+	deps        Deps
+	throttledMS int64
 	// specs holds the annotation of every runnable command, filled while the
 	// command tree is built and read by `schema`.
 	specs map[*cobra.Command]commandSpec

@@ -92,9 +92,16 @@ func (c *Client) readLoop() {
 // Call invokes a method and decodes the result into result (may be nil).
 // A server-side error comes back as *Error.
 func (c *Client) Call(ctx context.Context, method string, params, result any) error {
+	_, err := c.CallWithThrottle(ctx, method, params, result)
+	return err
+}
+
+// CallWithThrottle also returns the server's optional wait time on success or
+// application error. Transport errors have no server wait time.
+func (c *Client) CallWithThrottle(ctx context.Context, method string, params, result any) (int64, error) {
 	raw, err := marshalParams(params)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	c.mu.Lock()
 	c.nextID++
@@ -111,7 +118,7 @@ func (c *Client) Call(ctx context.Context, method string, params, result any) er
 	}
 	if err := c.write(ctx, req); err != nil {
 		c.forget(id)
-		return err
+		return 0, err
 	}
 
 	var resp Response
@@ -119,22 +126,22 @@ func (c *Client) Call(ctx context.Context, method string, params, result any) er
 	case resp = <-ch:
 	case <-ctx.Done():
 		c.forget(id)
-		return ctx.Err()
+		return 0, ctx.Err()
 	case <-c.done:
 		select {
 		case resp = <-ch:
 		default:
 			c.forget(id)
-			return c.err
+			return 0, c.err
 		}
 	}
 	if resp.Error != nil {
-		return resp.Error
+		return resp.ThrottledMS, resp.Error
 	}
 	if result == nil {
-		return nil
+		return resp.ThrottledMS, nil
 	}
-	return json.Unmarshal(resp.Result, result)
+	return resp.ThrottledMS, json.Unmarshal(resp.Result, result)
 }
 
 // Notify sends a request that expects no response.

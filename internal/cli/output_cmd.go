@@ -90,7 +90,7 @@ func (a *app) emit(settings outputSettings, data any, lines func(io.Writer) erro
 	if settings.format == output.FormatJSONL {
 		return lines(a.deps.Stdout)
 	}
-	return output.Select(a.deps.Stdout, settings.format, output.SuccessData(data), settings.fields)
+	return output.Select(a.deps.Stdout, settings.format, output.SuccessDataWithThrottle(data, a.throttledMS), settings.fields)
 }
 
 // success prints a result that has no items, so it can never be JSONL.
@@ -144,5 +144,5 @@ func (a *app) failure(cmd *cobra.Command, exit int, message string) {
 	// A write error on stdout cannot be reported anywhere else, and it must not
 	// replace the command's own failure: the exit code already tells the agent
 	// that something went wrong.
-	_ = output.Failure(a.deps.Stdout, format, exitcode.Name(exit), message)
+	_ = output.FailureWithThrottle(a.deps.Stdout, format, exitcode.Name(exit), message, a.throttledMS)
 }

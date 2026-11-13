@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"tg-cli/internal/throttle"
 )
 
 const (
@@ -188,16 +190,34 @@ func (s *Server) call(ctx context.Context, req Request) Response {
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.RequestTimeout)
 	defer cancel()
+	waited := new(throttle.Wait)
+	ctx = throttle.WithWait(ctx, waited)
+	response := Response{JSONRPC: Version, ID: req.ID}
 
 	result, err := s.safeCall(ctx, h, req)
 	if err != nil {
-		return Response{JSONRPC: Version, ID: req.ID, Error: s.toError(req.Method, err)}
+		response.Error = s.toError(req.Method, err)
+		response.ThrottledMS = waitedMilliseconds(waited)
+		return response
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		return Response{JSONRPC: Version, ID: req.ID, Error: s.toError(req.Method, err)}
+		response.Error = s.toError(req.Method, err)
+		response.ThrottledMS = waitedMilliseconds(waited)
+		return response
 	}
-	return Response{JSONRPC: Version, ID: req.ID, Result: data}
+	response.Result = data
+	response.ThrottledMS = waitedMilliseconds(waited)
+	return response
+}
+
+// Round positive sub-millisecond waits up so an actual throttle wait remains visible.
+func waitedMilliseconds(waited *throttle.Wait) int64 {
+	d := waited.Duration()
+	if d <= 0 {
+		return 0
+	}
+	return int64((d-1)/time.Millisecond + 1)
 }
 
 func (s *Server) safeCall(ctx context.Context, h Handler, req Request) (result any, err error) {

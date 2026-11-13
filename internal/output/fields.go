@@ -101,6 +101,11 @@ func keepObject(object obj, paths []string) obj {
 // followed by the cursor line when more follow. The paths are relative to one
 // item, because a line carries an item and not the envelope around it.
 func SelectLines[T any](w io.Writer, items []T, nextCursor string, paths []string) error {
+	return SelectLinesWithThrottle(w, items, nextCursor, paths, 0)
+}
+
+// SelectLinesWithThrottle appends one metadata line when a cursor or wait exists.
+func SelectLinesWithThrottle[T any](w io.Writer, items []T, nextCursor string, paths []string, milliseconds int64) error {
 	for _, item := range items {
 		filtered, err := FilterData(item, paths)
 		if err != nil {
@@ -110,12 +115,13 @@ func SelectLines[T any](w io.Writer, items []T, nextCursor string, paths []strin
 			return err
 		}
 	}
-	if nextCursor == "" {
+	if nextCursor == "" && milliseconds <= 0 {
 		return nil
 	}
 	return encode(w, struct {
-		NextCursor string `json:"next_cursor"`
-	}{nextCursor})
+		NextCursor  string `json:"next_cursor,omitempty"`
+		ThrottledMS int64  `json:"throttled_ms,omitempty"`
+	}{nextCursor, milliseconds})
 }
 
 // FilterData returns one value with only the chosen paths of it.

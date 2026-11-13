@@ -115,8 +115,8 @@ func schemaDocFor(root *cobra.Command, specs map[*cobra.Command]commandSpec) sch
 		Tool:          toolInfo{Name: root.Name(), Version: info.Version, Revision: info.Revision},
 		Output: outputDoc{
 			Formats: formatNames(output.Formats()),
-			Success: `{"ok":true,"data":...}`,
-			Failure: `{"ok":false,"error":{"code":"<name>","message":"..."}}`,
+			Success: `{"ok":true,"data":...,"throttled_ms":<milliseconds> (optional)}`,
+			Failure: `{"ok":false,"error":{"code":"<name>","message":"..."},"throttled_ms":<milliseconds> (optional)}`,
 		},
 		GlobalFlags: flagDocs(root.PersistentFlags(), nil),
 	}

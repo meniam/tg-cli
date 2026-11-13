@@ -53,8 +53,9 @@ func ParseFormat(s string) (Format, error) {
 func FormatsWithoutJSONL() []Format { return []Format{FormatJSON, FormatToon, FormatHuman} }
 
 type success struct {
-	OK   bool `json:"ok"`
-	Data any  `json:"data"`
+	OK          bool  `json:"ok"`
+	Data        any   `json:"data"`
+	ThrottledMS int64 `json:"throttled_ms,omitempty"`
 }
 
 // ErrorBody describes a failed command.
@@ -66,16 +67,27 @@ type ErrorBody struct {
 }
 
 type failure struct {
-	OK    bool      `json:"ok"`
-	Error ErrorBody `json:"error"`
+	OK          bool      `json:"ok"`
+	Error       ErrorBody `json:"error"`
+	ThrottledMS int64     `json:"throttled_ms,omitempty"`
 }
 
 // SuccessData is the success envelope of a result.
-func SuccessData(data any) any { return success{OK: true, Data: data} }
+func SuccessData(data any) any { return SuccessDataWithThrottle(data, 0) }
+
+// SuccessDataWithThrottle adds a positive server wait to the success envelope.
+func SuccessDataWithThrottle(data any, milliseconds int64) any {
+	return success{OK: true, Data: data, ThrottledMS: milliseconds}
+}
 
 // FailureData is the failure envelope of an error.
 func FailureData(code, message string) any {
-	return failure{OK: false, Error: ErrorBody{Code: code, Message: message}}
+	return FailureDataWithThrottle(code, message, 0)
+}
+
+// FailureDataWithThrottle adds a positive server wait to the failure envelope.
+func FailureDataWithThrottle(code, message string, milliseconds int64) any {
+	return failure{OK: false, Error: ErrorBody{Code: code, Message: message}, ThrottledMS: milliseconds}
 }
 
 // Success writes a success envelope in the format.
@@ -87,7 +99,12 @@ func Success(w io.Writer, f Format, data any) error {
 // per line, so JSONL gets the envelope as well: an agent finds the error the
 // same way whatever format it asked for.
 func Failure(w io.Writer, f Format, code, message string) error {
-	return Write(w, f, FailureData(code, message))
+	return FailureWithThrottle(w, f, code, message, 0)
+}
+
+// FailureWithThrottle writes a failure and its optional server wait.
+func FailureWithThrottle(w io.Writer, f Format, code, message string, milliseconds int64) error {
+	return Write(w, f, FailureDataWithThrottle(code, message, milliseconds))
 }
 
 // Write writes an envelope in the format. A format without an envelope of its

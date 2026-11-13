@@ -20,7 +20,9 @@ func emitList[T any](a *app, cmd *cobra.Command, settings outputSettings, result
 	var lines func(io.Writer) error
 	if settings.format == output.FormatJSONL {
 		paths := output.ItemPaths(settings.fields, a.specs[cmd].ItemPath)
-		lines = func(w io.Writer) error { return output.SelectLines(w, items, nextCursor, paths) }
+		lines = func(w io.Writer) error {
+			return output.SelectLinesWithThrottle(w, items, nextCursor, paths, a.throttledMS)
+		}
 	}
 	return a.emit(settings, result, lines)
 }

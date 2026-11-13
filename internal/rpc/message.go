@@ -47,10 +47,11 @@ func (r Request) IsNotification() bool { return len(r.ID) == 0 }
 
 // Response is a JSON-RPC response. ID is null when the request id is unknown.
 type Response struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id"`
-	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *Error          `json:"error,omitempty"`
+	JSONRPC     string          `json:"jsonrpc"`
+	ID          json.RawMessage `json:"id"`
+	Result      json.RawMessage `json:"result,omitempty"`
+	Error       *Error          `json:"error,omitempty"`
+	ThrottledMS int64           `json:"throttled_ms,omitempty"`
 }
 
 // Error is a JSON-RPC error object. It also serves as a Go error, so handlers

@@ -37,6 +37,9 @@ func Human(w io.Writer, v any) error {
 		message, _ := failure.get("message").(string)
 		fmt.Fprintf(&b, "error (%s): %s\n", code, message)
 	}
+	if ms, ok := envelope.get("throttled_ms").(json.Number); ok {
+		fmt.Fprintf(&b, "throttled_ms: %s\n", ms)
+	}
 	_, err = io.WriteString(w, b.String())
 	return err
 }
