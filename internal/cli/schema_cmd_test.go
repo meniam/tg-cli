@@ -123,3 +123,25 @@ func TestSchemaNeedsNoDaemonAndIsDeterministic(t *testing.T) {
 		}
 	}
 }
+
+func TestSchemaDaemonStartDescribesDefaultResult(t *testing.T) {
+	cmd, ok := schemaCommands(t)["daemon start"]
+	if !ok {
+		t.Fatal("daemon start is missing from schema")
+	}
+	if cmd.Result != "cli.backgroundStartedResult" {
+		t.Errorf("default result type = %q", cmd.Result)
+	}
+	var paths []string
+	for _, field := range cmd.Fields {
+		paths = append(paths, field.Path)
+	}
+	slices.Sort(paths)
+	want := []string{"log", "pid", "profile", "running", "socket"}
+	if !slices.Equal(paths, want) {
+		t.Errorf("default result fields = %v, want %v", paths, want)
+	}
+	if !strings.Contains(cmd.Description, "--foreground") || !strings.Contains(cmd.Description, `{"stopped":true}`) {
+		t.Errorf("foreground result is not described: %q", cmd.Description)
+	}
+}
