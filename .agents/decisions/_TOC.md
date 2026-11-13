@@ -27,13 +27,16 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-13 — [Драйвер SQLite modernc.org/sqlite, нормализацию «ё» делаем сами](20261113_2301_sqlite_driver_is_modernc_with_own_yo_normalization.md)
 - 2026-11-14 — [cli зависит от store только через daemon, прямой импорт запрещён](20261114_0005_cli_may_reach_the_store_only_through_the_daemon.md),
   revises [cli импортирует daemon ради путей, Telegram-клиент подставляет main](20261113_2113_cli_imports_daemon_paths_and_main_injects_telegram.md)
+- 2026-11-14 — [Команда schema описывает команды, классы безопасности и поля ответов](20261114_0030_schema_command_with_safety_classes_and_field_lists.md)
+- 2026-11-14 — [Форматы вывода: toon и human рядом с json, режимы quiet и verbose](20261114_0031_toon_human_quiet_verbose_output_modes.md)
+- 2026-11-14 — [Daemon уходит в фон по умолчанию, остановка по простою включается флагом](20261114_0032_daemon_starts_in_background_idle_stop_is_opt_in.md)
+- 2026-11-14 — [Метод execute не делаем](20261114_0033_execute_is_not_built.md)
 
 ## Open questions
 
 - Как называется утилита.
 - Каков риск ограничения аккаунта при входе через пресет официального клиента.
-- Какой формат выдачи: JSON, JSONL, TOON или несколько (в первом срезе только JSON-конверт).
 - Какие платформы поддерживаются.
-- Какие действия считать опасными и как обеспечить безопасность по умолчанию.
+- Какие действия считать опасными (классы безопасности решены, список конкретных действий и подтверждения нет) и как обеспечить безопасность по умолчанию.
 - Нужно ли скачивание медиа и в каком объёме (решается в ТЗ).
 - Как измерять «быстро» и какие целевые значения.
