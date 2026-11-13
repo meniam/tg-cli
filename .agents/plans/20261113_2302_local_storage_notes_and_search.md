@@ -10,7 +10,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-13
-- Next safe step: шаг 5 (пометки и поиск), исполнитель Codex, проверяет Claude.
+- Next safe step: шаг 6a (RPC для пометок и поиска в Daemon), затем 6b (запись «по пути»), исполнитель Codex, проверяет Claude.
 
 ## Context and sources
 
@@ -92,8 +92,8 @@ Daemon запоминает всё, что загрузил из Telegram (ча�
 - [x] 2. `internal/textnorm`: `Normalize(string) string`: нижний регистр, `ё` в `е`, схлопывание пробелов, нормализация Unicode; `Query(string) string` готовит запрос FTS5 (экранирование кавычек и операторов, префиксы по желанию). Тесты на кириллицу, смешанный регистр, `ё`, эмодзи, пустую строку, попытку внедрить синтаксис FTS5 (`"`, `*`, `NEAR`, `OR`).
 - [x] 3. Схема версии 1 и FTS (`chats_fts`, `people_fts`, `messages_fts`, `notes_fts`) с триггерами синхронизации. Тесты: вставка, правка, удаление дают нужный результат поиска; `ё` и регистр.
 - [x] 4. API хранилища для данных Telegram: `UpsertChats`, `UpsertPeople`, `UpsertMessages` (повтор без изменений ничего не плодит; смена текста пишет прежний в `message_versions`; сырой JSON), `MarkMessagesDeleted`, чтение. Тесты, в том числе повторная загрузка не затрагивает пометки.
-- [ ] 5. Пометки (`AddNote`, `ListNotes`, `DeleteNote`) и поиск (`Search` по областям `chats`, `people`, `messages`, `notes`, фильтр автора, лимит, сниппет, ранжирование `bm25`). Тесты, включая то, что пометки AI отфильтровываются.
-- [ ] 6. Daemon: открытие базы при старте, `daemon.Paths.Database`, запись «по пути» после ответов `chat.list`, `chat.resolve`, `chat.info`, `message.history`, `message.get`, `message.pinned`; методы RPC `note.add`, `note.list`, `note.delete`, `search`. Тесты на подмене Telegram: данные сохраняются, повторная загрузка не плодит дубли, сбой базы не ломает ответ, поиск работает при `Telegram`, который ничего не отвечает.
+- [x] 5. Пометки (`AddNote`, `ListNotes`, `DeleteNote`) и поиск (`Search` по областям `chats`, `people`, `messages`, `notes`, фильтр автора, лимит, сниппет, ранжирование `bm25`). Тесты, включая то, что пометки AI отфильтровываются.
+- [ ] 6. (делится на 6a: открытие базы, `daemon.Paths.Database`, методы `note.*` и `search`; 6b: запись «по пути» из ответов Telegram) Daemon: открытие базы при старте, `daemon.Paths.Database`, запись «по пути» после ответов `chat.list`, `chat.resolve`, `chat.info`, `message.history`, `message.get`, `message.pinned`; методы RPC `note.add`, `note.list`, `note.delete`, `search`. Тесты на подмене Telegram: данные сохраняются, повторная загрузка не плодит дубли, сбой базы не ломает ответ, поиск работает при `Telegram`, который ничего не отвечает.
 - [ ] 7. CLI: `note add|list|delete`, `search` (флаги `--scope`, `--author`, `--limit`, `--format`), ответы по общему конверту, коды выхода. Тесты по образцу `internal/cli`.
 - [ ] 8. Документы: `AGENTS.md` (раздел Running, схема), `FEATURES.md` (статусы 10.x и пометки через `docwriter`), решения в `.agents/decisions/`.
 - [ ] 9. Живая проверка Claude на аккаунте владельца: `chat list` и `message history`, затем `search` и `note` без обращения к Telegram; вывод фильтруется до формы.
@@ -145,6 +145,10 @@ Daemon запоминает всё, что загрузил из Telegram (ча�
 
 - Шаг 4 принят (2026-11-13): `UpsertChats`, `UpsertPeople`, `UpsertMessages`, `MarkMessagesDeleted`, чтение; правило слияния: пустое значение значит «источник не сказал», сохранённое остаётся. Отступление от решения о хранилище: колонка `raw` пока хранит JSON сообщения в том виде, в каком его отдаёт Daemon, а не исходный TL-объект Telegram; настоящий сырой объект появится вместе с синхронизацией.
 - Замечание к шагу 6: `out`, `pinned` и другие булевы поля сообщения Daemon передаёт явными значениями (в том числе `false`), иначе слияние сохранит старое значение; поле `pinned` в ответах Daemon пропускается при `false` (`omitempty`), при преобразовании в `store.Message` это надо учитывать.
+
+- Шаг 5 принят (2026-11-13): пометки (`AddNote`, `GetNote`, `ListNotes`, `DeleteNote`, `DeleteNotesByAuthor`) и поиск по четырём областям; сниппет строится из исходного текста, а не из нормализованного индекса; лимит применяется к каждой области отдельно, порядок областей фиксирован (чаты, люди, сообщения, пометки).
+- Известное ограничение шага 6b: Daemon знает у человека только отображаемое имя (`rpc.Sender.Name`, `rpc.Chat.Title` для личных чатов), поэтому оно записывается в `people.first_name`; раздельные имя и фамилия появятся с загрузкой полных данных пользователя в плане про синхронизацию.
+- Следствие шага 6: `internal/daemon` импортирует `internal/store`, поэтому `internal/cli` зависит от `store` транзитивно через `daemon`. Тест границы проверяет прямой импорт `store` в `cli` и по-прежнему запрещает транзитивные `tgclient` и gotd.
 
 ## Open questions
 
