@@ -32,6 +32,8 @@ Plans live in `.agents/plans/` and follow [`plans.md`](.agents/rules/plans.md). 
 
 Second: [read messages by chat reference](.agents/plans/20261113_2128_read_messages_by_chat_reference.md) (`done`, live check passed on 2026-11-13).
 
+Third: [local storage, notes and search](.agents/plans/20261113_2302_local_storage_notes_and_search.md) (`done`, live check passed on 2026-11-14). Fourth: [agent contract](.agents/plans/20261114_0050_agent_contract.md) (`draft`: all decisions made, waits for the owner's go-ahead and a branch).
+
 ## Layout
 
 ```
