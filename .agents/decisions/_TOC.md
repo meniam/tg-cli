@@ -20,7 +20,8 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-13 — [Поток входа свой: повторная отправка кода и вход по QR](20261113_2202_login_flow_is_our_own_with_resend_and_qr.md)
 - 2026-11-13 — [Имя устройства по умолчанию MacBook Pro M1 BRN, --device переопределяет](20261113_2218_device_name_is_macbook_pro_m1_brn_by_default.md),
   revises [Вход идёт по пресету официального клиента, своё приложение необязательно](20261113_2116_login_uses_official_client_presets.md)
-- 2026-11-13 — [Хранилище: одна SQLite на профиль, история подгружается по команде и медленно](20261113_2230_storage_is_one_sqlite_per_profile_with_slow_opt_in_history.md)
+- 2026-11-13 — [Хранилище: одна SQLite на профиль, история подгружается по команде и медленно](20261113_2230_storage_is_one_sqlite_per_profile_with_slow_opt_in_history.md),
+  revised by [Драйвер SQLite modernc.org/sqlite, нормализацию «ё» делаем сами](20261113_2301_sqlite_driver_is_modernc_with_own_yo_normalization.md)
 - 2026-11-13 — [Пометки лежат отдельно, AI пишет их без подтверждения](20261113_2231_notes_are_separate_and_ai_writes_them_without_confirmation.md)
 - 2026-11-13 — [Чтение страницами с курсором по id сообщения, JSONL с завершающей строкой курсора](20261113_2250_reading_pages_by_message_id_cursor_and_jsonl_with_cursor_line.md)
 - 2026-11-13 — [Драйвер SQLite modernc.org/sqlite, нормализацию «ё» делаем сами](20261113_2301_sqlite_driver_is_modernc_with_own_yo_normalization.md)

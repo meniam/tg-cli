@@ -1,7 +1,7 @@
 # Хранилище: одна SQLite на профиль, история подгружается по команде и медленно
 
 Decided: 2026-11-13
-Revised: —
+Revised: revised by [Драйвер SQLite modernc.org/sqlite, нормализацию «ё» делаем сами](20261113_2301_sqlite_driver_is_modernc_with_own_yo_normalization.md) 2026-11-14 (драйвер выбран, FTS5 проверен)
 
 ## Context
 
