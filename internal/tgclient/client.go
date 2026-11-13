@@ -11,6 +11,7 @@ import (
 	"github.com/gotd/td/tg"
 
 	"tg-cli/internal/rpc"
+	"tg-cli/internal/throttle"
 )
 
 // Config is what the client needs to connect.
@@ -23,6 +24,8 @@ type Config struct {
 	// DeviceModel is the device name Telegram shows for the session, in the
 	// list of devices. DefaultDeviceModel when empty.
 	DeviceModel string
+	// Throttle limits RPC requests when set. A nil value preserves the old behavior.
+	Throttle *throttle.Limiter
 }
 
 // DefaultDeviceModel is the device name when none is configured. It is the
@@ -57,14 +60,18 @@ type Client struct {
 
 // New creates a client. It does not connect until Run is called.
 func New(cfg Config) *Client {
+	options := telegram.Options{
+		SessionStorage: &telegram.FileSessionStorage{Path: cfg.SessionPath},
+		Device:         deviceConfig(cfg.DeviceModel),
+	}
+	if cfg.Throttle != nil {
+		options.Middlewares = []telegram.Middleware{throttleMiddleware(cfg.Throttle)}
+	}
 	c := &Client{
 		appID:   cfg.AppID,
 		appHash: cfg.AppHash,
 		ready:   make(chan struct{}),
-		tg: telegram.NewClient(cfg.AppID, cfg.AppHash, telegram.Options{
-			SessionStorage: &telegram.FileSessionStorage{Path: cfg.SessionPath},
-			Device:         deviceConfig(cfg.DeviceModel),
-		}),
+		tg:      telegram.NewClient(cfg.AppID, cfg.AppHash, options),
 	}
 	c.mgr = peers.Options{Storage: &peers.InmemoryStorage{}}.Build(c.tg.API())
 	return c
