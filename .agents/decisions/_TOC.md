@@ -22,12 +22,12 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-13 — [Хранилище: одна SQLite на профиль, история подгружается по команде и медленно](20261113_2230_storage_is_one_sqlite_per_profile_with_slow_opt_in_history.md)
 - 2026-11-13 — [Пометки лежат отдельно, AI пишет их без подтверждения](20261113_2231_notes_are_separate_and_ai_writes_them_without_confirmation.md)
 - 2026-11-13 — [Чтение страницами с курсором по id сообщения, JSONL с завершающей строкой курсора](20261113_2250_reading_pages_by_message_id_cursor_and_jsonl_with_cursor_line.md)
+- 2026-11-13 — [Драйвер SQLite modernc.org/sqlite, нормализацию «ё» делаем сами](20261113_2301_sqlite_driver_is_modernc_with_own_yo_normalization.md)
 
 ## Open questions
 
 - Как называется утилита.
 - Каков риск ограничения аккаунта при входе через пресет официального клиента.
-- Какой драйвер SQLite и достаточно ли FTS5 в `modernc.org/sqlite`.
 - Какой формат выдачи: JSON, JSONL, TOON или несколько (в первом срезе только JSON-конверт).
 - Какие платформы поддерживаются.
 - Какие действия считать опасными и как обеспечить безопасность по умолчанию.

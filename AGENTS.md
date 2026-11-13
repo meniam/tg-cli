@@ -70,7 +70,7 @@ internal/
 
 The list is in the "Open questions" section of [`_TOC.md`](.agents/decisions/_TOC.md) and in the open questions of `INTENT.md`. Do not choose yourself: ask or record a decision.
 
-Not verified by a prototype: whether `gotd/td/telegram/updates` is enough to recover missed updates, whether `modernc.org/sqlite` supports FTS5, whether a Go implementation of the TOON format exists. Do not cite them as fact.
+Not verified by a prototype: whether `gotd/td/telegram/updates` is enough to recover missed updates, whether a Go implementation of the TOON format exists. The SQLite driver is chosen (`modernc.org/sqlite`, FTS5 verified by a prototype, `ё` is not folded into `е`: normalize text ourselves), see the [decision](.agents/decisions/20261113_2301_sqlite_driver_is_modernc_with_own_yo_normalization.md). Do not cite them as fact.
 
 ## Facts and sources
 
