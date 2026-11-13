@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"tg-cli/internal/rpc"
+	"tg-cli/internal/store"
 )
 
 // ErrAlreadyRunning means another daemon holds the lock of the profile.
@@ -29,6 +30,7 @@ type Options struct {
 	Profile  string
 	Paths    Paths
 	Telegram Telegram
+	Store    *store.DB
 	Log      *slog.Logger
 	// OnListening, when set, is called once the socket accepts connections.
 	OnListening func()
@@ -39,6 +41,7 @@ type daemon struct {
 	log    *slog.Logger
 	srv    *rpc.Server
 	login  *loginManager
+	store  *store.DB
 	cancel context.CancelFunc
 	once   sync.Once
 }
@@ -61,6 +64,14 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 	defer release()
+	ownedStore := opts.Store
+	if ownedStore == nil {
+		ownedStore, err = store.Open(opts.Paths.Database)
+		if err != nil {
+			return fmt.Errorf("open database: %w", err)
+		}
+		defer ownedStore.Close()
+	}
 
 	// The lock is ours, so a socket file left here is stale.
 	if err := os.Remove(opts.Paths.Socket); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -78,7 +89,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), cancel: cancel}
+	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), cancel: cancel, store: ownedStore}
 	d.login = newLoginManager(runCtx, opts.Telegram)
 	d.register()
 
@@ -142,6 +153,11 @@ func (d *daemon) register() {
 	d.srv.Handle(rpc.MethodMessageHistory, d.messageHistory)
 	d.srv.Handle(rpc.MethodMessageGet, d.messageGet)
 	d.srv.Handle(rpc.MethodMessagePinned, d.messagePinned)
+	d.srv.Handle(rpc.MethodNoteAdd, d.noteAdd)
+	d.srv.Handle(rpc.MethodNoteList, d.noteList)
+	d.srv.Handle(rpc.MethodNoteDelete, d.noteDelete)
+	d.srv.Handle(rpc.MethodNoteDeleteByAuthor, d.noteDeleteByAuthor)
+	d.srv.Handle(rpc.MethodSearch, d.search)
 }
 
 func (d *daemon) ping(context.Context, json.RawMessage) (any, error) {

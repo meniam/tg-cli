@@ -497,8 +497,9 @@ func TestProfilesAreIsolated(t *testing.T) {
 	wantFailure(t, e.run("chat", "list", "--profile", "work"), exitcode.DaemonNotRunning)
 }
 
-// The CLI must stay free of the Telegram library and of storage.
-func TestDoesNotImportTelegramOrStore(t *testing.T) {
+// The CLI may depend on storage through daemon, but never import it directly.
+// Telegram packages remain banned across the full dependency graph.
+func TestCLIImportBoundary(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("go tool not found")
 	}
@@ -508,10 +509,20 @@ func TestDoesNotImportTelegramOrStore(t *testing.T) {
 		t.Fatalf("go list: %v", err)
 	}
 	for _, dep := range strings.Fields(string(out)) {
-		for _, banned := range []string{"tg-cli/internal/tgclient", "tg-cli/internal/store", "github.com/gotd/td"} {
+		for _, banned := range []string{"tg-cli/internal/tgclient", "github.com/gotd/td"} {
 			if strings.HasPrefix(dep, banned) {
 				t.Errorf("internal/cli depends on %s", dep)
 			}
+		}
+	}
+	direct := exec.Command("go", "list", "-f", `{{join .Imports "\n"}}`, "tg-cli/internal/cli")
+	imports, err := direct.Output()
+	if err != nil {
+		t.Fatalf("go list direct imports: %v", err)
+	}
+	for _, path := range strings.Fields(string(imports)) {
+		if path == "tg-cli/internal/store" {
+			t.Error("internal/cli imports internal/store directly")
 		}
 	}
 }

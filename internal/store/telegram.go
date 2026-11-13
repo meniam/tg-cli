@@ -146,6 +146,30 @@ func (db *DB) GetPerson(ctx context.Context, id int64) (Person, error) {
 	return p, nil
 }
 
+// FindChatByUsername finds a chat by its ASCII Telegram username.
+func (db *DB) FindChatByUsername(ctx context.Context, username string) (Chat, error) {
+	c, err := scanChat(db.read.QueryRowContext(ctx, `SELECT `+chatColumns+` FROM chats WHERE lower(username)=lower(?) ORDER BY id LIMIT 1`, username))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Chat{}, ErrNotFound
+	}
+	if err != nil {
+		return Chat{}, fmt.Errorf("find chat by username: %w", err)
+	}
+	return c, nil
+}
+
+// FindPersonByUsername finds a person by their ASCII Telegram username.
+func (db *DB) FindPersonByUsername(ctx context.Context, username string) (Person, error) {
+	p, err := scanPerson(db.read.QueryRowContext(ctx, `SELECT `+personColumns+` FROM people WHERE lower(username)=lower(?) ORDER BY id LIMIT 1`, username))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Person{}, ErrNotFound
+	}
+	if err != nil {
+		return Person{}, fmt.Errorf("find person by username: %w", err)
+	}
+	return p, nil
+}
+
 // GetMessage returns a message, including a marked deleted message, or ErrNotFound.
 func (db *DB) GetMessage(ctx context.Context, chatID int64, id int) (Message, error) {
 	m, err := scanMessage(db.read.QueryRowContext(ctx, `SELECT `+messageColumns+` FROM messages WHERE chat_id=? AND id=?`, chatID, id))

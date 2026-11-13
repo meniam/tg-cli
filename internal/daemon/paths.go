@@ -33,6 +33,8 @@ type Paths struct {
 	// Device holds the device name the profile shows to Telegram, for example
 	// in the list of devices. It is not a secret.
 	Device string
+	// Database is the local SQLite database, mode 0600.
+	Database string
 }
 
 // ResolvePaths returns the paths of a profile. home is the base directory
@@ -50,12 +52,13 @@ func ResolvePaths(home, profile string) (Paths, error) {
 	}
 	dir := filepath.Join(home, profile)
 	p := Paths{
-		Dir:     dir,
-		Socket:  filepath.Join(dir, "daemon.sock"),
-		Lock:    filepath.Join(dir, "daemon.lock"),
-		Session: filepath.Join(dir, "session.json"),
-		Client:  filepath.Join(dir, "client"),
-		Device:  filepath.Join(dir, "device"),
+		Dir:      dir,
+		Socket:   filepath.Join(dir, "daemon.sock"),
+		Lock:     filepath.Join(dir, "daemon.lock"),
+		Session:  filepath.Join(dir, "session.json"),
+		Client:   filepath.Join(dir, "client"),
+		Device:   filepath.Join(dir, "device"),
+		Database: filepath.Join(dir, "store.db"),
 	}
 	if len(p.Socket) > MaxSocketPath {
 		return Paths{}, fmt.Errorf("socket path %q is %d bytes, the limit is %d: set TG_CLI_HOME to a shorter directory", p.Socket, len(p.Socket), MaxSocketPath)

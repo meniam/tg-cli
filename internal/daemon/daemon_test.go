@@ -33,12 +33,14 @@ type fakeTelegram struct {
 	qrRefresh chan struct{} // the test sends to refresh the QR token
 
 	// What the read methods saw and what they return.
-	lastRef   chatref.Ref
-	lastQuery rpc.HistoryQuery
-	lastLimit int
-	lastType  string
-	messages  []rpc.Message
-	missing   bool // the read methods answer "not found"
+	lastRef      chatref.Ref
+	lastQuery    rpc.HistoryQuery
+	lastLimit    int
+	lastType     string
+	messages     []rpc.Message
+	missing      bool // the read methods answer "not found"
+	resolveCalls int
+	resolved     *rpc.Chat
 }
 
 func newFake() *fakeTelegram {
@@ -160,8 +162,12 @@ func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, er
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.lastRef = ref
+	f.resolveCalls++
 	if f.missing {
 		return rpc.Chat{}, rpc.NewError(rpc.CodeNotFound, "not found")
+	}
+	if f.resolved != nil {
+		return *f.resolved, nil
 	}
 	return rpc.Chat{ID: 77, Type: "supergroup", Title: "Team", Username: "team"}, nil
 }
@@ -324,7 +330,7 @@ func TestResolvePaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Dir != "/h/work" || p.Socket != "/h/work/daemon.sock" || p.Lock != "/h/work/daemon.lock" || p.Session != "/h/work/session.json" || p.Client != "/h/work/client" || p.Device != "/h/work/device" {
+	if p.Dir != "/h/work" || p.Socket != "/h/work/daemon.sock" || p.Lock != "/h/work/daemon.lock" || p.Session != "/h/work/session.json" || p.Client != "/h/work/client" || p.Device != "/h/work/device" || p.Database != "/h/work/store.db" {
 		t.Errorf("unexpected paths %+v", p)
 	}
 	for _, bad := range []string{"", "Work", "../x", "a/b", "-a", strings.Repeat("a", 33)} {

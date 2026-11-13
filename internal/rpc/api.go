@@ -16,12 +16,17 @@ const (
 	MethodAuthCancel   = "auth.cancel"
 	MethodChatList     = "chat.list"
 
-	MethodChatResolve    = "chat.resolve"
-	MethodChatInfo       = "chat.info"
-	MethodChatInviteInfo = "chat.invite_info"
-	MethodMessageHistory = "message.history"
-	MethodMessageGet     = "message.get"
-	MethodMessagePinned  = "message.pinned"
+	MethodChatResolve        = "chat.resolve"
+	MethodChatInfo           = "chat.info"
+	MethodChatInviteInfo     = "chat.invite_info"
+	MethodMessageHistory     = "message.history"
+	MethodMessageGet         = "message.get"
+	MethodMessagePinned      = "message.pinned"
+	MethodNoteAdd            = "note.add"
+	MethodNoteList           = "note.list"
+	MethodNoteDelete         = "note.delete"
+	MethodNoteDeleteByAuthor = "note.delete_by_author"
+	MethodSearch             = "search"
 )
 
 // Login states reported by the auth methods.
@@ -239,4 +244,93 @@ type MessageGetParams struct {
 type PinnedParams struct {
 	Chat  string `json:"chat"`
 	Limit int    `json:"limit,omitempty"`
+}
+
+// Note is a locally stored annotation. Timestamps are RFC 3339 UTC.
+type Note struct {
+	ID        int64    `json:"id"`
+	Kind      string   `json:"kind"`
+	ChatID    *int64   `json:"chat_id,omitempty"`
+	TargetID  *int64   `json:"target_id,omitempty"`
+	Body      string   `json:"body"`
+	Author    string   `json:"author"`
+	Model     string   `json:"model,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
+}
+
+// NoteAddParams describes a note target and its content.
+type NoteAddParams struct {
+	Kind      string   `json:"kind"`
+	Chat      string   `json:"chat,omitempty"`
+	Person    string   `json:"person,omitempty"`
+	MessageID int64    `json:"message_id,omitempty"`
+	Body      string   `json:"body"`
+	Author    string   `json:"author,omitempty"`
+	Model     string   `json:"model,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
+}
+
+// NoteListParams filters notes, newest first.
+type NoteListParams struct {
+	Kind      string `json:"kind,omitempty"`
+	Chat      string `json:"chat,omitempty"`
+	Person    string `json:"person,omitempty"`
+	MessageID int64  `json:"message_id,omitempty"`
+	Author    string `json:"author,omitempty"`
+	Tag       string `json:"tag,omitempty"`
+	Limit     int    `json:"limit,omitempty"`
+	BeforeID  int64  `json:"before_id,omitempty"`
+}
+
+// NoteListResult contains a page of notes.
+type NoteListResult struct {
+	Notes []Note `json:"notes"`
+}
+
+// NoteDeleteParams identifies one note.
+type NoteDeleteParams struct {
+	ID int64 `json:"id"`
+}
+
+// NoteDeleteResult reports how many notes were deleted.
+type NoteDeleteResult struct {
+	Deleted int `json:"deleted"`
+}
+
+// NoteDeleteByAuthorParams selects notes written by one author.
+type NoteDeleteByAuthorParams struct {
+	Author string `json:"author"`
+}
+
+// SearchParams selects ranked local search results.
+type SearchParams struct {
+	Query          string   `json:"query"`
+	Scopes         []string `json:"scopes,omitempty"`
+	Author         string   `json:"author,omitempty"`
+	Chat           string   `json:"chat,omitempty"`
+	Limit          int      `json:"limit,omitempty"`
+	Prefix         bool     `json:"prefix,omitempty"`
+	IncludeDeleted bool     `json:"include_deleted,omitempty"`
+}
+
+// SearchHit is one ranked result. Date is RFC 3339 UTC when present.
+type SearchHit struct {
+	Scope    string  `json:"scope"`
+	ID       int64   `json:"id"`
+	ChatID   *int64  `json:"chat_id,omitempty"`
+	Title    string  `json:"title,omitempty"`
+	Snippet  string  `json:"snippet"`
+	Date     string  `json:"date,omitempty"`
+	Deleted  bool    `json:"deleted,omitempty"`
+	Author   string  `json:"author,omitempty"`
+	Model    string  `json:"model,omitempty"`
+	NoteKind string  `json:"note_kind,omitempty"`
+	Rank     float64 `json:"rank"`
+}
+
+// SearchResult contains hits grouped by scope.
+type SearchResult struct {
+	Hits []SearchHit `json:"hits"`
 }
