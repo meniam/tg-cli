@@ -12,14 +12,14 @@ import (
 
 func (a *app) noteCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "note", Short: "Add, list, or delete local notes"}
-	add := &cobra.Command{
+	add := a.annotate(&cobra.Command{
 		Use: "add [flags] <body|->", Short: "Add a note to a chat, person, or message",
 		Long: "Add a local note. Use --chat for a chat, --person for a person, or --chat with\n" +
 			"--message for a message. Use - to read the whole body from stdin. Tags can be\n" +
 			"repeated. For a negative chat id, use note add --chat -12345 -- body\n" +
 			"(or --chat=-12345). The -- ends flags before a body starting with -.",
 		Args: cobra.ExactArgs(1), RunE: a.noteAdd,
-	}
+	}, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.Note](), Args: []argSpec{{Name: "body", Required: true}}, Choices: authorChoices()})
 	add.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return fail(exitcode.Usage, "%v (for a negative chat id use --chat=-12345)", err)
 	})
@@ -30,14 +30,14 @@ func (a *app) noteCommand() *cobra.Command {
 	add.Flags().String("model", "", "AI model name, only with --author ai")
 	add.Flags().StringArray("tag", nil, "tag to add; repeat for multiple tags")
 
-	list := &cobra.Command{
+	list := a.annotate(&cobra.Command{
 		Use: "list", Short: "List local notes, newest first",
 		Long: "List local notes. --chat filters chat and message notes; --person filters\n" +
 			"person notes; --chat with --message filters one message. Use --before-id\n" +
 			"to continue after a page. JSONL prints one note per line and no cursor line.\n" +
 			"For a negative chat id use --chat=-12345 (or --chat -12345 --).",
 		Args: cobra.NoArgs, RunE: a.noteList,
-	}
+	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.NoteListResult](), Choices: append(formatChoices(), authorChoices()...)})
 	list.Flags().String("chat", "", "filter by chat reference")
 	list.Flags().String("person", "", "filter by person reference")
 	list.Flags().Int64("message", 0, "filter one message id, requires --chat")
@@ -48,10 +48,10 @@ func (a *app) noteCommand() *cobra.Command {
 	addFormatFlag(list)
 	list.Flags().Lookup("format").Usage = "output format: json envelope or jsonl (one note per line, no cursor line)"
 
-	deleteCmd := &cobra.Command{
+	deleteCmd := a.annotate(&cobra.Command{
 		Use: "delete <id> | --author owner|ai --yes", Short: "Delete one note or all notes by author",
 		Args: cobra.ArbitraryArgs, RunE: a.noteDelete,
-	}
+	}, commandSpec{Safety: safetyLocalWrite, Dangerous: true, Result: typeOf[rpc.NoteDeleteResult](), Args: []argSpec{{Name: "id", Required: false}}, Choices: authorChoices()})
 	deleteCmd.Flags().String("author", "", "delete all notes by this author: owner or ai")
 	deleteCmd.Flags().Bool("yes", false, "confirm deletion of all notes by author")
 	cmd.AddCommand(add, list, deleteCmd)

@@ -16,6 +16,9 @@ const (
 	formatJSONL = "jsonl"
 )
 
+// outputFormats returns every accepted --format value, in a fixed order.
+func outputFormats() []string { return []string{formatJSON, formatJSONL} }
+
 // addFormatFlag adds --format to a command that returns a list.
 func addFormatFlag(cmd *cobra.Command) {
 	cmd.Flags().String("format", formatJSON, "output format: json (one envelope) or jsonl (one item per line, then {\"next_cursor\":...} when more follow)")
@@ -75,7 +78,7 @@ func (a *app) chatInviteInfo(cmd *cobra.Command, args []string) error {
 func (a *app) messageCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "message", Short: "Read messages of a chat"}
 
-	history := &cobra.Command{
+	history := a.annotate(&cobra.Command{
 		Use:   "history <chat>",
 		Short: "Read a chat from the newest message to the oldest (read only)",
 		Long: "Read a chat from the newest message to the oldest. <chat> is @username, a numeric\n" +
@@ -88,7 +91,7 @@ func (a *app) messageCommand() *cobra.Command {
 			"message sent exactly at that time.",
 		Args: cobra.ExactArgs(1),
 		RunE: a.messageHistory,
-	}
+	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: formatChoices()})
 	history.Flags().Int("limit", 0, "messages per page, 1 to 100 (default 20)")
 	history.Flags().String("since", "", "only messages sent at this time or later (RFC 3339)")
 	history.Flags().String("until", "", "only messages sent at this time or earlier (RFC 3339)")
@@ -96,19 +99,19 @@ func (a *app) messageCommand() *cobra.Command {
 	history.Flags().String("cursor", "", "continue after a previous page, the value of next_cursor")
 	addFormatFlag(history)
 
-	get := &cobra.Command{
+	get := a.annotate(&cobra.Command{
 		Use:   "get <chat> <id>",
 		Short: "Read one message by its id (read only)",
 		Args:  cobra.ExactArgs(2),
 		RunE:  a.messageGet,
-	}
+	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.Message](), Args: []argSpec{{Name: "chat", Required: true}, {Name: "id", Required: true}}})
 
-	pinned := &cobra.Command{
+	pinned := a.annotate(&cobra.Command{
 		Use:   "pinned <chat>",
 		Short: "Read the pinned messages of a chat (read only)",
 		Args:  cobra.ExactArgs(1),
 		RunE:  a.messagePinned,
-	}
+	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: formatChoices()})
 	pinned.Flags().Int("limit", 0, "how many pinned messages, 1 to 100 (default 20)")
 	addFormatFlag(pinned)
 

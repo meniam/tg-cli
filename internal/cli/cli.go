@@ -53,6 +53,9 @@ func fail(exit int, format string, args ...any) *cmdError {
 
 type app struct {
 	deps Deps
+	// specs holds the annotation of every runnable command, filled while the
+	// command tree is built and read by `schema`.
+	specs map[*cobra.Command]commandSpec
 }
 
 // Execute runs the command line and returns the process exit code. The result
@@ -61,7 +64,7 @@ func Execute(ctx context.Context, args []string, deps Deps) int {
 	if deps.CallTimeout == 0 {
 		deps.CallTimeout = defaultCallTimeout
 	}
-	a := &app{deps: deps}
+	a := &app{deps: deps, specs: map[*cobra.Command]commandSpec{}}
 	root := a.rootCommand()
 	root.SetArgs(args)
 	root.SetOut(deps.Stdout)
@@ -106,7 +109,16 @@ func (a *app) rootCommand() *cobra.Command {
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().String("profile", daemon.DefaultProfile, "account profile, each has its own session and daemon")
-	root.AddCommand(a.daemonCommand(), a.authCommand(), a.chatCommand(), a.messageCommand(), a.noteCommand(), a.searchCommand())
+	root.AddCommand(
+		a.daemonCommand(),
+		a.authCommand(),
+		a.chatCommand(),
+		a.messageCommand(),
+		a.noteCommand(),
+		a.searchCommand(),
+		a.versionCommand(),
+		a.schemaCommand(root),
+	)
 	return root
 }
 

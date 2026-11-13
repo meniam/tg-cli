@@ -20,7 +20,7 @@ import (
 
 func (a *app) daemonCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "daemon", Short: "Run and control the background daemon"}
-	start := &cobra.Command{
+	start := a.annotate(&cobra.Command{
 		Use:   "start",
 		Short: "Run the daemon in the foreground until it is stopped",
 		Long: "Run the daemon in the foreground until it is stopped.\n\n" +
@@ -32,20 +32,20 @@ func (a *app) daemonCommand() *cobra.Command {
 			"\"MacBook Pro M1 BRN\"; a name given by --device is remembered for the profile.",
 		Args: cobra.NoArgs,
 		RunE: a.daemonStart,
-	}
+	}, commandSpec{Safety: safetyLocalWrite, Result: typeOf[daemonStartedResult]()})
 	start.Flags().String("client", "", "official client preset to use instead of your own application, for example desktop")
 	start.Flags().String("device", "", "device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN)")
-	cmd.AddCommand(start, &cobra.Command{
+	cmd.AddCommand(start, a.annotate(&cobra.Command{
 		Use:   "status",
 		Short: "Show the state of the daemon and of the account",
 		Args:  cobra.NoArgs,
 		RunE:  a.daemonStatus,
-	}, &cobra.Command{
+	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.StatusResult]()}), a.annotate(&cobra.Command{
 		Use:   "stop",
 		Short: "Ask the daemon to stop",
 		Args:  cobra.NoArgs,
 		RunE:  a.daemonStop,
-	})
+	}, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.ShutdownResult]()}))
 	return cmd
 }
 
@@ -181,7 +181,12 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fail(exitcode.Failure, "%v", err)
 	}
-	return a.success(map[string]bool{"stopped": true})
+	return a.success(daemonStartedResult{Stopped: true})
+}
+
+// daemonStartedResult is what `daemon start` prints when the daemon has stopped.
+type daemonStartedResult struct {
+	Stopped bool `json:"stopped"`
 }
 
 func (a *app) daemonStatus(cmd *cobra.Command, _ []string) error {

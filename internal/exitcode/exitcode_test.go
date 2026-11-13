@@ -13,9 +13,15 @@ func TestCodesAreUniqueAndNamed(t *testing.T) {
 			t.Errorf("name %q used by codes %d and %d", n, prev, c)
 		}
 		seenName[n] = c
+		if Note(c) == "" {
+			t.Errorf("code %d has no description for the schema", c)
+		}
 	}
 	if len(seenName) != len(names) {
 		t.Errorf("All() returned %d codes, expected %d", len(seenName), len(names))
+	}
+	if Note(99) != "" {
+		t.Error("an undefined code must have no description")
 	}
 }
 

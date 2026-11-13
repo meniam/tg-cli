@@ -34,6 +34,22 @@ var names = map[int]string{
 	NotFound:         "not_found",
 }
 
+var notes = map[int]string{
+	OK:               "the command succeeded",
+	Failure:          "a generic error with no more specific code",
+	Usage:            "wrong arguments, flags or environment",
+	DaemonNotRunning: "the daemon socket does not answer",
+	NotAuthorized:    "the profile has no logged-in Telegram account",
+	Telegram:         "Telegram rejected the request",
+	FloodWait:        "Telegram asked to wait before the next request",
+	NotFound:         "the chat, user, message or note does not exist or is not visible",
+}
+
+// Note returns a one-line description of a code, or "" for an undefined one.
+func Note(code int) string {
+	return notes[code]
+}
+
 // Name returns the stable machine name of a code, or "unknown".
 func Name(code int) string {
 	if n, ok := names[code]; ok {

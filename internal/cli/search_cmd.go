@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -9,8 +10,11 @@ import (
 	"tg-cli/internal/rpc"
 )
 
+// searchScopes are the scopes `search` accepts, in the order results are grouped.
+func searchScopes() []string { return []string{"chats", "people", "messages", "notes"} }
+
 func (a *app) searchCommand() *cobra.Command {
-	cmd := &cobra.Command{
+	cmd := a.annotate(&cobra.Command{
 		Use: "search [flags] <query>", Short: "Search the local database",
 		Long: "Search the local database without a Telegram connection. Results include only\n" +
 			"chats, people, messages, and notes that the daemon has already loaded or saved.\n" +
@@ -18,7 +22,7 @@ func (a *app) searchCommand() *cobra.Command {
 			"--scope accepts repeated values or a comma-separated list. JSONL prints one hit\n" +
 			"per line in scope order.",
 		Args: cobra.ExactArgs(1), RunE: a.search,
-	}
+	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.SearchResult](), Args: []argSpec{{Name: "query", Required: true}}, Choices: append(formatChoices(), append(authorChoices(), scopeChoices()...)...)})
 	cmd.SetFlagErrorFunc(func(*cobra.Command, error) error {
 		return fail(exitcode.Usage, "invalid search flags")
 	})
@@ -44,9 +48,7 @@ func (a *app) search(cmd *cobra.Command, args []string) error {
 	scopes, _ := cmd.Flags().GetStringSlice("scope")
 	for i := range scopes {
 		scopes[i] = strings.TrimSpace(scopes[i])
-		switch scopes[i] {
-		case "chats", "people", "messages", "notes":
-		default:
+		if !slices.Contains(searchScopes(), scopes[i]) {
 			return fail(exitcode.Usage, "--scope must be chats, people, messages, or notes")
 		}
 	}
