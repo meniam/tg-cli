@@ -20,7 +20,7 @@ func (a *app) authCommand() *cobra.Command {
 			"interactively and are never accepted as flags, so they stay out of the shell\n" +
 			"history. With --qr no code is needed: scan the QR code in the Telegram app of\n" +
 			"a logged-in device (Settings, Devices, Link Desktop Device). The daemon must be\n" +
-			"running: `tg-cli daemon start`.",
+			"running: `tg daemon start`.",
 		Args: cobra.NoArgs,
 		RunE: a.authLogin,
 	}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.AuthResult]()})

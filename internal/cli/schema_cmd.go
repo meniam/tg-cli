@@ -13,7 +13,7 @@ import (
 	"tg-cli/internal/schema"
 )
 
-// schemaVersion is the version of the document `tg-cli schema` prints. It grows
+// schemaVersion is the version of the document `tg schema` prints. It grows
 // when a field changes meaning, so an agent tells an old schema from a new one.
 const schemaVersion = 1
 

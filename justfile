@@ -12,7 +12,7 @@
 help help="":
     @bash bin/lib/help.sh bin/just/help.txt
 
-# Build the binary into dist/tg-cli
+# Build the binary into dist/tg
 [group('build')]
 [arg("help", long="help", short="h", value="1")]
 build help="":
@@ -20,7 +20,7 @@ build help="":
     set -euo pipefail
     [[ -z "{{ help }}" ]] || exec bash bin/lib/recipe-help.sh build
     set -x
-    go build -o dist/tg-cli ./cmd/tg-cli
+    go build -o dist/tg ./cmd/tg-cli
 
 # Run the tool without building: just run <arguments>
 [group('build')]

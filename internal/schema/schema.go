@@ -1,5 +1,5 @@
 // Package schema turns the Go type of a command result into the list of field
-// paths that `tg-cli schema` prints and `--fields` selects.
+// paths that `tg schema` prints and `--fields` selects.
 //
 // The list follows the `json` tags of the result types, so it is never written
 // by hand: a field added to a result type appears in the schema by itself.

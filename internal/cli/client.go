@@ -37,7 +37,7 @@ func (a *app) connect(ctx context.Context, cmd *cobra.Command) (*rpc.Client, err
 	c, err := rpc.Dial(ctx, "unix", paths.Socket)
 	if err != nil {
 		if rpc.IsNotRunning(err) {
-			return nil, fail(exitcode.DaemonNotRunning, "the daemon is not running for profile %q: start it with `tg-cli daemon start`", profile)
+			return nil, fail(exitcode.DaemonNotRunning, "the daemon is not running for profile %q: start it with `tg daemon start`", profile)
 		}
 		return nil, fail(exitcode.Failure, "connect to the daemon: %v", err)
 	}

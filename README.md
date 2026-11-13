@@ -29,19 +29,19 @@ A human can use it from a terminal too, but the agent is the main user.
 Illustrative output: the field names come from the wire types in [`internal/rpc/api.go`](internal/rpc/api.go), the values are made up.
 
 ```console
-$ tg-cli daemon status
+$ tg daemon status
 {"ok":true,"data":{"profile":"default","pid":48213,"connected":true,"authorized":true,"user":{"id":123456789,"username":"me"},"active_requests":0}}
 
-$ tg-cli chat list --limit 2 --format jsonl
+$ tg chat list --limit 2 --format jsonl
 {"id":-1001234567890,"type":"supergroup","title":"Release team","username":"release_team","unread":3}
 {"id":987654321,"type":"user","title":"Alice","unread":0}
 
-$ tg-cli message history @release_team --limit 20 --format jsonl
+$ tg message history @release_team --limit 20 --format jsonl
 {"id":4102,"chat_id":-1001234567890,"date":"2026-11-14T09:12:40Z","sender":{"id":987654321,"name":"Alice"},"text":"Deploy is green"}
 ...
 {"next_cursor":"..."}
 
-$ tg-cli search "deploy" --scope messages,notes --prefix
+$ tg search "deploy" --scope messages,notes --prefix
 {"ok":true,"data":{"hits":[{"scope":"messages","id":4102,"chat_id":-1001234567890,"snippet":"... is green","rank":-1.2}]}}
 ```
 
@@ -53,7 +53,7 @@ On failure the envelope is `{"ok":false,"error":{"code":"...","message":"..."}}`
  agent / human
       |
       v
-  tg-cli (CLI)        one short call per command, no Telegram connection of its own
+  tg (CLI)            one short call per command, no Telegram connection of its own
       |
       |  JSON-RPC 2.0, one message per line, Unix socket (mode 0600)
       v
@@ -75,18 +75,18 @@ On failure the envelope is `{"ok":false,"error":{"code":"...","message":"..."}}`
 ```sh
 git clone https://github.com/meniam/tg-cli.git
 cd tg-cli
-just build                      # writes dist/tg-cli
-export PATH="$PWD/dist:$PATH"   # optional: use `tg-cli` instead of `dist/tg-cli`
+just build                      # writes dist/tg
+export PATH="$PWD/dist:$PATH"   # optional: use `tg` instead of `dist/tg`
 ```
 
 **1. Start the daemon.** It runs in the foreground, so give it its own terminal.
 
 ```sh
 # Without your own api_id: borrow the credentials of an official client
-tg-cli daemon start --client desktop
+tg daemon start --client desktop
 
 # Or with your own application from https://my.telegram.org
-TG_API_ID=... TG_API_HASH=... tg-cli daemon start
+TG_API_ID=... TG_API_HASH=... tg daemon start
 ```
 
 Use one source or the other, never both. A preset is remembered per profile, so the next start needs no flag. Every start that uses a preset downloads it from GitHub, so the daemon needs network access to `raw.githubusercontent.com` then.
@@ -94,34 +94,34 @@ Use one source or the other, never both. A preset is remembered per profile, so 
 **2. Log in** from a second terminal. Phone login is not yet confirmed end to end on a live account, see [Status](#status). The login code and the 2FA password are asked interactively and are never accepted as flags.
 
 ```sh
-tg-cli auth login --phone +15551234567
-# or: tg-cli auth login --qr    (scan in Telegram: Settings, Devices, Link Desktop Device)
-tg-cli auth status
+tg auth login --phone +15551234567
+# or: tg auth login --qr    (scan in Telegram: Settings, Devices, Link Desktop Device)
+tg auth status
 ```
 
 **3. Read.**
 
 ```sh
-tg-cli chat list --limit 20
-tg-cli chat resolve @username
-tg-cli message history @username --limit 50 --since 2026-11-01T00:00:00Z
-tg-cli message history -- -1001234567890      # `--` before a negative chat id
+tg chat list --limit 20
+tg chat resolve @username
+tg message history @username --limit 50 --since 2026-11-01T00:00:00Z
+tg message history -- -1001234567890      # `--` before a negative chat id
 ```
 
 **4. Search and take notes.** Both work on the local database and need no login, only the running daemon. The one exception: `note add` for an `@username` the database has never seen asks Telegram to resolve it.
 
 ```sh
-tg-cli search "invoice" --scope chats,messages --prefix
+tg search "invoice" --scope chats,messages --prefix
 echo "Asked for the contract, follow up on Monday" | \
-  tg-cli note add --chat @username --author ai --model my-model --tag followup -
-tg-cli note list --tag followup
+  tg note add --chat @username --author ai --model my-model --tag followup -
+tg note list --tag followup
 ```
 
 A chat is addressed as `@username`, a Bot API id (users positive, groups negative, channels from `-1000000000000`), the phone number of a contact, or a `t.me` link.
 
 ## Command reference
 
-Global flag: `--profile <name>` (default `default`). Run `tg-cli <command> -h` for the full flag list.
+Global flag: `--profile <name>` (default `default`). Run `tg <command> -h` for the full flag list.
 
 | Command | What it does |
 | --- | --- |
@@ -179,7 +179,7 @@ Implemented and checked by tests: the daemon, JSON-RPC layer, profiles, login fl
 
 Not confirmed on a live account yet: phone login end to end (the code did not arrive during the check), QR login, `auth resend`, `auth cancel`, `--device`, `chat invite-info` on a real group, and resolving a contact by phone number. The `people` search scope is covered by tests only. The exact status of every requirement is in [`FEATURES.md`](FEATURES.md).
 
-**Account risk, plainly.** `tg-cli` is an unofficial client for your personal account. With `--client` it presents itself with the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited this way are an open question in [`INTENT.md`](INTENT.md). This project has not assessed it. Do not point this at an account you cannot afford to lose.
+**Account risk, plainly.** `tg` is an unofficial client for your personal account. With `--client` it presents itself with the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited this way are an open question in [`INTENT.md`](INTENT.md). This project has not assessed it. Do not point this at an account you cannot afford to lose.
 
 ## Roadmap
 
@@ -222,7 +222,7 @@ Design notes (in Russian) and the reasons behind each choice live in [`INTENT.md
 
 | Recipe | Does |
 | --- | --- |
-| `just build` | Build the binary into `dist/tg-cli` |
+| `just build` | Build the binary into `dist/tg` |
 | `just run <args>` | Run without building |
 | `just fmt` / `just vet` / `just test` | gofmt, `go vet`, `go test ./...` |
 | `just check` | Format check, vet and tests in a row. Run it before every commit |

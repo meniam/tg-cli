@@ -26,7 +26,7 @@ func (a *app) daemonCommand() *cobra.Command {
 		Long: "Start the daemon in the background and wait until it answers on its socket.\n" +
 			"The background process has no terminal, writes its journal to\n" +
 			"<profile>/daemon.log and keeps running after this command returns; stop it with\n" +
-			"`tg-cli daemon stop`. With --foreground the daemon runs in this terminal instead,\n" +
+			"`tg daemon stop`. With --foreground the daemon runs in this terminal instead,\n" +
 			"as it did before.\n\n" +
 			"Starting a profile that already has a running daemon is not an error: the\n" +
 			"command reports the daemon that is already there and starts no second one,\n" +
@@ -295,7 +295,7 @@ func (a *app) daemonStop(cmd *cobra.Command, _ []string) error {
 	pid, err := daemon.Ping(cmd.Context(), paths.Socket)
 	if err != nil {
 		if rpc.IsNotRunning(err) {
-			return fail(exitcode.DaemonNotRunning, "the daemon is not running for profile %q: start it with `tg-cli daemon start`", profile)
+			return fail(exitcode.DaemonNotRunning, "the daemon is not running for profile %q: start it with `tg daemon start`", profile)
 		}
 		return fail(exitcode.Failure, "ask the daemon for its state: %v", err)
 	}

@@ -32,7 +32,7 @@ Plans live in `.agents/plans/` and follow [`plans.md`](.agents/rules/plans.md). 
 
 Second: [read messages by chat reference](.agents/plans/20261113_2128_read_messages_by_chat_reference.md) (`done`, live check passed on 2026-11-13).
 
-Third: [local storage, notes and search](.agents/plans/20261113_2302_local_storage_notes_and_search.md) (`done`, live check passed on 2026-11-14). Fourth: [agent contract](.agents/plans/20261114_0050_agent_contract.md) (`draft`: all decisions made, waits for the owner's go-ahead and a branch).
+Third: [local storage, notes and search](.agents/plans/20261113_2302_local_storage_notes_and_search.md) (`done`, live check passed on 2026-11-14). Fourth: [agent contract](.agents/plans/20261114_0050_agent_contract.md) (`draft`: all decisions made, waits for the owner's go-ahead and a branch). Fifth: [Telegram request throttle](.agents/plans/20261114_0153_telegram_request_throttle.md) (`draft`: the executor of the Go code must load the `expert-golang` skill).
 
 ## Layout
 
@@ -41,7 +41,8 @@ go.mod                module tg-cli (working path, changes with the name)
 justfile              single entry point: build, checks, maintenance
 bin/lib/              help.sh and recipe-help.sh: just help rendering
 bin/just/             help texts: help.txt and root/<recipe>.txt
-dist/                 build output, not tracked by git
+dist/                 build output (dist/tg, installed as `tg`), not tracked by git
+docs/skill/tg-cli/    agent skill: how to work with the tool (keep it in step with `tg schema`)
 cmd/tg-cli/main.go    entry point and wiring only, no logic
 internal/
   cli/                argv, calling the Daemon, printing the response
@@ -67,7 +68,7 @@ internal/
 ## Running
 
 - Credentials for `daemon start`: either `--client <preset>` (official client preset, remembered per profile in `<profile>/client`) or `TG_API_ID` and `TG_API_HASH` (your own application), never both. The device name shown in the list of Telegram devices is `MacBook Pro M1 BRN` by default, `--device` overrides it and is remembered in `<profile>/device`. `TG_CLI_HOME` is the optional base directory of profiles. Never print or log keys or hashes.
-- Commands: `tg-cli daemon start [--client preset] [--device name]|status|stop`, `tg-cli auth login [--phone|--qr]|status|resend|cancel`, `tg-cli chat list [--limit] [--type] [--format jsonl]`, `tg-cli chat resolve|info|invite-info <ref>`, `tg-cli message history <chat> [--limit --since --until --topic --cursor --format]`, `tg-cli message get <chat> <id>`, `tg-cli message pinned <chat>`, global flag `--profile`. `tg-cli note add [--chat ref] [--person ref] [--message id] [--author owner|ai] [--model name] [--tag t] <body|->`, `tg-cli note list|delete`, `tg-cli search <query> [--scope chats,people,messages,notes] [--author] [--chat] [--prefix] [--deleted]` work on the local database and need neither a login nor a Telegram connection (the one exception: `note add` for a `@username` the database has never seen asks Telegram to resolve it). The Daemon saves every chat, person and message it reads from Telegram into that database. A chat is given as `@username`, a Bot API id (users positive, groups negative, channels from -1000000000000; write `--` before a negative id), a contact's phone number or a `t.me` link. Every command prints one JSON envelope on stdout (`--format jsonl` on list commands prints one item per line and a last `{"next_cursor":...}` line when more follow); prompts and logs go to stderr. Exit codes are in `internal/exitcode`.
+- Commands: `tg daemon start [--client preset] [--device name]|status|stop`, `tg auth login [--phone|--qr]|status|resend|cancel`, `tg chat list [--limit] [--type] [--format jsonl]`, `tg chat resolve|info|invite-info <ref>`, `tg message history <chat> [--limit --since --until --topic --cursor --format]`, `tg message get <chat> <id>`, `tg message pinned <chat>`, global flag `--profile`. `tg note add [--chat ref] [--person ref] [--message id] [--author owner|ai] [--model name] [--tag t] <body|->`, `tg note list|delete`, `tg search <query> [--scope chats,people,messages,notes] [--author] [--chat] [--prefix] [--deleted]` work on the local database and need neither a login nor a Telegram connection (the one exception: `note add` for a `@username` the database has never seen asks Telegram to resolve it). The Daemon saves every chat, person and message it reads from Telegram into that database. A chat is given as `@username`, a Bot API id (users positive, groups negative, channels from -1000000000000; write `--` before a negative id), a contact's phone number or a `t.me` link. Every command prints one JSON envelope on stdout (`--format jsonl` on list commands prints one item per line and a last `{"next_cursor":...}` line when more follow); prompts and logs go to stderr. Exit codes are in `internal/exitcode`.
 - `daemon start` runs in the foreground. Login, session and the socket belong to the Daemon, so start it before `auth login` and never run a second client on its session.
 
 ## Not decided

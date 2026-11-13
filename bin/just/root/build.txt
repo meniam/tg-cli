@@ -1,6 +1,7 @@
-    Builds the binary from cmd/tg-cli into dist/tg-cli.
+    Builds the binary from cmd/tg-cli into dist/tg. The binary is installed
+    as `tg`.
 
   What runs
-    1. go build -o dist/tg-cli ./cmd/tg-cli
+    1. go build -o dist/tg ./cmd/tg-cli
 
     The dist/ directory is created automatically and is listed in .gitignore.

@@ -107,7 +107,7 @@ func withIDHint(message string, args []string) string {
 
 func (a *app) rootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "tg-cli",
+		Use:           "tg",
 		Short:         "Console client for a personal Telegram account",
 		SilenceUsage:  true,
 		SilenceErrors: true,

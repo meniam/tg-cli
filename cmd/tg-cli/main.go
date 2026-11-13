@@ -1,5 +1,6 @@
-// Command tg-cli is a console client for a personal Telegram account.
-// "tg-cli" is a working name. This file only wires the pieces together.
+// Command tg is a console client for a personal Telegram account. The binary is
+// installed as "tg"; the module and this directory keep the working name
+// "tg-cli". This file only wires the pieces together.
 package main
 
 import (
