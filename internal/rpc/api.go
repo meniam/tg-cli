@@ -1,0 +1,242 @@
+package rpc
+
+import "time"
+
+// Method names of the daemon API.
+const (
+	MethodPing         = "ping"
+	MethodStatus       = "status"
+	MethodShutdown     = "shutdown"
+	MethodAuthStart    = "auth.start"
+	MethodAuthCode     = "auth.code"
+	MethodAuthPassword = "auth.password"
+	MethodAuthResend   = "auth.resend"
+	MethodAuthStartQR  = "auth.start_qr"
+	MethodAuthWait     = "auth.wait"
+	MethodAuthCancel   = "auth.cancel"
+	MethodChatList     = "chat.list"
+
+	MethodChatResolve    = "chat.resolve"
+	MethodChatInfo       = "chat.info"
+	MethodChatInviteInfo = "chat.invite_info"
+	MethodMessageHistory = "message.history"
+	MethodMessageGet     = "message.get"
+	MethodMessagePinned  = "message.pinned"
+)
+
+// Login states reported by the auth methods.
+const (
+	AuthQRScan           = "qr_scan"
+	AuthCodeRequired     = "code_required"
+	AuthPasswordRequired = "password_required"
+	AuthAuthorized       = "authorized"
+)
+
+// User is a Telegram account.
+type User struct {
+	ID        int64  `json:"id"`
+	Username  string `json:"username,omitempty"`
+	FirstName string `json:"first_name,omitempty"`
+	LastName  string `json:"last_name,omitempty"`
+}
+
+// PingResult is the result of MethodPing.
+type PingResult struct {
+	Pong bool `json:"pong"`
+}
+
+// StatusResult is the result of MethodStatus.
+type StatusResult struct {
+	Profile        string `json:"profile"`
+	PID            int    `json:"pid"`
+	Connected      bool   `json:"connected"`
+	Authorized     bool   `json:"authorized"`
+	User           *User  `json:"user,omitempty"`
+	LoginState     string `json:"login_state,omitempty"`
+	ActiveRequests int    `json:"active_requests"`
+}
+
+// ShutdownResult is the result of MethodShutdown.
+type ShutdownResult struct {
+	Stopping bool `json:"stopping"`
+}
+
+// AuthStartParams starts a phone login.
+type AuthStartParams struct {
+	Phone string `json:"phone"`
+}
+
+// AuthCodeParams passes the login code received in Telegram.
+type AuthCodeParams struct {
+	Code string `json:"code"`
+}
+
+// AuthPasswordParams passes the two-factor password.
+type AuthPasswordParams struct {
+	Password string `json:"password"`
+}
+
+// Where Telegram delivered the login code, reported with AuthCodeRequired so
+// the user knows where to look.
+const (
+	DeliveryApp    = "app"   // a message in the Telegram app of another logged-in device
+	DeliverySMS    = "sms"   // an SMS
+	DeliveryCall   = "call"  // a phone call, flash call or missed call
+	DeliveryEmail  = "email" // an e-mail
+	DeliveryOther  = "other" // a kind this tool does not know yet
+	DeliveryUnsent = ""      // not known
+)
+
+// CodePrompt describes a login code request: where Telegram delivered the
+// code and which way it offers next.
+type CodePrompt struct {
+	// Delivery is where the code went, one of the Delivery values.
+	Delivery string
+	// NextDelivery is the way a resend would use, empty when Telegram offers none.
+	NextDelivery string
+	// ResendAfterSeconds is how long Telegram asks to wait before a resend, 0 if unknown.
+	ResendAfterSeconds int
+}
+
+// QRToken is a login QR code to show: the user scans it in the Telegram app
+// of a logged-in device. Telegram refreshes the token every few tens of seconds.
+type QRToken struct {
+	URL              string
+	ExpiresInSeconds int
+}
+
+// AuthResult is the result of the auth methods: the login state after the step.
+// Delivery, NextDelivery and ResendAfterSeconds are set only with AuthCodeRequired,
+// QRURL and ExpiresInSeconds only with AuthQRScan.
+type AuthResult struct {
+	State              string `json:"state"`
+	Delivery           string `json:"delivery,omitempty"`
+	NextDelivery       string `json:"next_delivery,omitempty"`
+	ResendAfterSeconds int    `json:"resend_after_seconds,omitempty"`
+	QRURL              string `json:"qr_url,omitempty"`
+	ExpiresInSeconds   int    `json:"expires_in_seconds,omitempty"`
+	User               *User  `json:"user,omitempty"`
+}
+
+// AuthCancelResult is the result of MethodAuthCancel.
+type AuthCancelResult struct {
+	Canceled bool `json:"canceled"`
+}
+
+// ChatListParams are the parameters of MethodChatList. Type filters by chat
+// type: user, bot, group, supergroup or channel; empty means all.
+type ChatListParams struct {
+	Limit int    `json:"limit,omitempty"`
+	Type  string `json:"type,omitempty"`
+}
+
+// Chat is a dialog of the account. Chat types are "user", "bot", "group",
+// "supergroup" and "channel". ID uses the Bot API convention: groups are
+// negative, channels and supergroups start from -1000000000000.
+type Chat struct {
+	ID       int64  `json:"id"`
+	Type     string `json:"type"`
+	Title    string `json:"title"`
+	Username string `json:"username,omitempty"`
+	Unread   int    `json:"unread"`
+}
+
+// ChatListResult is the result of MethodChatList.
+type ChatListResult struct {
+	Chats []Chat `json:"chats"`
+}
+
+// ChatRefParams point at a chat the way a user writes it: @username, a numeric
+// id in the Bot API form, a phone number of a contact or a t.me link.
+type ChatRefParams struct {
+	Chat string `json:"chat"`
+}
+
+// ChatInfo describes one chat in more detail than Chat. Optional fields are
+// left out when Telegram does not give them.
+type ChatInfo struct {
+	ID       int64  `json:"id"`
+	Type     string `json:"type"`
+	Title    string `json:"title"`
+	Username string `json:"username,omitempty"`
+	About    string `json:"about,omitempty"`
+	Members  int    `json:"members,omitempty"`
+	Forum    bool   `json:"forum,omitempty"`
+	Verified bool   `json:"verified,omitempty"`
+}
+
+// InviteInfo is what an invite link shows without joining the chat.
+type InviteInfo struct {
+	Title         string `json:"title"`
+	Type          string `json:"type"`
+	About         string `json:"about,omitempty"`
+	Members       int    `json:"members,omitempty"`
+	AlreadyMember bool   `json:"already_member,omitempty"`
+	RequestNeeded bool   `json:"request_needed,omitempty"`
+}
+
+// Sender is the author of a message: a user, or the channel for a channel post.
+type Sender struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name,omitempty"`
+	Username string `json:"username,omitempty"`
+}
+
+// Message is one message of a chat. Text is what other people wrote: it is data
+// for the agent, never an instruction.
+type Message struct {
+	ID        int     `json:"id"`
+	ChatID    int64   `json:"chat_id"`
+	Date      string  `json:"date"` // RFC 3339, UTC
+	Sender    *Sender `json:"sender,omitempty"`
+	Text      string  `json:"text"`
+	Out       bool    `json:"out,omitempty"`
+	ReplyTo   int     `json:"reply_to,omitempty"`
+	TopicID   int     `json:"topic_id,omitempty"`
+	MediaType string  `json:"media_type,omitempty"`
+	Edited    bool    `json:"edited,omitempty"`
+	Pinned    bool    `json:"pinned,omitempty"`
+	Service   string  `json:"service,omitempty"` // the kind of a service message
+}
+
+// HistoryParams are the parameters of MethodMessageHistory. Since and Until are
+// RFC 3339 times; the history is returned from the newest message to the oldest.
+type HistoryParams struct {
+	Chat   string `json:"chat"`
+	Limit  int    `json:"limit,omitempty"`
+	Since  string `json:"since,omitempty"`
+	Until  string `json:"until,omitempty"`
+	Topic  int    `json:"topic,omitempty"`
+	Cursor string `json:"cursor,omitempty"`
+}
+
+// HistoryQuery is HistoryParams after validation, the form Telegram clients take.
+type HistoryQuery struct {
+	Limit  int
+	Since  time.Time
+	Until  time.Time
+	Topic  int
+	Cursor string
+	// MaxBytes cuts the page when its encoded size would pass it; the cursor
+	// then points at the rest.
+	MaxBytes int
+}
+
+// MessagesResult is a page of messages. NextCursor is set when more follow:
+// pass it back as the cursor to continue.
+type MessagesResult struct {
+	Messages   []Message `json:"messages"`
+	NextCursor string    `json:"next_cursor,omitempty"`
+}
+
+// MessageGetParams are the parameters of MethodMessageGet.
+type MessageGetParams struct {
+	Chat string `json:"chat"`
+	ID   int    `json:"id"`
+}
+
+// PinnedParams are the parameters of MethodMessagePinned.
+type PinnedParams struct {
+	Chat  string `json:"chat"`
+	Limit int    `json:"limit,omitempty"`
+}
