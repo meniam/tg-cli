@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -27,6 +28,7 @@ type DB struct {
 	read     *sql.DB
 	close    sync.Once
 	closeErr error
+	now      func() time.Time
 }
 
 type migration struct {
@@ -104,7 +106,7 @@ func Open(path string) (*DB, error) {
 		write.Close()
 		return nil, fmt.Errorf("connect read pool: %w", err)
 	}
-	return &DB{path: path, write: write, read: read}, nil
+	return &DB{path: path, write: write, read: read, now: time.Now}, nil
 }
 
 func dsn(path, mode string) string {
