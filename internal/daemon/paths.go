@@ -35,7 +35,15 @@ type Paths struct {
 	Device string
 	// Database is the local SQLite database, mode 0600.
 	Database string
+	// Log is the journal of a daemon started in the background, mode 0600.
+	// It never holds a message text, a secret or a credential.
+	Log string
 }
+
+// maxLogBytes is the size the journal is trimmed to when a background daemon
+// starts. The journal only explains why a start failed, so an old one is of no
+// use and must not grow without a bound.
+const maxLogBytes = 1 << 20 // 1 MiB
 
 // ResolvePaths returns the paths of a profile. home is the base directory
 // (the TG_CLI_HOME value); when empty, the user config directory is used.
@@ -59,6 +67,7 @@ func ResolvePaths(home, profile string) (Paths, error) {
 		Client:   filepath.Join(dir, "client"),
 		Device:   filepath.Join(dir, "device"),
 		Database: filepath.Join(dir, "store.db"),
+		Log:      filepath.Join(dir, "daemon.log"),
 	}
 	if len(p.Socket) > MaxSocketPath {
 		return Paths{}, fmt.Errorf("socket path %q is %d bytes, the limit is %d: set TG_CLI_HOME to a shorter directory", p.Socket, len(p.Socket), MaxSocketPath)

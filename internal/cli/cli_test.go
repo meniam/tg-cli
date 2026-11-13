@@ -205,6 +205,8 @@ type testEnv struct {
 	cfg        daemon.TelegramConfig // what NewTelegram received last
 	fetchErr   error                 // returned by FetchPresets when set
 	fetchCalls int
+	// launch, when set, replaces the background launcher of a start.
+	launch func(args []string, logPath string) (int, func() error, error)
 }
 
 // presetFixture mimics the opentele file with made-up values.
@@ -273,6 +275,7 @@ func (e *testEnv) deps(stdout, stderr *safeBuffer) Deps {
 			e.mu.Unlock()
 			return e.tg, nil
 		},
+		LaunchDaemon: e.launch,
 		FetchPresets: func(context.Context) ([]byte, error) {
 			e.mu.Lock()
 			defer e.mu.Unlock()
@@ -316,7 +319,9 @@ func (e *testEnv) startDaemon(extraArgs ...string) *daemonRun {
 	var stdout, stderr safeBuffer
 	go func() {
 		defer close(d.finished)
-		code := Execute(ctx, append([]string{"daemon", "start"}, extraArgs...), e.deps(&stdout, &stderr))
+		// --foreground: the tests drive the daemon in this process, with a fake
+		// Telegram client. The background start is tested on its own.
+		code := Execute(ctx, append([]string{"daemon", "start", "--foreground"}, extraArgs...), e.deps(&stdout, &stderr))
 		d.res = result{code, stdout.String(), stderr.String()}
 	}()
 	e.t.Cleanup(func() {
@@ -387,7 +392,7 @@ func TestUsageErrors(t *testing.T) {
 	wantFailure(t, e.run("chat", "list", "--profile", "Bad Name"), exitcode.Usage)
 
 	delete(e.env, "TG_API_ID")
-	r := e.run("daemon", "start")
+	r := e.run("daemon", "start", "--foreground")
 	wantFailure(t, r, exitcode.Usage)
 	if strings.Contains(r.stdout+r.stderr, "APIHASHVALUE") {
 		t.Error("api hash must never be printed")
@@ -490,7 +495,7 @@ func TestAbandonedLoginIsCanceled(t *testing.T) {
 func TestSecondDaemonOnTheSameProfile(t *testing.T) {
 	e := newEnv(t)
 	e.startDaemon()
-	r := e.run("daemon", "start")
+	r := e.run("daemon", "start", "--foreground")
 	wantFailure(t, r, exitcode.Failure)
 	if !strings.Contains(r.stdout, "already running") {
 		t.Errorf("unexpected message %q", r.stdout)
@@ -605,7 +610,7 @@ func TestClientFlagOverridesTheSavedPreset(t *testing.T) {
 
 func TestClientAndOwnApplicationConflict(t *testing.T) {
 	e := newEnv(t) // TG_API_ID and TG_API_HASH are set
-	r := e.run("daemon", "start", "--client", "desktop")
+	r := e.run("daemon", "start", "--foreground", "--client", "desktop")
 	wantFailure(t, r, exitcode.Usage)
 	if !strings.Contains(r.stdout, "not both") {
 		t.Errorf("unexpected message %q", r.stdout)
@@ -618,7 +623,7 @@ func TestClientAndOwnApplicationConflict(t *testing.T) {
 func TestUnknownPresetIsRejectedAndNotSaved(t *testing.T) {
 	e := newEnv(t)
 	e.usePreset()
-	r := e.run("daemon", "start", "--client", "nope")
+	r := e.run("daemon", "start", "--foreground", "--client", "nope")
 	wantFailure(t, r, exitcode.Usage)
 	if !strings.Contains(r.stdout, "desktop, ios") {
 		t.Errorf("the available presets must be listed: %q", r.stdout)
@@ -635,7 +640,7 @@ func TestUnknownPresetIsRejectedAndNotSaved(t *testing.T) {
 func TestInvalidPresetNameIsRejectedBeforeDownload(t *testing.T) {
 	e := newEnv(t)
 	e.usePreset()
-	wantFailure(t, e.run("daemon", "start", "--client", "../etc"), exitcode.Usage)
+	wantFailure(t, e.run("daemon", "start", "--foreground", "--client", "../etc"), exitcode.Usage)
 	if e.fetchCalls != 0 {
 		t.Error("an invalid name must not trigger a download")
 	}
@@ -645,7 +650,7 @@ func TestPresetDownloadFailure(t *testing.T) {
 	e := newEnv(t)
 	e.usePreset()
 	e.fetchErr = errors.New("network is down")
-	r := e.run("daemon", "start", "--client", "desktop")
+	r := e.run("daemon", "start", "--foreground", "--client", "desktop")
 	wantFailure(t, r, exitcode.Failure)
 	if !strings.Contains(r.stdout, "network is down") {
 		t.Errorf("the reason must be reported: %q", r.stdout)
@@ -659,7 +664,7 @@ func TestPresetDownloadFailure(t *testing.T) {
 func TestNoCredentialsExplainsBothWays(t *testing.T) {
 	e := newEnv(t)
 	e.usePreset()
-	r := e.run("daemon", "start")
+	r := e.run("daemon", "start", "--foreground")
 	wantFailure(t, r, exitcode.Usage)
 	for _, want := range []string{"TG_API_ID", "--client"} {
 		if !strings.Contains(r.stdout, want) {
@@ -902,7 +907,7 @@ func TestDeviceNameIsPassedAndRemembered(t *testing.T) {
 func TestInvalidDeviceNames(t *testing.T) {
 	e := newEnv(t)
 	for _, name := range []string{"   ", strings.Repeat("x", 65), "a\nb", "a\x1b[0m"} {
-		wantFailure(t, e.run("daemon", "start", "--device", name), exitcode.Usage)
+		wantFailure(t, e.run("daemon", "start", "--foreground", "--device", name), exitcode.Usage)
 	}
 	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
 	if _, err := os.Stat(paths.Device); !errors.Is(err, os.ErrNotExist) {

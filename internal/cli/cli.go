@@ -34,6 +34,9 @@ type Deps struct {
 	NewTelegram func(daemon.TelegramConfig) (daemon.Telegram, error)
 	// FetchPresets downloads the file with the official client presets.
 	FetchPresets func(context.Context) ([]byte, error)
+	// LaunchDaemon starts the detached daemon process of a background start.
+	// It is a field so that tests start nothing for real.
+	LaunchDaemon func(args []string, logPath string) (int, func() error, error)
 	// CallTimeout bounds one RPC call; defaultCallTimeout when zero.
 	CallTimeout time.Duration
 }

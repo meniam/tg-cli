@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -21,19 +22,31 @@ func (a *app) daemonCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "daemon", Short: "Run and control the background daemon"}
 	start := a.annotate(&cobra.Command{
 		Use:   "start",
-		Short: "Run the daemon in the foreground until it is stopped",
-		Long: "Run the daemon in the foreground until it is stopped.\n\n" +
+		Short: "Start the daemon in the background and wait until it answers",
+		Long: "Start the daemon in the background and wait until it answers on its socket.\n" +
+			"The background process has no terminal, writes its journal to\n" +
+			"<profile>/daemon.log and keeps running after this command returns; stop it with\n" +
+			"`tg-cli daemon stop`. With --foreground the daemon runs in this terminal instead,\n" +
+			"as it did before.\n\n" +
+			"Starting a profile that already has a running daemon is not an error: the\n" +
+			"command reports the daemon that is already there and starts no second one,\n" +
+			"because two processes must never share one Telegram session.\n\n" +
 			"Application credentials come from TG_API_ID and TG_API_HASH (your own\n" +
 			"application, https://my.telegram.org) or from --client, an official client\n" +
 			"preset downloaded from the opentele project. The chosen preset is remembered\n" +
-			"for the profile, so later starts need no flag.\n\n" +
+			"for the profile, so later starts need no flag. Credentials are never passed on\n" +
+			"the command line of the background process, where `ps` would show them.\n\n" +
 			"--device sets the device name in the list of Telegram devices. The default is\n" +
-			"\"MacBook Pro M1 BRN\"; a name given by --device is remembered for the profile.",
+			"\"MacBook Pro M1 BRN\"; a name given by --device is remembered for the profile.\n\n" +
+			"--idle-timeout stops the daemon after this long without a request. The default\n" +
+			"is 0, no idle stop.",
 		Args: cobra.NoArgs,
 		RunE: a.daemonStart,
 	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[daemonStartedResult]()})
 	start.Flags().String("client", "", "official client preset to use instead of your own application, for example desktop")
 	start.Flags().String("device", "", "device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN)")
+	start.Flags().Bool("foreground", false, "run the daemon in this terminal instead of the background")
+	start.Flags().Duration("idle-timeout", 0, "stop the daemon after this long without a request, like 30m; 0 means never")
 	cmd.AddCommand(start, a.annotate(&cobra.Command{
 		Use:   "status",
 		Short: "Show the state of the daemon and of the account",
@@ -160,6 +173,14 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	foreground, _ := cmd.Flags().GetBool("foreground")
+	idle, _ := cmd.Flags().GetDuration("idle-timeout")
+	if idle < 0 {
+		return fail(exitcode.Usage, "--idle-timeout must not be negative")
+	}
+	if !foreground {
+		return a.startBackground(cmd, profile, paths, idle)
+	}
 	cfg, err := a.credentials(cmd, paths)
 	if err != nil {
 		return err
@@ -172,15 +193,56 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		return fail(exitcode.Failure, "create the Telegram client: %v", err)
 	}
 	err = daemon.Run(cmd.Context(), daemon.Options{
-		Profile:  profile,
-		Paths:    paths,
-		Telegram: tg,
-		Log:      a.daemonLog(cmd),
+		Profile:     profile,
+		Paths:       paths,
+		Telegram:    tg,
+		Log:         a.daemonLog(cmd),
+		IdleTimeout: idle,
 	})
 	if err != nil {
 		return fail(exitcode.Failure, "%v", err)
 	}
 	return a.success(cmd, daemonStartedResult{Stopped: true})
+}
+
+// startBackground launches the daemon as a separate process and waits for its
+// socket. The process re-runs this command with --foreground, so it finds the
+// credentials the way a foreground start does: from the environment and the
+// profile files, never from its arguments.
+func (a *app) startBackground(cmd *cobra.Command, profile string, paths daemon.Paths, idle time.Duration) error {
+	// The credentials are resolved here first, so a wrong or missing preset is
+	// an answer of this command and not a silent failure of a process the user
+	// cannot see. Only the client preset name is passed on, and it is saved for
+	// the profile, so the child needs no credential either way.
+	if _, err := a.credentials(cmd, paths); err != nil {
+		return err
+	}
+	if _, err := a.deviceModel(cmd, paths); err != nil {
+		return err
+	}
+	args := []string{"daemon", "start", "--foreground", "--profile", profile}
+	if idle > 0 {
+		args = append(args, "--idle-timeout", idle.String())
+	}
+	bg, err := daemon.Start(cmd.Context(), daemon.StartOptions{
+		Paths:       paths,
+		IdleTimeout: idle,
+		Args:        args,
+		Launcher:    a.deps.LaunchDaemon,
+	})
+	if err != nil {
+		// An error of a background start is never hidden: --quiet silences
+		// hints, not the reason a daemon did not come up.
+		return fail(exitcode.Failure, "%v", err)
+	}
+	a.warn(cmd, "daemon is running in the background, journal: %s", bg.Log)
+	return a.success(cmd, backgroundStartedResult{
+		Running: true,
+		PID:     bg.PID,
+		Profile: profile,
+		Socket:  bg.Socket,
+		Log:     bg.Log,
+	})
 }
 
 // daemonLog is the journal of the daemon on stderr. --quiet keeps it to the
@@ -194,9 +256,20 @@ func (a *app) daemonLog(cmd *cobra.Command) *slog.Logger {
 	return slog.New(slog.NewTextHandler(a.deps.Stderr, &slog.HandlerOptions{Level: level}))
 }
 
-// daemonStartedResult is what `daemon start` prints when the daemon has stopped.
+// daemonStartedResult is what `daemon start --foreground` prints when the daemon
+// has stopped.
 type daemonStartedResult struct {
 	Stopped bool `json:"stopped"`
+}
+
+// backgroundStartedResult is what a background `daemon start` prints: the daemon
+// is up, and these are the facts a caller needs to reach it and its journal.
+type backgroundStartedResult struct {
+	Running bool   `json:"running"`
+	PID     int    `json:"pid,omitempty"`
+	Profile string `json:"profile"`
+	Socket  string `json:"socket"`
+	Log     string `json:"log"`
 }
 
 func (a *app) daemonStatus(cmd *cobra.Command, _ []string) error {
@@ -213,14 +286,21 @@ func (a *app) daemonStatus(cmd *cobra.Command, _ []string) error {
 }
 
 func (a *app) daemonStop(cmd *cobra.Command, _ []string) error {
-	c, err := a.connect(cmd.Context(), cmd)
+	profile, paths, err := a.profile(cmd)
 	if err != nil {
 		return err
 	}
-	defer c.Close()
-	var res rpc.ShutdownResult
-	if err := a.call(cmd.Context(), cmd, c, rpc.MethodShutdown, nil, &res); err != nil {
-		return err
+	// The process id comes from the daemon itself, so the stop can tell whether
+	// the process is really gone rather than only whether the socket closed.
+	pid, err := daemon.Ping(cmd.Context(), paths.Socket)
+	if err != nil {
+		if rpc.IsNotRunning(err) {
+			return fail(exitcode.DaemonNotRunning, "the daemon is not running for profile %q: start it with `tg-cli daemon start`", profile)
+		}
+		return fail(exitcode.Failure, "ask the daemon for its state: %v", err)
 	}
-	return a.success(cmd, res)
+	if err := daemon.Stop(cmd.Context(), paths.Socket, pid, daemon.StopTimeout); err != nil {
+		return fail(exitcode.Failure, "%v", err)
+	}
+	return a.success(cmd, rpc.ShutdownResult{Stopping: true})
 }

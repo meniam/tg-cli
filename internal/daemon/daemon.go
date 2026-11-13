@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"tg-cli/internal/rpc"
@@ -32,9 +33,17 @@ type Options struct {
 	Telegram Telegram
 	Store    *store.DB
 	Log      *slog.Logger
+	// IdleTimeout stops the daemon after this long without a request and with
+	// no request in flight. Zero means no idle stop: the daemon lives until
+	// `daemon stop` or a failure.
+	IdleTimeout time.Duration
 	// OnListening, when set, is called once the socket accepts connections.
 	OnListening func()
 }
+
+// idleCheckEvery is how often the idle stop looks at the daemon. It is finer
+// than the shortest useful timeout and coarse enough to cost nothing.
+const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
 	opts   Options
@@ -44,6 +53,12 @@ type daemon struct {
 	store  *store.DB
 	cancel context.CancelFunc
 	once   sync.Once
+	// lastActivity is the Unix time of the last request that started or ended,
+	// in nanoseconds. A request is often shorter than the idle check, so the
+	// count of requests in flight alone would miss it.
+	lastActivity atomic.Int64
+	// inFlight is the number of requests being served right now.
+	inFlight atomic.Int64
 }
 
 // Run starts the daemon and blocks until ctx ends, a shutdown request
@@ -90,6 +105,8 @@ func Run(ctx context.Context, opts Options) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), cancel: cancel, store: ownedStore}
+	// A daemon that has just started is not idle: the clock runs from now.
+	d.lastActivity.Store(time.Now().UnixNano())
 	d.login = newLoginManager(runCtx, opts.Telegram)
 	d.register()
 
@@ -97,6 +114,18 @@ func Run(ctx context.Context, opts Options) error {
 	go func() { tgDone <- opts.Telegram.Run(runCtx) }()
 	serveDone := make(chan error, 1)
 	go func() { serveDone <- d.srv.Serve(l) }()
+
+	// An idle stop ends the daemon the same way a shutdown request does: it
+	// cancels the context Run waits on, so the stop sequence below runs once.
+	idleDone := make(chan struct{})
+	if opts.IdleTimeout > 0 {
+		go func() {
+			defer close(idleDone)
+			watchIdle(runCtx, cancel, log, d, opts.IdleTimeout)
+		}()
+	} else {
+		close(idleDone)
+	}
 
 	log.Info("daemon started", "profile", opts.Profile, "socket", opts.Paths.Socket)
 	if opts.OnListening != nil {
@@ -120,6 +149,9 @@ func Run(ctx context.Context, opts Options) error {
 
 	log.Info("daemon stopping")
 	cancel()
+	// Join the idle monitor: a goroutine that outlived the shutdown would keep
+	// the process alive after Run returned.
+	<-idleDone
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), stopGrace)
 	defer stopCancel()
 	if err := d.srv.Shutdown(stopCtx); err != nil {
@@ -135,29 +167,73 @@ func Run(ctx context.Context, opts Options) error {
 	return runErr
 }
 
+// watchIdle cancels the daemon when it has been without a request for longer
+// than idle and no request is in flight.
+func watchIdle(ctx context.Context, cancel context.CancelFunc, log *slog.Logger, d *daemon, idle time.Duration) {
+	ticker := time.NewTicker(idleCheckEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-ticker.C:
+			// A request in flight is work that must finish, whatever its age.
+			if d.inFlight.Load() > 0 {
+				continue
+			}
+			last := time.Unix(0, d.lastActivity.Load())
+			if now.Sub(last) < idle {
+				continue
+			}
+			log.Info("daemon idle, stopping", "idle", idle.String())
+			cancel()
+			return
+		}
+	}
+}
+
+// tracking records a request as activity, so the idle stop sees a short request
+// that starts and ends between two checks.
+func (d *daemon) tracking(h rpc.Handler) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (any, error) {
+		d.inFlight.Add(1)
+		d.lastActivity.Store(time.Now().UnixNano())
+		defer func() {
+			d.lastActivity.Store(time.Now().UnixNano())
+			d.inFlight.Add(-1)
+		}()
+		return h(ctx, params)
+	}
+}
+
+// handle registers a handler that counts as activity for the idle stop.
+func (d *daemon) handle(method string, h rpc.Handler) {
+	d.srv.Handle(method, d.tracking(h))
+}
+
 func (d *daemon) register() {
-	d.srv.Handle(rpc.MethodPing, d.ping)
-	d.srv.Handle(rpc.MethodStatus, d.status)
-	d.srv.Handle(rpc.MethodShutdown, d.shutdown)
-	d.srv.Handle(rpc.MethodAuthStart, d.authStart)
-	d.srv.Handle(rpc.MethodAuthCode, d.authCode)
-	d.srv.Handle(rpc.MethodAuthPassword, d.authPassword)
-	d.srv.Handle(rpc.MethodAuthResend, d.authResend)
-	d.srv.Handle(rpc.MethodAuthStartQR, d.authStartQR)
-	d.srv.Handle(rpc.MethodAuthWait, d.authWait)
-	d.srv.Handle(rpc.MethodAuthCancel, d.authCancel)
-	d.srv.Handle(rpc.MethodChatList, d.chatList)
-	d.srv.Handle(rpc.MethodChatResolve, d.chatResolve)
-	d.srv.Handle(rpc.MethodChatInfo, d.chatInfo)
-	d.srv.Handle(rpc.MethodChatInviteInfo, d.chatInviteInfo)
-	d.srv.Handle(rpc.MethodMessageHistory, d.messageHistory)
-	d.srv.Handle(rpc.MethodMessageGet, d.messageGet)
-	d.srv.Handle(rpc.MethodMessagePinned, d.messagePinned)
-	d.srv.Handle(rpc.MethodNoteAdd, d.noteAdd)
-	d.srv.Handle(rpc.MethodNoteList, d.noteList)
-	d.srv.Handle(rpc.MethodNoteDelete, d.noteDelete)
-	d.srv.Handle(rpc.MethodNoteDeleteByAuthor, d.noteDeleteByAuthor)
-	d.srv.Handle(rpc.MethodSearch, d.search)
+	d.handle(rpc.MethodPing, d.ping)
+	d.handle(rpc.MethodStatus, d.status)
+	d.handle(rpc.MethodShutdown, d.shutdown)
+	d.handle(rpc.MethodAuthStart, d.authStart)
+	d.handle(rpc.MethodAuthCode, d.authCode)
+	d.handle(rpc.MethodAuthPassword, d.authPassword)
+	d.handle(rpc.MethodAuthResend, d.authResend)
+	d.handle(rpc.MethodAuthStartQR, d.authStartQR)
+	d.handle(rpc.MethodAuthWait, d.authWait)
+	d.handle(rpc.MethodAuthCancel, d.authCancel)
+	d.handle(rpc.MethodChatList, d.chatList)
+	d.handle(rpc.MethodChatResolve, d.chatResolve)
+	d.handle(rpc.MethodChatInfo, d.chatInfo)
+	d.handle(rpc.MethodChatInviteInfo, d.chatInviteInfo)
+	d.handle(rpc.MethodMessageHistory, d.messageHistory)
+	d.handle(rpc.MethodMessageGet, d.messageGet)
+	d.handle(rpc.MethodMessagePinned, d.messagePinned)
+	d.handle(rpc.MethodNoteAdd, d.noteAdd)
+	d.handle(rpc.MethodNoteList, d.noteList)
+	d.handle(rpc.MethodNoteDelete, d.noteDelete)
+	d.handle(rpc.MethodNoteDeleteByAuthor, d.noteDeleteByAuthor)
+	d.handle(rpc.MethodSearch, d.search)
 }
 
 func (d *daemon) ping(context.Context, json.RawMessage) (any, error) {

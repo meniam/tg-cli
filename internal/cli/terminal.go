@@ -27,11 +27,12 @@ const presetFetchTimeout = 15 * time.Second
 func DefaultDeps(newTelegram func(daemon.TelegramConfig) (daemon.Telegram, error)) Deps {
 	stdin := bufio.NewReader(os.Stdin)
 	return Deps{
-		Stdout:      os.Stdout,
-		Stderr:      os.Stderr,
-		Stdin:       os.Stdin,
-		Getenv:      os.Getenv,
-		NewTelegram: newTelegram,
+		Stdout:       os.Stdout,
+		Stderr:       os.Stderr,
+		Stdin:        os.Stdin,
+		Getenv:       os.Getenv,
+		NewTelegram:  newTelegram,
+		LaunchDaemon: daemon.Launch,
 		FetchPresets: func(ctx context.Context) ([]byte, error) {
 			return clientpreset.Fetch(ctx, &http.Client{Timeout: presetFetchTimeout})
 		},
