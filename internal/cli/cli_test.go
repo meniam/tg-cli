@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -28,8 +29,9 @@ type fakeTelegram struct {
 	wantCode string
 	wantPass string
 
-	messages []rpc.Message // newest first
-	missing  bool          // the read methods answer "not found"
+	messages     []rpc.Message // newest first
+	missing      bool          // the read methods answer "not found"
+	resolveCalls int
 }
 
 func (f *fakeTelegram) Run(ctx context.Context) error {
@@ -128,6 +130,9 @@ func (f *fakeTelegram) Chats(_ context.Context, limit int, chatType string) ([]r
 }
 
 func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, error) {
+	f.mu.Lock()
+	f.resolveCalls++
+	f.mu.Unlock()
 	if f.missing {
 		return rpc.Chat{}, rpc.NewError(rpc.CodeNotFound, "not found: no such chat")
 	}
@@ -188,10 +193,11 @@ func (s *safeBuffer) String() string {
 }
 
 type testEnv struct {
-	t    *testing.T
-	home string
-	env  map[string]string
-	tg   *fakeTelegram
+	t     *testing.T
+	home  string
+	env   map[string]string
+	tg    *fakeTelegram
+	stdin io.Reader
 
 	mu         sync.Mutex
 	lines      []string              // answers for ReadLine
@@ -257,6 +263,7 @@ func (e *testEnv) deps(stdout, stderr *safeBuffer) Deps {
 	return Deps{
 		Stdout:     stdout,
 		Stderr:     stderr,
+		Stdin:      e.stdin,
 		Getenv:     func(k string) string { return e.env[k] },
 		ReadLine:   func(string) (string, error) { return pop(&e.lines) },
 		ReadSecret: func(string) (string, error) { return pop(&e.secrets) },

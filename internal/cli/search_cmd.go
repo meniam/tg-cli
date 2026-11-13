@@ -1,0 +1,67 @@
+package cli
+
+import (
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"tg-cli/internal/exitcode"
+	"tg-cli/internal/rpc"
+)
+
+func (a *app) searchCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use: "search [flags] <query>", Short: "Search the local database",
+		Long: "Search the local database without a Telegram connection. Results include only\n" +
+			"chats, people, messages, and notes that the daemon has already loaded or saved.\n" +
+			"Quote a multiword query in the shell. Use -- before a query starting with -.\n" +
+			"--scope accepts repeated values or a comma-separated list. JSONL prints one hit\n" +
+			"per line in scope order.",
+		Args: cobra.ExactArgs(1), RunE: a.search,
+	}
+	cmd.SetFlagErrorFunc(func(*cobra.Command, error) error {
+		return fail(exitcode.Usage, "invalid search flags")
+	})
+	cmd.Flags().StringSlice("scope", nil, "scopes: chats, people, messages, notes; repeat or separate with commas")
+	cmd.Flags().String("author", "", "filter note hits by owner or ai")
+	cmd.Flags().String("chat", "", "restrict message and note hits to this chat")
+	cmd.Flags().Int("limit", 0, "hits per scope, default 20, maximum 100")
+	cmd.Flags().Bool("prefix", false, "match the last query term as a prefix")
+	cmd.Flags().Bool("deleted", false, "include messages marked deleted")
+	addFormatFlag(cmd)
+	cmd.Flags().Lookup("format").Usage = "output format: json envelope or jsonl (one hit per line)"
+	return cmd
+}
+
+func (a *app) search(cmd *cobra.Command, args []string) error {
+	if strings.TrimSpace(args[0]) == "" {
+		return fail(exitcode.Usage, "search query must contain text")
+	}
+	f, err := format(cmd)
+	if err != nil {
+		return err
+	}
+	scopes, _ := cmd.Flags().GetStringSlice("scope")
+	for i := range scopes {
+		scopes[i] = strings.TrimSpace(scopes[i])
+		switch scopes[i] {
+		case "chats", "people", "messages", "notes":
+		default:
+			return fail(exitcode.Usage, "--scope must be chats, people, messages, or notes")
+		}
+	}
+	author, _ := cmd.Flags().GetString("author")
+	if author != "" && author != "owner" && author != "ai" {
+		return fail(exitcode.Usage, "--author must be owner or ai")
+	}
+	p := rpc.SearchParams{Query: args[0], Scopes: scopes, Author: author}
+	p.Chat, _ = cmd.Flags().GetString("chat")
+	p.Limit, _ = cmd.Flags().GetInt("limit")
+	p.Prefix, _ = cmd.Flags().GetBool("prefix")
+	p.IncludeDeleted, _ = cmd.Flags().GetBool("deleted")
+	var result rpc.SearchResult
+	if err := a.callOne(cmd, rpc.MethodSearch, p, &result); err != nil {
+		return err
+	}
+	return emitList(a, f, result, result.Hits, "")
+}

@@ -24,6 +24,7 @@ const defaultCallTimeout = 2 * time.Minute
 type Deps struct {
 	Stdout io.Writer
 	Stderr io.Writer
+	Stdin  io.Reader
 	// Getenv reads environment variables.
 	Getenv func(string) string
 	// ReadLine prints prompt to stderr and reads a line of input.
@@ -105,7 +106,7 @@ func (a *app) rootCommand() *cobra.Command {
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().String("profile", daemon.DefaultProfile, "account profile, each has its own session and daemon")
-	root.AddCommand(a.daemonCommand(), a.authCommand(), a.chatCommand(), a.messageCommand())
+	root.AddCommand(a.daemonCommand(), a.authCommand(), a.chatCommand(), a.messageCommand(), a.noteCommand(), a.searchCommand())
 	return root
 }
 

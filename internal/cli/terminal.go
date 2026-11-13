@@ -29,6 +29,7 @@ func DefaultDeps(newTelegram func(daemon.TelegramConfig) (daemon.Telegram, error
 	return Deps{
 		Stdout:      os.Stdout,
 		Stderr:      os.Stderr,
+		Stdin:       os.Stdin,
 		Getenv:      os.Getenv,
 		NewTelegram: newTelegram,
 		FetchPresets: func(ctx context.Context) ([]byte, error) {
