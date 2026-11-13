@@ -56,7 +56,12 @@ func (d *daemon) chatResolve(ctx context.Context, params json.RawMessage) (any, 
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.Resolve(ctx, ref)
+	chat, err := d.opts.Telegram.Resolve(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	d.saveChats(ctx, rpc.MethodChatResolve, []rpc.Chat{chat}, false)
+	return chat, nil
 }
 
 func (d *daemon) chatInfo(ctx context.Context, params json.RawMessage) (any, error) {
@@ -71,7 +76,12 @@ func (d *daemon) chatInfo(ctx context.Context, params json.RawMessage) (any, err
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.ChatInfo(ctx, ref)
+	info, err := d.opts.Telegram.ChatInfo(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	d.saveChatInfo(ctx, info)
+	return info, nil
 }
 
 func (d *daemon) chatInviteInfo(ctx context.Context, params json.RawMessage) (any, error) {
@@ -143,6 +153,7 @@ func (d *daemon) messageHistory(ctx context.Context, params json.RawMessage) (an
 	if res.Messages == nil {
 		res.Messages = []rpc.Message{}
 	}
+	d.saveMessages(ctx, rpc.MethodMessageHistory, res.Messages)
 	return res, nil
 }
 
@@ -161,7 +172,12 @@ func (d *daemon) messageGet(ctx context.Context, params json.RawMessage) (any, e
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.Message(ctx, ref, p.ID)
+	message, err := d.opts.Telegram.Message(ctx, ref, p.ID)
+	if err != nil {
+		return nil, err
+	}
+	d.saveMessages(ctx, rpc.MethodMessageGet, []rpc.Message{message})
+	return message, nil
 }
 
 func (d *daemon) messagePinned(ctx context.Context, params json.RawMessage) (any, error) {
@@ -187,6 +203,7 @@ func (d *daemon) messagePinned(ctx context.Context, params json.RawMessage) (any
 	if res.Messages == nil {
 		res.Messages = []rpc.Message{}
 	}
+	d.saveMessages(ctx, rpc.MethodMessagePinned, res.Messages)
 	return res, nil
 }
 

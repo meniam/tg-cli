@@ -38,6 +38,8 @@ type fakeTelegram struct {
 	lastLimit    int
 	lastType     string
 	messages     []rpc.Message
+	pinned       []rpc.Message
+	info         *rpc.ChatInfo
 	missing      bool // the read methods answer "not found"
 	resolveCalls int
 	resolved     *rpc.Chat
@@ -179,6 +181,9 @@ func (f *fakeTelegram) ChatInfo(_ context.Context, ref chatref.Ref) (rpc.ChatInf
 	if f.missing {
 		return rpc.ChatInfo{}, rpc.NewError(rpc.CodeNotFound, "not found")
 	}
+	if f.info != nil {
+		return *f.info, nil
+	}
 	return rpc.ChatInfo{ID: 77, Type: "supergroup", Title: "Team", About: "About", Members: 12}, nil
 }
 
@@ -220,7 +225,7 @@ func (f *fakeTelegram) Pinned(_ context.Context, ref chatref.Ref, limit int) (rp
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.lastRef, f.lastLimit = ref, limit
-	return rpc.MessagesResult{}, nil // nil slice: the handler must return an empty list
+	return rpc.MessagesResult{Messages: f.pinned}, nil // nil slice: the handler must return an empty list
 }
 
 // shortTempDir returns a short directory: Unix socket paths are length-limited

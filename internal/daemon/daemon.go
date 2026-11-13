@@ -277,6 +277,7 @@ func (d *daemon) chatList(ctx context.Context, params json.RawMessage) (any, err
 	if chats == nil {
 		chats = []rpc.Chat{}
 	}
+	d.saveChats(ctx, rpc.MethodChatList, chats, true)
 	return rpc.ChatListResult{Chats: chats}, nil
 }
 

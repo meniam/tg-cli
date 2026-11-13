@@ -25,7 +25,7 @@ func noteTestRPC(t *testing.T) (*rpc.Client, *store.DB, *fakeTelegram, *safeBuff
 	tg := newFake()
 	logs := &safeBuffer{}
 	logger := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	d := &daemon{opts: Options{Telegram: tg}, store: db, log: logger, srv: rpc.NewServer(logger)}
+	d := &daemon{opts: Options{Telegram: tg, Store: db}, store: db, log: logger, srv: rpc.NewServer(logger)}
 	d.register()
 	serverSide, clientSide := net.Pipe()
 	done := make(chan struct{})
