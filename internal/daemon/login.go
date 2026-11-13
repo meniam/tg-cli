@@ -178,6 +178,7 @@ func (m *loginManager) resend(ctx context.Context) (rpc.AuthResult, error) {
 	select {
 	case f.resendCh <- struct{}{}:
 	case <-ctx.Done():
+		m.restoreState(f, rpc.AuthCodeRequired)
 		return rpc.AuthResult{}, ctx.Err()
 	case <-f.ctx.Done():
 		return rpc.AuthResult{}, loginEnded(f)
@@ -210,11 +211,22 @@ func (m *loginManager) provide(ctx context.Context, want string, channel func(*l
 	select {
 	case channel(f) <- value:
 	case <-ctx.Done():
+		m.restoreState(f, want)
 		return rpc.AuthResult{}, ctx.Err()
 	case <-f.ctx.Done():
 		return rpc.AuthResult{}, loginEnded(f)
 	}
 	return m.wait(ctx, f)
+}
+
+// restoreState lets another request provide input if this request ended
+// before its value reached the login callback.
+func (m *loginManager) restoreState(f *loginFlow, state string) {
+	m.mu.Lock()
+	if m.flow == f && f.state == "" && f.ctx.Err() == nil {
+		f.state = state
+	}
+	m.mu.Unlock()
 }
 
 func (m *loginManager) stateLocked() string {
