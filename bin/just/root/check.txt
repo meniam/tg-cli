@@ -1,0 +1,7 @@
+    Pre-commit check: formatting, static analysis and tests in a row.
+    Changes no files and stops on unformatted code.
+
+  What runs
+    1. gofmt -l cmd internal: lists unformatted files, a non-empty list stops the check
+    2. go vet ./...
+    3. go test ./...

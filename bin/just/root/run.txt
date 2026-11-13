@@ -1,0 +1,5 @@
+    Runs the tool without a separate build; arguments are passed as they are.
+    Example: just run --help
+
+  What runs
+    1. go run ./cmd/tg-cli <arguments>

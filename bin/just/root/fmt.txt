@@ -1,0 +1,6 @@
+    Formats the Go code in cmd/ and internal/ and rewrites the files.
+
+  What runs
+    1. gofmt -w cmd internal
+
+    To only check formatting without changes, use just check.

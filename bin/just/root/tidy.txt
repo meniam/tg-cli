@@ -1,0 +1,6 @@
+    Brings go.mod and go.sum in line with the imports in the code.
+
+  What runs
+    1. go mod tidy
+
+    Changes go.mod and go.sum: review the diff before committing.

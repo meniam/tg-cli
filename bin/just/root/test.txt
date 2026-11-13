@@ -1,0 +1,7 @@
+    Runs all tests of the module.
+
+  What runs
+    1. go test ./...
+
+    Tests against live Telegram are not run by default: a real account is not
+    touched without an explicit instruction.

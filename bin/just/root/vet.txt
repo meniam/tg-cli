@@ -1,0 +1,4 @@
+    Go static analysis: suspicious constructs and mistakes in calls.
+
+  What runs
+    1. go vet ./...

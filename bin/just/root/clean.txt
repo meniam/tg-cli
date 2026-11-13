@@ -1,0 +1,4 @@
+    Removes build output.
+
+  What runs
+    1. rm -rf dist
