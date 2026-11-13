@@ -18,6 +18,8 @@ import (
 // commands say on stderr.
 type outputSettings struct {
 	format output.Format
+	// fields are the paths --fields asked for, empty when it was not given.
+	fields []string
 	// quiet removes hints and progress lines; errors are never removed.
 	quiet bool
 	// verbose adds diagnostics about the call.
@@ -31,6 +33,8 @@ func addOutputFlags(root *cobra.Command) {
 	flags.String("format", string(output.FormatJSON),
 		"output format: json (one envelope, the default), jsonl (one item per line, list commands only), toon (the same envelope, compact) or human (for a person)")
 	flags.Bool("human", false, "short for --format human")
+	flags.String("fields", "",
+		"only these paths of the result, comma separated, like id,title or messages.sender.name; a path the result does not have is skipped")
 	flags.Bool("quiet", false, "hide hints and progress on stderr; errors are still printed")
 	flags.Bool("verbose", false, "print diagnostics about the call on stderr")
 }
@@ -49,6 +53,10 @@ func (a *app) outputSettingsFor(cmd *cobra.Command) (outputSettings, error) {
 		return settings, err
 	}
 	settings.format = format
+	fields, _ := root.PersistentFlags().GetString("fields")
+	if settings.fields, err = output.ParseFields(fields); err != nil {
+		return settings, fail(exitcode.Usage, "%v", err)
+	}
 	// A command that returns no list has nothing to print one item per line.
 	if format == output.FormatJSONL && a.specs[cmd].ItemPath == "" {
 		return settings, fail(exitcode.Usage, "--format jsonl is for commands that return a list, %q is not one", cmd.CommandPath())
@@ -74,11 +82,15 @@ func requestedFormat(root *cobra.Command) (output.Format, error) {
 // emit prints a success result: the envelope in the chosen format, or the items
 // one per line for JSONL. lines is nil for a command that returns one object;
 // such a command cannot be asked for JSONL, because outputSettingsFor refuses it.
+//
+// --fields goes through every format the same way: the envelope is narrowed
+// first, so json, toon and human print the same selected data and JSONL prints
+// the selected lines. A format is never given a shape of its own.
 func (a *app) emit(settings outputSettings, data any, lines func(io.Writer) error) error {
 	if settings.format == output.FormatJSONL {
 		return lines(a.deps.Stdout)
 	}
-	return output.Success(a.deps.Stdout, settings.format, data)
+	return output.Select(a.deps.Stdout, settings.format, output.SuccessData(data), settings.fields)
 }
 
 // success prints a result that has no items, so it can never be JSONL.

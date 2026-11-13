@@ -73,16 +73,89 @@ func Fields(t reflect.Type) []Field {
 	if t.Kind() != reflect.Struct || t == timeType {
 		return nil
 	}
-	w := &walker{onPath: map[reflect.Type]bool{}}
-	w.structFields(t, "", false)
-	return w.out
+	w := &walker{
+		onPath:        map[reflect.Type]bool{},
+		taken:         map[string]candidate{},
+		byDeclaration: map[declaration]Field{},
+	}
+	w.structFields(t, "", false, 0)
+	return w.result()
+}
+
+// declaration identifies the struct field a path comes from. Two embedded
+// structs can declare fields that produce the same Field value, so the winner
+// of a path is decided by the declaration and not by the value.
+type declaration struct {
+	owner reflect.Type
+	index int
+}
+
+// candidate is the declaration that stands for a path, with the depth of the
+// struct that declares it: a field of an embedded struct is one level deeper.
+type candidate struct {
+	field declaration
+	depth int
+	// ambiguous is set when two declarations of one path sit at the same depth.
+	// encoding/json drops such a field from the output, and so does the schema.
+	ambiguous bool
+}
+
+// entry is a field of the walk with the declaration it came from.
+type entry struct {
+	field  Field
+	origin declaration
 }
 
 type walker struct {
-	out []Field
+	out []entry
 	// onPath holds the struct types the walk is inside: a type that contains
 	// itself is listed once and then stops, so the walk always ends.
 	onPath map[reflect.Type]bool
+	// taken records the field of every path, so a duplicate is resolved the
+	// way encoding/json resolves it rather than listed twice.
+	taken map[string]candidate
+	// byDeclaration keeps the Field of every declaration, so the winner of a
+	// path can be printed even when it was walked before the loser.
+	byDeclaration map[declaration]Field
+}
+
+// result returns the fields that survive the duplicate resolution: one field per
+// path, in the order the walk first saw the path.
+func (w *walker) result() []Field {
+	out := make([]Field, 0, len(w.out))
+	emitted := make(map[string]bool, len(w.out))
+	for _, e := range w.out {
+		if emitted[e.field.Path] {
+			continue
+		}
+		emitted[e.field.Path] = true
+		c, ok := w.taken[e.field.Path]
+		if !ok || c.ambiguous {
+			continue // two fields of one depth cancel each other, like encoding/json
+		}
+		if c.field == e.origin {
+			out = append(out, e.field)
+			continue
+		}
+		// A shallower field won this path after the deeper one was walked.
+		out = append(out, w.byDeclaration[c.field])
+	}
+	return out
+}
+
+// take records the declaration of a path: a field declared closer to the root
+// wins over one promoted from an embedded struct, and two declarations of one
+// depth cancel each other, which is what encoding/json does.
+func (w *walker) take(decl declaration, f Field, depth int) {
+	known, seen := w.taken[f.Path]
+	switch {
+	case !seen:
+		w.taken[f.Path] = candidate{field: decl, depth: depth}
+	case depth < known.depth:
+		w.taken[f.Path] = candidate{field: decl, depth: depth}
+	case depth == known.depth && known.field != decl:
+		w.taken[f.Path] = candidate{depth: depth, ambiguous: true}
+	}
 }
 
 // structFields appends the fields of t. prefix is the path of t itself, empty at
@@ -91,7 +164,7 @@ type walker struct {
 //
 // The walk stops when a struct type appears twice on one path: a type that
 // contains itself is described once, not for ever.
-func (w *walker) structFields(t reflect.Type, prefix string, optional bool) {
+func (w *walker) structFields(t reflect.Type, prefix string, optional bool, depth int) {
 	if w.onPath[t] {
 		return
 	}
@@ -100,6 +173,7 @@ func (w *walker) structFields(t reflect.Type, prefix string, optional bool) {
 
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
+		decl := declaration{owner: t, index: i}
 		// An anonymous field is encoded even when its type is unexported:
 		// encoding/json promotes or names it all the same.
 		if !f.IsExported() && !f.Anonymous {
@@ -118,57 +192,66 @@ func (w *walker) structFields(t reflect.Type, prefix string, optional bool) {
 				et = et.Elem()
 			}
 			if et.Kind() == reflect.Struct && et != timeType && et != rawType {
-				w.structFields(et, prefix, embeddedOptional)
+				w.structFields(et, prefix, embeddedOptional, depth+1)
 				continue
 			}
 		}
 		if name == "" {
 			name = f.Name // an untagged field keeps its Go name in the JSON
 		}
-		w.value(f.Type, join(prefix, name), optional || omit)
+		w.value(f.Type, join(prefix, name), optional || omit, decl, depth)
 	}
 }
 
-// value appends the field at path for a value of type t.
-func (w *walker) value(t reflect.Type, path string, optional bool) {
+// value appends the field at path for a value of type t. depth is the depth of
+// the struct that declares it, which decides a duplicate path.
+func (w *walker) value(t reflect.Type, path string, optional bool, decl declaration, depth int) {
 	for t.Kind() == reflect.Pointer {
 		optional = true
 		t = t.Elem()
 	}
 	if t == rawType {
-		w.out = append(w.out, Field{Path: path, Type: TypeJSON, Optional: optional})
+		w.add(Field{Path: path, Type: TypeJSON, Optional: optional}, decl, depth)
 		return
 	}
 	if name := kindName(t.Kind()); name != "" {
-		w.out = append(w.out, Field{Path: path, Type: name, Optional: optional})
+		w.add(Field{Path: path, Type: name, Optional: optional}, decl, depth)
 		return
 	}
 	switch t.Kind() {
 	case reflect.Struct:
 		if t == timeType {
-			w.out = append(w.out, Field{Path: path, Type: TypeTime, Optional: optional})
+			w.add(Field{Path: path, Type: TypeTime, Optional: optional}, decl, depth)
 			return
 		}
-		w.out = append(w.out, Field{Path: path, Type: TypeObject, Optional: optional})
-		w.structFields(t, path, optional)
+		w.add(Field{Path: path, Type: TypeObject, Optional: optional}, decl, depth)
+		w.structFields(t, path, optional, depth)
 	case reflect.Slice, reflect.Array:
 		if t.Elem().Kind() == reflect.Uint8 {
 			// []byte is one base64 string in JSON.
-			w.out = append(w.out, Field{Path: path, Type: TypeString, Optional: optional})
+			w.add(Field{Path: path, Type: TypeString, Optional: optional}, decl, depth)
 			return
 		}
-		w.out = append(w.out, Field{Path: path, Type: TypeArray, Element: elementName(t.Elem()), Optional: optional})
-		w.element(t.Elem(), path, optional)
+		w.add(Field{Path: path, Type: TypeArray, Element: elementName(t.Elem()), Optional: optional}, decl, depth)
+		w.element(t.Elem(), path, optional, decl, depth)
 	case reflect.Map:
 		// The keys of a map come from the data, so its members have no path.
-		w.out = append(w.out, Field{Path: path, Type: TypeObject, Optional: optional})
+		w.add(Field{Path: path, Type: TypeObject, Optional: optional}, decl, depth)
 	default:
-		w.out = append(w.out, Field{Path: path, Type: TypeAny, Optional: optional})
+		w.add(Field{Path: path, Type: TypeAny, Optional: optional}, decl, depth)
 	}
 }
 
-// element lists the fields of the elements of an array at path.
-func (w *walker) element(t reflect.Type, path string, optional bool) {
+// add records a field of the walk and resolves a duplicate path.
+func (w *walker) add(f Field, decl declaration, depth int) {
+	w.out = append(w.out, entry{field: f, origin: decl})
+	w.byDeclaration[decl] = f
+	w.take(decl, f, depth)
+}
+
+// element lists the fields of the elements of an array at path. The elements sit
+// one level deeper than the array, which is what makes their fields deeper.
+func (w *walker) element(t reflect.Type, path string, optional bool, decl declaration, depth int) {
 	for t.Kind() == reflect.Pointer {
 		optional = true
 		t = t.Elem()
@@ -176,10 +259,10 @@ func (w *walker) element(t reflect.Type, path string, optional bool) {
 	switch t.Kind() {
 	case reflect.Struct:
 		if t != timeType {
-			w.structFields(t, path, optional)
+			w.structFields(t, path, optional, depth+1)
 		}
 	case reflect.Slice, reflect.Array:
-		w.element(t.Elem(), path, optional)
+		w.element(t.Elem(), path, optional, decl, depth+1)
 	}
 }
 
@@ -264,23 +347,49 @@ func FieldType(t reflect.Type, path string) (reflect.Type, bool) {
 		if t.Kind() != reflect.Struct {
 			return nil, false
 		}
-		found := false
-		for i := 0; i < t.NumField(); i++ {
-			f := t.Field(i)
-			name, _, named := jsonTag(f)
-			if !named {
-				name = f.Name
-			}
-			if name == part {
-				t, found = f.Type, true
-				break
-			}
-		}
+		next, found := fieldByPath(t, part)
 		if !found {
 			return nil, false
 		}
+		t = next
 	}
 	return t, true
+}
+
+// fieldByPath finds the type of one level of a path in a struct. A field of an
+// embedded struct counts as a field of the outer one, the way Fields lists it:
+// both walk the same JSON shape, so a path the schema prints is one FieldType
+// can follow.
+func fieldByPath(t reflect.Type, name string) (reflect.Type, bool) {
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if !f.IsExported() && !f.Anonymous {
+			continue
+		}
+		jsonName, _, named := jsonTag(f)
+		if jsonName == "-" {
+			continue
+		}
+		if f.Anonymous && !named {
+			et := f.Type
+			for et.Kind() == reflect.Pointer {
+				et = et.Elem()
+			}
+			if et.Kind() == reflect.Struct && et != timeType && et != rawType {
+				if found, ok := fieldByPath(et, name); ok {
+					return found, true
+				}
+				continue
+			}
+		}
+		if jsonName == "" {
+			jsonName = f.Name
+		}
+		if jsonName == name {
+			return f.Type, true
+		}
+	}
+	return nil, false
 }
 
 // validName reports whether the tag names a field. Copied from encoding/json so

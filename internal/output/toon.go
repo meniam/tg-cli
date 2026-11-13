@@ -38,8 +38,35 @@ type field struct {
 	value any
 }
 
+// MarshalJSON writes an object back as a JSON object. The ordered form is a Go
+// slice, so without this method it would be written as an array of fields.
+// encoding/json sorts the keys of a map, so the order is not kept here: the
+// ordered form exists for TOON, which keeps it by itself.
+func (o obj) MarshalJSON() ([]byte, error) {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i, f := range o {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		key, err := json.Marshal(f.key)
+		if err != nil {
+			return nil, err
+		}
+		b.Write(key)
+		b.WriteByte(':')
+		value, err := json.Marshal(f.value)
+		if err != nil {
+			return nil, err
+		}
+		b.Write(value)
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
+}
+
 // marshalOrdered turns a value into the decoded form of its JSON encoding:
-// values are obj, []any, string, bool, int64, float64 or nil.
+// values are obj, []any, json.Number, string, bool or nil.
 func marshalOrdered(v any) (any, error) {
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -65,7 +92,7 @@ func decodeOrdered(dec *json.Decoder) (any, error) {
 	}
 	delim, ok := tok.(json.Delim)
 	if !ok {
-		return scalarOf(tok), nil // a number, a string, a bool or nil
+		return tok, nil // a number, a string, a bool or nil
 	}
 	switch delim {
 	case '{':
@@ -99,16 +126,15 @@ func decodeOrdered(dec *json.Decoder) (any, error) {
 	return nil, fmt.Errorf("unexpected JSON delimiter %q", delim)
 }
 
-// scalarOf turns a JSON scalar into the Go value TOON encodes without losing it.
+// toonScalar turns a JSON scalar into the value the TOON encoder keeps exact.
 //
-// json.Number is kept for nothing else: the encoder turns it into a float64, so
-// an id beyond 2^53 would come back changed. A whole number that fits int64 goes
-// in as int64, which the encoder writes exactly or quotes as a string; anything
-// else stays a number.
-func scalarOf(tok any) any {
-	number, ok := tok.(json.Number)
+// The encoder turns a float64 back into text, so an id beyond 2^53 would come
+// back changed. A whole number that fits int64 goes in as int64, which the
+// encoder writes exactly or quotes as a string; anything else stays a float.
+func toonScalar(v any) any {
+	number, ok := v.(json.Number)
 	if !ok {
-		return tok
+		return v
 	}
 	if i, err := number.Int64(); err == nil {
 		return i
@@ -134,7 +160,7 @@ func align(v any) any {
 	case []any:
 		return alignArray(t)
 	}
-	return v
+	return toonScalar(v)
 }
 
 // alignArray gives the elements of an array one set of keys, which is what

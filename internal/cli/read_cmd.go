@@ -13,10 +13,14 @@ import (
 
 // emitList prints a list result: the envelope in the chosen format, or one item
 // per line for JSONL. The item lines are built only when they are asked for.
+//
+// --fields names paths inside one item, so the list prefix of the path is
+// dropped: "chats.id" and "id" both keep the id of every chat.
 func emitList[T any](a *app, cmd *cobra.Command, settings outputSettings, result any, items []T, nextCursor string) error {
 	var lines func(io.Writer) error
 	if settings.format == output.FormatJSONL {
-		lines = func(w io.Writer) error { return output.Lines(w, items, nextCursor) }
+		paths := output.ItemPaths(settings.fields, a.specs[cmd].ItemPath)
+		lines = func(w io.Writer) error { return output.SelectLines(w, items, nextCursor, paths) }
 	}
 	return a.emit(settings, result, lines)
 }

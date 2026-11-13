@@ -1,6 +1,7 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -185,7 +186,7 @@ func pad(s string, width int) string {
 // isScalar reports whether a value is written on one line.
 func isScalar(v any) bool {
 	switch v.(type) {
-	case nil, string, bool, int64, float64:
+	case nil, string, bool, json.Number:
 		return true
 	}
 	return false
@@ -199,14 +200,23 @@ func scalar(v any) string {
 		return "-"
 	case string:
 		return cut(t)
-	case float64:
-		// 'f' keeps a small rank readable (-1e-06 is -0.000001 for a person),
-		// and four decimals are as much as a person reads of a rank.
-		return strconv.FormatFloat(t, 'f', 4, 64)
-	case int64:
-		return strconv.FormatInt(t, 10)
+	case json.Number:
+		return humanNumber(t)
 	}
 	return fmt.Sprint(v)
+}
+
+// humanNumber writes a JSON number for a person: a whole number as it is, a
+// fraction with four decimals at most, which is as much as a person reads of a
+// rank.
+func humanNumber(n json.Number) string {
+	if i, err := n.Int64(); err == nil {
+		return strconv.FormatInt(i, 10)
+	}
+	if f, err := n.Float64(); err == nil {
+		return strconv.FormatFloat(f, 'f', 4, 64) // 'f', so -1e-06 stays readable
+	}
+	return n.String()
 }
 
 // cut shortens a value that does not fit in maxCell characters, counted as runes
