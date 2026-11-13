@@ -92,7 +92,8 @@ Check the status of libraries and analogues with `gh api` or `crates.io`, not fr
 - Code, code comments, identifiers, error strings, log strings and commit messages are in English.
 - This file is in English.
 - The `just` help (`justfile`, `bin/just/`), the JSON-RPC package and the API description are in English. This project overrides the global `justfile.md` preference for Russian help text; the help layout rules from it still apply.
-- Project documents (`INTENT.md`, `FEATURES.md`, plans, decisions, README, `docs/`) are in Russian, avoiding the em dash "—" where possible. Commands, flags and identifiers stay in the original.
+- `README.md` is in English: it is the public face of the repository. It documents only what is implemented and verified, and links to the Russian documents below.
+- Other project documents (`INTENT.md`, `FEATURES.md`, plans, decisions, `docs/`) are in Russian, avoiding the em dash "—" where possible. `INTENT.md` stays in Russian. Commands, flags and identifiers stay in the original.
 - Text documents (INTENT, FEATURES, README, `docs/`) are written and checked by the `writer` or `docwriter` agent and `glavred` per [`docs_chain.md`](.agents/rules/docs_chain.md). Editing this file does not start that chain.
 
 ## Git
