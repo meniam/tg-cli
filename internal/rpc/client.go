@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 )
 
 // ErrClosed is returned by calls on a closed or broken connection.
@@ -16,8 +17,9 @@ var ErrClosed = errors.New("rpc: connection closed")
 
 // Client is a JSON-RPC client. Calls may run in parallel.
 type Client struct {
-	conn net.Conn
-	w    *frameWriter
+	conn      net.Conn
+	w         *frameWriter
+	writeSlot chan struct{}
 
 	mu      sync.Mutex
 	nextID  uint64
@@ -40,10 +42,11 @@ func Dial(ctx context.Context, network, address string) (*Client, error) {
 // NewClient wraps an established connection.
 func NewClient(conn net.Conn) *Client {
 	c := &Client{
-		conn:    conn,
-		w:       &frameWriter{w: conn},
-		pending: map[uint64]chan Response{},
-		done:    make(chan struct{}),
+		conn:      conn,
+		w:         &frameWriter{w: conn},
+		writeSlot: make(chan struct{}, 1),
+		pending:   map[uint64]chan Response{},
+		done:      make(chan struct{}),
 	}
 	go c.readLoop()
 	return c
@@ -106,7 +109,7 @@ func (c *Client) Call(ctx context.Context, method string, params, result any) er
 		Method:  method,
 		Params:  raw,
 	}
-	if err := c.w.write(req); err != nil {
+	if err := c.write(ctx, req); err != nil {
 		c.forget(id)
 		return err
 	}
@@ -140,7 +143,47 @@ func (c *Client) Notify(method string, params any) error {
 	if err != nil {
 		return err
 	}
-	return c.w.write(Request{JSONRPC: Version, Method: method, Params: raw})
+	return c.write(context.Background(), Request{JSONRPC: Version, Method: method, Params: raw})
+}
+
+// write bounds both waiting for the writer and a blocked socket write.
+// Only one write owns the connection deadline at a time.
+func (c *Client) write(ctx context.Context, req Request) error {
+	select {
+	case c.writeSlot <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-c.writeSlot }()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		if err := c.conn.SetWriteDeadline(deadline); err != nil {
+			return err
+		}
+	}
+	finished := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		_ = c.conn.SetWriteDeadline(time.Now())
+		close(finished)
+	})
+	err := c.w.write(req)
+	if !stop() {
+		<-finished
+	}
+	resetErr := c.conn.SetWriteDeadline(time.Time{})
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err != nil {
+		var netErr net.Error
+		if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) && errors.As(err, &netErr) && netErr.Timeout() {
+			return context.DeadlineExceeded
+		}
+		return err
+	}
+	return resetErr
 }
 
 // Close closes the connection. In-flight calls on other goroutines return an error.

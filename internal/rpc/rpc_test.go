@@ -82,6 +82,27 @@ func TestCallRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCallContextStopsBlockedWrite(t *testing.T) {
+	clientConn, peerConn := net.Pipe()
+	c := NewClient(clientConn)
+	t.Cleanup(func() {
+		_ = c.Close()
+		_ = peerConn.Close()
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- c.Call(ctx, "echo", map[string]string{"x": "y"}, nil) }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("blocked write returned %v, want deadline exceeded", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Call remained blocked after its context expired")
+	}
+}
+
 func TestParallelCallsKeepTheirIDs(t *testing.T) {
 	const n = 8
 	srv := NewServer(nil)
