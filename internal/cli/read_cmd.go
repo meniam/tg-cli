@@ -91,7 +91,7 @@ func (a *app) messageCommand() *cobra.Command {
 			"message sent exactly at that time.",
 		Args: cobra.ExactArgs(1),
 		RunE: a.messageHistory,
-	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: formatChoices()})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: formatChoices(), ItemPath: "messages"})
 	history.Flags().Int("limit", 0, "messages per page, 1 to 100 (default 20)")
 	history.Flags().String("since", "", "only messages sent at this time or later (RFC 3339)")
 	history.Flags().String("until", "", "only messages sent at this time or earlier (RFC 3339)")
@@ -104,14 +104,14 @@ func (a *app) messageCommand() *cobra.Command {
 		Short: "Read one message by its id (read only)",
 		Args:  cobra.ExactArgs(2),
 		RunE:  a.messageGet,
-	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.Message](), Args: []argSpec{{Name: "chat", Required: true}, {Name: "id", Required: true}}})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.Message](), Args: []argSpec{{Name: "chat", Required: true}, {Name: "id", Required: true}}})
 
 	pinned := a.annotate(&cobra.Command{
 		Use:   "pinned <chat>",
 		Short: "Read the pinned messages of a chat (read only)",
 		Args:  cobra.ExactArgs(1),
 		RunE:  a.messagePinned,
-	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: formatChoices()})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: formatChoices(), ItemPath: "messages"})
 	pinned.Flags().Int("limit", 0, "how many pinned messages, 1 to 100 (default 20)")
 	addFormatFlag(pinned)
 

@@ -32,7 +32,7 @@ func (a *app) daemonCommand() *cobra.Command {
 			"\"MacBook Pro M1 BRN\"; a name given by --device is remembered for the profile.",
 		Args: cobra.NoArgs,
 		RunE: a.daemonStart,
-	}, commandSpec{Safety: safetyLocalWrite, Result: typeOf[daemonStartedResult]()})
+	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[daemonStartedResult]()})
 	start.Flags().String("client", "", "official client preset to use instead of your own application, for example desktop")
 	start.Flags().String("device", "", "device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN)")
 	cmd.AddCommand(start, a.annotate(&cobra.Command{
@@ -40,12 +40,12 @@ func (a *app) daemonCommand() *cobra.Command {
 		Short: "Show the state of the daemon and of the account",
 		Args:  cobra.NoArgs,
 		RunE:  a.daemonStatus,
-	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.StatusResult]()}), a.annotate(&cobra.Command{
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.StatusResult]()}), a.annotate(&cobra.Command{
 		Use:   "stop",
 		Short: "Ask the daemon to stop",
 		Args:  cobra.NoArgs,
 		RunE:  a.daemonStop,
-	}, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.ShutdownResult]()}))
+	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.ShutdownResult]()}))
 	return cmd
 }
 

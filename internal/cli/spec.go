@@ -59,6 +59,24 @@ func scopeChoices() []flagChoices {
 	return []flagChoices{{Flag: "scope", Values: searchScopes()}}
 }
 
+// risk is whether a command can lose data or do something the agent cannot
+// undo. It is its own type and a required argument of annotate, so that every
+// command records the choice: a bool field would have let a new command fall
+// back to the zero value "not dangerous" without anyone deciding it.
+type risk string
+
+const (
+	// noRisk marks a command whose success loses nothing: it reads, or it
+	// writes something that can be written again.
+	noRisk risk = "no"
+	// dangerous marks a command that can lose data or change the account
+	// beyond an ordinary write, like `note delete --author ai --yes`.
+	dangerous risk = "dangerous"
+)
+
+// known reports whether r was chosen from the constants above.
+func (r risk) known() bool { return r == noRisk || r == dangerous }
+
 // commandSpec is what every runnable command declares about itself: the part of
 // its contract an agent needs before calling it. A runnable command without a
 // spec fails TestEveryCommandIsAnnotated, so a new command cannot ship
@@ -66,20 +84,24 @@ func scopeChoices() []flagChoices {
 type commandSpec struct {
 	// Safety is the class of changes the command makes.
 	Safety safetyClass
-	// Dangerous is set by hand, never derived from Safety: a command can be
-	// local_write and still lose data, like `note delete --author ai --yes`.
-	// A command that is not dangerous leaves this out.
-	Dangerous bool
+	// Risk is the hand-made dangerous flag; it is set through annotate, never
+	// derived from Safety: a local_write command can still lose data.
+	Risk risk
 	// Result is the Go type of data in the success envelope.
 	Result reflect.Type
 	// Args are the positional arguments, in the order they are given.
 	Args []argSpec
 	// Choices are the allowed values of the flags whose check is a list.
 	Choices []flagChoices
+	// ItemPath is the json path of the list inside the result that a JSONL
+	// line is taken from, empty when the command does not print JSONL.
+	ItemPath string
 }
 
-// annotate records the spec of a runnable command and returns the command.
-func (a *app) annotate(cmd *cobra.Command, spec commandSpec) *cobra.Command {
+// annotate records the spec of a runnable command and returns the command. The
+// risk of the command is a required argument, so the choice cannot be skipped.
+func (a *app) annotate(cmd *cobra.Command, r risk, spec commandSpec) *cobra.Command {
+	spec.Risk = r
 	a.specs[cmd] = spec
 	return cmd
 }

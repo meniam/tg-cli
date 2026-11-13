@@ -19,7 +19,7 @@ func (a *app) noteCommand() *cobra.Command {
 			"repeated. For a negative chat id, use note add --chat -12345 -- body\n" +
 			"(or --chat=-12345). The -- ends flags before a body starting with -.",
 		Args: cobra.ExactArgs(1), RunE: a.noteAdd,
-	}, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.Note](), Args: []argSpec{{Name: "body", Required: true}}, Choices: authorChoices()})
+	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.Note](), Args: []argSpec{{Name: "body", Required: true}}, Choices: authorChoices()})
 	add.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return fail(exitcode.Usage, "%v (for a negative chat id use --chat=-12345)", err)
 	})
@@ -37,7 +37,7 @@ func (a *app) noteCommand() *cobra.Command {
 			"to continue after a page. JSONL prints one note per line and no cursor line.\n" +
 			"For a negative chat id use --chat=-12345 (or --chat -12345 --).",
 		Args: cobra.NoArgs, RunE: a.noteList,
-	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.NoteListResult](), Choices: append(formatChoices(), authorChoices()...)})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.NoteListResult](), Choices: append(formatChoices(), authorChoices()...), ItemPath: "notes"})
 	list.Flags().String("chat", "", "filter by chat reference")
 	list.Flags().String("person", "", "filter by person reference")
 	list.Flags().Int64("message", 0, "filter one message id, requires --chat")
@@ -51,7 +51,7 @@ func (a *app) noteCommand() *cobra.Command {
 	deleteCmd := a.annotate(&cobra.Command{
 		Use: "delete <id> | --author owner|ai --yes", Short: "Delete one note or all notes by author",
 		Args: cobra.ArbitraryArgs, RunE: a.noteDelete,
-	}, commandSpec{Safety: safetyLocalWrite, Dangerous: true, Result: typeOf[rpc.NoteDeleteResult](), Args: []argSpec{{Name: "id", Required: false}}, Choices: authorChoices()})
+	}, dangerous, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.NoteDeleteResult](), Args: []argSpec{{Name: "id", Required: false}}, Choices: authorChoices()})
 	deleteCmd.Flags().String("author", "", "delete all notes by this author: owner or ai")
 	deleteCmd.Flags().Bool("yes", false, "confirm deletion of all notes by author")
 	cmd.AddCommand(add, list, deleteCmd)

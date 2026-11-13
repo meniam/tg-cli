@@ -23,7 +23,7 @@ func (a *app) authCommand() *cobra.Command {
 			"running: `tg-cli daemon start`.",
 		Args: cobra.NoArgs,
 		RunE: a.authLogin,
-	}, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.AuthResult]()})
+	}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.AuthResult]()})
 	login.Flags().String("phone", "", "phone number in international format; asked when omitted")
 	login.Flags().Bool("qr", false, "log in by scanning a QR code in the Telegram app of a logged-in device, no code is needed")
 	cancel := a.annotate(&cobra.Command{
@@ -31,13 +31,13 @@ func (a *app) authCommand() *cobra.Command {
 		Short: "Cancel a login that is waiting for a code or a password",
 		Args:  cobra.NoArgs,
 		RunE:  a.authCancel,
-	}, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.AuthCancelResult]()})
+	}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.AuthCancelResult]()})
 	status := a.annotate(&cobra.Command{
 		Use:   "status",
 		Short: "Show whether the profile is logged in, and as whom",
 		Args:  cobra.NoArgs,
 		RunE:  a.authStatus,
-	}, commandSpec{Safety: safetyRead, Result: typeOf[authStatus]()})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[authStatus]()})
 	resend := a.annotate(&cobra.Command{
 		Use:   "resend",
 		Short: "Ask Telegram to send the login code another way (for example by SMS)",
@@ -46,7 +46,7 @@ func (a *app) authCommand() *cobra.Command {
 			"first one. Typing resend at the code prompt does the same.",
 		Args: cobra.NoArgs,
 		RunE: a.authResend,
-	}, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.AuthResult]()})
+	}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.AuthResult]()})
 	cmd.AddCommand(login, status, resend, cancel)
 	return cmd
 }

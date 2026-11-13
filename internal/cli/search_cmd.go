@@ -22,7 +22,7 @@ func (a *app) searchCommand() *cobra.Command {
 			"--scope accepts repeated values or a comma-separated list. JSONL prints one hit\n" +
 			"per line in scope order.",
 		Args: cobra.ExactArgs(1), RunE: a.search,
-	}, commandSpec{Safety: safetyRead, Result: typeOf[rpc.SearchResult](), Args: []argSpec{{Name: "query", Required: true}}, Choices: append(formatChoices(), append(authorChoices(), scopeChoices()...)...)})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.SearchResult](), Args: []argSpec{{Name: "query", Required: true}}, Choices: append(formatChoices(), append(authorChoices(), scopeChoices()...)...), ItemPath: "hits"})
 	cmd.SetFlagErrorFunc(func(*cobra.Command, error) error {
 		return fail(exitcode.Usage, "invalid search flags")
 	})

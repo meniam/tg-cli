@@ -9,6 +9,7 @@ import (
 
 	"tg-cli/internal/buildinfo"
 	"tg-cli/internal/exitcode"
+	"tg-cli/internal/schema"
 )
 
 // schemaVersion is the version of the document `tg-cli schema` prints. It grows
@@ -62,9 +63,21 @@ type commandDoc struct {
 	// account beyond an ordinary write.
 	Dangerous bool `json:"dangerous"`
 	// Result is the Go type of data in the success envelope.
-	Result string    `json:"result"`
-	Args   []argDoc  `json:"args,omitempty"`
-	Flags  []flagDoc `json:"flags,omitempty"`
+	Result string `json:"result"`
+	// Fields are the paths of the result, for a command that returns an object.
+	Fields []schema.Field `json:"fields,omitempty"`
+	// Item is the list a JSONL line is taken from, for a command that prints
+	// JSONL; its Fields are the paths inside one line.
+	Item  *itemDoc  `json:"item,omitempty"`
+	Args  []argDoc  `json:"args,omitempty"`
+	Flags []flagDoc `json:"flags,omitempty"`
+}
+
+// itemDoc names the list inside a list result that --format jsonl prints.
+type itemDoc struct {
+	// Path is the json path of the list, like "chats".
+	Path   string         `json:"path"`
+	Fields []schema.Field `json:"fields"`
 }
 
 // argDoc describes one positional argument.
@@ -118,8 +131,10 @@ func commandDocFor(cmd *cobra.Command, path string, spec commandSpec) commandDoc
 		Path:        path,
 		Summary:     cmd.Short,
 		Safety:      string(spec.Safety),
-		Dangerous:   spec.Dangerous,
+		Dangerous:   spec.Risk == dangerous,
 		Result:      resultName(spec.Result),
+		Fields:      schema.Fields(spec.Result),
+		Item:        itemDocFor(spec),
 		Flags:       flagDocs(cmd.LocalFlags(), spec.Choices),
 		Description: cmd.Long,
 	}
@@ -130,6 +145,23 @@ func commandDocFor(cmd *cobra.Command, path string, spec commandSpec) commandDoc
 		doc.Args = append(doc.Args, argDoc{Name: arg.Name, Required: arg.Required, Variadic: arg.Variadic})
 	}
 	return doc
+}
+
+// itemDocFor describes the JSONL line of a list command: the path of the list in
+// the result and the fields of one element of it.
+func itemDocFor(spec commandSpec) *itemDoc {
+	t := spec.Result
+	for t != nil && t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if spec.ItemPath == "" || t == nil || t.Kind() != reflect.Struct {
+		return nil
+	}
+	elem, ok := schema.FieldType(t, spec.ItemPath)
+	if !ok || elem.Kind() != reflect.Slice {
+		return nil
+	}
+	return &itemDoc{Path: spec.ItemPath, Fields: schema.Fields(elem.Elem())}
 }
 
 // resultName is the type of a result as written in Go, empty for an unknown type.
@@ -180,7 +212,7 @@ func (a *app) versionCommand() *cobra.Command {
 		RunE: func(*cobra.Command, []string) error {
 			return a.success(buildinfo.Get())
 		},
-	}, commandSpec{Safety: safetyRead, Result: typeOf[buildinfo.Info]()})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[buildinfo.Info]()})
 }
 
 // schemaCommand prints the description of every command. It reads the command
@@ -193,5 +225,5 @@ func (a *app) schemaCommand(root *cobra.Command) *cobra.Command {
 		RunE: func(*cobra.Command, []string) error {
 			return a.success(schemaDocFor(root, a.specs))
 		},
-	}, commandSpec{Safety: safetyRead, Result: typeOf[schemaDoc]()})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[schemaDoc]()})
 }
