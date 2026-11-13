@@ -21,6 +21,7 @@ Decisions with their alternatives live in [`.agents/decisions/`](.agents/decisio
 - CLI and agents talk to the Daemon over JSON-RPC 2.0 on a Unix socket: [decision](.agents/decisions/20261113_2051_daemon_speaks_json_rpc_over_unix_socket.md). The method set, schema self-description and idempotency are defined in the spec.
 - Code layout: [decision](.agents/decisions/20261113_2052_code_lives_in_cmd_and_internal.md). See "Layout".
 - Login without an own application: `daemon start --client <preset>` uses an official client preset ([decision](.agents/decisions/20261113_2116_login_uses_official_client_presets.md)). The owner will not get an `api_id`.
+- Local database: one SQLite file per profile (`<profile>/store.db`), see the [storage decision](.agents/decisions/20261113_2230_storage_is_one_sqlite_per_profile_with_slow_opt_in_history.md). Notes (owner or AI, with tags) live apart from Telegram data and are never changed by a reload: [decision](.agents/decisions/20261113_2231_notes_are_separate_and_ai_writes_them_without_confirmation.md).
 - Multiple accounts are required.
 - A local history and offline search on SQLite are required.
 - No MCP in the first stage.
@@ -47,7 +48,8 @@ internal/
   tgclient/           gotd/td wrapper, one account per client
   clientpreset/       official client presets (api_id/api_hash) downloaded from opentele
   chatref/            parses a chat reference: @username, id, phone, t.me link
-  store/              SQLite: migrations, history, FTS
+  store/              SQLite owned by the Daemon: migrations, schema, chats, people, messages, notes, search
+  textnorm/           search text normalization (lower case, `ё` to `е`) and safe FTS5 queries
   output/             output formats
   exitcode/           stable exit codes
 ```
@@ -63,7 +65,7 @@ internal/
 ## Running
 
 - Credentials for `daemon start`: either `--client <preset>` (official client preset, remembered per profile in `<profile>/client`) or `TG_API_ID` and `TG_API_HASH` (your own application), never both. The device name shown in the list of Telegram devices is `MacBook Pro M1 BRN` by default, `--device` overrides it and is remembered in `<profile>/device`. `TG_CLI_HOME` is the optional base directory of profiles. Never print or log keys or hashes.
-- Commands: `tg-cli daemon start [--client preset] [--device name]|status|stop`, `tg-cli auth login [--phone|--qr]|status|resend|cancel`, `tg-cli chat list [--limit] [--type] [--format jsonl]`, `tg-cli chat resolve|info|invite-info <ref>`, `tg-cli message history <chat> [--limit --since --until --topic --cursor --format]`, `tg-cli message get <chat> <id>`, `tg-cli message pinned <chat>`, global flag `--profile`. A chat is given as `@username`, a Bot API id (users positive, groups negative, channels from -1000000000000; write `--` before a negative id), a contact's phone number or a `t.me` link. Every command prints one JSON envelope on stdout (`--format jsonl` on list commands prints one item per line and a last `{"next_cursor":...}` line when more follow); prompts and logs go to stderr. Exit codes are in `internal/exitcode`.
+- Commands: `tg-cli daemon start [--client preset] [--device name]|status|stop`, `tg-cli auth login [--phone|--qr]|status|resend|cancel`, `tg-cli chat list [--limit] [--type] [--format jsonl]`, `tg-cli chat resolve|info|invite-info <ref>`, `tg-cli message history <chat> [--limit --since --until --topic --cursor --format]`, `tg-cli message get <chat> <id>`, `tg-cli message pinned <chat>`, global flag `--profile`. `tg-cli note add [--chat ref] [--person ref] [--message id] [--author owner|ai] [--model name] [--tag t] <body|->`, `tg-cli note list|delete`, `tg-cli search <query> [--scope chats,people,messages,notes] [--author] [--chat] [--prefix] [--deleted]` work on the local database and need neither a login nor a Telegram connection. The Daemon saves every chat, person and message it reads from Telegram into that database. A chat is given as `@username`, a Bot API id (users positive, groups negative, channels from -1000000000000; write `--` before a negative id), a contact's phone number or a `t.me` link. Every command prints one JSON envelope on stdout (`--format jsonl` on list commands prints one item per line and a last `{"next_cursor":...}` line when more follow); prompts and logs go to stderr. Exit codes are in `internal/exitcode`.
 - `daemon start` runs in the foreground. Login, session and the socket belong to the Daemon, so start it before `auth login` and never run a second client on its session.
 
 ## Not decided
