@@ -12,7 +12,8 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
   revised by [Вход идёт по пресету официального клиента, своё приложение необязательно](20261113_2116_login_uses_official_client_presets.md)
 - 2026-11-13 — [Ответ CLI это JSON-конверт, коды выхода версии 0 закреплены](20261113_2112_json_envelope_and_exit_codes_v0.md)
 - 2026-11-13 — [cli импортирует daemon ради путей, Telegram-клиент подставляет main](20261113_2113_cli_imports_daemon_paths_and_main_injects_telegram.md),
-  revises [Код лежит в cmd/ и internal/, без src/ и pkg/](20261113_2052_code_lives_in_cmd_and_internal.md)
+  revises [Код лежит в cmd/ и internal/, без src/ и pkg/](20261113_2052_code_lives_in_cmd_and_internal.md),
+  revised by [cli зависит от store только через daemon, прямой импорт запрещён](20261114_0005_cli_may_reach_the_store_only_through_the_daemon.md)
 - 2026-11-13 — [Вход идёт по пресету официального клиента, своё приложение необязательно](20261113_2116_login_uses_official_client_presets.md),
   revises [Данные профиля лежат в каталоге профиля, ключи приложения берутся из окружения](20261113_2111_profile_layout_and_credentials_from_env.md),
   revised by [Имя устройства по умолчанию MacBook Pro M1 BRN, --device переопределяет](20261113_2218_device_name_is_macbook_pro_m1_brn_by_default.md)
@@ -23,6 +24,8 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-13 — [Пометки лежат отдельно, AI пишет их без подтверждения](20261113_2231_notes_are_separate_and_ai_writes_them_without_confirmation.md)
 - 2026-11-13 — [Чтение страницами с курсором по id сообщения, JSONL с завершающей строкой курсора](20261113_2250_reading_pages_by_message_id_cursor_and_jsonl_with_cursor_line.md)
 - 2026-11-13 — [Драйвер SQLite modernc.org/sqlite, нормализацию «ё» делаем сами](20261113_2301_sqlite_driver_is_modernc_with_own_yo_normalization.md)
+- 2026-11-14 — [cli зависит от store только через daemon, прямой импорт запрещён](20261114_0005_cli_may_reach_the_store_only_through_the_daemon.md),
+  revises [cli импортирует daemon ради путей, Telegram-клиент подставляет main](20261113_2113_cli_imports_daemon_paths_and_main_injects_telegram.md)
 
 ## Open questions
 

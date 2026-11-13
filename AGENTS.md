@@ -53,7 +53,7 @@ internal/
 ```
 
 - Code lives only in `cmd/` and `internal/`. Do not create `src/`, `pkg/`, `models/`, `utils/`.
-- `internal/cli` must not import `tgclient` or `store`. It may import `rpc`, `output`, `exitcode` and `daemon` (paths only). `main` injects the Telegram client into the Daemon.
+- `internal/cli` must not import `tgclient`, gotd or `store` (`store` is reachable only through `daemon`, which owns the database). It may import `rpc`, `output`, `exitcode`, `clientpreset`, `chatref` and `daemon` (paths and `Run`). `main` injects the Telegram client into the Daemon.
 - A package with only `doc.go` is a stub: add logic when a task needs it.
 - The package that uses an interface declares it.
 - Tests sit next to the code, fixtures in `testdata/`. Do not run tests against live Telegram by default.

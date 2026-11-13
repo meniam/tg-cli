@@ -10,7 +10,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-13
-- Next safe step: шаг 6a (RPC для пометок и поиска в Daemon), затем 6b (запись «по пути»), исполнитель Codex, проверяет Claude.
+- Next safe step: шаг 6b (запись «по пути» из ответов Telegram), исполнитель Codex, проверяет Claude.
 
 ## Context and sources
 
@@ -149,6 +149,8 @@ Daemon запоминает всё, что загрузил из Telegram (ча�
 - Шаг 5 принят (2026-11-13): пометки (`AddNote`, `GetNote`, `ListNotes`, `DeleteNote`, `DeleteNotesByAuthor`) и поиск по четырём областям; сниппет строится из исходного текста, а не из нормализованного индекса; лимит применяется к каждой области отдельно, порядок областей фиксирован (чаты, люди, сообщения, пометки).
 - Известное ограничение шага 6b: Daemon знает у человека только отображаемое имя (`rpc.Sender.Name`, `rpc.Chat.Title` для личных чатов), поэтому оно записывается в `people.first_name`; раздельные имя и фамилия появятся с загрузкой полных данных пользователя в плане про синхронизацию.
 - Следствие шага 6: `internal/daemon` импортирует `internal/store`, поэтому `internal/cli` зависит от `store` транзитивно через `daemon`. Тест границы проверяет прямой импорт `store` в `cli` и по-прежнему запрещает транзитивные `tgclient` и gotd.
+
+- Шаг 6a принят (2026-11-14): Daemon открывает базу до сокета, методы `note.add|list|delete|delete_by_author` и `search` не требуют входа и соединения, имена `@username` ищутся сначала в базе. Граница `cli` и `store` записана решением [cli зависит от store только через daemon](../decisions/20261114_0005_cli_may_reach_the_store_only_through_the_daemon.md).
 
 ## Open questions
 
