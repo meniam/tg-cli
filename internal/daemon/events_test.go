@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -127,6 +128,129 @@ func TestDeleteWithoutChatPolicy(t *testing.T) {
 	got = nextEvent(t, sub)
 	if got.ChatID != nil {
 		t.Fatalf("unfiltered unknown delete got chat: %+v", got)
+	}
+}
+
+func TestDeleteWithoutChatIDMarksKnownMessagesAndPreservesEvent(t *testing.T) {
+	const channelID int64 = -1000000000003
+	type savedMessage struct {
+		chatID int64
+		id     int
+	}
+	for _, tc := range []struct {
+		name, access string
+		messages     []savedMessage
+		ids          []int
+		eventChat    int64
+		marked       []bool
+		delivered    bool
+		wantChat     int64
+	}{
+		{"unfiltered private", "", []savedMessage{{1, 9}}, []int{9}, 0, []bool{true}, true, 0},
+		{"unfiltered two chats", "", []savedMessage{{1, 9}, {2, 10}}, []int{9, 10}, 0, []bool{true, true}, true, 0},
+		{"unfiltered unknown id", "", []savedMessage{{1, 9}}, []int{1234}, 0, []bool{false}, true, 0},
+		{"filtered open", `{"allow":[1]}`, []savedMessage{{1, 9}}, []int{9}, 0, []bool{true}, true, 1},
+		{"filtered closed among matches", `{"allow":[1]}`, []savedMessage{{1, 9}, {2, 10}}, []int{9, 10}, 0, []bool{false, false}, false, 0},
+		{"filtered unknown id", `{"allow":[1]}`, []savedMessage{{1, 9}}, []int{1234}, 0, []bool{false}, false, 0},
+		{"channel with chat id", "", []savedMessage{{channelID, 9}}, []int{9}, channelID, []bool{true}, true, channelID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, _, db, path := accessTestDaemon(t)
+			sub := d.hub.Subscribe()
+			defer sub.Close()
+			ctx := context.Background()
+			for _, message := range tc.messages {
+				d.saveMessages(ctx, "test", []rpc.Message{testMessage(message.id, message.chatID, "saved")})
+			}
+			if tc.access != "" {
+				writeAccess(t, path, tc.access)
+			}
+			var chat *int64
+			if tc.eventChat != 0 {
+				chat = &tc.eventChat
+			}
+			event := testEvent(t, rpc.EventMessageDelete, chat, rpc.MessageDeleteData{ChatID: chat, IDs: tc.ids}, "delete")
+			d.handleEvent(event)
+			if tc.delivered {
+				got := nextEvent(t, sub)
+				want := event
+				want.ID = "1.0.0.0"
+				if tc.wantChat != 0 {
+					want.ChatID = &tc.wantChat
+				}
+				gotJSON, err := json.Marshal(got)
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantJSON, err := json.Marshal(want)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(gotJSON, wantJSON) {
+					t.Fatalf("event shape changed: got %s want %s", gotJSON, wantJSON)
+				}
+			} else {
+				noEvent(t, sub)
+			}
+			for i, message := range tc.messages {
+				stored, err := db.GetMessage(ctx, message.chatID, message.id)
+				if err != nil || (stored.DeletedAt != nil) != tc.marked[i] {
+					t.Fatalf("message %d/%d marker=%v want=%v err=%v", message.chatID, message.id, stored.DeletedAt, tc.marked[i], err)
+				}
+			}
+			if tc.name == "unfiltered private" {
+				if page := exportPage(t, d, rpc.ExportParams{Chat: "1"}); len(page.Messages) != 0 {
+					t.Fatalf("deleted message exported by default: %+v", page)
+				}
+				page := exportPage(t, d, rpc.ExportParams{Chat: "1", IncludeDeleted: true})
+				if len(page.Messages) != 1 || page.Messages[0].ID != 9 || !page.Messages[0].Deleted {
+					t.Fatalf("deleted message not exported with marker: %+v", page)
+				}
+			}
+		})
+	}
+}
+
+func TestDeleteWithoutChatIDStorageErrorsProduceGap(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		setFailure func(*daemon, *int)
+	}{
+		{"lookup", func(d *daemon, attempts *int) {
+			d.findMessageChats = func(context.Context, []int) ([]int64, error) {
+				(*attempts)++
+				return nil, errors.New("lookup failed")
+			}
+		}},
+		{"write", func(d *daemon, attempts *int) {
+			d.markMessagesDeleted = func(context.Context, int64, []int) (int, error) {
+				(*attempts)++
+				return 0, errors.New("delete failed")
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, _, db, _ := accessTestDaemon(t)
+			sub := d.hub.Subscribe()
+			defer sub.Close()
+			ctx := context.Background()
+			d.saveMessages(ctx, "test", []rpc.Message{testMessage(9, 1, "saved")})
+			attempts := 0
+			tc.setFailure(d, &attempts)
+			d.handleEvent(testEvent(t, rpc.EventMessageDelete, nil, rpc.MessageDeleteData{IDs: []int{9}}, "delete"))
+			if attempts != eventSaveAttempts {
+				t.Fatalf("attempts=%d want=%d", attempts, eventSaveAttempts)
+			}
+			gap := nextEvent(t, sub)
+			if gap.Type != rpc.EventGap || gap.ChatID != nil || gap.ID != "" || string(gap.Data) != `{"reason":"store"}` {
+				t.Fatalf("gap=%+v", gap)
+			}
+			noEvent(t, sub)
+			stored, err := db.GetMessage(ctx, 1, 9)
+			if err != nil || stored.DeletedAt != nil {
+				t.Fatalf("failed delete marked message: %+v err=%v", stored, err)
+			}
+		})
 	}
 }
 

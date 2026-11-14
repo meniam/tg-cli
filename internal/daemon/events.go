@@ -55,6 +55,7 @@ func (d *daemon) handleEvent(event rpc.Event) {
 	ctx, cancel := context.WithTimeout(context.Background(), eventSaveTimeout)
 	defer cancel()
 	policy := d.policy()
+	var deleteChats []int64
 	if event.ChatID == nil {
 		switch event.Type {
 		case rpc.EventStatus:
@@ -70,31 +71,37 @@ func (d *daemon) handleEvent(event rpc.Event) {
 				event.ChatID = &data.ChatID
 			}
 		case rpc.EventMessageDelete:
-			if !policy.Enabled() {
-				break
-			}
 			var data rpc.MessageDeleteData
 			if json.Unmarshal(event.Data, &data) != nil {
-				d.log.Error("invalid delete event")
-				return
+				if policy.Enabled() {
+					d.log.Error("invalid delete event")
+					return
+				}
+				break
 			}
-			chats, err := d.store.ChatsOfMessages(ctx, data.IDs)
-			if err != nil {
-				d.log.Error("message chat lookup failed")
+			find := d.findMessageChats
+			if find == nil {
+				find = d.store.ChatsOfMessages
+			}
+			if !d.retryEventWrite(ctx, func() error {
+				var err error
+				deleteChats, err = find(ctx, data.IDs)
+				return err
+			}) {
 				return
 			}
 			if policy.Enabled() {
-				if len(chats) == 0 {
+				if len(deleteChats) == 0 {
 					return
 				}
-				for _, id := range chats {
+				for _, id := range deleteChats {
 					if !policy.Allowed(id) {
 						return
 					}
 				}
 			}
-			if policy.Enabled() && len(chats) == 1 {
-				event.ChatID = &chats[0]
+			if policy.Enabled() && len(deleteChats) == 1 {
+				event.ChatID = &deleteChats[0]
 			}
 		}
 	}
@@ -142,12 +149,25 @@ func (d *daemon) handleEvent(event rpc.Event) {
 			}
 		}
 	case rpc.EventMessageDelete:
-		if event.ChatID != nil {
-			var data rpc.MessageDeleteData
-			if json.Unmarshal(event.Data, &data) == nil {
-				if !d.retryEventWrite(ctx, func() error { _, err := d.store.MarkMessagesDeleted(ctx, *event.ChatID, data.IDs); return err }) {
-					return
+		var data rpc.MessageDeleteData
+		if json.Unmarshal(event.Data, &data) == nil {
+			chats := deleteChats
+			if event.ChatID != nil && len(chats) == 0 {
+				chats = []int64{*event.ChatID}
+			}
+			mark := d.markMessagesDeleted
+			if mark == nil {
+				mark = d.store.MarkMessagesDeleted
+			}
+			if len(chats) > 0 && !d.retryEventWrite(ctx, func() error {
+				for _, chatID := range chats {
+					if _, err := mark(ctx, chatID, data.IDs); err != nil {
+						return err
+					}
 				}
+				return nil
+			}) {
+				return
 			}
 		}
 	}

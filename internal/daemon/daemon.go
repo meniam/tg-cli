@@ -48,18 +48,20 @@ type Options struct {
 const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
-	opts        Options
-	log         *slog.Logger
-	srv         *rpc.Server
-	hub         *rpc.Hub
-	login       *loginManager
-	store       *store.DB
-	sync        *historySyncManager
-	cancel      context.CancelFunc
-	once        sync.Once
-	eventMu     sync.Mutex
-	deletionsMu sync.Mutex
-	addEvent    func(context.Context, store.Event) (int64, bool, error)
+	opts                Options
+	log                 *slog.Logger
+	srv                 *rpc.Server
+	hub                 *rpc.Hub
+	login               *loginManager
+	store               *store.DB
+	sync                *historySyncManager
+	cancel              context.CancelFunc
+	once                sync.Once
+	eventMu             sync.Mutex
+	deletionsMu         sync.Mutex
+	addEvent            func(context.Context, store.Event) (int64, bool, error)
+	findMessageChats    func(context.Context, []int) ([]int64, error)
+	markMessagesDeleted func(context.Context, int64, []int) (int, error)
 	// lastActivity is the Unix time of the last request that started or ended,
 	// in nanoseconds. A request is often shorter than the idle check, so the
 	// count of requests in flight alone would miss it.
