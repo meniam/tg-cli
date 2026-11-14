@@ -18,7 +18,11 @@ import (
 // The flow is written out here instead of using auth.Flow, which has no way
 // to resend the code.
 func (c *Client) Login(ctx context.Context, phone string, code func(ctx context.Context, prompt rpc.CodePrompt) (string, bool, error), password func(context.Context) (string, error)) error {
-	return mapError(c.login(ctx, phone, code, password))
+	err := mapError(c.login(ctx, phone, code, password))
+	if err == nil {
+		c.signalAuthorized()
+	}
+	return err
 }
 
 func (c *Client) login(ctx context.Context, phone string, code func(context.Context, rpc.CodePrompt) (string, bool, error), password func(context.Context) (string, error)) error {

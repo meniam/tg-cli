@@ -12,16 +12,18 @@ import (
 	"tg-cli/internal/rpc"
 )
 
-// qrPollInterval is how often the QR login asks Telegram whether the token has
-// been scanned. The client runs without an update handler, so it cannot wait
-// for the login-token update and polls instead.
+// qrPollInterval is how often QR login checks whether a token was scanned.
 const qrPollInterval = 2 * time.Second
 
 // LoginQR runs the QR login: show gets every new token and the user scans it
 // in the Telegram app of a logged-in device. password is called when the
 // account has two-factor authentication.
 func (c *Client) LoginQR(ctx context.Context, show func(ctx context.Context, token rpc.QRToken) error, password func(context.Context) (string, error)) error {
-	return mapError(c.loginQR(ctx, show, password))
+	err := mapError(c.loginQR(ctx, show, password))
+	if err == nil {
+		c.signalAuthorized()
+	}
+	return err
 }
 
 func (c *Client) loginQR(ctx context.Context, show func(context.Context, rpc.QRToken) error, password func(context.Context) (string, error)) error {

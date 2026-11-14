@@ -41,7 +41,8 @@ func (f *fakeTelegram) Run(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (f *fakeTelegram) Ready() <-chan struct{} { return f.ready }
+func (f *fakeTelegram) Ready() <-chan struct{}       { return f.ready }
+func (f *fakeTelegram) SetEventSink(func(rpc.Event)) {}
 
 func (f *fakeTelegram) Self(context.Context) (*rpc.User, error) {
 	f.mu.Lock()

@@ -81,7 +81,7 @@ var presetName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 //
 // Giving both (1) and (2) is an error: it is unclear which one is meant.
 func (a *app) credentials(cmd *cobra.Command, paths daemon.Paths) (daemon.TelegramConfig, error) {
-	cfg := daemon.TelegramConfig{SessionPath: paths.Session}
+	cfg := daemon.TelegramConfig{SessionPath: paths.Session, StatePath: paths.Database}
 	flagClient, _ := cmd.Flags().GetString("client")
 	idText, hash := a.deps.Getenv("TG_API_ID"), a.deps.Getenv("TG_API_HASH")
 

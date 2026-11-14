@@ -8,6 +8,7 @@ import (
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/telegram/query"
+	"github.com/gotd/td/telegram/updates"
 	"github.com/gotd/td/tg"
 
 	"tg-cli/internal/rpc"
@@ -26,6 +27,8 @@ type Config struct {
 	DeviceModel string
 	// Throttle limits RPC requests when set. A nil value preserves the old behavior.
 	Throttle *throttle.Limiter
+	// StateKV persists update cursors; nil keeps them in memory.
+	StateKV StateKV
 }
 
 // DefaultDeviceModel is the device name when none is configured. It is the
@@ -49,6 +52,11 @@ type Client struct {
 	tg        *telegram.Client
 	ready     chan struct{}
 	readyOnce sync.Once
+	authReady chan struct{}
+	updates   *updates.Manager
+	stateKV   StateKV
+	sinkMu    sync.RWMutex
+	sink      func(rpc.Event)
 
 	mgr         *peers.Manager // resolves chat references to Telegram peers
 	mgrMu       sync.Mutex
@@ -60,20 +68,18 @@ type Client struct {
 
 // New creates a client. It does not connect until Run is called.
 func New(cfg Config) *Client {
+	c := &Client{appID: cfg.AppID, appHash: cfg.AppHash, ready: make(chan struct{}), authReady: make(chan struct{}, 1), stateKV: cfg.StateKV}
 	options := telegram.Options{
 		SessionStorage: &telegram.FileSessionStorage{Path: cfg.SessionPath},
 		Device:         deviceConfig(cfg.DeviceModel),
+		UpdateHandler:  managerHandler{client: c},
 	}
 	if cfg.Throttle != nil {
 		options.Middlewares = []telegram.Middleware{throttleMiddleware(cfg.Throttle)}
 	}
-	c := &Client{
-		appID:   cfg.AppID,
-		appHash: cfg.AppHash,
-		ready:   make(chan struct{}),
-		tg:      telegram.NewClient(cfg.AppID, cfg.AppHash, options),
-	}
+	c.tg = telegram.NewClient(cfg.AppID, cfg.AppHash, options)
 	c.mgr = peers.Options{Storage: &peers.InmemoryStorage{}}.Build(c.tg.API())
+	c.updates = updates.New(c.updateConfig())
 	return c
 }
 
@@ -81,9 +87,48 @@ func New(cfg Config) *Client {
 func (c *Client) Run(ctx context.Context) error {
 	return c.tg.Run(ctx, func(ctx context.Context) error {
 		c.readyOnce.Do(func() { close(c.ready) })
-		<-ctx.Done()
-		return ctx.Err()
+		for {
+			user, err := c.Self(ctx)
+			if err != nil {
+				return err
+			}
+			if user != nil {
+				if _, err := c.manager(ctx); err != nil {
+					return err
+				}
+				return c.updates.Run(ctx, c.tg.API(), user.ID, updates.AuthOptions{Forget: false})
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-c.authReady:
+			}
+		}
 	})
+}
+
+// SetEventSink installs a receiver before Run. The callback is invoked without
+// holding the sink lock; it should finish promptly to keep updates moving.
+func (c *Client) SetEventSink(sink func(rpc.Event)) {
+	c.sinkMu.Lock()
+	c.sink = sink
+	c.sinkMu.Unlock()
+}
+
+func (c *Client) emit(event rpc.Event) {
+	c.sinkMu.RLock()
+	sink := c.sink
+	c.sinkMu.RUnlock()
+	if sink != nil {
+		sink(event)
+	}
+}
+
+func (c *Client) signalAuthorized() {
+	select {
+	case c.authReady <- struct{}{}:
+	default:
+	}
 }
 
 // Ready is closed once the client is connected.

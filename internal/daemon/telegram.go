@@ -17,6 +17,7 @@ type Telegram interface {
 	// Run connects and keeps the connection until ctx ends. It returns
 	// ctx.Err() on a clean stop.
 	Run(ctx context.Context) error
+	SetEventSink(func(rpc.Event))
 	// Ready is closed once the client is connected.
 	Ready() <-chan struct{}
 	// Self returns the logged-in account, or nil when there is none.
@@ -56,6 +57,8 @@ type TelegramConfig struct {
 	AppID       int
 	AppHash     string
 	SessionPath string
+	// StatePath is the profile database used for update checkpoints.
+	StatePath string
 	// DeviceModel is the device name Telegram shows for this session.
 	DeviceModel string
 	// Throttle limits this account's Telegram requests when set.

@@ -28,6 +28,47 @@ type Event struct {
 	ChatID *int64          `json:"chat_id,omitempty"`
 	Time   string          `json:"time"`
 	Data   json.RawMessage `json:"data,omitempty" untrusted:"true"`
+	// DedupKey is used by the Daemon's durable event store and never sent to clients.
+	DedupKey string `json:"-"`
+}
+
+// Message event data is the existing Message type.
+type MessageDeleteData struct {
+	ChatID *int64 `json:"chat_id,omitempty"`
+	IDs    []int  `json:"ids"`
+}
+
+type ReactionCount struct {
+	Emoji string `json:"emoji"`
+	Count int    `json:"count"`
+}
+
+type ReactionData struct {
+	ChatID    int64           `json:"chat_id"`
+	MessageID int             `json:"message_id"`
+	Reactions []ReactionCount `json:"reactions"`
+}
+
+type ReadData struct {
+	ChatID int64 `json:"chat_id"`
+	MaxID  int   `json:"max_id"`
+	Outbox bool  `json:"outbox"`
+}
+
+type TypingData struct {
+	ChatID int64  `json:"chat_id"`
+	UserID int64  `json:"user_id"`
+	Action string `json:"action"`
+}
+
+type StatusData struct {
+	UserID int64 `json:"user_id"`
+	Online bool  `json:"online"`
+}
+
+type GapData struct {
+	ChatID *int64 `json:"chat_id,omitempty"`
+	Reason string `json:"reason"`
 }
 
 // SubscribeParams selects chats, topic, types and the last seen event cursor.
