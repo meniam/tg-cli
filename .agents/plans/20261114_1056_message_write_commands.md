@@ -12,7 +12,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: Steps 1-2 (аудит gotd `telegram/message` и список записи в `access.json`). План начат по общему указанию владельца «делай, не останавливайся»; решения из Open questions приняты по рекомендациям и ждут подтверждения владельцем при ревью ветки. Живая запись только в чат «Браин Тест».
+- Next safe step: Steps 4-5 (Daemon: проверка записи, пробный запуск, журнал удалений; CLI: четыре команды). Шаги 1-3 выполнены.
 
 ## Context and sources
 
@@ -87,15 +87,15 @@ PR: —
 
 ## Step 1. Audit and baseline
 
-- [ ] `just check` и `just build` на чистом дереве; результат в Known facts.
-- [ ] По исходникам gotd `telegram/message`: как задаются ответ на сообщение, тема, тихая отправка, редактирование, удаление с `revoke`, пересылка; что возвращается и как получить идентификатор сообщения; нужен ли `random_id` вручную.
-- [ ] Выяснить, как дроссель классифицирует правку и удаление и как `tgclient` собирает `InputPeer` по `chatref`.
-- [ ] Записать итог в Known facts, непокрытое в Risks и Open questions.
+- [x] `just check` и `just build` на чистом дереве; результат в Known facts.
+- [x] По исходникам gotd `telegram/message`: как задаются ответ на сообщение, тема, тихая отправка, редактирование, удаление с `revoke`, пересылка; что возвращается и как получить идентификатор сообщения; нужен ли `random_id` вручную.
+- [x] Выяснить, как дроссель классифицирует правку и удаление и как `tgclient` собирает `InputPeer` по `chatref`.
+- [x] Записать итог в Known facts, непокрытое в Risks и Open questions.
 
 ## Implementation steps
 
-- [ ] 2. `internal/access`: список `write` (разбор, дубликаты, `WriteAllowed(chatID)`: виден, не в `block`, есть в `write`), счётчик для `daemon status`; тесты.
-- [ ] 3. `rpc` и `tgclient`: типы и методы `message.send|edit|delete|forward`, код ошибки `write_disabled`, интерфейс `daemon.Telegram` (`Send`, `Edit`, `Delete`, `Forward`), реализация через gotd, тесты на поддельном `tg.Invoker` (аргументы, ответ, ошибки, без повторов).
+- [x] 2. `internal/access`: список `write` (разбор, дубликаты, `WriteAllowed(chatID)`: виден, не в `block`, есть в `write`), счётчик для `daemon status`; тесты.
+- [x] 3. `rpc` и `tgclient`: типы и методы `message.send|edit|delete|forward`, код ошибки `write_disabled`, интерфейс `daemon.Telegram` (`Send`, `Edit`, `Delete`, `Forward`), реализация через gotd, тесты на поддельном `tg.Invoker` (аргументы, ответ, ошибки, без повторов).
 - [ ] 4. Daemon: проверка записи (закрытый чат `not_found`, не в `write` код `write_disabled`), `--dry-run` на уровне метода, журнал удалений (до и после), сохранение в базу, тест полноты пометок доступа; тесты.
 - [ ] 5. CLI: четыре команды, `--text` или stdin, `--yes`, `--dry-run`, класс «запись» и `dangerous: true` в схеме, код выхода 9 `write_disabled`; тесты и схема.
 - [ ] 6. Документы: `AGENTS.md` (Running, запрет записи без задачи остаётся, код 9), `FEATURES.md` (5.1, 5.2, 5.5, 9.1, 9.3, 9.6), навык, решение в `.agents/decisions/`; через `docwriter`.
@@ -130,6 +130,10 @@ PR: —
 
 - Утилита сейчас только читает; записи в Telegram нет.
 - `internal/access` умеет `allow` и `block`; расширять его списком `write`.
+
+- Аудит gotd v0.166.0 (шаг 3): `message.Sender` (`telegram/message/sender.go:25`), `To` строит запрос на `InputPeer` (`peer.go:55`), `Silent` (`builder.go:63`), ответ (`builder.go:81`), `Edit` (`edit.go:36,100`), `ForwardIDs(...).Send` (`forward.go:33,59`), `Delete` (`delete.go:27,53`). У `InputReplyToMessage` есть `TopMsgID`, но построитель его не задаёт: ответ внутри темы идёт прямым `messages.sendMessage` с собственным `random_id` (`tg/tl_input_reply_to_gen.go:46,53,533`). Для канала gotd выбирает только `channels.deleteMessages`, то есть удаление без `revoke` для канала отклоняется до Telegram.
+- Находка, влияющая на защиту: `messages.deleteMessages` для личных чатов и обычных групп не принимает `peer`, только идентификаторы сообщений (они уникальны на аккаунт). Поэтому проверка чата по ссылке не исключает удаление сообщения другого чата. Решение плана: перед удалением Daemon проверяет по локальной базе, что все идентификаторы принадлежат выбранному чату, и при неопределённости отказывает.
+- Запись исключена из автоповтора после FLOOD_WAIT (дроссель повторяет только запросы чтения).
 
 ## Open questions
 
