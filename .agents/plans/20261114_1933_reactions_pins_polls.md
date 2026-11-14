@@ -12,7 +12,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: шаг 5 (документы через `docwriter`), затем шаг 6 (живая проверка Claude).
+- Next safe step: шаг 6 (живая проверка Claude).
 
 ## Context and sources
 
@@ -97,7 +97,7 @@ PR: —
 - [x] 2. `rpc` и `tgclient` (опрос отправляется прямым `MessagesSendMediaRequest` с `InputMediaPoll`, не через `message.Poll`; снятие реакции ненулевым пустым списком; плюс извлечение вопроса опроса в `text` в `toMessage` с тестом на `MessageMediaPoll`): типы и методы `message.react`, `message.pin`, `message.unpin`, `message.poll`, клиентские `React`, `Pin`, `Unpin`, `SendPoll`, добавление новых запросов в `writeRequest` дросселя, перевод ошибок (`REACTION_INVALID`, `MESSAGE_ID_INVALID`, `CHAT_ADMIN_REQUIRED`, `POLL_*`) в понятные коды; проверка параметров опроса до обращения к Telegram (пределы строк, число вариантов, викторина и `--multiple`, номер правильного варианта); тесты на подмене Telegram: параметры каждого запроса, снятие реакции, закрепление с `silent` и без, открепление, опрос обычный, множественный, неанонимный, викторина с пояснением, пределы на границах, FLOOD_WAIT без повтора, ошибка прав.
 - [x] 3. Daemon (плюс обновление признака `pinned` в базе после успешного `pin` и `unpin`, метод хранилища и тест): обработчики четырёх методов по образцу записи (видимость чата, `write`, `--dry-run`, ответ), сохранение отправленного опроса в базу, журнал без параметров и текстов, тест полноты методов; тесты без сокетов: чат вне `write` код 9 без вызова Telegram, закрытый чат `not_found`, `--dry-run`, успех каждого метода, ошибка Telegram в код.
 - [x] 4. CLI: `message react`, `message pin`, `message unpin`, `message poll` с флагами, повторяемый `--option`, схема (класс «запись в аккаунт», не `dangerous`), коды выхода, форматы; тесты по образцу `internal/cli` и тест полноты схемы.
-- [ ] 5. Документы через `docwriter`: `AGENTS.md` (Running: четыре команды, правила, что видят другие), `FEATURES.md` (5.3 и подпункты, что проверено), `README.md`, навык `docs/skill/tg-cli/` (предупреждение про закрепление), решение в `.agents/decisions/` и строка в `_TOC.md`.
+- [x] 5. Документы через `docwriter`: `AGENTS.md` (Running: четыре команды, правила, что видят другие), `FEATURES.md` (5.3 и подпункты, что проверено), `README.md`, навык `docs/skill/tg-cli/` (предупреждение про закрепление), решение в `.agents/decisions/` и строка в `_TOC.md`.
 - [ ] 6. Живая проверка Claude в «Браин Тест» (временный `access.json` с `write` для чата, затем удалён): реакция и её снятие на тестовом сообщении, опрос обычный, множественный, викторина, закрепление и открепление (с `--silent`), `--dry-run`, чат вне `write` код 9; проверка по `message get` и `message history` (`media_type`, `pinned`) и числам; тестовые сообщения удаляются командой `message delete`; текст в вывод не попадает.
 
 ## Verification
