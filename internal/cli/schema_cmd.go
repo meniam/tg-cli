@@ -84,6 +84,7 @@ type commandDoc struct {
 	// Item is the list a JSONL line is taken from, for a command that prints
 	// JSONL; its Fields are the paths inside one line.
 	Item               *itemDoc  `json:"item,omitempty"`
+	PublicItem         *itemDoc  `json:"public_item,omitempty"`
 	SubscriptionMethod string    `json:"subscription_method,omitempty"`
 	Args               []argDoc  `json:"args,omitempty"`
 	Flags              []flagDoc `json:"flags,omitempty"`
@@ -158,6 +159,7 @@ func commandDocFor(cmd *cobra.Command, path string, spec commandSpec) commandDoc
 		Formats:            commandFormats(spec),
 		Fields:             schema.Fields(spec.Result),
 		Item:               itemDocFor(spec),
+		PublicItem:         itemDocFor(commandSpec{Result: spec.Result, ItemPath: spec.PublicItemPath}),
 		Flags:              flagDocs(cmd.LocalFlags(), spec.Choices),
 		Description:        cmd.Long,
 		SubscriptionMethod: spec.SubscriptionMethod,

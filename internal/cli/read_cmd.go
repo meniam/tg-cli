@@ -2,11 +2,9 @@ package cli
 
 import (
 	"io"
-	"strconv"
 
 	"github.com/spf13/cobra"
 
-	"tg-cli/internal/exitcode"
 	"tg-cli/internal/output"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/schema"
@@ -17,8 +15,11 @@ import (
 //
 // --fields accepts result paths and item-relative paths for every format.
 func emitList[T any](a *app, cmd *cobra.Command, settings outputSettings, result any, items []T, nextCursor string) error {
+	return emitListAtPath(a, cmd, settings, a.specs[cmd].ItemPath, result, items, nextCursor)
+}
+
+func emitListAtPath[T any](a *app, cmd *cobra.Command, settings outputSettings, itemPath string, result any, items []T, nextCursor string) error {
 	var lines func(io.Writer) error
-	itemPath := a.specs[cmd].ItemPath
 	if settings.format == output.FormatJSONL {
 		paths := output.ItemPaths(settings.fields, itemPath)
 		lines = func(w io.Writer) error {
@@ -88,11 +89,11 @@ func (a *app) messageCommand() *cobra.Command {
 	history.Flags().String("cursor", "", "continue after a previous page, the value of next_cursor")
 
 	get := a.annotate(&cobra.Command{
-		Use:   "get <chat> <id>",
+		Use:   "get <chat> <id> | get <message-link>",
 		Short: "Read one message by its id (read only)",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.RangeArgs(1, 2),
 		RunE:  a.messageGet,
-	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.Message](), Args: []argSpec{{Name: "chat", Required: true}, {Name: "id", Required: true}}})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.Message](), Args: []argSpec{{Name: "chat_or_link", Required: true}, {Name: "id", Required: false}}})
 
 	pinned := a.annotate(&cobra.Command{
 		Use:   "pinned <chat>",
@@ -103,6 +104,7 @@ func (a *app) messageCommand() *cobra.Command {
 	pinned.Flags().Int("limit", 0, "how many pinned messages, 1 to 100 (default 20)")
 
 	cmd.AddCommand(history, get, pinned, a.watchCommand())
+	cmd.AddCommand(a.messageDiscoveryCommands()...)
 	cmd.AddCommand(a.messageWriteCommands()...)
 	return cmd
 }
@@ -127,12 +129,12 @@ func (a *app) messageHistory(cmd *cobra.Command, args []string) error {
 }
 
 func (a *app) messageGet(cmd *cobra.Command, args []string) error {
-	id, err := strconv.Atoi(args[1])
-	if err != nil || id <= 0 {
-		return fail(exitcode.Usage, "the message id must be a positive number, got %q", args[1])
+	chat, id, err := messageTarget(args)
+	if err != nil {
+		return err
 	}
 	var res rpc.Message
-	if err := a.callOne(cmd, rpc.MethodMessageGet, rpc.MessageGetParams{Chat: args[0], ID: id}, &res); err != nil {
+	if err := a.callOne(cmd, rpc.MethodMessageGet, rpc.MessageGetParams{Chat: chat, ID: id}, &res); err != nil {
 		return err
 	}
 	return a.success(cmd, res)
