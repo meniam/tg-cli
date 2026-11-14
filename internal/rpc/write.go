@@ -7,6 +7,8 @@ type SendParams struct {
 	IdempotencyKey string   `json:"idempotency_key,omitempty"`
 	AccountID      int64    `json:"-"`
 	Chat           string   `json:"chat"`
+	At             string   `json:"at,omitempty"`
+	In             string   `json:"in,omitempty"`
 	Text           string   `json:"text"`
 	ReplyTo        int      `json:"reply_to,omitempty"`
 	Topic          int      `json:"topic,omitempty"`
@@ -141,6 +143,7 @@ type PollParams struct {
 type SendResult struct {
 	ReplayAvailable *bool  `json:"replay_available,omitempty"`
 	Replayed        bool   `json:"replayed,omitempty"`
+	Scheduled       bool   `json:"scheduled,omitempty"`
 	ChatID          int64  `json:"chat_id"`
 	ID              int    `json:"id,omitempty"`
 	Date            string `json:"date,omitempty"`
