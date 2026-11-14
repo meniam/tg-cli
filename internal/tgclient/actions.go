@@ -53,6 +53,12 @@ func (c *Client) Unpin(ctx context.Context, ref chatref.Ref, p rpc.UnpinParams) 
 }
 
 func (c *Client) SendPoll(ctx context.Context, ref chatref.Ref, p rpc.PollParams) (rpc.SendResult, error) {
+	accountID, accountErr := c.idempotencyAccount(ctx, p.IdempotencyKey)
+	if accountErr != nil {
+		return rpc.SendResult{}, accountErr
+	}
+	p.AccountID = accountID
+
 	if p.DryRun {
 		return rpc.SendResult{}, rpc.NewError(rpc.CodeInvalidParams, "dry-run must be handled by the daemon")
 	}
@@ -99,6 +105,12 @@ func updatePin(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, chat
 }
 
 func sendPoll(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, chatID int64, p rpc.PollParams) (rpc.SendResult, error) {
+	wrappedAPI, wrapErr := idempotentAPI(api, p.AccountID, chatID, p.IdempotencyKey)
+	if wrapErr != nil {
+		return rpc.SendResult{}, wrapErr
+	}
+	api = wrappedAPI
+
 	if err := ctx.Err(); err != nil {
 		return rpc.SendResult{}, err
 	}

@@ -4,31 +4,35 @@ import "os"
 
 // SendParams sends text to a chat. The caller validates authorization.
 type SendParams struct {
-	Chat     string   `json:"chat"`
-	At       string   `json:"at,omitempty"`
-	In       string   `json:"in,omitempty"`
-	Text     string   `json:"text"`
-	ReplyTo  int      `json:"reply_to,omitempty"`
-	Topic    int      `json:"topic,omitempty"`
-	Silent   bool     `json:"silent,omitempty"`
-	DryRun   bool     `json:"dry_run,omitempty"`
-	Parse    string   `json:"parse,omitempty"`
-	Entities []Entity `json:"entities,omitempty"`
+	IdempotencyKey string   `json:"idempotency_key,omitempty"`
+	AccountID      int64    `json:"-"`
+	Chat           string   `json:"chat"`
+	At             string   `json:"at,omitempty"`
+	In             string   `json:"in,omitempty"`
+	Text           string   `json:"text"`
+	ReplyTo        int      `json:"reply_to,omitempty"`
+	Topic          int      `json:"topic,omitempty"`
+	Silent         bool     `json:"silent,omitempty"`
+	DryRun         bool     `json:"dry_run,omitempty"`
+	Parse          string   `json:"parse,omitempty"`
+	Entities       []Entity `json:"entities,omitempty"`
 }
 
 // SendMediaParams carries only the request description, never file contents.
 type SendMediaParams struct {
-	Chat     string   `json:"chat"`
-	As       string   `json:"as"`
-	Files    []string `json:"files"`
-	Caption  string   `json:"caption,omitempty"`
-	ReplyTo  int      `json:"reply_to,omitempty"`
-	Topic    int      `json:"topic,omitempty"`
-	Silent   bool     `json:"silent,omitempty"`
-	DryRun   bool     `json:"dry_run,omitempty"`
-	Duration int      `json:"duration,omitempty"`
-	Width    int      `json:"width,omitempty"`
-	Height   int      `json:"height,omitempty"`
+	IdempotencyKey string   `json:"idempotency_key,omitempty"`
+	AccountID      int64    `json:"-"`
+	Chat           string   `json:"chat"`
+	As             string   `json:"as"`
+	Files          []string `json:"files"`
+	Caption        string   `json:"caption,omitempty"`
+	ReplyTo        int      `json:"reply_to,omitempty"`
+	Topic          int      `json:"topic,omitempty"`
+	Silent         bool     `json:"silent,omitempty"`
+	DryRun         bool     `json:"dry_run,omitempty"`
+	Duration       int      `json:"duration,omitempty"`
+	Width          int      `json:"width,omitempty"`
+	Height         int      `json:"height,omitempty"`
 }
 
 // MediaFile is a checked, already-open file owned by the caller.
@@ -45,14 +49,16 @@ type MediaFile struct {
 type MessageRef = ForwardedMessage
 
 type SendMediaResult struct {
-	ChatID        int64        `json:"chat_id"`
-	Messages      []MessageRef `json:"messages"`
-	DryRun        bool         `json:"dry_run,omitempty"`
-	Action        string       `json:"action,omitempty"`
-	Count         int          `json:"count,omitempty"`
-	Types         []string     `json:"types,omitempty"`
-	Sizes         []int64      `json:"sizes,omitempty"`
-	CaptionLength int          `json:"caption_length,omitempty"`
+	ReplayAvailable *bool        `json:"replay_available,omitempty"`
+	Replayed        bool         `json:"replayed,omitempty"`
+	ChatID          int64        `json:"chat_id"`
+	Messages        []MessageRef `json:"messages"`
+	DryRun          bool         `json:"dry_run,omitempty"`
+	Action          string       `json:"action,omitempty"`
+	Count           int          `json:"count,omitempty"`
+	Types           []string     `json:"types,omitempty"`
+	Sizes           []int64      `json:"sizes,omitempty"`
+	CaptionLength   int          `json:"caption_length,omitempty"`
 }
 
 type EditParams struct {
@@ -87,11 +93,13 @@ type DeleteParams struct {
 }
 
 type ForwardParams struct {
-	From   string `json:"from"`
-	To     string `json:"to"`
-	IDs    []int  `json:"ids"`
-	Silent bool   `json:"silent,omitempty"`
-	DryRun bool   `json:"dry_run,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	AccountID      int64  `json:"-"`
+	From           string `json:"from"`
+	To             string `json:"to"`
+	IDs            []int  `json:"ids"`
+	Silent         bool   `json:"silent,omitempty"`
+	DryRun         bool   `json:"dry_run,omitempty"`
 }
 
 type ReactParams struct {
@@ -116,35 +124,37 @@ type UnpinParams struct {
 }
 
 type PollParams struct {
-	Chat        string   `json:"chat"`
-	Question    string   `json:"question"`
-	Options     []string `json:"options"`
-	Multiple    bool     `json:"multiple,omitempty"`
-	Public      bool     `json:"public,omitempty"`
-	Quiz        bool     `json:"quiz,omitempty"`
-	Correct     int      `json:"correct,omitempty"`
-	Explanation string   `json:"explanation,omitempty"`
-	ReplyTo     int      `json:"reply_to,omitempty"`
-	Topic       int      `json:"topic,omitempty"`
-	Silent      bool     `json:"silent,omitempty"`
-	DryRun      bool     `json:"dry_run,omitempty"`
+	IdempotencyKey string   `json:"idempotency_key,omitempty"`
+	AccountID      int64    `json:"-"`
+	Chat           string   `json:"chat"`
+	Question       string   `json:"question"`
+	Options        []string `json:"options"`
+	Multiple       bool     `json:"multiple,omitempty"`
+	Public         bool     `json:"public,omitempty"`
+	Quiz           bool     `json:"quiz,omitempty"`
+	Correct        int      `json:"correct,omitempty"`
+	Explanation    string   `json:"explanation,omitempty"`
+	ReplyTo        int      `json:"reply_to,omitempty"`
+	Topic          int      `json:"topic,omitempty"`
+	Silent         bool     `json:"silent,omitempty"`
+	DryRun         bool     `json:"dry_run,omitempty"`
 }
 
 type SendResult struct {
-	Scheduled   bool   `json:"scheduled,omitempty"`
-	ChatID      int64  `json:"chat_id"`
-	ID          int    `json:"id,omitempty"`
-	Date        string `json:"date,omitempty"`
-	DryRun      bool   `json:"dry_run,omitempty"`
-	Action      string `json:"action,omitempty"`
-	Count       int    `json:"count,omitempty"`
-	TextLength  int    `json:"text_length,omitempty"`
-	Mode        string `json:"mode,omitempty"`
-	PlainLength *int   `json:"plain_length,omitempty"`
-	EntityCount *int   `json:"entities,omitempty"`
-	RichMode    *bool  `json:"rich,omitempty"`
-	PlainText   string `json:"-"`
-	Rich        bool   `json:"-"`
+	ReplayAvailable *bool  `json:"replay_available,omitempty"`
+	Replayed        bool   `json:"replayed,omitempty"`
+	Scheduled       bool   `json:"scheduled,omitempty"`
+	ChatID          int64  `json:"chat_id"`
+	ID              int    `json:"id,omitempty"`
+	Date            string `json:"date,omitempty"`
+	DryRun          bool   `json:"dry_run,omitempty"`
+	Action          string `json:"action,omitempty"`
+	Count           int    `json:"count,omitempty"`
+	TextLength      int    `json:"text_length,omitempty"`
+	Mode            string `json:"mode,omitempty"`
+	PlainLength     *int   `json:"plain_length,omitempty"`
+	EntityCount     *int   `json:"entities,omitempty"`
+	RichMode        *bool  `json:"rich,omitempty"`
 }
 
 // TextCheck is a local formatting preview without a Telegram write.
@@ -188,11 +198,13 @@ type ForwardedMessage struct {
 }
 
 type ForwardResult struct {
-	ChatID   int64              `json:"chat_id"`
-	Messages []ForwardedMessage `json:"messages"`
-	DryRun   bool               `json:"dry_run,omitempty"`
-	Action   string             `json:"action,omitempty"`
-	Count    int                `json:"count,omitempty"`
+	ReplayAvailable *bool              `json:"replay_available,omitempty"`
+	Replayed        bool               `json:"replayed,omitempty"`
+	ChatID          int64              `json:"chat_id"`
+	Messages        []ForwardedMessage `json:"messages"`
+	DryRun          bool               `json:"dry_run,omitempty"`
+	Action          string             `json:"action,omitempty"`
+	Count           int                `json:"count,omitempty"`
 }
 
 // ErrWriteDisabled tells the caller how the owner can enable this chat.

@@ -41,7 +41,7 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-14 — [Участники, топики и общие чаты читаются тремя командами под chat: текст поиска вместе с фильтром роли применяется к загруженной странице, закрытые чаты убираются из общих с добором страниц, канал без прав админа даёт ошибку, люди сохраняются в people](20261114_2002_chat_members_topics_and_common_are_read_lists_with_text_search_on_the_loaded_page.md)
 - 2026-11-14 — [Медиа уходит командой message send-media: файлы только из корней files в access.json, тип всегда явный, загрузка синхронная до 100 МиБ](20261114_2010_media_goes_by_send_media_from_roots_in_access_json_with_explicit_type.md)
 - 2026-11-14 — [Реакции, закрепление и опросы это записи под write без --yes: закрепление с уведомлением, пределы опроса проверяются до Telegram, признак pinned в базе обновляется сразу](20261114_2010_reactions_pins_and_polls_are_writes_under_write_without_yes.md)
-- 2026-11-14 — [Форматирование идёт флагами --parse и --entities у send и edit, RichMessage разбирает сервер, упоминание по id берётся из кэша пиров, в базу пишется итоговый простой текст](20261114_2040_text_formatting_through_parse_and_entities_flags_with_server_parsed_rich_messages.md)
+- 2026-11-14 — [Форматирование идёт флагами --parse и --entities у send и edit, RichMessage разбирает сервер, упоминание по id берётся из кэша пиров, в базу пишется итоговый простой текст (пересмотрено: исходная разметка)](20261114_2040_text_formatting_through_parse_and_entities_flags_with_server_parsed_rich_messages.md)
 
 ## Open questions
 

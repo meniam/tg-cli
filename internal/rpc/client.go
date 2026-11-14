@@ -18,9 +18,10 @@ var ErrClosed = errors.New("rpc: connection closed")
 
 // Client is a JSON-RPC client. Calls may run in parallel.
 type Client struct {
-	conn      net.Conn
-	w         *frameWriter
-	writeSlot chan struct{}
+	expectUser string
+	conn       net.Conn
+	w          *frameWriter
+	writeSlot  chan struct{}
 
 	mu        sync.Mutex
 	nextID    uint64
@@ -32,6 +33,9 @@ type Client struct {
 	done chan struct{}
 	err  error // set before done is closed
 }
+
+// SetExpectUser sets the account constraint for subsequent requests.
+func (c *Client) SetExpectUser(user string) { c.expectUser = user }
 
 // Dial connects to a server and returns a ready client.
 func Dial(ctx context.Context, network, address string) (*Client, error) {
@@ -132,10 +136,11 @@ func (c *Client) CallWithThrottle(ctx context.Context, method string, params, re
 	c.mu.Unlock()
 
 	req := Request{
-		JSONRPC: Version,
-		ID:      json.RawMessage(strconv.FormatUint(id, 10)),
-		Method:  method,
-		Params:  raw,
+		ExpectUser: c.expectUser,
+		JSONRPC:    Version,
+		ID:         json.RawMessage(strconv.FormatUint(id, 10)),
+		Method:     method,
+		Params:     raw,
 	}
 	if err := c.write(ctx, req); err != nil {
 		c.forget(id)

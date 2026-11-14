@@ -48,7 +48,6 @@ func validWriteSource(p rpc.SendParams) error {
 }
 
 func formatRequested(p rpc.SendParams) bool { return p.Parse != "" || p.Entities != nil }
-func richRequested(parse string) bool       { return parse == "rich-html" || parse == "rich-markdown" }
 
 func applyTextCheck(result *rpc.SendResult, check rpc.TextCheck) {
 	result.Mode = check.Mode
@@ -109,14 +108,9 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	if err := decodeParams(raw, &p); err != nil {
 		return nil, err
 	}
-	scheduledAt, err := rpc.ScheduleTime(p.At, p.In, time.Now())
-	if err != nil {
-		return nil, err
-	}
-	if !scheduledAt.IsZero() {
-		p.At = scheduledAt.Format(time.RFC3339)
-		p.In = ""
-	}
+	canonical := p
+	canonical.DryRun = false
+	scheduledAt, scheduleErr := rpc.ScheduleTime(p.At, p.In, time.Now())
 	if err := validWriteSource(p); err != nil {
 		return nil, err
 	}
@@ -134,8 +128,59 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 			return nil, err
 		}
 	}
+	if scheduleErr != nil {
+		if p.IdempotencyKey == "" {
+			return nil, scheduleErr
+		}
+		_, _, replayAvailable, err := d.beginIdempotency(ctx, id, p.IdempotencyKey, rpc.MethodMessageSend, canonical, true)
+		if err != nil {
+			return nil, err
+		}
+		if !replayAvailable {
+			return nil, scheduleErr
+		}
+	}
+	session, saved, available, err := d.beginIdempotency(ctx, id, p.IdempotencyKey, rpc.MethodMessageSend, canonical, p.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer session.unlock()
+	if saved != nil {
+		var replay rpc.SendResult
+		if err := json.Unmarshal(saved, &replay); err != nil {
+			return nil, err
+		}
+		replay.Replayed = true
+		return replay, nil
+	}
+	if scheduleErr != nil {
+		return nil, scheduleErr
+	}
+	if p.IdempotencyKey != "" && p.In != "" && !p.DryRun {
+		record, found, err := d.store.GetIdempotency(ctx, id, p.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			return nil, rpc.NewError(rpc.CodeTelegram, "idempotency reservation is missing")
+		}
+		scheduledAt, err = rpc.ScheduleTime("", p.In, record.CreatedAt.Add(time.Second))
+		if err != nil {
+			return nil, err
+		}
+		if scheduledAt.Before(time.Now().Add(10 * time.Second)) {
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "reserved schedule time is too close or in the past")
+		}
+	}
+	if !scheduledAt.IsZero() {
+		p.At = scheduledAt.Format(time.RFC3339)
+		p.In = ""
+	}
 	if p.DryRun {
 		result := rpc.SendResult{ChatID: id, DryRun: true, Action: "send", Count: 1, TextLength: utf8.RuneCountInString(p.Text)}
+		if p.IdempotencyKey != "" {
+			result.ReplayAvailable = &available
+		}
 		if formatRequested(p) {
 			applyTextCheck(&result, check)
 		}
@@ -146,12 +191,11 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, err
 	}
 	res.ChatID = id
-	text := p.Text
-	if formatRequested(p) {
-		text = res.PlainText
+	if !res.Scheduled {
+		d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
 	}
-	if !res.Scheduled && (!richRequested(p.Parse) || text != "") {
-		d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+	if err := session.complete(ctx, res); err != nil {
+		return nil, err
 	}
 	return res, nil
 }
@@ -191,13 +235,7 @@ func (d *daemon) messageEdit(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, err
 	}
 	res.ChatID = id
-	text := p.Text
-	if formatRequested(checkParams) {
-		text = res.PlainText
-	}
-	if !richRequested(p.Parse) || text != "" {
-		d.saveMessages(ctx, rpc.MethodMessageEdit, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: text, Out: true}})
-	}
+	d.saveMessages(ctx, rpc.MethodMessageEdit, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Text, Out: true}})
 	return res, nil
 }
 
@@ -274,14 +312,36 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 	if err != nil {
 		return nil, err
 	}
+	canonical := p
+	canonical.DryRun = false
+	session, saved, available, err := d.beginIdempotency(ctx, id, p.IdempotencyKey, rpc.MethodMessageForward, canonical, p.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer session.unlock()
+	if saved != nil {
+		var replay rpc.ForwardResult
+		if err := json.Unmarshal(saved, &replay); err != nil {
+			return nil, err
+		}
+		replay.Replayed = true
+		return replay, nil
+	}
 	if p.DryRun {
-		return rpc.ForwardResult{ChatID: id, Messages: []rpc.ForwardedMessage{}, DryRun: true, Action: "forward", Count: len(p.IDs)}, nil
+		result := rpc.ForwardResult{ChatID: id, Messages: []rpc.ForwardedMessage{}, DryRun: true, Action: "forward", Count: len(p.IDs)}
+		if p.IdempotencyKey != "" {
+			result.ReplayAvailable = &available
+		}
+		return result, nil
 	}
 	res, err := d.opts.Telegram.Forward(ctx, from, to, p)
 	if err != nil {
 		return nil, err
 	}
 	res.ChatID = id
+	if err := session.complete(ctx, res); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 
@@ -376,8 +436,27 @@ func (d *daemon) messagePoll(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, err
 	}
+	canonical := p
+	canonical.DryRun = false
+	session, saved, available, err := d.beginIdempotency(ctx, id, p.IdempotencyKey, rpc.MethodMessagePoll, canonical, p.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer session.unlock()
+	if saved != nil {
+		var replay rpc.SendResult
+		if err := json.Unmarshal(saved, &replay); err != nil {
+			return nil, err
+		}
+		replay.Replayed = true
+		return replay, nil
+	}
 	if p.DryRun {
-		return rpc.SendResult{ChatID: id, DryRun: true, Action: "poll", Count: 1, TextLength: utf8.RuneCountInString(p.Question)}, nil
+		result := rpc.SendResult{ChatID: id, DryRun: true, Action: "poll", Count: 1, TextLength: utf8.RuneCountInString(p.Question)}
+		if p.IdempotencyKey != "" {
+			result.ReplayAvailable = &available
+		}
+		return result, nil
 	}
 	res, err := d.opts.Telegram.SendPoll(ctx, ref, p)
 	if err != nil {
@@ -385,6 +464,9 @@ func (d *daemon) messagePoll(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	res.ChatID = id
 	d.saveMessages(ctx, rpc.MethodMessagePoll, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Question, MediaType: "poll", Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+	if err := session.complete(ctx, res); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 

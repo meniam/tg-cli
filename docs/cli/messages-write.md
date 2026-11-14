@@ -17,7 +17,7 @@ Writing is off by default. The owner adds chat ids (Bot API form, nonzero intege
 - **Confirmation.** `message edit` and `message delete` need `--yes`; without `--yes` and without `--dry-run` they exit with code 2 and never call the Daemon. All other write commands need no `--yes`.
 - **Dry run.** `--dry-run` runs every applicable Daemon check, the write permission included, and returns `dry_run: true` with the fields of that command's result. It calls no Telegram write method, writes nothing to the database and creates no journal. Run it first, then run the real call.
 - **Negative chat ids.** The id goes after `--` and the flags before it: `tg message send --text hi -- -1001234567890`.
-- **No retries.** A write is never repeated automatically, neither after `FLOOD_WAIT` (exit code 6) nor after a network error. The agent decides: after a network error read the history first, the message may have gone out. Reads keep their usual retry. The owner has not confirmed the rule "no retry for writes" yet. The write rate is limited by the request throttle only (the send buckets), see [overview.md](overview.md#request-throttle-and-flood_wait).
+- **No retries.** Without an idempotency key, a write is never repeated automatically, neither after `FLOOD_WAIT` (exit code 6) nor after a network error. The agent decides: after a network error read the history first, the message may have gone out. Reads keep their usual retry. An idempotency-keyed write has its documented one transient retry. The write rate is limited by the request throttle only (the send buckets), see [overview.md](overview.md#request-throttle-and-flood_wait).
 - **Saved locally.** Ordinary sent and edited messages are saved to the local database (`out: true`, an edit keeps the previous version), deleted ones get `deleted_at`, a forward is not saved. A scheduled send is not saved until it is delivered.
 - **Who can bypass it.** An agent running as the same user can edit `write` in `access.json`: the list protects against accidental writes and against writes induced through a chat, not against an agent that deliberately bypasses it.
 - **Not done.** None of the commands on this page.
@@ -36,7 +36,7 @@ Common errors of this page: 2 for bad arguments (checked before the Daemon where
 tg message send <chat> [flags]
 ```
 
-**Time.** `--at` is an RFC 3339 time with an explicit offset, such as `2026-11-15T09:00:00+03:00`. `--in` is a Go duration, such as `90m` or `2h`. The flags exclude each other and the selected time must be at least 10 seconds ahead. A bad time is exit code 2 before the Daemon call.
+**Time.** `--at` is an RFC 3339 time with an explicit offset, such as `2026-11-15T09:00:00+03:00`. `--in` is a Go duration, such as `90m` or `2h`. The flags exclude each other and the selected time must be at least 10 seconds ahead. Without an idempotency key, a bad time is exit code 2 before the Daemon call. With a key, the Daemon first checks for a completed replay; without one, the same bad time is exit code 2.
 
 **How it works.** Telegram receives `messages.sendMessage` with `schedule_date`. The answer contains `chat_id`, a scheduled-message `id`, `date`, and `scheduled: true`. A scheduled id is not an ordinary message id, so it is not written to the local `messages` table. The ordinary delivered message follows the normal update path.
 
@@ -138,9 +138,19 @@ tg message scheduled send-now @release_team 17
 
 Live-account verification is tracked only in [FEATURES.md](../../FEATURES.md), item 5.6.
 
+## Idempotent writes
+
+`--idempotency-key <key>` is available on `message send`, `message send-media`, `message poll` and `message forward`. The key contains 1 to 64 characters from `A-Z`, `a-z`, `0-9`, `.`, `_`, `:` and `-`; another value is exit code 2. Use it when a caller may repeat one of these writes after a timeout or a transient network error. Do not invent a key for deliberately separate, identical messages.
+
+For `message send --at` or `--in`, the key covers the scheduled send as well. `--at` must be repeated with the same value. For `--in`, the first reservation fixes the delivery time; a later retry that is already fewer than 10 seconds from that time fails before another Telegram request. A completed repeat returns the saved scheduled result and never turns the scheduled id into a locally saved ordinary message.
+
+The key belongs to the destination chat (`<chat>` for send, media and poll, `<to>` for forward). A repeated call with the same method and parameters returns the saved result with `replayed: true`; the same key with different parameters is exit code 2. `--dry-run` does not reserve a key or write to Telegram; its `replay_available: true` means a completed saved result exists. For media, the comparison includes the content of each selected file.
+
+Without a key the tool keeps its ordinary random Telegram identifier and has no application-level retry. With a key it derives the identifiers from the account, destination chat, key and item position, then retries one transient network failure or timeout. Telegram transport retries are outside this rule. If a response is lost before the Daemon saves it, Telegram can return `RANDOM_ID_DUPLICATE` instead of the original result; the tool cannot recover that result automatically.
+
 ## Formatting text
 
-`message send` and `message edit` format the text with `--parse` or `--entities`. They exclude each other (both together is exit code 2: `--parse and --entities cannot be used together`). Without either one the text goes as plain text. A formatted write follows every rule above: the chat must be in `write`, `edit` needs `--yes`, and nothing is retried.
+`message send` and `message edit` format the text with `--parse` or `--entities`. They exclude each other (both together is exit code 2: `--parse and --entities cannot be used together`). Without either one the text goes as plain text. A formatted write follows every rule above: the chat must be in `write`, `edit` needs `--yes`, and a send retries only under the idempotency-key rule.
 
 | Option | The text is | What Telegram gets |
 | --- | --- | --- |
@@ -203,7 +213,7 @@ The syntax of the rich modes is Telegram's own and is parsed by the server; the 
 
   With `--entities -` the standard input holds the JSON, so the text must come from `--text`. With a file path the text comes from `--text` or stdin as usual.
 - **UTF-16 offsets.** `offset` and `length` count UTF-16 units, as Telegram does: a character outside the Basic Multilingual Plane, an emoji for example, takes 2. In `😀 bold` the word `bold` starts at offset 3. A boundary inside such a pair, a zero length and a range outside the text are exit code 2.
-- **Mention by id.** `<a href="tg://user?id=N">name</a>`, `[name](tg://user?id=N)` and the `mention_name` entity need a user that the session knows: the Daemon resolves the id through the peer cache of the session, as it does for a numeric chat reference, and on a miss loads the dialog list once. The local database stores no access hashes and takes no part. Any other id is exit code 2 `unknown user id for this session`. A `--dry-run` with such a mention may read the user from Telegram; it still writes nothing. This resolution and the saving of the final plain text (below) are implemented but still wait for the confirmation of the owner.
+- **Mention by id.** `<a href="tg://user?id=N">name</a>`, `[name](tg://user?id=N)` and the `mention_name` entity need a user that the session knows: the Daemon resolves the id through the peer cache of the session, as it does for a numeric chat reference, and on a miss loads the dialog list once. The local database stores no access hashes and takes no part. Any other id is exit code 2 `unknown user id for this session`. A `--dry-run` with such a mention may read the user from Telegram; it still writes nothing.
 - **Length.** A plain text, an `--entities` text and the source of a rich mode are at most 4096 characters. For `html` and `markdown` the limit applies to the text left after parsing, and a text read from stdin is at most 64 KiB. The limit of a rich message has not been measured, so 4096 characters of its source is a guard of this tool, not a known limit.
 - **Errors.** Bad flags and input, HTML, Markdown and entity errors and an unknown mention id are exit code 2, raised before any Telegram write method is called (a mention lookup may read from Telegram). A refusal of a rich message by Telegram is exit code 5 `Telegram rejected rich message`. `FLOOD_WAIT` is exit code 6 and the write is not repeated.
 - **Dry run.** `--dry-run` parses the text without writing and adds the mode, the length of the text without markup, the number of entities and whether the message is rich:
@@ -217,7 +227,7 @@ The syntax of the rich modes is Telegram's own and is parsed by the server; the 
   ```
 
   `mode` is `html`, `markdown`, `rich-html`, `rich-markdown` or `entities`. A rich mode reports `plain_length` and `entities` as 0, because Telegram parses the text.
-- **What is saved locally.** The database gets the final plain text without markup: after `--parse markdown` of `**hi**` it holds `hi`. For a rich message it is the text of the blocks in the answer of Telegram; if the answer does not carry it, nothing is saved at send time (an edit leaves the saved row unchanged), and the next read of the message saves it.
+- **What is saved locally.** After `message send` or `message edit`, the database gets the source text supplied to `--text` or stdin, including HTML, Markdown and rich markup. A rich message is saved even if Telegram's response carries no message. A later read from Telegram replaces `text` with Telegram's plain text; when that text differs, the source text becomes a prior version in `message_versions`.
 - **Reading a rich message.** `message get`, history, pinned messages, context, search and the live stream return `text` built from rich blocks; see [messages-read.md](messages-read.md#rules-shared-by-message-reads) and [FEATURES.md](../../FEATURES.md), item 4.10.
 - **Editing.** `message edit` can change the kind of a message: plain to rich, rich to plain, and between the formatting modes.
 
@@ -239,6 +249,7 @@ tg message send <chat> [flags]
 | `--at` | string | `none` | schedule delivery at an RFC 3339 time |
 | `--dry-run` | bool | `false` | describe the action without sending |
 | `--entities` | string | `none` | JSON entity array file, or - for stdin |
+| `--idempotency-key` | string | `none` | idempotency key: 1 to 64 characters A-Za-z0-9._:- |
 | `--in` | string | `none` | schedule delivery after a Go duration |
 | `--parse` | string | `none` | format: html, markdown, rich-html or rich-markdown |
 | `--reply-to` | int | `0` | reply to this message id |
@@ -269,6 +280,8 @@ echo "Fixed text" | tg message send @release_team
 ```
 
 **Answer fields** (`data`): `chat_id` integer, `id` integer (optional), `date` string (optional), `dry_run` boolean (optional), `action` string (optional), `count` integer (optional), `text_length` integer (optional), `mode` string (optional), `plain_length` integer (optional), `entities` integer (optional), `rich` boolean (optional).
+
+With `--idempotency-key`, `replayed` is an optional boolean. With `--dry-run`, `replay_available` is an optional boolean.
 
 With `--dry-run`: `{"chat_id":-1001234567890,"dry_run":true,"action":"send","count":1,"text_length":15}` (plus `mode`, `plain_length`, `entities` and `rich` when the text is formatted).
 
@@ -375,6 +388,7 @@ tg message forward <from> <to> <id>... [flags]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | describe the action without forwarding |
+| `--idempotency-key` | string | `none` | idempotency key: 1 to 64 characters A-Za-z0-9._:- |
 | `--silent` | bool | `false` | forward without a notification |
 <!-- /schema:flags -->
 
@@ -397,6 +411,8 @@ tg message forward --silent @release_team @archive_team 4102
 ```
 
 **Answer fields** (`data`): `chat_id` integer, `messages` array, `messages.id` integer, `messages.date` string, `dry_run` boolean (optional), `action` string (optional), `count` integer (optional).
+
+With `--idempotency-key`, `replayed` is an optional boolean. With `--dry-run`, `replay_available` is an optional boolean.
 
 **Exit codes.** 0; 2 fewer than three arguments; 3, 4; 5; 6; 7 an unknown or closed source or target; 9 the target is not in `write`.
 
@@ -421,6 +437,7 @@ tg message send-media <chat> [flags]
 | `--duration` | int | `0` | media duration in seconds; overrides detected duration |
 | `--file` | stringArray | `[]` | file path; repeat for an album (1 to 10 files) |
 | `--height` | int | `0` | video height; overrides detected height |
+| `--idempotency-key` | string | `none` | idempotency key: 1 to 64 characters A-Za-z0-9._:- |
 | `--reply-to` | int | `0` | reply to this message id |
 | `--silent` | bool | `false` | send without a notification |
 | `--topic` | int | `0` | send in this forum topic |
@@ -451,6 +468,8 @@ tg message send-media <chat> [flags]
 | `document` | any regular file | 1 to 10 |
 
 A mismatch is exit code 2 with the hint `--as document`. WebP, GIF, MOV, WAV, FLAC, Ogg Vorbis and everything else goes as `document`.
+
+With `--idempotency-key`, the result can contain `replayed: true`; with `--dry-run`, it can contain `replay_available: true`.
 
 **Limits.** 100 MiB per file and 100 MiB for all files of one call, over that is exit code 2 before any upload. One file goes as one message; 2 to 10 files go as one album of one type, and the caption goes with the first file. `voice` takes one file, two or more is exit code 2. The caption is at most 1024 characters (an empty one is fine); this is the limit of the project, the limit of your account was not read.
 
@@ -617,6 +636,7 @@ tg message poll <chat> [flags]
 | `--correct` | int | `0` | correct option number, starting from 1; requires --quiz |
 | `--dry-run` | bool | `false` | check the action without changing Telegram |
 | `--explanation` | string | `none` | quiz explanation, up to 200 characters and two line feeds |
+| `--idempotency-key` | string | `none` | idempotency key: 1 to 64 characters A-Za-z0-9._:- |
 | `--multiple` | bool | `false` | allow multiple answers |
 | `--option` | stringArray | `[]` | answer option, 1 to 100 characters; repeat 2 to 10 times in display order |
 | `--public` | bool | `false` | show who voted |
@@ -650,6 +670,8 @@ tg message poll @release_team --question "2 + 2?" --option 3 --option 4 --quiz -
 ```
 
 **Answer fields** (`data`): `chat_id` integer, `id` integer (optional), `date` string (optional), `dry_run` boolean (optional), `action` string (optional), `count` integer (optional), `text_length` integer (optional), `mode` string (optional), `plain_length` integer (optional), `entities` integer (optional), `rich` boolean (optional).
+
+With `--idempotency-key`, `replayed` is an optional boolean. With `--dry-run`, `replay_available` is an optional boolean.
 
 **Exit codes.** 0; 2 limits, a quiz with `--multiple`, `--correct` or `--explanation` without `--quiz`, fewer than 2 options; 3, 4; 5; 6; 7; 9.
 

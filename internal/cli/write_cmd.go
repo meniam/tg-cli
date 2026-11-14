@@ -30,6 +30,7 @@ func (a *app) messageWriteCommands() []*cobra.Command {
 	send := a.annotate(&cobra.Command{Use: "send <chat>", Short: "Send a text message", Long: writeFormatHelp, Args: cobra.ExactArgs(1), RunE: a.messageSend}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: []flagChoices{{Flag: "parse", Values: writeParseModes}}})
 	send.Flags().String("at", "", "schedule delivery at an RFC 3339 time")
 	send.Flags().String("in", "", "schedule delivery after a Go duration")
+	send.Flags().String("idempotency-key", "", "idempotency key: 1 to 64 characters A-Za-z0-9._:-")
 	send.Flags().String("text", "", "message text; reads stdin when absent (stdin is ignored when --text is given)")
 	send.Flags().String("parse", "", "format: html, markdown, rich-html or rich-markdown")
 	send.Flags().String("entities", "", "JSON entity array file, or - for stdin")
@@ -52,6 +53,7 @@ func (a *app) messageWriteCommands() []*cobra.Command {
 	del.Flags().Bool("dry-run", false, "describe the deletion without changing Telegram")
 
 	forward := a.annotate(&cobra.Command{Use: "forward <from> <to> <id>...", Short: "Forward messages", Args: cobra.MinimumNArgs(3), RunE: a.messageForward}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.ForwardResult](), Args: []argSpec{{Name: "from", Required: true}, {Name: "to", Required: true}, {Name: "id", Required: true, Variadic: true}}})
+	forward.Flags().String("idempotency-key", "", "idempotency key: 1 to 64 characters A-Za-z0-9._:-")
 	forward.Flags().Bool("silent", false, "forward without a notification")
 	forward.Flags().Bool("dry-run", false, "describe the action without forwarding")
 
@@ -67,6 +69,7 @@ func (a *app) messageWriteCommands() []*cobra.Command {
 	unpin.Flags().Bool("dry-run", false, "check the action without changing Telegram")
 
 	poll := a.annotate(&cobra.Command{Use: "poll <chat>", Short: "Send a poll or quiz", Args: cobra.ExactArgs(1), RunE: a.messagePoll}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendResult](), ObjectJSONL: true, Args: []argSpec{{Name: "chat", Required: true}}})
+	poll.Flags().String("idempotency-key", "", "idempotency key: 1 to 64 characters A-Za-z0-9._:-")
 	poll.Flags().String("question", "", "poll question, 1 to 255 characters")
 	poll.Flags().StringArray("option", nil, "answer option, 1 to 100 characters; repeat 2 to 10 times in display order")
 	poll.Flags().Bool("multiple", false, "allow multiple answers")
@@ -208,6 +211,11 @@ func messageIDs(args []string) ([]int, error) {
 	return ids, nil
 }
 func (a *app) writeCall(cmd *cobra.Command, method string, p, result any) error {
+	var err error
+	p, err = withIdempotencyKey(cmd, p)
+	if err != nil {
+		return err
+	}
 	if err := a.callOne(cmd, method, p, result); err != nil {
 		if ce, ok := err.(*cmdError); ok && ce.exit == exitcode.WriteDisabled {
 			a.warn(cmd, "add the chat to the write list in this profile's access.json")
@@ -234,7 +242,7 @@ func (a *app) messageSend(cmd *cobra.Command, args []string) error {
 	dry, _ := cmd.Flags().GetBool("dry-run")
 	at, _ := cmd.Flags().GetString("at")
 	in, _ := cmd.Flags().GetString("in")
-	if _, err := rpc.ScheduleTime(at, in, time.Now()); err != nil {
+	if _, err := rpc.ScheduleTime(at, in, time.Now()); err != nil && !cmd.Flags().Changed("idempotency-key") {
 		return fail(exitcode.Usage, "%v", err)
 	}
 	var result rpc.SendResult
