@@ -10,9 +10,9 @@ PR: —
 
 ## Status
 
-- Current status: approved
+- Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: шаг 0 (создать ветку), затем шаг 1 (аудит).
+- Next safe step: шаг 1 (аудит), исполнитель Codex `tg-deep` в Herdr.
 
 ## Context and sources
 
@@ -77,7 +77,7 @@ PR: —
 
 - [x] Форма команды и состав строки подтверждены владельцем (2026-11-14).
 - [ ] Исполнитель Go-кода загрузил скилл `expert-golang` и подтвердил это в начале работы.
-- [ ] Ветка `feature/20261114_1749_local_message_export` создана, в заголовок записан `Branch`, статус `in_progress`.
+- [x] Ветка `feature/20261114_1749_local_message_export` создана, в заголовок записан `Branch`, статус `in_progress`.
 
 ## Step 1. Audit and baseline
 
