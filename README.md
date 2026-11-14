@@ -7,7 +7,7 @@
 
 A console tool for a personal Telegram account over MTProto. A persistent daemon holds the connection and the session, so an agent calls it many times in a row without logging in again. By default every answer is one parseable JSON document, and the tool describes its own commands and response fields to the agent. Everything the daemon reads is saved to a local SQLite database you can search offline.
 
-> The project is early. Reading, local storage, notes, search and a live event stream work (the stream is checked by tests only, not on a live account yet). Sending, editing, deleting and forwarding messages are implemented, off by default and checked by tests only, not on a live account yet. Media does not exist yet. See [Status](#status) before you trust it with your account.
+> The project is early. Reading, local storage, notes, search and a live event stream work (the stream is checked by tests only, not on a live account yet). Telegram-side search, message context, post comments and message links are implemented and checked by tests only. Sending, editing, deleting and forwarding messages and marking a chat read are implemented, off by default and checked by tests only, not on a live account yet. Media does not exist yet. See [Status](#status) before you trust it with your account.
 
 ## Why it exists
 
@@ -19,6 +19,7 @@ What an agent gets:
 - **A contract it can read.** `tg schema` prints every command with its arguments, flags, response fields, safety class and exit codes, without the daemon and without the network.
 - **No repeated logins.** The daemon keeps the connection and the session, and starts in the background with one command. Each CLI call is a short JSON-RPC request.
 - **Offline memory.** Every chat, person and message the daemon reads lands in SQLite with full-text search. Search needs no login and no Telegram connection, only the running daemon.
+- **Finding and linking.** `tg message search` searches inside Telegram (one chat, or everywhere with `--public`), `message context` shows what surrounds a message, `message comments` reads a channel post's discussion, and `message link` builds a link that `message get` accepts back, see [Finding messages](#finding-messages).
 - **Live events.** `tg message watch` prints new messages, edits, deletions, reactions, reads, typing and online status as they arrive, one JSON line per event. The daemon keeps the stored events for 7 days (at most 100 000), so an agent resumes from a cursor and gets the stored events it missed, see [Live events](#live-events).
 - **Its own notes.** The agent (or you) attaches tagged notes to chats, people and messages. Notes live apart from Telegram data, and a reload never touches them.
 - **Safe defaults.** Reading is allowed. Writing to Telegram is off until you add a chat to the `write` list of `access.json`; editing and deleting also need `--yes`, every write command has `--dry-run`, and deletions are logged, see [Writing messages](#writing-messages).
@@ -134,6 +135,8 @@ tg chat list --limit 20
 tg chat resolve @username
 tg message history @username --limit 50 --since 2026-11-01T00:00:00Z
 tg message history -- -1001234567890      # `--` before a negative chat id
+tg message search @username "invoice" --limit 10   # search inside Telegram
+tg message get https://t.me/username/4102          # a message link instead of `<chat> <id>`
 ```
 
 **4. Search and take notes.** Both work on the local database and need no login, only the running daemon. The one exception: `note add` for an `@username` the database has never seen asks Telegram to resolve it.
@@ -175,13 +178,19 @@ Global flags work in any position:
 | `chat info <chat>` | Description, member count, forum and verified flags |
 | `chat invite-info <link>` | See what an invite link leads to, without joining |
 | `message history <chat> [--limit] [--since] [--until] [--topic] [--cursor] [--format]` | Page through a chat from newest to oldest |
-| `message get <chat> <id>` | Read one message |
+| `message get <chat> <id> \| <message-link>` | Read one message |
 | `message pinned <chat>` | Read the pinned messages |
+| `message search <chat> <query> [--media photo\|video\|document\|voice\|audio\|link\|gif\|pinned] [--limit N] [--cursor C]` | Search one chat in Telegram, see [Finding messages](#finding-messages) |
+| `message search --public <query> [--limit N] [--cursor C]` | Search across Telegram; hashtags are plain query text |
+| `message context <chat> <id> \| <message-link> [--before N] [--after N] [--local]` | Read the messages around one message; `--local` uses only the local database |
+| `message comments <chat> <id> \| <message-link> [--limit N] [--cursor C]` | Read the comments under a channel post |
+| `message link <chat> <id> [--topic N]` | Print the link to a message of a channel or supergroup |
 | `message watch [--chat <chat>]... [--topic N] [--types a,b] [--after <cursor>] [--max-events N]` | Watch live events, one JSON line per event, see [Live events](#live-events) |
 | `message send <chat> [--text TEXT] [--reply-to ID] [--topic ID] [--silent] [--dry-run]` | Send a plain text message; without `--text` the text is read from stdin. Needs the chat in `write`, see [Writing messages](#writing-messages) |
 | `message edit <chat> <id> [--text TEXT] [--yes] [--dry-run]` | Edit a message; needs `--yes` unless `--dry-run` |
 | `message delete <chat> <id>... (--revoke \| --for-me) [--yes] [--dry-run]` | Delete messages for everyone or only for this account; needs `--yes` unless `--dry-run` |
 | `message forward <from> <to> <id>... [--silent] [--dry-run]` | Forward messages to another chat |
+| `chat mark-read <chat> [--dry-run]` | Mark a chat as read; needs the chat in `write`, the other side sees it |
 | `note add [--chat] [--person] [--message] [--author owner\|ai] [--model] [--tag] <body\|->` | Add a note to a chat, person or message |
 | `note list [--chat] [--person] [--message] [--author] [--tag] [--before-id]` | List notes, newest first |
 | `note delete <id>` / `note delete --author owner\|ai --yes` | Delete one note, or all notes by an author |
@@ -189,7 +198,7 @@ Global flags work in any position:
 | `schema` | Describe all commands, flags, response fields, safety classes, exit codes and formats; needs no daemon and no network |
 | `version` | Print the version and the build revision |
 
-Reading commands change nothing in Telegram; the four write commands are off until a chat is in `write`. `history` pages hold 20 messages by default and 100 at most; pass `next_cursor` back with `--cursor` to continue.
+Reading commands change nothing in Telegram; the four message write commands and `chat mark-read` are off until a chat is in `write`. `history` pages hold 20 messages by default and 100 at most; pass `next_cursor` back with `--cursor` to continue.
 
 ### Output and exit codes
 
@@ -227,7 +236,30 @@ Each command carries a safety class and a `dangerous` mark. The mark is set by h
 | `local_write` | Writes to the local database or starts and stops the daemon |
 | `account_write` | Changes the Telegram account or its login state |
 
-`message edit`, `message delete` and `note delete` are marked dangerous. `note delete` is a `local_write` and the other two are `account_write`: a deleted note or message cannot be restored. `message send` and `message forward` are `account_write` but not dangerous: the chat is already allowed by the `write` list. The schema of `daemon start` describes the `--foreground` answer (`stopped`) only; the answer of a background start is shown in the quick start above.
+`message edit`, `message delete` and `note delete` are marked dangerous. `note delete` is a `local_write` and the other two are `account_write`: a deleted note or message cannot be restored. `message send`, `message forward` and `chat mark-read` are `account_write` but not dangerous: the chat is already allowed by the `write` list. The schema of `daemon start` describes the `--foreground` answer (`stopped`) only; the answer of a background start is shown in the quick start above.
+
+### Finding messages
+
+`tg search` works on the local database and finds only what the daemon has already read. The commands below ask Telegram itself, so they need a login (except `message context --local`).
+
+```sh
+tg message search @release_team "deploy" --media document --limit 10
+tg message search --public "#release" --limit 20
+tg message context @release_team 4102 --before 3 --after 3
+tg message context https://t.me/release_team/4102 --local
+tg message comments https://t.me/news_channel/88
+tg message link @news_channel 88            # data.link is https://t.me/news_channel/88
+```
+
+- **Search in a chat.** `message search <chat> <query>` calls `messages.search` and returns messages in the formats of the history, with `next_cursor` for the next page. `--media` takes `photo`, `video`, `document`, `voice`, `audio`, `link`, `gif` or `pinned`; an empty query is allowed only with `--media`.
+- **Global search.** `message search --public <query>` calls `messages.searchGlobal`. Hashtags are plain query text. The result is `hits`, a list of `{chat_id, chat?, message}`; with `--format jsonl` each hit is a line. `--media` is not available here and is exit code 2.
+- **Limits.** `--limit` is 1 to 100, 20 by default. A bad `--media`, a limit out of range, an empty query or a wrong number of arguments is exit code 2, before the daemon is called. Global search runs into `FLOOD_WAIT` quickly: keep pauses between calls.
+- **Context.** `message context <chat> <id>` returns 5 messages before and 5 after by default, 50 at most on each side (`--before 0` and `--after 0` are allowed), ascending by id, the message itself included. `--local` reads only the local database: no Telegram and no login (the daemon still must run), only messages that are not deleted, and an unknown message is `not_found`. Without `--local` the window comes from Telegram; how it behaves at the edges of a chat is not confirmed on a live account.
+- **Comments.** `message comments <chat> <id>` reads the discussion of a channel post (`messages.getReplies`), 20 per page by default, with a cursor. A post without a discussion is `not_found`.
+- **Message links.** `message get`, `message context` and `message comments` take either `<chat> <id>` or one link: `t.me/<username>/<id>`, `t.me/<username>/<topic>/<id>`, `t.me/c/<channel>/<id>` or `t.me/c/<channel>/<topic>/<id>`, with `https://`, `http://` or no scheme. A query and a fragment are ignored, and `c/<channel>` becomes the chat ID `-100<channel>`. Any other form, `tg://privatepost` included, is exit code 2 with an example. `message link <chat> <id> [--topic N]` goes the other way: `https://t.me/<username>/<id>` for a channel or supergroup with a username, otherwise `https://t.me/c/<channel>/<id>`, with the topic before the id. A private chat and a basic group have no message links (exit code 2). The link is built locally, without `channels.exportMessageLink`; the chat is resolved as in other commands, so a login is needed and Telegram may be asked.
+- **Access.** The chat access lists apply to all of this. A closed chat gives the same `not_found` as an unknown one, global search drops the hits of closed chats before it answers, and results of closed chats are not saved to the local database. Results of open chats are saved like history. Other people's text is marked `untrusted` in `tg schema`; the schema describes the `--public` items as `public_item`. With the read filter off, hits from foreign public chats come back as they are; a nonempty `allow` drops them.
+
+Not done: search filters by sender and date, search across several chats at once, context by forum topic, unread messages by topic, and `tg://privatepost` links. These commands are checked by tests only, not on a live account.
 
 ## Profiles, credentials and security
 
@@ -271,6 +303,7 @@ Writing is off by default. Add the IDs of the chats you allow to the list `write
 - **Result.** `send` and `edit` return `{chat_id, id, date}`, `delete` returns the IDs, `forward` returns a list of `{id, date}`. Sent and edited messages are saved to the local database (`out: true`, an edit keeps the previous version), deleted ones get `deleted_at`, a forward is not saved.
 - **Delete guard.** For private chats and basic groups Telegram deletes by message ID without naming the chat, and IDs are unique per account. So the daemon checks in the local database that every ID belongs to the chosen chat before it deletes. An ID that is unknown locally or belongs to another chat is `not_found`: read the message first. Channels need no check.
 - **Deletion journal.** `deletions.jsonl` in the profile directory (mode `0600`) gets one JSON line per phase: `time`, `account`, `tool` (`tg`), `phase` (`intent` before the Telegram call, `result` after), `chat_id`, `ids`, `revoke` and `outcome`. It holds no message text. If the `intent` line cannot be written, the deletion is cancelled. The file is not rotated.
+- **Marking a chat read.** `chat mark-read <chat> [--dry-run]` calls `messages.readHistory` or `channels.readHistory` and answers `{chat_id}`. It is `account_write` and follows the same rule as `send`: the chat must be in `write`, otherwise exit code 9, and a closed chat is `not_found`. It needs no `--yes`. `--dry-run` runs the checks and calls no Telegram write method. The other person sees the read mark, so use it only on request.
 - **No retries.** A write is never repeated automatically, neither after `FLOOD_WAIT` (exit code 6) nor after a network error; the agent decides. Reads keep their usual retry. The write rate is limited by the request throttle only (the send buckets).
 
 ```sh
@@ -315,9 +348,9 @@ Known limits: the event sink does not return an error to the updates manager, so
 
 ## Status
 
-Implemented and checked by tests: the daemon, JSON-RPC layer, profiles, login flows, chat and message reading, message send, edit, delete and forward with the `write` list, `--dry-run`, `--yes` and the deletion journal, the local database, notes and search, `schema`, the output formats and `--fields`, and the live event stream (`message watch`, the `subscribe` method and the event journal; fake updates, an in-memory connection and a temporary database). Reading and the local database were also checked on a live account (plan checks of 2026-11-13 and 2026-11-14), and so was the background daemon (start in 0.75 s, stop in 0.15 s, idle stop of a 6 s timeout after about 7 s, no secrets in `ps`, socket and journal at `0600`). The request journal was checked by tests only. `daemon logs` was also run as a built binary on a temporary profile; neither was run against a live account. Telegram is never contacted by the test suite.
+Implemented and checked by tests: the daemon, JSON-RPC layer, profiles, login flows, chat and message reading, message send, edit, delete and forward with the `write` list, `--dry-run`, `--yes` and the deletion journal, the local database, notes and search, `schema`, the output formats and `--fields`, the live event stream (`message watch`, the `subscribe` method and the event journal; fake updates, an in-memory connection and a temporary database), and `message search`, `message context`, `message comments`, `message link` and `chat mark-read`. Reading and the local database were also checked on a live account (plan checks of 2026-11-13 and 2026-11-14), and so was the background daemon (start in 0.75 s, stop in 0.15 s, idle stop of a 6 s timeout after about 7 s, no secrets in `ps`, socket and journal at `0600`). The request journal was checked by tests only. `daemon logs` was also run as a built binary on a temporary profile; neither was run against a live account. Telegram is never contacted by the test suite.
 
-Not confirmed on a live account yet: sending, editing, deleting and forwarding messages (plan checks in the test chat are still to be done), the live event stream (incoming events, a daemon restart with a resumed cursor, recovery after a break, a closed chat that yields no events), phone login end to end (the code did not arrive during the check), QR login, `auth resend`, `auth cancel`, `--device`, `chat invite-info` on a real group, and resolving a contact by phone number. The chat access lists and the `human` frame were also checked on a live account (read-only, one chat for message reads); `note add|list|delete` and `message pinned` under the filter and `@username`, phone and `t.me` references under it were not. The `people` search scope is covered by tests only. The background start was not run on Linux. The exact status of every requirement is in [`FEATURES.md`](FEATURES.md).
+Not confirmed on a live account yet: sending, editing, deleting and forwarding messages (plan checks in the test chat are still to be done), Telegram-side search, message context, post comments, message links and `chat mark-read` (the live check of the plan is still to be done), the live event stream (incoming events, a daemon restart with a resumed cursor, recovery after a break, a closed chat that yields no events), phone login end to end (the code did not arrive during the check), QR login, `auth resend`, `auth cancel`, `--device`, `chat invite-info` on a real group, and resolving a contact by phone number. The chat access lists and the `human` frame were also checked on a live account (read-only, one chat for message reads); `note add|list|delete` and `message pinned` under the filter and `@username`, phone and `t.me` references under it were not. The `people` search scope is covered by tests only. The background start was not run on Linux. The exact status of every requirement is in [`FEATURES.md`](FEATURES.md).
 
 **Account risk, plainly.** `tg` is an unofficial client for your personal account. With `--client` it presents itself with the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited this way are an open question in [`INTENT.md`](INTENT.md). This project has not assessed it. Do not point this at an account you cannot afford to lose.
 
@@ -344,7 +377,7 @@ internal/
   tgclient/      gotd/td wrapper, one account per client, updates manager
   access/        chat access lists: parsing, the allow, block and write rules, reload
   clientpreset/  official client presets
-  chatref/       parses @username, ids, phones and t.me links
+  chatref/       parses @username, ids, phones, t.me chat links and message links
   store/         SQLite: migrations, chats, people, messages, notes, search, event journal
   textnorm/      search normalization and safe FTS5 queries
   output/        JSON envelope, JSONL, TOON, human format and `--fields`
