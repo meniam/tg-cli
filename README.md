@@ -7,7 +7,7 @@
 
 A console tool for a personal Telegram account over MTProto. A persistent daemon holds the connection and the session, so an agent calls it many times in a row without logging in again. By default every answer is one parseable JSON document, and the tool describes its own commands and response fields to the agent. Everything the daemon reads is saved to a local SQLite database you can search offline.
 
-> The project is early. Reading, local storage, notes, search and a live event stream work (the stream is checked by tests only, not on a live account yet). Sending, editing and media do not exist yet. See [Status](#status) before you trust it with your account.
+> The project is early. Reading, local storage, notes, search and a live event stream work (the stream is checked by tests only, not on a live account yet). Sending, editing, deleting and forwarding messages are implemented, off by default and checked by tests only, not on a live account yet. Media does not exist yet. See [Status](#status) before you trust it with your account.
 
 ## Why it exists
 
@@ -21,7 +21,7 @@ What an agent gets:
 - **Offline memory.** Every chat, person and message the daemon reads lands in SQLite with full-text search. Search needs no login and no Telegram connection, only the running daemon.
 - **Live events.** `tg message watch` prints new messages, edits, deletions, reactions, reads, typing and online status as they arrive, one JSON line per event. The daemon keeps the stored events for 7 days (at most 100 000), so an agent resumes from a cursor and gets the stored events it missed, see [Live events](#live-events).
 - **Its own notes.** The agent (or you) attaches tagged notes to chats, people and messages. Notes live apart from Telegram data, and a reload never touches them.
-- **Safe defaults.** Reading is allowed. No command sends, edits or deletes anything in Telegram, because none is implemented. The only thing deleted is your own local notes.
+- **Safe defaults.** Reading is allowed. Writing to Telegram is off until you add a chat to the `write` list of `access.json`; editing and deleting also need `--yes`, every write command has `--dry-run`, and deletions are logged, see [Writing messages](#writing-messages).
 - **Chats it cannot see.** You can close chats to the agent with a file in the profile directory. A closed chat does not exist for the agent, see [Chat access lists](#chat-access-lists).
 - **Other people's text is marked.** `tg schema` flags the fields that carry text written by others, and `--human` frames that text, see [Untrusted text](#untrusted-text).
 - **Several accounts.** Each profile has its own session, database and daemon.
@@ -178,6 +178,10 @@ Global flags work in any position:
 | `message get <chat> <id>` | Read one message |
 | `message pinned <chat>` | Read the pinned messages |
 | `message watch [--chat <chat>]... [--topic N] [--types a,b] [--after <cursor>] [--max-events N]` | Watch live events, one JSON line per event, see [Live events](#live-events) |
+| `message send <chat> [--text TEXT] [--reply-to ID] [--topic ID] [--silent] [--dry-run]` | Send a plain text message; without `--text` the text is read from stdin. Needs the chat in `write`, see [Writing messages](#writing-messages) |
+| `message edit <chat> <id> [--text TEXT] [--yes] [--dry-run]` | Edit a message; needs `--yes` unless `--dry-run` |
+| `message delete <chat> <id>... (--revoke \| --for-me) [--yes] [--dry-run]` | Delete messages for everyone or only for this account; needs `--yes` unless `--dry-run` |
+| `message forward <from> <to> <id>... [--silent] [--dry-run]` | Forward messages to another chat |
 | `note add [--chat] [--person] [--message] [--author owner\|ai] [--model] [--tag] <body\|->` | Add a note to a chat, person or message |
 | `note list [--chat] [--person] [--message] [--author] [--tag] [--before-id]` | List notes, newest first |
 | `note delete <id>` / `note delete --author owner\|ai --yes` | Delete one note, or all notes by an author |
@@ -185,7 +189,7 @@ Global flags work in any position:
 | `schema` | Describe all commands, flags, response fields, safety classes, exit codes and formats; needs no daemon and no network |
 | `version` | Print the version and the build revision |
 
-Reading commands change nothing in Telegram. `history` pages hold 20 messages by default and 100 at most; pass `next_cursor` back with `--cursor` to continue.
+Reading commands change nothing in Telegram; the four write commands are off until a chat is in `write`. `history` pages hold 20 messages by default and 100 at most; pass `next_cursor` back with `--cursor` to continue.
 
 ### Output and exit codes
 
@@ -207,6 +211,7 @@ Reading commands change nothing in Telegram. `history` pages hold 20 messages by
 | 6 | `flood_wait` | Telegram asked to wait before the next request |
 | 7 | `not_found` | The chat, user or message does not exist or is not visible |
 | 8 | `cursor_expired` | The event cursor is older than the retained event journal; run `message watch` without `--after` |
+| 9 | `write_disabled` | The owner did not allow writes to the chat: add it to `write` in `access.json` |
 
 This is table version 0 and it may grow: existing codes never change meaning, new ones are only appended. The same table is in the answer of `tg schema`. The wait time of `flood_wait` arrives in the `message` text, there is no separate field yet.
 
@@ -222,7 +227,7 @@ Each command carries a safety class and a `dangerous` mark. The mark is set by h
 | `local_write` | Writes to the local database or starts and stops the daemon |
 | `account_write` | Changes the Telegram account or its login state |
 
-Today `note delete` is the only command marked dangerous, although it is a `local_write`: a deleted note cannot be restored. No command sends, edits or deletes anything in Telegram. The schema of `daemon start` describes the `--foreground` answer (`stopped`) only; the answer of a background start is shown in the quick start above.
+`message edit`, `message delete` and `note delete` are marked dangerous. `note delete` is a `local_write` and the other two are `account_write`: a deleted note or message cannot be restored. `message send` and `message forward` are `account_write` but not dangerous: the chat is already allowed by the `write` list. The schema of `daemon start` describes the `--foreground` answer (`stopped`) only; the answer of a background start is shown in the quick start above.
 
 ## Profiles, credentials and security
 
@@ -246,10 +251,36 @@ By default the agent sees every chat of the account. To limit that, put a file `
 - **Rule.** No file, or two empty lists: the filter is off. A nonempty `allow` leaves only its chats visible. `block` wins over `allow`. `chat invite-info` is closed while `allow` is nonempty.
 - **A closed chat does not exist for the agent.** It is absent from `chat list` (topped up from Telegram until `--limit`, so with many closed chats it can be shorter), `search` and `note list`. `chat resolve`, `chat info` and `message history|get|pinned` for it give the same `not_found` (exit code 7, same message) as a chat that does not exist. `note add` for it gives `not_found`, and `note delete` of a note that belongs to such a chat gives the same `not_found` as a note that does not exist. Closed chats are not saved to the local database; what was saved earlier stays but is hidden from search and notes.
 - **Only a human edits the file.** No command writes it. The daemon rereads it when its modification time, size or mode changes, so no restart is needed. If the file cannot be read or parsed, or its mode is too wide, everything is closed, the daemon keeps running, and each request that checks access writes at least one error record to the journal, without the file content.
-- **Status.** `tg daemon status` shows `access` only when the filter is on: `enabled`, the counts `allow` and `block`, and `closed: true` when the file does not parse. It never shows chat IDs.
+- **Status.** `tg daemon status` shows `access` when the read filter is on or `write` is not empty: `enabled`, the counts `allow` and `block`, the count `write` (when it is not empty), and `closed: true` when the file does not parse. It never shows chat IDs.
 - **Finding the IDs of closed chats.** Clear the file for a moment, run `tg chat list`, and restore the file.
 
 What the filter does not cover: `note delete --author` (it also deletes notes of closed chats), people and notes about people (not filtered), and direct access to the SQLite file. For a `@username`, a phone number or a `t.me` link the daemon resolves the reference in Telegram first and checks the ID afterwards, so a request for a closed chat still reaches Telegram, and its response time and the throttle counter may differ. An agent running as the same user can edit `access.json`: the filter protects against accidental reading and against reading induced through a chat, not against an agent that deliberately bypasses it.
+
+### Writing messages
+
+Writing is off by default. Add the IDs of the chats you allow to the list `write` in the same `access.json`:
+
+```json
+{"write": [-1001234567890]}
+```
+
+- **Rule.** A chat accepts writes only when it is in `write`, is visible by the read rules above and is not in `block`. No file or no `write` list means writing is off everywhere. `write` alone does not turn the read filter on. The format is that of `allow` and `block`: nonzero integer chat IDs in the Bot API form without duplicates.
+- **No permission.** The command exits with code 9 `write_disabled` and a hint to add the chat to `write`. A chat closed for reading gives the same `not_found` as an unknown chat.
+- **Commands.** `message send` takes the text from `--text` or, when it is absent, from stdin; with `--text` the standard input is never read. Without `--text`, a terminal or an empty stdin, an empty text, and a text longer than 4096 characters are exit code 2, before the daemon is called. `message edit` takes its text the same way. The text goes as it is, without Markdown or HTML formatting. `--reply-to` replies to a message, `--topic` sends into a forum topic, `--silent` sends without a notification. `message delete` needs exactly one of `--revoke` (for everyone) and `--for-me`; in a channel `--for-me` is rejected, because a channel deletion is always for everyone. `message forward` needs the source chat to be readable and the target chat to be writable. A negative chat ID goes after `--`, and the flags go before `--`.
+- **Confirmation and dry run.** `message edit` and `message delete` without `--yes` and without `--dry-run` are exit code 2 and do not call the daemon. `--dry-run` runs every check of the daemon, the write permission included, and returns `dry_run: true`, the action, the number of messages and the text length without the text. It calls no Telegram write method, writes nothing to the database and creates no journal.
+- **Result.** `send` and `edit` return `{chat_id, id, date}`, `delete` returns the IDs, `forward` returns a list of `{id, date}`. Sent and edited messages are saved to the local database (`out: true`, an edit keeps the previous version), deleted ones get `deleted_at`, a forward is not saved.
+- **Delete guard.** For private chats and basic groups Telegram deletes by message ID without naming the chat, and IDs are unique per account. So the daemon checks in the local database that every ID belongs to the chosen chat before it deletes. An ID that is unknown locally or belongs to another chat is `not_found`: read the message first. Channels need no check.
+- **Deletion journal.** `deletions.jsonl` in the profile directory (mode `0600`) gets one JSON line per phase: `time`, `account`, `tool` (`tg`), `phase` (`intent` before the Telegram call, `result` after), `chat_id`, `ids`, `revoke` and `outcome`. It holds no message text. If the `intent` line cannot be written, the deletion is cancelled. The file is not rotated.
+- **No retries.** A write is never repeated automatically, neither after `FLOOD_WAIT` (exit code 6) nor after a network error; the agent decides. Reads keep their usual retry. The write rate is limited by the request throttle only (the send buckets).
+
+```sh
+tg message send --dry-run @release_team --text "Deploy is green"   # check only
+tg message send --reply-to 4102 --text "Thanks" -- -1001234567890   # flags before `--`
+echo "Fixed text" | tg message edit @release_team 4103 --yes
+tg message delete @release_team 4103 --revoke --yes
+```
+
+Not done: Markdown and HTML formatting, media, reactions, pinning, polls, scheduled messages, drafts and the typing indicator. An agent running as the same user can edit `write` in `access.json`: the list protects against accidental writes and against writes induced through a chat, not against an agent that deliberately bypasses it. Writing is checked by tests without Telegram only, not on a live account.
 
 ### Untrusted text
 
@@ -284,9 +315,9 @@ Known limits: the event sink does not return an error to the updates manager, so
 
 ## Status
 
-Implemented and checked by tests: the daemon, JSON-RPC layer, profiles, login flows, chat and message reading, the local database, notes and search, `schema`, the output formats and `--fields`, and the live event stream (`message watch`, the `subscribe` method and the event journal; fake updates, an in-memory connection and a temporary database). Reading and the local database were also checked on a live account (plan checks of 2026-11-13 and 2026-11-14), and so was the background daemon (start in 0.75 s, stop in 0.15 s, idle stop of a 6 s timeout after about 7 s, no secrets in `ps`, socket and journal at `0600`). The request journal was checked by tests only. `daemon logs` was also run as a built binary on a temporary profile; neither was run against a live account. Telegram is never contacted by the test suite.
+Implemented and checked by tests: the daemon, JSON-RPC layer, profiles, login flows, chat and message reading, message send, edit, delete and forward with the `write` list, `--dry-run`, `--yes` and the deletion journal, the local database, notes and search, `schema`, the output formats and `--fields`, and the live event stream (`message watch`, the `subscribe` method and the event journal; fake updates, an in-memory connection and a temporary database). Reading and the local database were also checked on a live account (plan checks of 2026-11-13 and 2026-11-14), and so was the background daemon (start in 0.75 s, stop in 0.15 s, idle stop of a 6 s timeout after about 7 s, no secrets in `ps`, socket and journal at `0600`). The request journal was checked by tests only. `daemon logs` was also run as a built binary on a temporary profile; neither was run against a live account. Telegram is never contacted by the test suite.
 
-Not confirmed on a live account yet: the live event stream (incoming events, a daemon restart with a resumed cursor, recovery after a break, a closed chat that yields no events), phone login end to end (the code did not arrive during the check), QR login, `auth resend`, `auth cancel`, `--device`, `chat invite-info` on a real group, and resolving a contact by phone number. The chat access lists and the `human` frame were also checked on a live account (read-only, one chat for message reads); `note add|list|delete` and `message pinned` under the filter and `@username`, phone and `t.me` references under it were not. The `people` search scope is covered by tests only. The background start was not run on Linux. The exact status of every requirement is in [`FEATURES.md`](FEATURES.md).
+Not confirmed on a live account yet: sending, editing, deleting and forwarding messages (plan checks in the test chat are still to be done), the live event stream (incoming events, a daemon restart with a resumed cursor, recovery after a break, a closed chat that yields no events), phone login end to end (the code did not arrive during the check), QR login, `auth resend`, `auth cancel`, `--device`, `chat invite-info` on a real group, and resolving a contact by phone number. The chat access lists and the `human` frame were also checked on a live account (read-only, one chat for message reads); `note add|list|delete` and `message pinned` under the filter and `@username`, phone and `t.me` references under it were not. The `people` search scope is covered by tests only. The background start was not run on Linux. The exact status of every requirement is in [`FEATURES.md`](FEATURES.md).
 
 **Account risk, plainly.** `tg` is an unofficial client for your personal account. With `--client` it presents itself with the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited this way are an open question in [`INTENT.md`](INTENT.md). This project has not assessed it. Do not point this at an account you cannot afford to lose.
 
@@ -294,7 +325,7 @@ Not confirmed on a live account yet: the live event stream (incoming events, a d
 
 Planned, not implemented. [`FEATURES.md`](FEATURES.md) is the source of truth.
 
-- **Writing.** Sending, editing, deleting and forwarding messages, with safety classes and confirmation rules.
+- **Writing, the rest.** Formatting (Markdown and HTML), media, reactions, pinning, polls, scheduled messages and drafts. Plain text send, edit, delete and forward already exist, see [Writing messages](#writing-messages).
 - **Media, reactions, polls, forum topic management**, members and contacts. Reading a topic already works (`message history --topic`).
 - **Sessions and access.** Export and import of a session string, login without a terminal, an expected-account check, SOCKS and MTProxy, WSS transport.
 - **Local history.** Background sync and deletion tracking, folders. Today only what you read is stored.
@@ -308,10 +339,10 @@ Not goals: the Bot API and bots, a TUI client for humans, replacing the official
 cmd/tg-cli/      entry point and wiring only
 internal/
   cli/           argv, calling the daemon, printing the response
-  daemon/        lifecycle, socket, profile lock, login, reads, notes, search, live events
+  daemon/        lifecycle, socket, profile lock, login, reads, writes, notes, search, live events
   rpc/           JSON-RPC 2.0: frames, dispatcher, client, wire types, event hub
   tgclient/      gotd/td wrapper, one account per client, updates manager
-  access/        chat access lists: parsing, the allow and block rule, reload
+  access/        chat access lists: parsing, the allow, block and write rules, reload
   clientpreset/  official client presets
   chatref/       parses @username, ids, phones and t.me links
   store/         SQLite: migrations, chats, people, messages, notes, search, event journal
