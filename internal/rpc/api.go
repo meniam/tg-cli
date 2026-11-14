@@ -29,6 +29,7 @@ const (
 	MethodMessageSearch       = "message.search"
 	MethodMessageSearchPublic = "message.search_public"
 	MethodMessageContext      = "message.context"
+	MethodMessageExportLocal  = "message.export_local"
 	MethodMessageComments     = "message.comments"
 	MethodMessageLink         = "message.link"
 	MethodChatMarkRead        = "chat.mark_read"
@@ -228,6 +229,27 @@ type Message struct {
 	Edited    bool    `json:"edited,omitempty"`
 	Pinned    bool    `json:"pinned,omitempty"`
 	Service   string  `json:"service,omitempty"` // the kind of a service message
+}
+
+// ExportMessage is a locally stored message with an optional deletion marker.
+type ExportMessage struct {
+	Message
+	Deleted bool `json:"deleted,omitempty"`
+}
+
+// ExportParams selects one page of messages from the local database.
+type ExportParams struct {
+	Chat           string `json:"chat"`
+	Since          string `json:"since,omitempty"`
+	Until          string `json:"until,omitempty"`
+	IncludeDeleted bool   `json:"include_deleted,omitempty"`
+	After          int    `json:"after,omitempty"`
+}
+
+// ExportPage continues after NextAfter when the field is present.
+type ExportPage struct {
+	Messages  []ExportMessage `json:"messages"`
+	NextAfter int             `json:"next_after,omitempty"`
 }
 
 // HistoryParams are the parameters of MethodMessageHistory. Since and Until are

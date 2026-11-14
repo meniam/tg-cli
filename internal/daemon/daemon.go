@@ -253,6 +253,7 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodMessageSearch, d.messageSearch)
 	d.handle(rpc.MethodMessageSearchPublic, d.messageSearchPublic)
 	d.handle(rpc.MethodMessageContext, d.messageContext)
+	d.handle(rpc.MethodMessageExportLocal, d.messageExportLocal)
 	d.handle(rpc.MethodMessageComments, d.messageComments)
 	d.handle(rpc.MethodMessageLink, d.messageLink)
 	d.handle(rpc.MethodChatMarkRead, d.chatMarkRead)

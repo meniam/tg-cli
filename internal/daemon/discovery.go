@@ -136,28 +136,9 @@ func (d *daemon) messageContext(ctx context.Context, raw json.RawMessage) (any, 
 	return result, nil
 }
 func (d *daemon) localContext(ctx context.Context, p rpc.ContextParams) (any, error) {
-	ref, err := parseChatNoInvite(p.Chat)
+	id, _, err := d.localChatID(ctx, p.Chat)
 	if err != nil {
 		return nil, err
-	}
-	var id int64
-	if ref.Kind == chatref.ID {
-		id = ref.ID
-	} else {
-		var found bool
-		id, found, err = d.resolveStoredReference(ctx, p.Chat, false, false)
-		if err != nil {
-			return nil, err
-		}
-		if !found {
-			return nil, rpc.ErrChatNotFound()
-		}
-	}
-	if !d.policy().Allowed(id) {
-		if ref.Kind == chatref.ID {
-			return nil, rpc.ErrUnknownChatID()
-		}
-		return nil, rpc.ErrChatNotFound()
 	}
 	stored, err := d.store.MessagesAround(ctx, id, p.ID, p.Before, p.After)
 	if errors.Is(err, store.ErrNotFound) {
@@ -171,6 +152,34 @@ func (d *daemon) localContext(ctx context.Context, p rpc.ContextParams) (any, er
 		result.Messages = append(result.Messages, rpcStoredMessage(message))
 	}
 	return result, nil
+}
+
+// localChatID resolves a chat and checks access without a Telegram call.
+func (d *daemon) localChatID(ctx context.Context, value string) (int64, chatref.Kind, error) {
+	ref, err := parseChatNoInvite(value)
+	if err != nil {
+		return 0, 0, err
+	}
+	var id int64
+	if ref.Kind == chatref.ID {
+		id = ref.ID
+	} else {
+		var found bool
+		id, found, err = d.resolveStoredReference(ctx, value, false, false)
+		if err != nil {
+			return 0, 0, err
+		}
+		if !found {
+			return 0, 0, rpc.ErrChatNotFound()
+		}
+	}
+	if !d.policy().Allowed(id) {
+		if ref.Kind == chatref.ID {
+			return 0, 0, rpc.ErrUnknownChatID()
+		}
+		return 0, 0, rpc.ErrChatNotFound()
+	}
+	return id, ref.Kind, nil
 }
 func rpcStoredMessage(m store.Message) rpc.Message {
 	var out rpc.Message
