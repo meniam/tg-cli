@@ -53,7 +53,7 @@ internal/             cli, daemon, rpc, tgclient, throttle, access, fileroot, me
 
 - Planner: Claude Opus 5.5. It writes and revises plans (requirement audit, decision questions, the plan file). Start it with the Agent tool, `model: opus`.
 - Manager (the main session) and every other Claude agent: Claude Sonnet 5.5, unless a skill or an agent definition sets another model.
-- Coder: Codex Sol (`gpt-6-sol`) in a herdr pane, as described in "Herdr layout".
+- Coder: Codex Terra (`gpt-6.1-terra`) in a herdr pane, as described in "Herdr layout".
 
 ## Herdr layout
 
