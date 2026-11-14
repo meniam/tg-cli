@@ -92,8 +92,8 @@ Step 0 не меняет код. Аудит Step 1 тоже ничего не м
 
 ## Step 1. Audit and baseline
 
-- [ ] `just check` и `just build` на чистом дереве; результат в Known facts.
-- [ ] По исходникам gotd v0.166.0 выяснить: как запустить `updates.Manager` вместе с `telegram.Client.Run` и нашим `peers.Manager` (`AccessHasher`), что передаётся в `Handler`, какие типы обновлений дают правку, удаление, реакцию, прочтение, typing и статус; как ведёт себя первый запуск без состояния; идёт ли `getDifference` через `Options.Middlewares`. Таблица: событие, тип обновления gotd, `chat_id` и поля, файл и строка.
+- [x] `just check` на чистом дереве (`main` на f54968f, worktree `tg-cli-plan`); результат в Known facts.
+- [x] По исходникам gotd v0.166.0 выяснить (частично, см. Known facts; таблицу «событие, обновление, поля» и поведение первого запуска проверяет шаг 4 тестами): как запустить `updates.Manager` вместе с `telegram.Client.Run` и нашим `peers.Manager` (`AccessHasher`), что передаётся в `Handler`, какие типы обновлений дают правку, удаление, реакцию, прочтение, typing и статус; как ведёт себя первый запуск без состояния; идёт ли `getDifference` через `Options.Middlewares`. Таблица: событие, тип обновления gotd, `chat_id` и поля, файл и строка.
 - [ ] Выяснить, как Daemon сейчас получает вход (`Self`, `Run`), чтобы определить, когда запускать менеджер, и что даёт `peers.Manager` как хранилище хешей доступа.
 - [ ] Выяснить, как `rpc.Server` держит соединения (запись в соединение из нескольких горутин, закрытие), чтобы отправлять уведомления.
 - [ ] Записать итог в Known facts, добавить непокрытое в Risks и Open questions.
@@ -150,6 +150,9 @@ Step 0 не меняет код. Аудит Step 1 тоже ничего не м
 - У gotd `updates.Manager` принимает `StateStorage` (pts, qts, date, seq, pts каналов) и `ChannelAccessHasher` (подходит `peers.Manager`); без хранилища состояние в памяти.
 - Таблица `account_state(key, value JSON)` в `store` есть и не используется.
 - Проект не вызывает `updates`.
+- Аудит gotd v0.166.0 (2026-11-14): `updates.New(Config)` возвращает `*Manager`, который сам реализует `telegram.UpdateHandler` (`Handle(ctx, tg.UpdatesClass)`, `telegram/client.go:32`); его подключают как `telegram.Options.UpdateHandler`, а `Manager.Run(ctx, api, userID, AuthOptions{Forget, OnStart})` вызывают после входа (`updates/manager.go:165`); `api` это три метода `UpdatesGetState|GetDifference|GetChannelDifference` (`updates/config.go:18-22`), их даёт `c.tg.API()`, поэтому они идут через Middlewares и под дроссель. Без сохранённого состояния `Run` берёт состояние с сервера (поэтому первый запуск идёт «с этого момента»), обратный вызов `OnLoadUserStateFailed` сообщает об этом. Хешам доступа подходит `*peers.Manager` (`AccessHasher`).
+- Обновления для событий: `UpdateNewMessage`, `UpdateNewChannelMessage`, `UpdateEditMessage`, `UpdateEditChannelMessage`, `UpdateDeleteMessages`, `UpdateDeleteChannelMessages`, `UpdateMessageReactions` (есть `Peer`), `UpdateReadHistoryInbox|Outbox`, `UpdateReadChannelInbox|Outbox`, `UpdateUserTyping`, `UpdateChatUserTyping`, `UpdateChannelUserTyping`, `UpdateUserStatus` (`tg/tl_update_gen.go`).
+- Находка, влияющая на фильтр чатов: `UpdateDeleteMessages` (личные чаты и обычные группы) несёт только список `Messages []int` без идентификатора чата (`tg/tl_update_gen.go:404`), у `UpdateDeleteChannelMessages` есть `ChannelID`. Идентификатор чата для удаления в личном чате или обычной группе можно узнать только по локальной базе (идентификатор сообщения в них уникален на аккаунт). Решение плана: если фильтр чатов включён и чат удаления определить нельзя, событие отбрасывается (закрыто по умолчанию); без фильтра событие идёт с пустым `chat_id`.
 
 ## Open questions
 
