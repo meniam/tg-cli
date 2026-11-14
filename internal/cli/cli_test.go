@@ -91,6 +91,26 @@ func (f *fakeTelegram) Comments(context.Context, chatref.Ref, rpc.CommentsParams
 func (f *fakeTelegram) MessageLink(context.Context, chatref.Ref, rpc.LinkParams) (rpc.LinkResult, error) {
 	return rpc.LinkResult{}, errors.New("not implemented")
 }
+func (f *fakeTelegram) DraftGet(context.Context, chatref.Ref) (rpc.Draft, error) {
+	return rpc.Draft{}, nil
+}
+func (f *fakeTelegram) DraftList(context.Context) (rpc.DraftList, error) { return rpc.DraftList{}, nil }
+func (f *fakeTelegram) DraftSet(context.Context, chatref.Ref, rpc.DraftParams) (rpc.DraftWriteResult, error) {
+	return rpc.DraftWriteResult{}, nil
+}
+func (f *fakeTelegram) ScheduledList(context.Context, chatref.Ref) (rpc.ScheduledResult, error) {
+	return rpc.ScheduledResult{}, nil
+}
+func (f *fakeTelegram) ScheduledDelete(context.Context, chatref.Ref, []int) (rpc.ScheduledResult, error) {
+	return rpc.ScheduledResult{}, nil
+}
+func (f *fakeTelegram) ScheduledSendNow(context.Context, chatref.Ref, []int) (rpc.ScheduledResult, error) {
+	return rpc.ScheduledResult{}, nil
+}
+func (f *fakeTelegram) Typing(context.Context, chatref.Ref, rpc.TypingParams) (rpc.TypingResult, error) {
+	return rpc.TypingResult{}, nil
+}
+
 func (f *fakeTelegram) MarkRead(context.Context, chatref.Ref) (rpc.MarkReadResult, error) {
 	return rpc.MarkReadResult{}, errors.New("not implemented")
 }

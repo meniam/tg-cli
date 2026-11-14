@@ -16,6 +16,10 @@ import (
 // classifyRequest selects the destination bucket without retaining request data.
 func classifyRequest(input bin.Encoder) (throttle.Class, string) {
 	switch request := input.(type) {
+	case *tg.MessagesSendScheduledMessagesRequest:
+		if request != nil {
+			return classifyPeer(request.Peer)
+		}
 	case *tg.MessagesSendMessageRequest:
 		if request != nil {
 			return classifyPeer(request.Peer)
@@ -78,7 +82,7 @@ func writeRequest(input bin.Encoder) bool {
 		*tg.ChannelsEditBannedRequest, *tg.MessagesEditChatDefaultBannedRightsRequest,
 		*tg.ChannelsToggleSlowModeRequest:
 		return true
-	case *tg.MessagesSendMessageRequest, *tg.MessagesSendMediaRequest, *tg.MessagesSendMultiMediaRequest,
+	case *tg.MessagesSaveDraftRequest, *tg.MessagesDeleteScheduledMessagesRequest, *tg.MessagesSendScheduledMessagesRequest, *tg.MessagesSetTypingRequest, *tg.MessagesSendMessageRequest, *tg.MessagesSendMediaRequest, *tg.MessagesSendMultiMediaRequest,
 		*tg.MessagesForwardMessagesRequest,
 		*tg.MessagesEditMessageRequest, *tg.MessagesDeleteMessagesRequest, *tg.ChannelsDeleteMessagesRequest,
 		*tg.MessagesReadHistoryRequest, *tg.ChannelsReadHistoryRequest,
