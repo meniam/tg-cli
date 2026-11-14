@@ -75,6 +75,18 @@ func (f *fakeTelegram) Delete(context.Context, chatref.Ref, rpc.DeleteParams) (r
 func (f *fakeTelegram) Forward(context.Context, chatref.Ref, chatref.Ref, rpc.ForwardParams) (rpc.ForwardResult, error) {
 	return rpc.ForwardResult{}, errors.New("not implemented")
 }
+func (f *fakeTelegram) React(context.Context, chatref.Ref, rpc.ReactParams) (rpc.ReactResult, error) {
+	return rpc.ReactResult{}, errors.New("not implemented")
+}
+func (f *fakeTelegram) Pin(context.Context, chatref.Ref, rpc.PinParams) (rpc.PinResult, error) {
+	return rpc.PinResult{}, errors.New("not implemented")
+}
+func (f *fakeTelegram) Unpin(context.Context, chatref.Ref, rpc.UnpinParams) (rpc.PinResult, error) {
+	return rpc.PinResult{}, errors.New("not implemented")
+}
+func (f *fakeTelegram) SendPoll(context.Context, chatref.Ref, rpc.PollParams) (rpc.SendResult, error) {
+	return rpc.SendResult{}, errors.New("not implemented")
+}
 func (f *fakeTelegram) SearchMessages(context.Context, chatref.Ref, rpc.SearchMessagesParams) (rpc.MessagesResult, error) {
 	return rpc.MessagesResult{}, errors.New("not implemented")
 }

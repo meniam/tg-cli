@@ -73,7 +73,10 @@ func writeRequest(input bin.Encoder) bool {
 	switch input.(type) {
 	case *tg.MessagesSendMessageRequest, *tg.MessagesForwardMessagesRequest,
 		*tg.MessagesEditMessageRequest, *tg.MessagesDeleteMessagesRequest, *tg.ChannelsDeleteMessagesRequest,
-		*tg.MessagesReadHistoryRequest, *tg.ChannelsReadHistoryRequest:
+		*tg.MessagesReadHistoryRequest, *tg.ChannelsReadHistoryRequest,
+		*tg.MessagesSendReactionRequest,
+		*tg.MessagesUpdatePinnedMessageRequest,
+		*tg.MessagesSendMediaRequest:
 		return true
 	}
 	return false

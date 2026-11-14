@@ -33,6 +33,42 @@ type ForwardParams struct {
 	DryRun bool   `json:"dry_run,omitempty"`
 }
 
+type ReactParams struct {
+	Chat   string `json:"chat"`
+	ID     int    `json:"id"`
+	Emoji  string `json:"emoji"`
+	Remove bool   `json:"remove,omitempty"`
+	DryRun bool   `json:"dry_run,omitempty"`
+}
+
+type PinParams struct {
+	Chat   string `json:"chat"`
+	ID     int    `json:"id"`
+	Silent bool   `json:"silent,omitempty"`
+	DryRun bool   `json:"dry_run,omitempty"`
+}
+
+type UnpinParams struct {
+	Chat   string `json:"chat"`
+	ID     int    `json:"id"`
+	DryRun bool   `json:"dry_run,omitempty"`
+}
+
+type PollParams struct {
+	Chat        string   `json:"chat"`
+	Question    string   `json:"question"`
+	Options     []string `json:"options"`
+	Multiple    bool     `json:"multiple,omitempty"`
+	Public      bool     `json:"public,omitempty"`
+	Quiz        bool     `json:"quiz,omitempty"`
+	Correct     int      `json:"correct,omitempty"`
+	Explanation string   `json:"explanation,omitempty"`
+	ReplyTo     int      `json:"reply_to,omitempty"`
+	Topic       int      `json:"topic,omitempty"`
+	Silent      bool     `json:"silent,omitempty"`
+	DryRun      bool     `json:"dry_run,omitempty"`
+}
+
 type SendResult struct {
 	ChatID     int64  `json:"chat_id"`
 	ID         int    `json:"id,omitempty"`
@@ -41,6 +77,23 @@ type SendResult struct {
 	Action     string `json:"action,omitempty"`
 	Count      int    `json:"count,omitempty"`
 	TextLength int    `json:"text_length,omitempty"`
+}
+
+type ReactResult struct {
+	ChatID  int64  `json:"chat_id"`
+	ID      int    `json:"id,omitempty"`
+	Emoji   string `json:"emoji,omitempty"`
+	Removed bool   `json:"removed"`
+	DryRun  bool   `json:"dry_run,omitempty"`
+	Action  string `json:"action,omitempty"`
+}
+
+type PinResult struct {
+	ChatID int64  `json:"chat_id"`
+	ID     int    `json:"id,omitempty"`
+	Pinned bool   `json:"pinned"`
+	DryRun bool   `json:"dry_run,omitempty"`
+	Action string `json:"action,omitempty"`
 }
 
 type DeleteResult struct {
