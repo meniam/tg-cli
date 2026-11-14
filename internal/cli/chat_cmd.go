@@ -15,8 +15,8 @@ func (a *app) chatCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE:  a.chatList,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.ChatListResult](), Choices: chatTypeChoices(), ItemPath: "chats"})
-	list.Flags().Int("limit", 50, "maximum number of chats, 1 to 500")
-	list.Flags().String("type", "", "only chats of this type: user, bot, group, supergroup, channel")
+	list.Flags().Int("limit", 50, "maximum number of chats, 1 to 500; 0 means 50")
+	list.Flags().String("type", "", "chat type: user, bot, group, supergroup or channel")
 
 	resolve := a.annotate(&cobra.Command{
 		Use:   "resolve <chat>",

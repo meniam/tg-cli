@@ -1,0 +1,6 @@
+    Rebuild flag and exit-code tables in docs/cli/ from the command schema.
+
+  What runs
+    1. go test ./internal/cli -run TestDocsGenerated -update-docs
+
+    Only content between schema markers is regenerated. Review the diff.

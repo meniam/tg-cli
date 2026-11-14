@@ -54,7 +54,7 @@ func (a *app) daemonCommand() *cobra.Command {
 		Long: "Read up to 10000 lines of the current journal. --tail selects the last N lines; --follow prints new lines as they arrive, including after rotation. In follow mode each update is a separate result in the selected format.",
 		Args: cobra.NoArgs, RunE: a.daemonLogs,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[daemonLogsResult](), ItemPath: "lines"})
-	logs.Flags().Int("tail", 0, "last N lines (1 to 10000); default: all lines, up to 10000")
+	logs.Flags().Int("tail", 0, "last N lines, 1 to 10000; 0 means up to 10000 lines")
 	logs.Flags().Bool("follow", false, "print new lines until interrupted, including after rotation")
 	cmd.AddCommand(start, logs, a.annotate(&cobra.Command{
 		Use:   "status",
