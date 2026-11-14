@@ -1,0 +1,384 @@
+package tgclient
+
+import (
+	"context"
+	"errors"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/gotd/td/bin"
+	"github.com/gotd/td/telegram/peers"
+	"github.com/gotd/td/tg"
+	"github.com/gotd/td/tgerr"
+
+	"tg-cli/internal/rpc"
+)
+
+func knownUser(id int64) (tg.InputUserClass, error) {
+	if id != 7 {
+		return nil, errors.New("unknown")
+	}
+	return &tg.InputUser{UserID: id, AccessHash: 123}, nil
+}
+
+func formatErrorCode(t *testing.T, err error, code int) {
+	t.Helper()
+	var got *rpc.Error
+	if !errors.As(err, &got) || got.Code != code {
+		t.Fatalf("error=%v, want RPC code %d", err, code)
+	}
+}
+
+func TestPrepareWriteTextEntities(t *testing.T) {
+	for _, tc := range []struct {
+		name, source, parse, wantText string
+		wantTypes                     []string
+	}{
+		{"html nested emoji", "<b>😀<i>x</i></b>", "html", "😀x", []string{"messageEntityBold", "messageEntityItalic"}},
+		{"markdown nested emoji", "**😀 _x_**", "markdown", "😀 x", []string{"messageEntityBold", "messageEntityItalic"}},
+		{"html quote code", `<blockquote expandable>quote</blockquote><pre><code class="language-go">fmt</code></pre>`, "html", "quotefmt", []string{"messageEntityBlockquote", "messageEntityPre"}},
+		{"markdown quote code", "> quote\n\n```go\nfmt\n```", "markdown", "quote\n\nfmt", []string{"messageEntityBlockquote", "messageEntityPre"}},
+		{"html link", `<a href="https://example.com">link</a>`, "html", "link", []string{"messageEntityTextUrl"}},
+		{"markdown link", `[link](https://example.com)`, "markdown", "link", []string{"messageEntityTextUrl"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := prepareWriteText(tc.source, tc.parse, nil, knownUser)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.text != tc.wantText {
+				t.Fatalf("text=%q want %q", p.text, tc.wantText)
+			}
+			if len(p.entities) != len(tc.wantTypes) {
+				t.Fatalf("entities=%v", p.entities)
+			}
+			for i, e := range p.entities {
+				if e.TypeName() != tc.wantTypes[i] {
+					t.Errorf("entity %d=%s", i, e.TypeName())
+				}
+			}
+			if strings.Contains(tc.name, "emoji") {
+				if p.entities[0].GetLength() < 2 {
+					t.Fatalf("entity misses UTF-16 surrogate pair: %v", p.entities)
+				}
+				wantInnerOffset := 2
+				if tc.parse == "markdown" {
+					wantInnerOffset = 3
+				}
+				if p.entities[1].GetOffset() != wantInnerOffset {
+					t.Fatalf("inner offset=%d want=%d", p.entities[1].GetOffset(), wantInnerOffset)
+				}
+			}
+			if strings.Contains(tc.name, "quote code") {
+				if !p.entities[0].(*tg.MessageEntityBlockquote).Collapsed && tc.parse == "html" {
+					t.Fatal("quote is not expandable")
+				}
+				if p.entities[1].(*tg.MessageEntityPre).Language != "go" {
+					t.Fatal("code language lost")
+				}
+			}
+		})
+	}
+}
+
+func TestPrepareWriteTextManualEntitiesAndErrors(t *testing.T) {
+	valid := []rpc.Entity{{Type: "bold", Offset: 2, Length: 1}, {Type: "custom_emoji", Offset: 0, Length: 2, CustomEmojiID: 99}}
+	p, err := prepareWriteText("😀x", "", valid, knownUser)
+	if err != nil || p.text != "😀x" || p.entities[0].GetOffset() != 2 || p.entities[1].GetLength() != 2 {
+		t.Fatalf("manual=%+v %v", p, err)
+	}
+	for _, tc := range []struct {
+		name, text, parse string
+		entities          []rpc.Entity
+	}{
+		{"unknown type", "x", "", []rpc.Entity{{Type: "nope", Length: 1}}},
+		{"out of range", "x", "", []rpc.Entity{{Type: "bold", Offset: 1, Length: 1}}},
+		{"surrogate boundary", "😀x", "", []rpc.Entity{{Type: "bold", Offset: 1, Length: 1}}},
+		{"zero length", "x", "", []rpc.Entity{{Type: "bold", Length: 0}}},
+		{"parse and entities", "x", "html", []rpc.Entity{}},
+		{"empty", "", "", nil},
+		{"long plain", strings.Repeat("x", 4097), "", nil},
+		{"long parsed", "<b>" + strings.Repeat("x", 4097) + "</b>", "html", nil},
+		{"long rich", strings.Repeat("x", 4097), "rich-html", nil},
+		{"unknown parse", "x", "other", nil},
+		{"unclosed html", "<b>x", "html", nil},
+		{"invalid link", `<a href="https://">x</a>`, "html", nil},
+		{"unknown html mention", `<a href="tg://user?id=8">x</a>`, "html", nil},
+		{"unknown markdown mention", `[x](tg://user?id=8)`, "markdown", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := prepareWriteText(tc.text, tc.parse, tc.entities, knownUser)
+			formatErrorCode(t, err, rpc.CodeInvalidParams)
+			if strings.Contains(err.Error(), tc.text) && tc.text != "" {
+				t.Fatalf("error leaked input: %v", err)
+			}
+		})
+	}
+	for _, source := range []string{strings.Repeat("x", 4096), "<b>" + strings.Repeat("x", 4096) + "</b>"} {
+		parse := ""
+		if strings.HasPrefix(source, "<") {
+			parse = "html"
+		}
+		if _, err := prepareWriteText(source, parse, nil, knownUser); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, parse := range []string{"html", "markdown"} {
+		source := `<a href="tg://user?id=7">name</a>`
+		if parse == "markdown" {
+			source = `[name](tg://user?id=7)`
+		}
+		p, err := prepareWriteText(source, parse, nil, knownUser)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if e, ok := p.entities[0].(*tg.InputMessageEntityMentionName); !ok || e.UserID.(*tg.InputUser).AccessHash != 123 {
+			t.Fatalf("mention=%v", p.entities)
+		}
+		unknown := source
+		if parse == "html" {
+			unknown = `<a href="tg://user?id=8">name</a>`
+		} else {
+			unknown = `[name](tg://user?id=8)`
+		}
+		_, err = prepareWriteText(unknown, parse, nil, knownUser)
+		var rpcErr *rpc.Error
+		if !errors.As(err, &rpcErr) || rpcErr.Message != "unknown user id for this session" {
+			t.Fatalf("unknown mention=%v", err)
+		}
+	}
+	p, err = prepareWriteText("name", "", []rpc.Entity{{Type: "mention_name", Length: 4, UserID: 7}}, knownUser)
+	if err != nil || p.entities[0].(*tg.InputMessageEntityMentionName).UserID.(*tg.InputUser).AccessHash != 123 {
+		t.Fatalf("manual mention=%v %v", p.entities, err)
+	}
+	date, err := prepareWriteText("today", "", []rpc.Entity{{Type: "date_time", Length: 5, DateUnix: 1700000000, Format: "d"}}, knownUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, ok := date.entities[0].(*tg.MessageEntityFormattedDate); !ok || e.Date != 1700000000 || !e.ShortDate {
+		t.Fatalf("date=%v", date.entities)
+	}
+	if _, err := prepareWriteText("today", "", []rpc.Entity{{Type: "date_time", Length: 5, Format: "!"}}, knownUser); err == nil {
+		t.Fatal("invalid date format accepted")
+	}
+}
+
+func TestAllManualEntityTypes(t *testing.T) {
+	types := []string{"bold", "italic", "underline", "strikethrough", "spoiler", "code", "pre", "blockquote", "text_url", "url", "email", "phone", "mention", "mention_name", "hashtag", "cashtag", "bot_command", "custom_emoji", "date_time"}
+	for _, typ := range types {
+		t.Run(typ, func(t *testing.T) {
+			item := rpc.Entity{Type: typ, Length: 1, URL: "https://example.com", UserID: 7, CustomEmojiID: 9, DateUnix: 1700000000, Format: "d"}
+			p, err := prepareWriteText("x", "", []rpc.Entity{item}, knownUser)
+			if err != nil || len(p.entities) != 1 || p.entities[0].GetLength() != 1 {
+				t.Fatalf("entity=%v err=%v", p.entities, err)
+			}
+		})
+	}
+}
+
+func TestFormattedWriteRequests(t *testing.T) {
+	for _, mode := range []string{"html", "markdown", "rich-html", "rich-markdown", "entities"} {
+		for _, forum := range []bool{false, true} {
+			name := mode
+			if forum {
+				name += " forum"
+			}
+			t.Run(name, func(t *testing.T) {
+				p := rpc.SendParams{Text: "<b>bold</b>", Parse: mode, Silent: true}
+				if mode == "markdown" {
+					p.Text = "**bold**"
+				}
+				if mode == "rich-markdown" {
+					p.Text = "# heading"
+				}
+				if mode == "entities" {
+					p.Parse = ""
+					p.Text = "bold"
+					p.Entities = []rpc.Entity{{Type: "bold", Length: 4}}
+				}
+				if forum {
+					p.ReplyTo = 502
+					p.Topic = 501
+				}
+				prepared, err := prepareWriteText(p.Text, p.Parse, p.Entities, knownUser)
+				if err != nil {
+					t.Fatal(err)
+				}
+				calls := 0
+				api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
+					calls++
+					req, ok := input.(*tg.MessagesSendMessageRequest)
+					if !ok {
+						t.Fatalf("request=%T", input)
+					}
+					if !req.Silent {
+						t.Error("silent flag lost")
+					}
+					if forum {
+						r := req.ReplyTo.(*tg.InputReplyToMessage)
+						if r.ReplyToMsgID != 502 {
+							t.Errorf("reply=%d", r.ReplyToMsgID)
+						}
+						if top, _ := r.GetTopMsgID(); top != 501 {
+							t.Errorf("top=%d", top)
+						}
+					}
+					if strings.HasPrefix(mode, "rich") {
+						if req.RichMessage == nil || req.Message != "" {
+							t.Errorf("rich request=%+v", req)
+						}
+						if mode == "rich-html" {
+							if _, ok := req.RichMessage.(*tg.InputRichMessageHTML); !ok {
+								t.Errorf("rich type=%T", req.RichMessage)
+							}
+						}
+						if mode == "rich-markdown" {
+							if _, ok := req.RichMessage.(*tg.InputRichMessageMarkdown); !ok {
+								t.Errorf("rich type=%T", req.RichMessage)
+							}
+						}
+					} else if req.Message != "bold" || len(req.Entities) != 1 || req.Entities[0].TypeName() != "messageEntityBold" {
+						t.Errorf("entities request=%+v", req)
+					}
+					return respond(output, &tg.UpdateShortSentMessage{ID: 17, Date: 1700000000})
+				}))
+				out, err := sendPreparedText(context.Background(), api, &tg.InputPeerUser{UserID: 42, AccessHash: 99}, 42, p, prepared)
+				if err != nil || calls != 1 || out.ID != 17 || out.Rich != strings.HasPrefix(mode, "rich") {
+					t.Fatalf("out=%+v err=%v calls=%d", out, err, calls)
+				}
+				if out.Rich && out.PlainText != "" {
+					t.Fatal("rich source leaked into plain text")
+				}
+			})
+		}
+	}
+}
+
+func TestFormattedEditsAndRichRejection(t *testing.T) {
+	for _, mode := range []string{"html", "markdown", "rich-html", "rich-markdown", "entities"} {
+		t.Run(mode, func(t *testing.T) {
+			p := rpc.EditParams{ID: 5, Text: "<b>bold</b>", Parse: mode}
+			if mode == "markdown" {
+				p.Text = "**bold**"
+			}
+			if mode == "rich-markdown" {
+				p.Text = "# heading"
+			}
+			if mode == "entities" {
+				p.Parse = ""
+				p.Text = "bold"
+				p.Entities = []rpc.Entity{{Type: "bold", Length: 4}}
+			}
+			prepared, err := prepareWriteText(p.Text, p.Parse, p.Entities, knownUser)
+			if err != nil {
+				t.Fatal(err)
+			}
+			api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
+				req := input.(*tg.MessagesEditMessageRequest)
+				if strings.HasPrefix(mode, "rich") {
+					if req.RichMessage == nil || req.Message != "" {
+						t.Errorf("rich edit=%+v", req)
+					}
+					if mode == "rich-html" {
+						if _, ok := req.RichMessage.(*tg.InputRichMessageHTML); !ok {
+							t.Errorf("rich edit type=%T", req.RichMessage)
+						}
+					}
+					if mode == "rich-markdown" {
+						if _, ok := req.RichMessage.(*tg.InputRichMessageMarkdown); !ok {
+							t.Errorf("rich edit type=%T", req.RichMessage)
+						}
+					}
+				} else if req.Message != "bold" || len(req.Entities) != 1 {
+					t.Errorf("edit=%+v", req)
+				}
+				return respond(output, &tg.Updates{Date: 1700000000, Updates: []tg.UpdateClass{&tg.UpdateEditMessage{Message: &tg.Message{ID: 5, Date: 1700000000, PeerID: &tg.PeerUser{UserID: 42}}}}})
+			}))
+			out, err := editPreparedText(context.Background(), api, &tg.InputPeerUser{UserID: 42}, 42, p, prepared)
+			if err != nil || out.ID != 5 {
+				t.Fatalf("out=%+v err=%v", out, err)
+			}
+		})
+	}
+	api := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error {
+		return tgerr.New(400, "RICH_MESSAGE_NOT_ALLOWED")
+	}))
+	_, err := sendText(context.Background(), api, &tg.InputPeerUser{UserID: 42}, 42, rpc.SendParams{Text: "# heading", Parse: "rich-markdown"})
+	formatErrorCode(t, err, rpc.CodeTelegram)
+	if strings.Contains(err.Error(), "# heading") {
+		t.Fatal("source leaked")
+	}
+	calls := 0
+	floodAPI := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error {
+		calls++
+		return tgerr.New(420, "FLOOD_WAIT_8")
+	}))
+	_, err = sendText(context.Background(), floodAPI, &tg.InputPeerUser{UserID: 42}, 42, rpc.SendParams{Text: "# heading", Parse: "rich-markdown"})
+	formatErrorCode(t, err, rpc.CodeFloodWait)
+	if calls != 1 {
+		t.Fatalf("rich write retried %d times", calls)
+	}
+}
+
+func TestPlainWriteRequestIsUnchanged(t *testing.T) {
+	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
+		req := input.(*tg.MessagesSendMessageRequest)
+		want := &tg.MessagesSendMessageRequest{Peer: &tg.InputPeerUser{UserID: 42, AccessHash: 99}, Message: "plain", RandomID: req.RandomID}
+		if !reflect.DeepEqual(req, want) {
+			t.Errorf("plain request changed: got=%+v want=%+v", req, want)
+		}
+		return respond(output, &tg.UpdateShortSentMessage{ID: 17, Date: 1700000000})
+	}))
+	out, err := sendText(context.Background(), api, &tg.InputPeerUser{UserID: 42, AccessHash: 99}, 42, rpc.SendParams{Text: "plain"})
+	if err != nil || out.PlainText != "plain" || out.Rich {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+}
+
+func TestPlainEditRequestIsUnchanged(t *testing.T) {
+	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
+		req := input.(*tg.MessagesEditMessageRequest)
+		want := &tg.MessagesEditMessageRequest{Peer: &tg.InputPeerUser{UserID: 42, AccessHash: 99}, ID: 5, Message: "plain"}
+		if !reflect.DeepEqual(req, want) {
+			t.Errorf("plain edit changed: got=%+v want=%+v", req, want)
+		}
+		return respond(output, &tg.Updates{Date: 1700000000, Updates: []tg.UpdateClass{&tg.UpdateEditMessage{Message: &tg.Message{ID: 5, Date: 1700000000, PeerID: &tg.PeerUser{UserID: 42}}}}})
+	}))
+	out, err := editText(context.Background(), api, &tg.InputPeerUser{UserID: 42, AccessHash: 99}, 42, rpc.EditParams{ID: 5, Text: "plain"})
+	if err != nil || out.PlainText != "plain" || out.Rich {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+}
+
+func TestMentionResolverUsesPeerCache(t *testing.T) {
+	ctx := context.Background()
+	cache := &peers.InmemoryCache{}
+	if err := cache.SaveUsers(ctx, &tg.User{ID: 7, AccessHash: 123}); err != nil {
+		t.Fatal(err)
+	}
+	api := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error {
+		t.Fatal("cache hit made Telegram request")
+		return nil
+	}))
+	c := &Client{mgr: peers.Options{Cache: cache}.Build(api), mgrReady: true}
+	user, err := c.mentionResolver(ctx)(7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u, ok := user.(*tg.InputUser); !ok || u.AccessHash != 123 {
+		t.Fatalf("resolved user=%v", user)
+	}
+}
+
+func TestInvalidFormatDoesNotSend(t *testing.T) {
+	calls := 0
+	api := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { calls++; return nil }))
+	_, err := sendText(context.Background(), api, &tg.InputPeerUser{UserID: 42}, 42, rpc.SendParams{Text: "<b>bad", Parse: "html"})
+	formatErrorCode(t, err, rpc.CodeInvalidParams)
+	_, err = editText(context.Background(), api, &tg.InputPeerUser{UserID: 42}, 42, rpc.EditParams{ID: 5, Text: "x", Entities: []rpc.Entity{{Type: "bold", Offset: 2, Length: 1}}})
+	formatErrorCode(t, err, rpc.CodeInvalidParams)
+	if calls != 0 {
+		t.Fatalf("invalid input made %d Telegram calls", calls)
+	}
+}
