@@ -27,6 +27,9 @@ const (
 	MethodNoteDelete         = "note.delete"
 	MethodNoteDeleteByAuthor = "note.delete_by_author"
 	MethodSearch             = "search"
+	MethodSubscribe          = "subscribe"
+	MethodUnsubscribe        = "unsubscribe"
+	MethodEvent              = "event"
 )
 
 // Login states reported by the auth methods.

@@ -10,6 +10,7 @@ import (
 	"tg-cli/internal/buildinfo"
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/output"
+	"tg-cli/internal/rpc"
 	"tg-cli/internal/schema"
 )
 
@@ -19,12 +20,22 @@ const schemaVersion = 1
 
 // schemaDoc is the machine description of the command line.
 type schemaDoc struct {
-	SchemaVersion int           `json:"schema_version"`
-	Tool          toolInfo      `json:"tool"`
-	Output        outputDoc     `json:"output"`
-	ExitCodes     []exitCodeDoc `json:"exit_codes"`
-	GlobalFlags   []flagDoc     `json:"global_flags"`
-	Commands      []commandDoc  `json:"commands"`
+	SchemaVersion int             `json:"schema_version"`
+	Tool          toolInfo        `json:"tool"`
+	Output        outputDoc       `json:"output"`
+	ExitCodes     []exitCodeDoc   `json:"exit_codes"`
+	GlobalFlags   []flagDoc       `json:"global_flags"`
+	Commands      []commandDoc    `json:"commands"`
+	Subscription  subscriptionDoc `json:"subscription"`
+}
+
+// subscriptionDoc describes the raw RPC stream before a CLI watch command is
+// added. Event is the shape of notification params, not a command result.
+type subscriptionDoc struct {
+	Method       string         `json:"method"`
+	Result       []schema.Field `json:"result"`
+	Notification string         `json:"notification"`
+	Event        []schema.Field `json:"event"`
 }
 
 // toolInfo names the tool and the build it was made from.
@@ -119,6 +130,12 @@ func schemaDocFor(root *cobra.Command, specs map[*cobra.Command]commandSpec) sch
 			Failure: `{"ok":false,"error":{"code":"<name>","message":"..."},"throttled_ms":<milliseconds> (optional)}`,
 		},
 		GlobalFlags: flagDocs(root.PersistentFlags(), nil),
+		Subscription: subscriptionDoc{
+			Method:       rpc.MethodSubscribe,
+			Result:       schema.Fields(reflect.TypeOf(rpc.SubscribeResult{})),
+			Notification: rpc.MethodEvent,
+			Event:        schema.Fields(reflect.TypeOf(rpc.Event{})),
+		},
 	}
 	for _, code := range exitcode.All() {
 		doc.ExitCodes = append(doc.ExitCodes, exitCodeDoc{Code: code, Name: exitcode.Name(code), Description: exitcode.Note(code)})

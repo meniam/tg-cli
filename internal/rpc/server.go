@@ -43,17 +43,24 @@ type Server struct {
 	baseCancel context.CancelFunc
 	sem        chan struct{}
 	active     atomic.Int64
+	nextSub    atomic.Uint64
 
 	mu        sync.Mutex
 	handlers  map[string]Handler
 	conns     map[*serverConn]struct{}
 	listeners map[net.Listener]struct{}
 	closing   bool
+	hub       *Hub
+	replay    ReplayFunc
 }
 
 type serverConn struct {
-	c      net.Conn
-	active atomic.Int64
+	c       net.Conn
+	active  atomic.Int64
+	mu      sync.Mutex
+	sub     *Subscription
+	subID   string
+	pending bool
 }
 
 // NewServer creates a server without handlers.
@@ -92,8 +99,30 @@ func (s *Server) Methods() []string {
 	for method := range s.handlers {
 		methods = append(methods, method)
 	}
+	if s.hub != nil {
+		methods = append(methods, MethodSubscribe, MethodUnsubscribe)
+	}
 	sort.Strings(methods)
 	return methods
+}
+
+// SetEventSource enables the built-in subscribe and unsubscribe methods.
+// Call it before serving connections. The replay callback runs after the
+// subscriber is registered and may read durable history from another package.
+func (s *Server) SetEventSource(hub *Hub, replay ReplayFunc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.hub, s.replay = hub, replay
+}
+
+// PublishEvent fans out one event without waiting for subscribers.
+func (s *Server) PublishEvent(event Event) {
+	s.mu.Lock()
+	hub := s.hub
+	s.mu.Unlock()
+	if hub != nil {
+		hub.Publish(event)
+	}
 }
 
 // Active returns the number of requests being handled right now.
@@ -143,6 +172,7 @@ func (s *Server) ServeConn(c net.Conn) {
 	w := &frameWriter{w: c}
 	s.readLoop(ctx, sc, newFrameReader(c), w, &wg)
 	cancel()
+	sc.stopSubscription()
 	wg.Wait()
 	_ = c.Close()
 
@@ -171,6 +201,9 @@ func (s *Server) readLoop(ctx context.Context, sc *serverConn, fr *frameReader, 
 			}
 			continue
 		}
+		if req.IsNotification() && (req.Method == MethodSubscribe || req.Method == MethodUnsubscribe) {
+			continue
+		}
 		select {
 		case s.sem <- struct{}{}:
 		default:
@@ -187,9 +220,35 @@ func (s *Server) readLoop(ctx context.Context, sc *serverConn, fr *frameReader, 
 			defer func() { <-s.sem }()
 			defer s.active.Add(-1)
 			defer sc.active.Add(-1)
-			resp := s.call(ctx, req)
+			var resp Response
+			var sub *Subscription
+			var plan ReplayPlan
+			started := time.Now()
+			switch req.Method {
+			case MethodSubscribe:
+				resp, sub, plan = s.subscribe(ctx, sc, req)
+			case MethodUnsubscribe:
+				resp = s.unsubscribe(sc, req)
+			default:
+				resp = s.call(ctx, req)
+			}
+			if req.Method == MethodSubscribe || req.Method == MethodUnsubscribe {
+				code := any("ok")
+				if resp.Error != nil {
+					code = resp.Error.Code
+				}
+				s.log.Info("request", "method", req.Method, "duration_ms", time.Since(started).Milliseconds(), "code", code)
+			}
 			if !req.IsNotification() {
-				_ = w.write(resp)
+				if err := w.write(resp); err != nil {
+					sc.stopSubscription()
+					_ = sc.c.Close()
+					return
+				}
+			}
+			if sub != nil {
+				wg.Add(1)
+				go func() { defer wg.Done(); s.sendEvents(ctx, sc, w, sub, plan) }()
 			}
 		}()
 	}

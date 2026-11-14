@@ -82,7 +82,7 @@ func TestSchemaMigration(t *testing.T) {
 			if version, err := db.Version(); err != nil || version != newestMigrationVersion(t) {
 				t.Fatalf("version = %d, %v, want %d", version, err, newestMigrationVersion(t))
 			}
-			for _, table := range []string{"meta", "chats", "people", "messages", "message_versions", "folders", "folder_chats", "account_state", "sync_state", "notes", "note_tags"} {
+			for _, table := range []string{"meta", "chats", "people", "messages", "message_versions", "folders", "folder_chats", "account_state", "sync_state", "notes", "note_tags", "events"} {
 				var strict int
 				if err := db.read.QueryRow(`SELECT "strict" FROM pragma_table_list WHERE name=?`, table).Scan(&strict); err != nil || strict != 1 {
 					t.Errorf("table %s strict = %d, %v", table, strict, err)

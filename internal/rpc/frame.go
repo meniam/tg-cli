@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"sync"
+	"time"
 )
 
 // MaxFrameSize is the largest accepted message, matching the installed tg.
@@ -46,6 +48,12 @@ type frameWriter struct {
 }
 
 func (f *frameWriter) write(v any) error {
+	return f.writeWithTimeout(v, 0)
+}
+
+// writeWithTimeout serializes both the frame and the connection write deadline.
+// Only notifications use a timeout; ordinary response behavior is unchanged.
+func (f *frameWriter) writeWithTimeout(v any, timeout time.Duration) error {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -53,6 +61,14 @@ func (f *frameWriter) write(v any) error {
 	data = append(data, '\n')
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if timeout > 0 {
+		if conn, ok := f.w.(net.Conn); ok {
+			if err := conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+				return err
+			}
+			defer conn.SetWriteDeadline(time.Time{})
+		}
+	}
 	_, err = f.w.Write(data)
 	return err
 }

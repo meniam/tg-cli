@@ -213,7 +213,7 @@ func (w *walker) value(t reflect.Type, path string, optional bool, decl declarat
 		t = t.Elem()
 	}
 	if t == rawType {
-		w.add(Field{Path: path, Type: TypeJSON, Optional: optional}, decl, depth)
+		w.add(Field{Path: path, Type: TypeJSON, Optional: optional, Untrusted: untrusted}, decl, depth)
 		return
 	}
 	if name := kindName(t.Kind()); name != "" {
