@@ -7,7 +7,7 @@
 
 A console tool for a personal Telegram account over MTProto. A persistent daemon holds the connection and the session, so an agent calls it many times in a row without logging in again. By default every answer is one parseable JSON document, and the tool describes its own commands and response fields to the agent. Everything the daemon reads is saved to a local SQLite database you can search offline.
 
-> The project is early. Reading, local storage, notes, search and a live event stream work (the stream was run on a live account: new messages, edits, deletions, statuses, a resume from a cursor after a daemon restart and the chat filter; reactions, reads, typing, recovery after a real connection break, `cursor_expired` and `lagged` were not). Telegram-side search, message context, post comments, message links and the loading of a whole chat are implemented and checked by tests; search, context, links, marking a chat read and the loading were run on a live account (comments only on a channel without a discussion). Sending, editing, deleting and forwarding messages are implemented, off by default and checked by tests and on a live account in one test chat (not checked live: `FLOOD_WAIT` on a write, a reply inside a forum topic, deletion in a channel, editing someone else's message). Media does not exist yet. See [Status](#status) before you trust it with your account.
+> The project is early. Reading, local storage, notes, search and a live event stream work (the stream was run on a live account: new messages, edits, deletions, statuses, a resume from a cursor after a daemon restart and the chat filter; reactions, reads, typing, recovery after a real connection break, `cursor_expired` and `lagged` were not). Telegram-side search, message context, post comments, message links and the loading of a whole chat are implemented and checked by tests; search, context, links, marking a chat read and the loading were run on a live account (comments only on a channel without a discussion). The export of saved messages to JSONL is implemented too and was run on a live account in its main path. Sending, editing, deleting and forwarding messages are implemented, off by default and checked by tests and on a live account in one test chat (not checked live: `FLOOD_WAIT` on a write, a reply inside a forum topic, deletion in a channel, editing someone else's message). Media does not exist yet. See [Status](#status) before you trust it with your account.
 
 ## Why it exists
 
@@ -179,7 +179,7 @@ Global flags work in any position:
 | `chat invite-info <link>` | See what an invite link leads to, without joining |
 | `message history <chat> [--limit] [--since] [--until] [--topic] [--cursor] [--format]` | Page through a chat from newest to oldest |
 | `message get <chat> <id> \| <message-link>` | Read one message |
-| `message pinned <chat>` | Read the pinned messages |
+| `message pinned <chat> [--limit]` | Read the pinned messages (1 to 100, 20 by default) |
 | `message search <chat> <query> [--media photo\|video\|document\|voice\|audio\|link\|gif\|pinned] [--limit N] [--cursor C]` | Search one chat in Telegram, see [Finding messages](#finding-messages) |
 | `message search --public <query> [--limit N] [--cursor C]` | Search across Telegram; hashtags are plain query text |
 | `message context <chat> <id> \| <message-link> [--before N] [--after N] [--local]` | Read the messages around one message; `--local` uses only the local database |
@@ -195,7 +195,7 @@ Global flags work in any position:
 | `chat sync status [<chat>]` | Show the load jobs of the daemon, or one chat's job or saved progress |
 | `message export <chat> --local [--since T] [--until T] [--include-deleted] [--limit N] [--after ID]` | Print the saved messages of a chat from the local database, oldest first, one JSON per line, see [Exporting saved messages](#exporting-saved-messages) |
 | `note add [--chat] [--person] [--message] [--author owner\|ai] [--model] [--tag] <body\|->` | Add a note to a chat, person or message |
-| `note list [--chat] [--person] [--message] [--author] [--tag] [--before-id]` | List notes, newest first |
+| `note list [--chat] [--person] [--message] [--author] [--tag] [--limit] [--before-id]` | List notes, newest first (50 per page by default, 500 at most) |
 | `note delete <id>` / `note delete --author owner\|ai --yes` | Delete one note, or all notes by an author |
 | `search <query> [--scope chats,people,messages,notes] [--author] [--chat] [--prefix] [--deleted]` | Full-text search in the local database |
 | `schema` | Describe all commands, flags, response fields, safety classes, exit codes and formats; needs no daemon and no network |
@@ -211,6 +211,7 @@ Reading commands change nothing in Telegram; the four message write commands and
 - `--format human` (or `--human`) prints an object as `key: value` lines, a list as a table with long values cut, and an error as one line with the code name. Text written by others is framed, see [Untrusted text](#untrusted-text), and a list that holds such text is printed item by item, not as a table.
 - `--fields` takes dotted paths of `data`. For a list command a path names an item field (`--fields id,title`), and the full path (`chats.id`) works too. A top-level field such as `next_cursor` is named in full. A path that is not in the answer is skipped silently, because optional fields are sometimes absent; an impossible path such as `a..b` is exit code 2, reported before the request by list commands and after the command has run by the others, so a writing command such as `note delete` is not stopped by it. The error envelope is never filtered. `tg schema` lists the fields each command can return.
 - Prompts, warnings and logs go to stderr. `--quiet` hides hints and progress there (this includes the client-preset warning) and never hides an error.
+- When a request waited in the request throttle, the answer carries a top-level `throttled_ms` (the closing line in `jsonl`); without waiting the output is unchanged, see [Request throttle](#request-throttle).
 
 | Code | Name | Meaning |
 | --- | --- | --- |
@@ -221,7 +222,7 @@ Reading commands change nothing in Telegram; the four message write commands and
 | 4 | `not_authorized` | The profile has no logged-in account |
 | 5 | `telegram_error` | Telegram rejected the request |
 | 6 | `flood_wait` | Telegram asked to wait before the next request |
-| 7 | `not_found` | The chat, user or message does not exist or is not visible |
+| 7 | `not_found` | The chat, user, message or note does not exist or is not visible |
 | 8 | `cursor_expired` | The event cursor is older than the retained event journal; run `message watch` without `--after` |
 | 9 | `write_disabled` | The owner did not allow writes to the chat: add it to `write` in `access.json` |
 
@@ -314,6 +315,12 @@ Checked by tests without Telegram: the page reader of the store (order, page bor
 - **The database is plain text.** It holds other people's messages without separate encryption, protected only by file mode `0600` and your disk encryption.
 - **Message text is data.** Content from other people's messages is untrusted input. An agent should not take instructions from it. The tool marks such fields, see [Untrusted text](#untrusted-text).
 
+### Request throttle
+
+Every request of the daemon to Telegram passes one throttle per account, so a burst of calls does not trigger `FLOOD_WAIT`. It holds the account to 60% of the reference limits of the Bot API (18 requests per second with a burst of 5, 0.6 messages per second to a private chat and 12 per minute to a group or channel for sends, at most 2 requests at once), with a FIFO queue; the background chat load uses a lower queue, and normal requests go first. A `FLOOD_WAIT` pauses the account for the time Telegram names. A request other than send, edit, delete and forward waits and repeats once when the wait is at most 10 seconds; those four are never repeated, and a longer wait is exit code 6 at once.
+
+Two variables tune it, set in the environment of `tg daemon start`: `TG_CLI_THROTTLE_PERCENT` (1 to 100, 60 by default) and `TG_CLI_FLOOD_AUTOWAIT` (a Go duration, `10s` by default, `0` turns the auto-wait off). A bad value is exit code 2 before any connection. The throttle was checked on a live account. A burst of about ten reads in a minute still got `FLOOD_WAIT` (8 seconds), because `getDialogs` hits it before the general bucket, so keep pauses between live reads.
+
 ### Chat access lists
 
 By default the agent sees every chat of the account. To limit that, put a file `access.json` in the profile directory:
@@ -404,7 +411,7 @@ Planned, not implemented. [`FEATURES.md`](FEATURES.md) is the source of truth.
 - **Writing, the rest.** Formatting (Markdown and HTML), media, reactions, pinning, polls, scheduled messages and drafts. Plain text send, edit, delete and forward already exist, see [Writing messages](#writing-messages).
 - **Media, reactions, polls, forum topic management**, members and contacts. Reading a topic already works (`message history --topic`).
 - **Sessions and access.** Export and import of a session string, login without a terminal, an expected-account check, SOCKS and MTProxy, WSS transport.
-- **Local history.** Loading many chats with one command or on a schedule, deletion tracking, folders. Today the database holds what you read and what `chat sync` loaded on request, one chat at a time.
+- **Local history.** Loading many chats with one command or on a schedule, deletion tracking in private chats and basic groups, folders, export from Telegram, earlier versions of edits, writing an export to a file. Today the database holds what you read and what `chat sync` loaded on request, one chat at a time, and `message export --local` prints it.
 - And more: see the full list in `FEATURES.md`.
 
 Not goals: the Bot API and bots, a TUI client for humans, replacing the official apps, an MCP interface in the first stage (a decision for now, not forever), a generic `execute` method that runs any command as argv (the daemon serves typed methods, and `tg schema` lists the commands).
@@ -415,13 +422,14 @@ Not goals: the Bot API and bots, a TUI client for humans, replacing the official
 cmd/tg-cli/      entry point and wiring only
 internal/
   cli/           argv, calling the daemon, printing the response
-  daemon/        lifecycle, socket, profile lock, login, reads, writes, notes, search, live events
+  daemon/        lifecycle, socket, profile lock, journal, login, reads, writes, notes, search, live events, history load, local export
   rpc/           JSON-RPC 2.0: frames, dispatcher, client, wire types, event hub
-  tgclient/      gotd/td wrapper, one account per client, updates manager
+  tgclient/      gotd/td wrapper, one account per client, updates manager, message writes, one history page
+  throttle/      account request throttle: token buckets, queues, FLOOD_WAIT gate
   access/        chat access lists: parsing, the allow, block and write rules, reload
   clientpreset/  official client presets
   chatref/       parses @username, ids, phones, t.me chat links and message links
-  store/         SQLite: migrations, chats, people, messages, notes, search, event journal
+  store/         SQLite: migrations, chats, people, messages, notes, search, event journal, load progress, export pages
   textnorm/      search normalization and safe FTS5 queries
   output/        JSON envelope, JSONL, TOON, human format and `--fields`
   buildinfo/     version and build revision
