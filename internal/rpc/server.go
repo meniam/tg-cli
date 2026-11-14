@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"runtime/debug"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -81,6 +82,18 @@ func (s *Server) Handle(method string, h Handler) {
 		panic("rpc: duplicate handler for " + method)
 	}
 	s.handlers[method] = h
+}
+
+// Methods returns a sorted snapshot of registered method names.
+func (s *Server) Methods() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	methods := make([]string, 0, len(s.handlers))
+	for method := range s.handlers {
+		methods = append(methods, method)
+	}
+	sort.Strings(methods)
+	return methods
 }
 
 // Active returns the number of requests being handled right now.

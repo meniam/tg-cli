@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"sync"
 	"time"
 )
@@ -42,6 +43,23 @@ func (p Policy) Enabled() bool { return p.denied || len(p.allow) > 0 || len(p.bl
 // AllowCount and BlockCount expose list sizes without exposing identifiers.
 func (p Policy) AllowCount() int { return len(p.allow) }
 func (p Policy) BlockCount() int { return len(p.block) }
+
+// Filter returns a detached snapshot for database queries. A failed policy
+// hides all chats; callers may still show records without a chat ID.
+func (p Policy) Filter() (hideAll bool, allow, block []int64) {
+	if p.denied {
+		return true, nil, nil
+	}
+	for id := range p.allow {
+		allow = append(allow, id)
+	}
+	for id := range p.block {
+		block = append(block, id)
+	}
+	sort.Slice(allow, func(i, j int) bool { return allow[i] < allow[j] })
+	sort.Slice(block, func(i, j int) bool { return block[i] < block[j] })
+	return false, allow, block
+}
 
 var denyAll = Policy{denied: true}
 

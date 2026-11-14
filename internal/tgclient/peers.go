@@ -39,7 +39,7 @@ func isNotFound(err error) bool {
 }
 
 func notFound() error {
-	return rpc.NewError(rpc.CodeNotFound, "not found: the chat or message does not exist or is not visible to this account")
+	return rpc.ErrChatNotFound()
 }
 
 // manager returns the peer manager, initialized on first use.

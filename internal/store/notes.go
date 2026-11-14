@@ -31,13 +31,14 @@ type Note struct {
 
 // NoteFilter selects notes in descending ID order.
 type NoteFilter struct {
-	Kind     string
-	ChatID   *int64
-	TargetID *int64
-	Author   string
-	Tag      string
-	Limit    int
-	BeforeID int64
+	Kind       string
+	ChatID     *int64
+	TargetID   *int64
+	Author     string
+	Tag        string
+	Limit      int
+	BeforeID   int64
+	ChatFilter ChatFilter
 }
 
 func validNoteKind(kind string) bool     { return kind == "chat" || kind == "person" || kind == "message" }
@@ -201,6 +202,9 @@ func (db *DB) ListNotes(ctx context.Context, filter NoteFilter) ([]Note, error) 
 		query.WriteString(` AND chat_id=?`)
 		args = append(args, *filter.ChatID)
 	}
+	condition, filterArgs := filter.ChatFilter.condition("chat_id", true)
+	query.WriteString(condition)
+	args = append(args, filterArgs...)
 	if filter.TargetID != nil {
 		query.WriteString(` AND target_id=?`)
 		args = append(args, *filter.TargetID)

@@ -53,12 +53,21 @@ func (d *daemon) chatResolve(ctx context.Context, params json.RawMessage) (any, 
 	if err != nil {
 		return nil, err
 	}
-	if err := d.requireAccount(ctx); err != nil {
-		return nil, err
-	}
-	chat, err := d.opts.Telegram.Resolve(ctx, ref)
+	resolved, err := d.requireAllowedChat(ctx, ref)
 	if err != nil {
 		return nil, err
+	}
+	var chat rpc.Chat
+	if resolved != nil {
+		chat = *resolved
+	} else {
+		chat, err = d.opts.Telegram.Resolve(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if !d.policy().Allowed(chat.ID) {
+		return nil, rpc.ErrChatNotFound()
 	}
 	d.saveChats(ctx, rpc.MethodChatResolve, []rpc.Chat{chat}, false)
 	return chat, nil
@@ -73,12 +82,15 @@ func (d *daemon) chatInfo(ctx context.Context, params json.RawMessage) (any, err
 	if err != nil {
 		return nil, err
 	}
-	if err := d.requireAccount(ctx); err != nil {
+	if _, err := d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
 	info, err := d.opts.Telegram.ChatInfo(ctx, ref)
 	if err != nil {
 		return nil, err
+	}
+	if !d.policy().Allowed(info.ID) {
+		return nil, rpc.ErrChatNotFound()
 	}
 	d.saveChatInfo(ctx, info)
 	return info, nil
@@ -96,7 +108,7 @@ func (d *daemon) chatInviteInfo(ctx context.Context, params json.RawMessage) (an
 	if ref.Kind != chatref.Invite {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "this is not an invite link: use chat info")
 	}
-	if err := d.requireAccount(ctx); err != nil {
+	if _, err := d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
 	return d.opts.Telegram.InviteInfo(ctx, ref)
@@ -141,7 +153,7 @@ func (d *daemon) messageHistory(ctx context.Context, params json.RawMessage) (an
 	if p.Topic < 0 {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "topic must be a positive topic id")
 	}
-	if err := d.requireAccount(ctx); err != nil {
+	if _, err := d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
 	res, err := d.opts.Telegram.History(ctx, ref, rpc.HistoryQuery{
@@ -152,6 +164,12 @@ func (d *daemon) messageHistory(ctx context.Context, params json.RawMessage) (an
 	}
 	if res.Messages == nil {
 		res.Messages = []rpc.Message{}
+	}
+	policy := d.policy()
+	for _, message := range res.Messages {
+		if !policy.Allowed(message.ChatID) {
+			return nil, rpc.ErrChatNotFound()
+		}
 	}
 	d.saveMessages(ctx, rpc.MethodMessageHistory, res.Messages)
 	return res, nil
@@ -169,12 +187,15 @@ func (d *daemon) messageGet(ctx context.Context, params json.RawMessage) (any, e
 	if p.ID <= 0 {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "id must be a positive message id")
 	}
-	if err := d.requireAccount(ctx); err != nil {
+	if _, err := d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
 	message, err := d.opts.Telegram.Message(ctx, ref, p.ID)
 	if err != nil {
 		return nil, err
+	}
+	if !d.policy().Allowed(message.ChatID) {
+		return nil, rpc.ErrChatNotFound()
 	}
 	d.saveMessages(ctx, rpc.MethodMessageGet, []rpc.Message{message})
 	return message, nil
@@ -193,7 +214,7 @@ func (d *daemon) messagePinned(ctx context.Context, params json.RawMessage) (any
 	if err != nil {
 		return nil, err
 	}
-	if err := d.requireAccount(ctx); err != nil {
+	if _, err := d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
 	res, err := d.opts.Telegram.Pinned(ctx, ref, limit)
@@ -202,6 +223,12 @@ func (d *daemon) messagePinned(ctx context.Context, params json.RawMessage) (any
 	}
 	if res.Messages == nil {
 		res.Messages = []rpc.Message{}
+	}
+	policy := d.policy()
+	for _, message := range res.Messages {
+		if !policy.Allowed(message.ChatID) {
+			return nil, rpc.ErrChatNotFound()
+		}
 	}
 	d.saveMessages(ctx, rpc.MethodMessagePinned, res.Messages)
 	return res, nil

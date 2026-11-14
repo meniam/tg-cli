@@ -35,6 +35,8 @@ type Paths struct {
 	Device string
 	// Database is the local SQLite database, mode 0600.
 	Database string
+	// Access is the human-managed chat access list.
+	Access string
 	// Log is the journal of a daemon started in the background, mode 0600.
 	// Request entries contain only a registered method, duration and code.
 	Log string
@@ -64,6 +66,7 @@ func ResolvePaths(home, profile string) (Paths, error) {
 		Client:   filepath.Join(dir, "client"),
 		Device:   filepath.Join(dir, "device"),
 		Database: filepath.Join(dir, "store.db"),
+		Access:   filepath.Join(dir, "access.json"),
 		Log:      filepath.Join(dir, "daemon.log"),
 	}
 	if len(p.Socket) > MaxSocketPath {

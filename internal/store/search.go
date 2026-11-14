@@ -22,6 +22,7 @@ type SearchOptions struct {
 	Scopes         []string
 	Author         string
 	ChatID         *int64
+	ChatFilter     ChatFilter
 	Limit          int
 	Prefix         bool
 	IncludeDeleted bool
@@ -84,7 +85,7 @@ func (db *DB) Search(ctx context.Context, options SearchOptions) ([]SearchHit, e
 		var err error
 		switch scope {
 		case "chats":
-			found, err = db.searchChats(ctx, match, limit, terms, options.Prefix)
+			found, err = db.searchChats(ctx, match, limit, terms, options.Prefix, options.ChatFilter)
 		case "people":
 			found, err = db.searchPeople(ctx, match, limit, terms, options.Prefix)
 		case "messages":
@@ -100,8 +101,11 @@ func (db *DB) Search(ctx context.Context, options SearchOptions) ([]SearchHit, e
 	return hits, nil
 }
 
-func (db *DB) searchChats(ctx context.Context, match string, limit int, terms []string, prefix bool) ([]SearchHit, error) {
-	rows, err := db.read.QueryContext(ctx, `SELECT c.id,c.title,c.about,bm25(chats_fts) FROM chats_fts JOIN chats c ON c.rowid=chats_fts.rowid WHERE chats_fts MATCH ? ORDER BY bm25(chats_fts),c.id LIMIT ?`, match, limit)
+func (db *DB) searchChats(ctx context.Context, match string, limit int, terms []string, prefix bool, filter ChatFilter) ([]SearchHit, error) {
+	condition, filterArgs := filter.condition("c.id", false)
+	args := append([]any{match}, filterArgs...)
+	args = append(args, limit)
+	rows, err := db.read.QueryContext(ctx, `SELECT c.id,c.title,c.about,bm25(chats_fts) FROM chats_fts JOIN chats c ON c.rowid=chats_fts.rowid WHERE chats_fts MATCH ?`+condition+` ORDER BY bm25(chats_fts),c.id LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +155,9 @@ func (db *DB) searchMessages(ctx context.Context, match string, limit int, terms
 		query += ` AND m.chat_id=?`
 		args = append(args, *options.ChatID)
 	}
+	condition, filterArgs := options.ChatFilter.condition("m.chat_id", false)
+	query += condition
+	args = append(args, filterArgs...)
 	if !options.IncludeDeleted {
 		query += ` AND m.deleted_at IS NULL`
 	}
@@ -188,6 +195,9 @@ func (db *DB) searchNotes(ctx context.Context, match string, limit int, terms []
 		query += ` AND n.chat_id=?`
 		args = append(args, *options.ChatID)
 	}
+	condition, filterArgs := options.ChatFilter.condition("n.chat_id", true)
+	query += condition
+	args = append(args, filterArgs...)
 	query += ` ORDER BY bm25(notes_fts),n.id LIMIT ?`
 	args = append(args, limit)
 	rows, err := db.read.QueryContext(ctx, query, args...)

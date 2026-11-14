@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"tg-cli/internal/access"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
 )
@@ -32,6 +33,7 @@ type Options struct {
 	Paths    Paths
 	Telegram Telegram
 	Store    *store.DB
+	Access   *access.Loader
 	Log      *slog.Logger
 	// IdleTimeout stops the daemon after this long without a request and with
 	// no request in flight. Zero means no idle stop: the daemon lives until
@@ -104,6 +106,9 @@ func Run(ctx context.Context, opts Options) error {
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	if opts.Access == nil {
+		opts.Access = access.Open(opts.Paths.Access)
+	}
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), cancel: cancel, store: ownedStore}
 	// A daemon that has just started is not idle: the clock runs from now.
 	d.lastActivity.Store(time.Now().UnixNano())
@@ -346,9 +351,30 @@ func (d *daemon) chatList(ctx context.Context, params json.RawMessage) (any, err
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	chats, err := d.opts.Telegram.Chats(ctx, limit, p.Type)
+	policy := d.policy()
+	requested := limit
+	chats, err := d.opts.Telegram.Chats(ctx, requested, p.Type)
 	if err != nil {
 		return nil, err
+	}
+	if policy.Enabled() {
+		for {
+			visible := make([]rpc.Chat, 0, len(chats))
+			for _, chat := range chats {
+				if policy.Allowed(chat.ID) {
+					visible = append(visible, chat)
+				}
+			}
+			if len(visible) >= limit || len(chats) < requested || requested == maxChatLimit {
+				chats = visible[:min(len(visible), limit)]
+				break
+			}
+			requested = min(requested*2, maxChatLimit)
+			chats, err = d.opts.Telegram.Chats(ctx, requested, p.Type)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	if chats == nil {
 		chats = []rpc.Chat{}

@@ -177,3 +177,22 @@ func TestConcurrentPolicyCalls(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestFilterReturnsDetachedSortedLists(t *testing.T) {
+	policy, err := parse([]byte(`{"allow":[42,-1001234567890],"block":[42,-77]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hide, allow, block := policy.Filter()
+	if hide || len(allow) != 2 || allow[0] != -1001234567890 || len(block) != 2 || block[0] != -77 {
+		t.Fatalf("filter = %v, %v, %v", hide, allow, block)
+	}
+	allow[0] = 999
+	if !policy.Allowed(-1001234567890) {
+		t.Fatal("filter mutated policy")
+	}
+	hide, _, _ = denyAll.Filter()
+	if !hide {
+		t.Fatal("denied policy must hide all")
+	}
+}

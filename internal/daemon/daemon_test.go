@@ -42,6 +42,7 @@ type fakeTelegram struct {
 	info         *rpc.ChatInfo
 	missing      bool // the read methods answer "not found"
 	resolveCalls int
+	chatsCalls   int
 	resolved     *rpc.Chat
 }
 
@@ -147,6 +148,7 @@ func (f *fakeTelegram) LoginQR(ctx context.Context, show func(context.Context, r
 func (f *fakeTelegram) Chats(_ context.Context, limit int, chatType string) ([]rpc.Chat, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.chatsCalls++
 	f.lastType = chatType
 	var out []rpc.Chat
 	for _, c := range f.chats {
@@ -166,7 +168,7 @@ func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, er
 	f.lastRef = ref
 	f.resolveCalls++
 	if f.missing {
-		return rpc.Chat{}, rpc.NewError(rpc.CodeNotFound, "not found")
+		return rpc.Chat{}, rpc.ErrChatNotFound()
 	}
 	if f.resolved != nil {
 		return *f.resolved, nil
@@ -179,7 +181,7 @@ func (f *fakeTelegram) ChatInfo(_ context.Context, ref chatref.Ref) (rpc.ChatInf
 	defer f.mu.Unlock()
 	f.lastRef = ref
 	if f.missing {
-		return rpc.ChatInfo{}, rpc.NewError(rpc.CodeNotFound, "not found")
+		return rpc.ChatInfo{}, rpc.ErrChatNotFound()
 	}
 	if f.info != nil {
 		return *f.info, nil
@@ -199,7 +201,7 @@ func (f *fakeTelegram) History(_ context.Context, ref chatref.Ref, q rpc.History
 	defer f.mu.Unlock()
 	f.lastRef, f.lastQuery = ref, q
 	if f.missing {
-		return rpc.MessagesResult{}, rpc.NewError(rpc.CodeNotFound, "not found")
+		return rpc.MessagesResult{}, rpc.ErrChatNotFound()
 	}
 	res := rpc.MessagesResult{Messages: f.messages}
 	if q.Limit < len(f.messages) {
@@ -213,12 +215,15 @@ func (f *fakeTelegram) Message(_ context.Context, ref chatref.Ref, id int) (rpc.
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.lastRef = ref
+	if f.missing {
+		return rpc.Message{}, rpc.ErrChatNotFound()
+	}
 	for _, m := range f.messages {
 		if m.ID == id {
 			return m, nil
 		}
 	}
-	return rpc.Message{}, rpc.NewError(rpc.CodeNotFound, "message not found")
+	return rpc.Message{}, rpc.ErrChatNotFound()
 }
 
 func (f *fakeTelegram) Pinned(_ context.Context, ref chatref.Ref, limit int) (rpc.MessagesResult, error) {

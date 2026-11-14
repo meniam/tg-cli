@@ -97,6 +97,7 @@ func (d *daemon) noteAdd(ctx context.Context, params json.RawMessage) (any, erro
 		return nil, err
 	}
 	note := store.Note{Kind: p.Kind, Body: p.Body, Author: p.Author, Tags: p.Tags}
+	policy := d.policy()
 	if note.Author == "" {
 		note.Author = "owner"
 	}
@@ -111,6 +112,9 @@ func (d *daemon) noteAdd(ctx context.Context, params json.RawMessage) (any, erro
 		id, _, err := d.resolveStoredReference(ctx, p.Chat, false, true)
 		if err != nil {
 			return nil, err
+		}
+		if !policy.Allowed(id) {
+			return nil, rpc.ErrChatNotFound()
 		}
 		note.ChatID = &id
 	case "person":
@@ -129,6 +133,9 @@ func (d *daemon) noteAdd(ctx context.Context, params json.RawMessage) (any, erro
 		id, _, err := d.resolveStoredReference(ctx, p.Chat, false, true)
 		if err != nil {
 			return nil, err
+		}
+		if !policy.Allowed(id) {
+			return nil, rpc.ErrChatNotFound()
 		}
 		note.ChatID, note.TargetID = &id, &p.MessageID
 	default:
@@ -155,7 +162,8 @@ func (d *daemon) noteList(ctx context.Context, params json.RawMessage) (any, err
 	if p.Person != "" && p.MessageID != 0 || p.MessageID < 0 {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "person and message_id cannot be combined")
 	}
-	filter := store.NoteFilter{Kind: p.Kind, Author: p.Author, Tag: p.Tag, Limit: p.Limit, BeforeID: p.BeforeID}
+	policy := d.policy()
+	filter := store.NoteFilter{Kind: p.Kind, Author: p.Author, Tag: p.Tag, Limit: p.Limit, BeforeID: p.BeforeID, ChatFilter: chatFilter(policy)}
 	if p.Person != "" {
 		if filter.Kind != "" && filter.Kind != "person" {
 			return nil, rpc.NewError(rpc.CodeInvalidParams, "person filter requires person kind")
@@ -174,6 +182,9 @@ func (d *daemon) noteList(ctx context.Context, params json.RawMessage) (any, err
 			return nil, err
 		}
 		if !found {
+			return rpc.NoteListResult{Notes: []rpc.Note{}}, nil
+		}
+		if !policy.Allowed(id) {
 			return rpc.NoteListResult{Notes: []rpc.Note{}}, nil
 		}
 		filter.ChatID = &id
@@ -210,6 +221,16 @@ func (d *daemon) noteDelete(ctx context.Context, params json.RawMessage) (any, e
 	if p.ID <= 0 {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "id must be positive")
 	}
+	policy := d.policy()
+	if policy.Enabled() {
+		note, err := d.store.GetNote(ctx, p.ID)
+		if err != nil {
+			return nil, storeError(err)
+		}
+		if note.ChatID != nil && !policy.Allowed(*note.ChatID) {
+			return nil, storeError(store.ErrNotFound)
+		}
+	}
 	if err := d.store.DeleteNote(ctx, p.ID); err != nil {
 		return nil, storeError(err)
 	}
@@ -244,7 +265,8 @@ func (d *daemon) search(ctx context.Context, params json.RawMessage) (any, error
 			return nil, rpc.NewError(rpc.CodeInvalidParams, "unknown scope")
 		}
 	}
-	options := store.SearchOptions{Query: p.Query, Scopes: p.Scopes, Author: p.Author, Limit: p.Limit, Prefix: p.Prefix, IncludeDeleted: p.IncludeDeleted}
+	policy := d.policy()
+	options := store.SearchOptions{Query: p.Query, Scopes: p.Scopes, Author: p.Author, Limit: p.Limit, Prefix: p.Prefix, IncludeDeleted: p.IncludeDeleted, ChatFilter: chatFilter(policy)}
 	if p.Chat != "" {
 		id, found, err := d.resolveStoredReference(ctx, p.Chat, false, false)
 		if err != nil {
@@ -252,6 +274,18 @@ func (d *daemon) search(ctx context.Context, params json.RawMessage) (any, error
 		}
 		if !found {
 			return rpc.SearchResult{Hits: []rpc.SearchHit{}}, nil
+		}
+		if !policy.Allowed(id) {
+			return rpc.SearchResult{Hits: []rpc.SearchHit{}}, nil
+		}
+		if policy.Enabled() {
+			known, err := d.store.ChatKnown(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			if !known {
+				return rpc.SearchResult{Hits: []rpc.SearchHit{}}, nil
+			}
 		}
 		options.ChatID = &id
 	}
