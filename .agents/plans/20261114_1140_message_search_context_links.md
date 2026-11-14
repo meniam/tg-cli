@@ -12,7 +12,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: Steps 1-3 (аудит gotd, разбор и сборка ссылок на сообщения, методы чтения). План начат по общему указанию владельца «делай, не останавливайся»; решения из Open questions приняты по рекомендациям и ждут подтверждения владельцем при ревью ветки. Живая проверка только чтением (отметка прочитанным только в «Браин Тест»).
+- Next safe step: Step 4 (CLI). Шаги 1-3 выполнены: ссылки, методы чтения и `chat.mark_read`; `just check` и `go test -race` зелёные. Не проверено на живом аккаунте: окно контекста (`add_offset`), глобальный поиск.
 
 ## Context and sources
 
@@ -78,14 +78,14 @@ PR: —
 
 ## Step 1. Audit and baseline
 
-- [ ] `just check` и `just build` на чистом дереве; результат в Known facts.
-- [ ] По исходникам gotd: `messages.search` (фильтры `InputMessagesFilter*`), `messages.searchGlobal`, комментарии к посту (`getReplies` и `getDiscussionMessage`), `getHistory` со смещением для контекста, `readHistory` и `channels.readHistory`, `channels.exportMessageLink`; что возвращают.
-- [ ] Записать итог в Known facts, непокрытое в Risks и Open questions.
+- [x] `just check` и `just build` на чистом дереве; результат в Known facts.
+- [x] По исходникам gotd: `messages.search` (фильтры `InputMessagesFilter*`), `messages.searchGlobal`, комментарии к посту (`getReplies` и `getDiscussionMessage`), `getHistory` со смещением для контекста, `readHistory` и `channels.readHistory`, `channels.exportMessageLink`; что возвращают.
+- [x] Записать итог в Known facts, непокрытое в Risks и Open questions.
 
 ## Implementation steps
 
-- [ ] 2. `internal/chatref`: разбор ссылок на сообщения и сборка ссылки (`MessageRef`, `ParseMessageLink`, `FormatMessageLink`); тесты на формы ссылок, темы, `t.me/c`, ошибки.
-- [ ] 3. `rpc`, `tgclient`, Daemon: методы `message.search`, `message.search_public`, `message.context`, `message.comments`, `message.link`, `chat.mark_read` (запись, `write`), проверка закрытых чатов, `untrusted`, сохранение прочитанного в базу, тест полноты пометок доступа; тесты на поддельных клиентах и `tg.Invoker`.
+- [x] 2. `internal/chatref`: разбор ссылок на сообщения и сборка ссылки (`MessageRef`, `ParseMessageLink`, `FormatMessageLink`); тесты на формы ссылок, темы, `t.me/c`, ошибки.
+- [x] 3. `rpc`, `tgclient`, Daemon: методы `message.search`, `message.search_public`, `message.context`, `message.comments`, `message.link`, `chat.mark_read` (запись, `write`), проверка закрытых чатов, `untrusted`, сохранение прочитанного в базу, тест полноты пометок доступа; тесты на поддельных клиентах и `tg.Invoker`.
 - [ ] 4. CLI: команды и флаги, `message get <ссылка>`, схема (классы безопасности: чтение; `chat mark-read` запись в аккаунт), коды выхода, форматы; тесты.
 - [ ] 5. Документы через `docwriter`: `AGENTS.md`, `FEATURES.md` (3.10, 4.3, 4.4, 4.5, 4.7), `README.md`, навык, решение в `.agents/decisions/`.
 - [ ] 6. Живая проверка чтением: ссылка на сообщение туда и обратно, `message search` в чате (результат числом), `--public` одной пробой, `message context` с `--local` и без, комментарии к посту канала с обсуждением (если такой есть у аккаунта), `chat mark-read` в «Браин Тест».
