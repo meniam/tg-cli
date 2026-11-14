@@ -38,6 +38,7 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-14 — [Поиск в Telegram, контекст, комментарии и ссылки идут через Daemon, ссылка строится без channels.exportMessageLink, chat mark-read это запись под write](20261114_1200_discovery_reads_and_links_through_the_daemon.md)
 - 2026-11-14 — [Глубокая загрузка истории идёт фоновой задачей Daemon через общий дроссель, задачи живут в памяти, сама после перезапуска не возобновляется](20261114_1353_deep_history_sync_is_a_background_job_behind_the_shared_throttle.md)
 - 2026-11-14 — [Выгрузка из базы это команда message export --local: Daemon отдаёт страницы до 500 сообщений и 768 КиБ, CLI печатает JSONL по строке на сообщение, версии правок не входят](20261114_1845_local_export_is_a_paged_jsonl_stream_of_saved_messages.md)
+- 2026-11-14 — [Медиа уходит командой message send-media: файлы только из корней files в access.json, тип всегда явный, загрузка синхронная до 100 МиБ](20261114_2010_media_goes_by_send_media_from_roots_in_access_json_with_explicit_type.md)
 
 ## Open questions
 
