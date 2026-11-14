@@ -10,9 +10,9 @@ PR: —
 
 ## Status
 
-- Current status: approved
+- Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: шаг 0 (создать ветку), затем шаг 1.
+- Next safe step: шаг 1 (код и тесты), исполнитель Codex `tg-deep` в Herdr.
 
 ## Context and sources
 
@@ -63,7 +63,7 @@ PR: —
 
 - [x] Решение об исправлении подтверждено владельцем (2026-11-14).
 - [ ] Исполнитель Go-кода загрузил скилл `expert-golang` и подтвердил это.
-- [ ] Ветка `feature/20261114_1904_stream_delete_without_chat_id` создана, в заголовок записан `Branch`, статус `in_progress`.
+- [x] Ветка `feature/20261114_1904_stream_delete_without_chat_id` создана, в заголовок записан `Branch`, статус `in_progress`.
 
 ## Implementation steps
 
