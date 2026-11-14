@@ -162,6 +162,18 @@ func TestEventReplayAndExpiration(t *testing.T) {
 	}
 }
 
+func TestEventSubscriptionNeedsLogin(t *testing.T) {
+	d, tg, _, _ := accessTestDaemon(t)
+	tg.mu.Lock()
+	tg.user = nil
+	tg.mu.Unlock()
+	_, err := d.replayEvents(context.Background(), rpc.SubscribeParams{})
+	var rpcErr *rpc.Error
+	if !errors.As(err, &rpcErr) || rpcErr.Code != rpc.CodeNotAuthorized {
+		t.Fatalf("unauthorized subscription: %v", err)
+	}
+}
+
 func TestEventPruningStopsWithContext(t *testing.T) {
 	d, _, db, _ := accessTestDaemon(t)
 	ctx := context.Background()

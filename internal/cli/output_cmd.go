@@ -55,6 +55,14 @@ func (a *app) outputSettingsFor(cmd *cobra.Command) (outputSettings, error) {
 		return settings, err
 	}
 	settings.format = format
+	if a.specs[cmd].SubscriptionMethod != "" {
+		if !root.PersistentFlags().Changed("format") && format != output.FormatHuman {
+			settings.format = output.FormatJSONL
+		}
+		if settings.format == output.FormatToon {
+			return settings, fail(exitcode.Usage, "--format toon is not supported for a stream")
+		}
+	}
 	if format == output.FormatHuman {
 		for _, field := range schema.Fields(a.specs[cmd].Result) {
 			if field.Untrusted {

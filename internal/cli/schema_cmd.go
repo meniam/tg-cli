@@ -83,9 +83,10 @@ type commandDoc struct {
 	Fields []schema.Field `json:"fields,omitempty"`
 	// Item is the list a JSONL line is taken from, for a command that prints
 	// JSONL; its Fields are the paths inside one line.
-	Item  *itemDoc  `json:"item,omitempty"`
-	Args  []argDoc  `json:"args,omitempty"`
-	Flags []flagDoc `json:"flags,omitempty"`
+	Item               *itemDoc  `json:"item,omitempty"`
+	SubscriptionMethod string    `json:"subscription_method,omitempty"`
+	Args               []argDoc  `json:"args,omitempty"`
+	Flags              []flagDoc `json:"flags,omitempty"`
 }
 
 // itemDoc names the list inside a list result that --format jsonl prints.
@@ -149,16 +150,17 @@ func schemaDocFor(root *cobra.Command, specs map[*cobra.Command]commandSpec) sch
 
 func commandDocFor(cmd *cobra.Command, path string, spec commandSpec) commandDoc {
 	doc := commandDoc{
-		Path:        path,
-		Summary:     cmd.Short,
-		Safety:      string(spec.Safety),
-		Dangerous:   spec.Risk == dangerous,
-		Result:      resultName(spec.Result),
-		Formats:     commandFormats(spec),
-		Fields:      schema.Fields(spec.Result),
-		Item:        itemDocFor(spec),
-		Flags:       flagDocs(cmd.LocalFlags(), spec.Choices),
-		Description: cmd.Long,
+		Path:               path,
+		Summary:            cmd.Short,
+		Safety:             string(spec.Safety),
+		Dangerous:          spec.Risk == dangerous,
+		Result:             resultName(spec.Result),
+		Formats:            commandFormats(spec),
+		Fields:             schema.Fields(spec.Result),
+		Item:               itemDocFor(spec),
+		Flags:              flagDocs(cmd.LocalFlags(), spec.Choices),
+		Description:        cmd.Long,
+		SubscriptionMethod: spec.SubscriptionMethod,
 	}
 	if doc.Description == cmd.Short {
 		doc.Description = ""
@@ -172,6 +174,9 @@ func commandDocFor(cmd *cobra.Command, path string, spec commandSpec) commandDoc
 // commandFormats are the --format values a command accepts: every format, or
 // every format but JSONL for a command that returns no list.
 func commandFormats(spec commandSpec) []string {
+	if len(spec.Formats) > 0 {
+		return formatNames(spec.Formats)
+	}
 	if spec.ItemPath == "" {
 		return formatNames(output.FormatsWithoutJSONL())
 	}

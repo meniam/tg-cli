@@ -102,6 +102,10 @@ type commandSpec struct {
 	// ItemPath is the json path of the list inside the result that a JSONL
 	// line is taken from, empty when the command does not print JSONL.
 	ItemPath string
+	// Formats overrides the ordinary command formats for a streaming command.
+	Formats []output.Format
+	// SubscriptionMethod links a stream command to the raw RPC contract.
+	SubscriptionMethod string
 }
 
 // annotate records the spec of a runnable command and returns the command. The

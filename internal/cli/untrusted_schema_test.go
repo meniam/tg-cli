@@ -15,6 +15,8 @@ func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 		"message get":      {"sender.name", "sender.username", "text"},
 		"message pinned":   {"messages.sender.name", "messages.sender.username", "messages.text"},
 		"search":           {"hits.title", "hits.snippet"},
+		// An event carries message text and names inside data, so the whole payload is untrusted.
+		"message watch": {"events.data"},
 	}
 	commands := schemaCommands(t)
 	for path, expected := range want {

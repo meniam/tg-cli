@@ -34,7 +34,11 @@ func (a *app) connect(ctx context.Context, cmd *cobra.Command) (*rpc.Client, err
 	// The socket path names the profile and nothing secret: it is the one fact
 	// that tells a lost daemon from a wrong profile.
 	a.diagnose(cmd, "connect profile=%s socket=%s", profile, paths.Socket)
-	c, err := rpc.Dial(ctx, "unix", paths.Socket)
+	dial := a.deps.DialRPC
+	if dial == nil {
+		dial = rpc.Dial
+	}
+	c, err := dial(ctx, "unix", paths.Socket)
 	if err != nil {
 		if rpc.IsNotRunning(err) {
 			return nil, fail(exitcode.DaemonNotRunning, "the daemon is not running for profile %q: start it with `tg daemon start`", profile)
@@ -86,6 +90,8 @@ func exitForRPC(e *rpc.Error) int {
 		return exitcode.Telegram
 	case rpc.CodeNotFound:
 		return exitcode.NotFound
+	case rpc.CodeCursorExpired:
+		return exitcode.CursorExpired
 	case rpc.CodeInvalidParams, rpc.CodeMethodNotFound:
 		return exitcode.Usage
 	}

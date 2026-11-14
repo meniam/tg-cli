@@ -13,6 +13,7 @@ import (
 
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
+	"tg-cli/internal/rpc"
 )
 
 // defaultCallTimeout bounds one RPC call, matching the daemon request deadline.
@@ -39,6 +40,8 @@ type Deps struct {
 	LaunchDaemon func(args []string, logPath string) (int, func() error, error)
 	// CallTimeout bounds one RPC call; defaultCallTimeout when zero.
 	CallTimeout time.Duration
+	// DialRPC replaces the daemon connection in transport-level tests.
+	DialRPC func(context.Context, string, string) (*rpc.Client, error)
 }
 
 // cmdError carries the exit code of a failed command.

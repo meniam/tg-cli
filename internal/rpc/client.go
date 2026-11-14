@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -21,9 +22,12 @@ type Client struct {
 	w         *frameWriter
 	writeSlot chan struct{}
 
-	mu      sync.Mutex
-	nextID  uint64
-	pending map[uint64]chan Response
+	mu        sync.Mutex
+	nextID    uint64
+	pending   map[uint64]chan Response
+	events    chan Event
+	closed    chan struct{}
+	closeOnce sync.Once
 
 	done chan struct{}
 	err  error // set before done is closed
@@ -46,6 +50,8 @@ func NewClient(conn net.Conn) *Client {
 		w:         &frameWriter{w: conn},
 		writeSlot: make(chan struct{}, 1),
 		pending:   map[uint64]chan Response{},
+		events:    make(chan Event, SubscriberQueueSize),
+		closed:    make(chan struct{}),
 		done:      make(chan struct{}),
 	}
 	go c.readLoop()
@@ -66,6 +72,21 @@ func (c *Client) readLoop() {
 			loopErr = err
 			break
 		}
+		var note Request
+		if json.Unmarshal(line, &note) == nil && note.Method == MethodEvent && note.IsNotification() {
+			var event Event
+			if json.Unmarshal(note.Params, &event) == nil {
+				select {
+				case c.events <- event:
+				case <-c.closed:
+					loopErr = ErrClosed
+				}
+				if loopErr != nil {
+					break
+				}
+			}
+			continue
+		}
 		var resp Response
 		if err := json.Unmarshal(line, &resp); err != nil {
 			continue
@@ -82,7 +103,7 @@ func (c *Client) readLoop() {
 			ch <- resp
 		}
 	}
-	if loopErr == nil || errors.Is(loopErr, os.ErrClosed) {
+	if loopErr == nil || errors.Is(loopErr, os.ErrClosed) || errors.Is(loopErr, io.EOF) {
 		loopErr = ErrClosed
 	}
 	c.err = loopErr
@@ -190,11 +211,69 @@ func (c *Client) write(ctx context.Context, req Request) error {
 		}
 		return err
 	}
+	// The peer may answer and close right after a complete write. A failed
+	// deadline reset on a closed connection must not turn that write into an error.
+	if errors.Is(resetErr, io.ErrClosedPipe) || errors.Is(resetErr, net.ErrClosed) || errors.Is(resetErr, os.ErrClosed) {
+		return nil
+	}
 	return resetErr
 }
 
 // Close closes the connection. In-flight calls on other goroutines return an error.
-func (c *Client) Close() error { return c.conn.Close() }
+func (c *Client) Close() error {
+	var err error
+	c.closeOnce.Do(func() { close(c.closed); err = c.conn.Close() })
+	return err
+}
+
+// LaggedError carries the last delivered cursor of a subscription that fell behind.
+type LaggedError struct{ Cursor string }
+
+func (e *LaggedError) Error() string { return "event stream lagged" }
+
+// Subscribe starts a stream and handles notifications in arrival order.
+func (c *Client) Subscribe(ctx context.Context, params SubscribeParams, handle func(Event) error) (SubscribeResult, error) {
+	return c.SubscribeWithStart(ctx, params, nil, handle)
+}
+
+// SubscribeWithStart calls started after the subscribe response and before events.
+func (c *Client) SubscribeWithStart(ctx context.Context, params SubscribeParams, started func(SubscribeResult), handle func(Event) error) (SubscribeResult, error) {
+	defer c.Close()
+	var result SubscribeResult
+	if err := c.Call(ctx, MethodSubscribe, params, &result); err != nil {
+		return result, err
+	}
+	if started != nil {
+		started(result)
+	}
+	deliver := func(event Event) error {
+		if event.Type == EventLagged {
+			return &LaggedError{Cursor: event.ID}
+		}
+		return handle(event)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return result, ctx.Err()
+		case <-c.done:
+			for {
+				select {
+				case event := <-c.events:
+					if err := deliver(event); err != nil {
+						return result, err
+					}
+				default:
+					return result, ErrClosed
+				}
+			}
+		case event := <-c.events:
+			if err := deliver(event); err != nil {
+				return result, err
+			}
+		}
+	}
+}
 
 func (c *Client) forget(id uint64) {
 	c.mu.Lock()

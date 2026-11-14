@@ -181,6 +181,9 @@ func (d *daemon) storageGap() {
 }
 
 func (d *daemon) replayEvents(ctx context.Context, params rpc.SubscribeParams) (rpc.ReplayPlan, error) {
+	if err := d.requireAccount(ctx); err != nil {
+		return rpc.ReplayPlan{}, err
+	}
 	filter := rpc.EventFilter{Types: params.Types, Topic: params.Topic}
 	storeFilter := store.EventFilter{Types: params.Types}
 	for _, ref := range params.Chats {
