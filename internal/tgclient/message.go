@@ -18,8 +18,12 @@ func toMessage(chatID int64, msg tg.NotEmptyMessage, ent peer.Entities, fallback
 	switch m := msg.(type) {
 	case *tg.Message:
 		text := m.Message
-		if poll, ok := m.Media.(*tg.MessageMediaPoll); ok && text == "" {
-			text = poll.Poll.Question.Text
+		if strings.TrimSpace(text) == "" {
+			if poll, ok := m.Media.(*tg.MessageMediaPoll); ok {
+				text = poll.Poll.Question.Text
+			} else if rich, ok := m.GetRichMessage(); ok {
+				text = richMessageText(rich)
+			}
 		}
 		out := rpc.Message{
 			ID:        m.ID,

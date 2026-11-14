@@ -4,13 +4,18 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"net"
 	"time"
 	"unicode/utf8"
 
+	"github.com/gotd/td/constant"
 	"github.com/gotd/td/telegram/message"
 	"github.com/gotd/td/telegram/message/peer"
+	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
+	"github.com/gotd/td/tgerr"
 
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
@@ -44,7 +49,8 @@ func (c *Client) Send(ctx context.Context, ref chatref.Ref, p rpc.SendParams) (r
 	if p.DryRun {
 		return rpc.SendResult{}, rpc.NewError(rpc.CodeInvalidParams, "dry-run must be handled by the daemon")
 	}
-	if err := validateWriteText(p.Text); err != nil {
+	prepared, err := prepareWriteText(p.Text, p.Parse, p.Entities, c.mentionResolver(ctx))
+	if err != nil {
 		return rpc.SendResult{}, err
 	}
 	if p.ReplyTo < 0 || p.Topic < 0 {
@@ -54,14 +60,15 @@ func (c *Client) Send(ctx context.Context, ref chatref.Ref, p rpc.SendParams) (r
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	return sendText(ctx, c.tg.API(), resolved.InputPeer(), int64(resolved.TDLibPeerID()), p)
+	return sendPreparedText(ctx, c.tg.API(), resolved.InputPeer(), int64(resolved.TDLibPeerID()), p, prepared)
 }
 
 func (c *Client) Edit(ctx context.Context, ref chatref.Ref, p rpc.EditParams) (rpc.SendResult, error) {
 	if p.DryRun {
 		return rpc.SendResult{}, rpc.NewError(rpc.CodeInvalidParams, "dry-run must be handled by the daemon")
 	}
-	if err := validateWriteText(p.Text); err != nil {
+	prepared, err := prepareWriteText(p.Text, p.Parse, p.Entities, c.mentionResolver(ctx))
+	if err != nil {
 		return rpc.SendResult{}, err
 	}
 	if p.ID <= 0 {
@@ -71,7 +78,45 @@ func (c *Client) Edit(ctx context.Context, ref chatref.Ref, p rpc.EditParams) (r
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	return editText(ctx, c.tg.API(), resolved.InputPeer(), int64(resolved.TDLibPeerID()), p)
+	return editPreparedText(ctx, c.tg.API(), resolved.InputPeer(), int64(resolved.TDLibPeerID()), p, prepared)
+}
+
+func (c *Client) mentionResolver(ctx context.Context) userResolver {
+	return func(id int64) (tg.InputUserClass, error) {
+		m, err := c.manager(ctx)
+		if err != nil {
+			return nil, err
+		}
+		// Use the same session peer manager as numeric chat references, but
+		// classify its raw error before the general RPC error mapper erases it.
+		peer, err := m.ResolveTDLibID(ctx, constant.TDLibPeerID(id))
+		if err != nil && isNotFound(err) && c.preloadDialogs(ctx) {
+			peer, err = m.ResolveTDLibID(ctx, constant.TDLibPeerID(id))
+		}
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
+			var timeout net.Error
+			if errors.As(err, &timeout) && timeout.Timeout() {
+				return nil, err
+			}
+			// mapError classifies typed peer and Telegram errors. All other
+			// lookup failures, including gotd's "got empty user", mean this
+			// session cannot name the requested user.
+			err = mapError(err)
+			var rpcErr *rpc.Error
+			if errors.As(err, &rpcErr) && (rpcErr.Code == rpc.CodeNotAuthorized || rpcErr.Code == rpc.CodeFloodWait) {
+				return nil, err
+			}
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "unknown user id for this session")
+		}
+		user, ok := peer.(peers.User)
+		if !ok {
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "unknown user id for this session")
+		}
+		return user.InputUser(), nil
+	}
 }
 
 func (c *Client) Delete(ctx context.Context, ref chatref.Ref, p rpc.DeleteParams) (rpc.DeleteResult, error) {
@@ -107,9 +152,14 @@ func (c *Client) Forward(ctx context.Context, from, to chatref.Ref, p rpc.Forwar
 }
 
 func sendText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.SendParams) (rpc.SendResult, error) {
-	if err := validateWriteText(p.Text); err != nil {
+	prepared, err := prepareWriteText(p.Text, p.Parse, p.Entities, nil)
+	if err != nil {
 		return rpc.SendResult{}, err
 	}
+	return sendPreparedText(ctx, api, destination, chatID, p, prepared)
+}
+
+func sendPreparedText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.SendParams, prepared preparedText) (rpc.SendResult, error) {
 	sender := message.NewSender(api)
 	builder := sender.To(destination)
 	if p.Silent {
@@ -128,36 +178,115 @@ func sendText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass
 		}
 		replyTo := &tg.InputReplyToMessage{ReplyToMsgID: p.ReplyTo}
 		replyTo.SetTopMsgID(p.Topic)
-		updates, err = api.MessagesSendMessage(ctx, &tg.MessagesSendMessageRequest{Peer: destination, Message: p.Text, Silent: p.Silent, ReplyTo: replyTo, RandomID: randomID})
+		updates, err = api.MessagesSendMessage(ctx, &tg.MessagesSendMessageRequest{Peer: destination, Message: prepared.text, Entities: prepared.entities, RichMessage: prepared.rich, Silent: p.Silent, ReplyTo: replyTo, RandomID: randomID})
 	} else {
 		if reply > 0 {
 			builder.Reply(reply)
 		}
-		updates, err = builder.Text(ctx, p.Text)
+		switch {
+		case prepared.rich != nil:
+			updates, err = builder.RichMessage(ctx, prepared.rich)
+		case p.Parse != "" || p.Entities != nil:
+			randomID, randomErr := newRandomID()
+			if randomErr != nil {
+				return rpc.SendResult{}, randomErr
+			}
+			var replyTo tg.InputReplyToClass
+			if reply > 0 {
+				replyTo = &tg.InputReplyToMessage{ReplyToMsgID: reply}
+			}
+			updates, err = api.MessagesSendMessage(ctx, &tg.MessagesSendMessageRequest{Peer: destination, Message: prepared.text, Entities: prepared.entities, Silent: p.Silent, ReplyTo: replyTo, RandomID: randomID})
+		default:
+			updates, err = builder.Text(ctx, p.Text)
+		}
 	}
 	if err != nil {
-		return rpc.SendResult{}, mapError(err)
+		return rpc.SendResult{}, writeFormatError(err, prepared.rich != nil)
 	}
 	messages, err := writtenMessages(updates)
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date}, nil
+	plainText := prepared.text
+	if prepared.rich != nil {
+		plainText = richTextFromWrittenUpdates(updates, messages[0].ID)
+	}
+	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, PlainText: plainText, Rich: prepared.rich != nil}, nil
 }
 
 func editText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.EditParams) (rpc.SendResult, error) {
-	if err := validateWriteText(p.Text); err != nil {
+	prepared, err := prepareWriteText(p.Text, p.Parse, p.Entities, nil)
+	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	updates, err := message.NewSender(api).To(destination).Edit(p.ID).Text(ctx, p.Text)
+	return editPreparedText(ctx, api, destination, chatID, p, prepared)
+}
+
+func editPreparedText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.EditParams, prepared preparedText) (rpc.SendResult, error) {
+	var updates tg.UpdatesClass
+	var err error
+	switch {
+	case prepared.rich != nil:
+		updates, err = message.NewSender(api).To(destination).Edit(p.ID).RichMessage(ctx, prepared.rich)
+	case p.Parse != "" || p.Entities != nil:
+		updates, err = api.MessagesEditMessage(ctx, &tg.MessagesEditMessageRequest{Peer: destination, ID: p.ID, Message: prepared.text, Entities: prepared.entities})
+	default:
+		updates, err = message.NewSender(api).To(destination).Edit(p.ID).Text(ctx, p.Text)
+	}
 	if err != nil {
-		return rpc.SendResult{}, mapError(err)
+		return rpc.SendResult{}, writeFormatError(err, prepared.rich != nil)
 	}
 	messages, err := writtenMessages(updates)
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date}, nil
+	plainText := prepared.text
+	if prepared.rich != nil {
+		plainText = richTextFromWrittenUpdates(updates, messages[0].ID)
+	}
+	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, PlainText: plainText, Rich: prepared.rich != nil}, nil
+}
+
+func richTextFromWrittenUpdates(updates tg.UpdatesClass, id int) string {
+	var changes []tg.UpdateClass
+	switch value := updates.(type) {
+	case *tg.UpdateShort:
+		changes = []tg.UpdateClass{value.Update}
+	case *tg.Updates:
+		changes = value.Updates
+	case *tg.UpdatesCombined:
+		changes = value.Updates
+	}
+	for _, change := range changes {
+		var message tg.MessageClass
+		switch value := change.(type) {
+		case *tg.UpdateNewMessage:
+			message = value.Message
+		case *tg.UpdateNewChannelMessage:
+			message = value.Message
+		case *tg.UpdateEditMessage:
+			message = value.Message
+		case *tg.UpdateEditChannelMessage:
+			message = value.Message
+		}
+		if received, ok := message.(*tg.Message); ok && received.ID == id {
+			if rich, present := received.GetRichMessage(); present {
+				return richMessageText(rich)
+			}
+		}
+	}
+	return ""
+}
+
+func writeFormatError(err error, rich bool) error {
+	mapped := mapError(err)
+	if rich {
+		var rpcErr *rpc.Error
+		if _, telegramError := tgerr.As(err); telegramError && errors.As(mapped, &rpcErr) && rpcErr.Code == rpc.CodeTelegram {
+			return rpc.NewError(rpc.CodeTelegram, "Telegram rejected rich message")
+		}
+	}
+	return mapped
 }
 
 func deleteMessages(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.DeleteParams) (rpc.DeleteResult, error) {
