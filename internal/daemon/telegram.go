@@ -60,6 +60,10 @@ type Telegram interface {
 	Edit(ctx context.Context, ref chatref.Ref, p rpc.EditParams) (rpc.SendResult, error)
 	Delete(ctx context.Context, ref chatref.Ref, p rpc.DeleteParams) (rpc.DeleteResult, error)
 	Forward(ctx context.Context, from, to chatref.Ref, p rpc.ForwardParams) (rpc.ForwardResult, error)
+	React(ctx context.Context, ref chatref.Ref, p rpc.ReactParams) (rpc.ReactResult, error)
+	Pin(ctx context.Context, ref chatref.Ref, p rpc.PinParams) (rpc.PinResult, error)
+	Unpin(ctx context.Context, ref chatref.Ref, p rpc.UnpinParams) (rpc.PinResult, error)
+	SendPoll(ctx context.Context, ref chatref.Ref, p rpc.PollParams) (rpc.SendResult, error)
 	// Discovery methods read Telegram without changing account state.
 	SearchMessages(ctx context.Context, ref chatref.Ref, p rpc.SearchMessagesParams) (rpc.MessagesResult, error)
 	SearchPublic(ctx context.Context, p rpc.PublicSearchParams) (rpc.PublicSearchResult, error)

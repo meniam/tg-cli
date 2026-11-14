@@ -502,6 +502,19 @@ func upsertMessagesTx(ctx context.Context, tx *sql.Tx, messages []Message, last 
 	return nil
 }
 
+// SetMessagePinned updates only a saved message's pin state. It never creates a row.
+func (db *DB) SetMessagePinned(ctx context.Context, chatID int64, id int, pinned bool) (bool, error) {
+	result, err := db.write.ExecContext(ctx, `UPDATE messages SET pinned=? WHERE chat_id=? AND id=?`, boolInt(&pinned), chatID, id)
+	if err != nil {
+		return false, fmt.Errorf("set message %d/%d pinned: %w", chatID, id, err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("check message %d/%d pin update: %w", chatID, id, err)
+	}
+	return n != 0, nil
+}
+
 // MarkMessagesDeleted marks known messages once and returns the changed count.
 func (db *DB) MarkMessagesDeleted(ctx context.Context, chatID int64, ids []int) (int, error) {
 	tx, err := db.write.BeginTx(ctx, nil)

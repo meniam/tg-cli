@@ -275,6 +275,9 @@ func TestThrottleWriteFloodNeverRetries(t *testing.T) {
 		{"channel delete", &tg.ChannelsDeleteMessagesRequest{Channel: &tg.InputChannel{ChannelID: 2}, ID: []int{3}}},
 		{"mark read", &tg.MessagesReadHistoryRequest{Peer: &tg.InputPeerUser{UserID: 1}, MaxID: 3}},
 		{"channel mark read", &tg.ChannelsReadHistoryRequest{Channel: &tg.InputChannel{ChannelID: 2}, MaxID: 3}},
+		{"react", &tg.MessagesSendReactionRequest{Peer: &tg.InputPeerUser{UserID: 1}, MsgID: 3}},
+		{"pin", &tg.MessagesUpdatePinnedMessageRequest{Peer: &tg.InputPeerUser{UserID: 1}, ID: 3}},
+		{"poll", &tg.MessagesSendMediaRequest{Peer: &tg.InputPeerUser{UserID: 1}, Media: &tg.InputMediaPoll{}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			limiter := limiterWithClock(t, newThrottleClock(), nil)

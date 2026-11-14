@@ -33,7 +33,7 @@ type outputSettings struct {
 func addOutputFlags(root *cobra.Command) {
 	flags := root.PersistentFlags()
 	flags.String("format", string(output.FormatJSON),
-		"output format: json (one envelope, the default), jsonl (one item per line, list commands only), toon (the same envelope, compact) or human (for a person)")
+		"output format: json (one envelope, the default), jsonl (list items or a supported single-result envelope), toon (compact envelope) or human")
 	flags.Bool("human", false, "short for --format human")
 	flags.String("fields", "",
 		"only these paths of the result, comma separated, like id,title or messages.sender.name; a path the result does not have is skipped")
@@ -75,7 +75,7 @@ func (a *app) outputSettingsFor(cmd *cobra.Command) (outputSettings, error) {
 		return settings, fail(exitcode.Usage, "%v", err)
 	}
 	// A command that returns no list has nothing to print one item per line.
-	if format == output.FormatJSONL && a.specs[cmd].ItemPath == "" {
+	if format == output.FormatJSONL && a.specs[cmd].ItemPath == "" && !a.specs[cmd].ObjectJSONL {
 		return settings, fail(exitcode.Usage, "--format jsonl is for commands that return a list, %q is not one", cmd.CommandPath())
 	}
 	return settings, nil
@@ -97,8 +97,7 @@ func requestedFormat(root *cobra.Command) (output.Format, error) {
 }
 
 // emit prints a success result: the envelope in the chosen format, or the items
-// one per line for JSONL. lines is nil for a command that returns one object;
-// such a command cannot be asked for JSONL, because outputSettingsFor refuses it.
+// one per line for JSONL. Selected single-result JSONL commands use success.
 //
 // --fields goes through every format the same way: the envelope is narrowed
 // first, so json, toon and human print the same selected data and JSONL prints
@@ -110,11 +109,14 @@ func (a *app) emit(settings outputSettings, data any, lines func(io.Writer) erro
 	return output.SelectWithUntrusted(a.deps.Stdout, settings.format, output.SuccessDataWithThrottle(data, a.throttledMS), settings.fields, settings.untrusted)
 }
 
-// success prints a result that has no items, so it can never be JSONL.
+// success prints one result; selected commands allow it as one JSONL envelope.
 func (a *app) success(cmd *cobra.Command, data any) error {
 	settings, err := a.outputSettingsFor(cmd)
 	if err != nil {
 		return err
+	}
+	if settings.format == output.FormatJSONL && a.specs[cmd].ObjectJSONL {
+		return output.SelectWithUntrusted(a.deps.Stdout, output.FormatJSON, output.SuccessDataWithThrottle(data, a.throttledMS), settings.fields, settings.untrusted)
 	}
 	return a.emit(settings, data, nil)
 }

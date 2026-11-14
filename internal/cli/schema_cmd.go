@@ -178,11 +178,13 @@ func commandDocFor(cmd *cobra.Command, path string, spec commandSpec) commandDoc
 	return doc
 }
 
-// commandFormats are the --format values a command accepts: every format, or
-// every format but JSONL for a command that returns no list.
+// commandFormats are the --format values a command accepts.
 func commandFormats(spec commandSpec) []string {
 	if len(spec.Formats) > 0 {
 		return formatNames(spec.Formats)
+	}
+	if spec.ObjectJSONL {
+		return formatNames(output.Formats())
 	}
 	if spec.ItemPath == "" {
 		return formatNames(output.FormatsWithoutJSONL())

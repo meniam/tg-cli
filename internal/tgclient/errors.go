@@ -3,6 +3,7 @@ package tgclient
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/tgerr"
@@ -37,4 +38,27 @@ func mapError(err error) error {
 		return rpc.NewError(rpc.CodeTelegram, tgErr.Type)
 	}
 	return rpc.NewError(rpc.CodeTelegram, "telegram request failed: "+err.Error())
+}
+
+// mapActionError keeps new write errors stable without changing older commands.
+func mapActionError(err error) error {
+	if tgErr, ok := tgerr.As(err); ok {
+		switch tgErr.Type {
+		case "REACTION_INVALID":
+			return rpc.NewError(rpc.CodeInvalidParams, "reaction is not available for this message")
+		case "MESSAGE_ID_INVALID", "MSG_ID_INVALID":
+			return rpc.NewError(rpc.CodeInvalidParams, "message id is invalid")
+		case "CHAT_ADMIN_REQUIRED":
+			return rpc.NewError(rpc.CodeTelegram, "chat admin rights are required")
+		case "CHAT_SEND_POLL_FORBIDDEN":
+			return rpc.NewError(rpc.CodeTelegram, "sending polls is forbidden in this chat")
+		}
+		if strings.HasPrefix(tgErr.Type, "POLL_") {
+			return rpc.NewError(rpc.CodeInvalidParams, "poll settings were rejected by Telegram: "+tgErr.Type)
+		}
+		if strings.HasPrefix(tgErr.Type, "QUIZ_") {
+			return rpc.NewError(rpc.CodeInvalidParams, "quiz settings were rejected by Telegram: "+tgErr.Type)
+		}
+	}
+	return mapError(err)
 }

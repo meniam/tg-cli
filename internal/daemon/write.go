@@ -211,6 +211,109 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 	return res, nil
 }
 
+func (d *daemon) messageReact(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p rpc.ReactParams
+	if err := decodeParams(raw, &p); err != nil {
+		return nil, err
+	}
+	if err := rpc.ValidateReactParams(p); err != nil {
+		return nil, err
+	}
+	ref, id, err := d.writeReference(ctx, p.Chat, true)
+	if err != nil {
+		return nil, err
+	}
+	if p.DryRun {
+		return rpc.ReactResult{ChatID: id, ID: p.ID, Emoji: p.Emoji, Removed: p.Remove, DryRun: true, Action: "react", Count: 1}, nil
+	}
+	res, err := d.opts.Telegram.React(ctx, ref, p)
+	if err != nil {
+		return nil, err
+	}
+	res.ChatID, res.ID, res.Emoji, res.Removed = id, p.ID, p.Emoji, p.Remove
+	return res, nil
+}
+
+func (d *daemon) messagePin(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p rpc.PinParams
+	if err := decodeParams(raw, &p); err != nil {
+		return nil, err
+	}
+	if p.ID <= 0 {
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "message id must be positive")
+	}
+	ref, id, err := d.writeReference(ctx, p.Chat, true)
+	if err != nil {
+		return nil, err
+	}
+	if p.DryRun {
+		return rpc.PinResult{ChatID: id, ID: p.ID, Pinned: true, DryRun: true, Action: "pin", Count: 1}, nil
+	}
+	res, err := d.opts.Telegram.Pin(ctx, ref, p)
+	if err != nil {
+		return nil, err
+	}
+	res.ChatID, res.ID, res.Pinned = id, p.ID, true
+	d.setMessagePinned(ctx, id, p.ID, true)
+	return res, nil
+}
+
+func (d *daemon) messageUnpin(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p rpc.UnpinParams
+	if err := decodeParams(raw, &p); err != nil {
+		return nil, err
+	}
+	if p.ID <= 0 {
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "message id must be positive")
+	}
+	ref, id, err := d.writeReference(ctx, p.Chat, true)
+	if err != nil {
+		return nil, err
+	}
+	if p.DryRun {
+		return rpc.PinResult{ChatID: id, ID: p.ID, Pinned: false, DryRun: true, Action: "unpin", Count: 1}, nil
+	}
+	res, err := d.opts.Telegram.Unpin(ctx, ref, p)
+	if err != nil {
+		return nil, err
+	}
+	res.ChatID, res.ID, res.Pinned = id, p.ID, false
+	d.setMessagePinned(ctx, id, p.ID, false)
+	return res, nil
+}
+
+func (d *daemon) setMessagePinned(ctx context.Context, chatID int64, id int, pinned bool) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveTimeout)
+	defer cancel()
+	if _, err := d.store.SetMessagePinned(ctx, chatID, id, pinned); err != nil {
+		d.log.Warn("message pin storage failed")
+	}
+}
+
+func (d *daemon) messagePoll(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p rpc.PollParams
+	if err := decodeParams(raw, &p); err != nil {
+		return nil, err
+	}
+	if err := rpc.ValidatePollParams(p); err != nil {
+		return nil, err
+	}
+	ref, id, err := d.writeReference(ctx, p.Chat, true)
+	if err != nil {
+		return nil, err
+	}
+	if p.DryRun {
+		return rpc.SendResult{ChatID: id, DryRun: true, Action: "poll", Count: 1, TextLength: utf8.RuneCountInString(p.Question)}, nil
+	}
+	res, err := d.opts.Telegram.SendPoll(ctx, ref, p)
+	if err != nil {
+		return nil, err
+	}
+	res.ChatID = id
+	d.saveMessages(ctx, rpc.MethodMessagePoll, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Question, MediaType: "poll", Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+	return res, nil
+}
+
 type deletionRecord struct {
 	Time    string `json:"time"`
 	Account int64  `json:"account"`

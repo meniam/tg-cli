@@ -9,7 +9,8 @@ import (
 )
 
 func TestWriteContractsAndDisabledError(t *testing.T) {
-	if MethodMessageSend != "message.send" || MethodMessageEdit != "message.edit" || MethodMessageDelete != "message.delete" || MethodMessageForward != "message.forward" {
+	if MethodMessageSend != "message.send" || MethodMessageEdit != "message.edit" || MethodMessageDelete != "message.delete" || MethodMessageForward != "message.forward" ||
+		MethodMessageReact != "message.react" || MethodMessagePin != "message.pin" || MethodMessageUnpin != "message.unpin" || MethodMessagePoll != "message.poll" {
 		t.Fatal("write method names changed")
 	}
 	err := ErrWriteDisabled()

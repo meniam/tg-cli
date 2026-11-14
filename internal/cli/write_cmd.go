@@ -37,7 +37,31 @@ func (a *app) messageWriteCommands() []*cobra.Command {
 	forward := a.annotate(&cobra.Command{Use: "forward <from> <to> <id>...", Short: "Forward messages", Args: cobra.MinimumNArgs(3), RunE: a.messageForward}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.ForwardResult](), Args: []argSpec{{Name: "from", Required: true}, {Name: "to", Required: true}, {Name: "id", Required: true, Variadic: true}}})
 	forward.Flags().Bool("silent", false, "forward without a notification")
 	forward.Flags().Bool("dry-run", false, "describe the action without forwarding")
-	return []*cobra.Command{send, a.messageSendMediaCommand(), edit, del, forward}
+
+	react := a.annotate(&cobra.Command{Use: "react <chat> <id> <emoji>", Short: "Set or remove an emoji reaction", Args: cobra.ExactArgs(3), RunE: a.messageReact}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.ReactResult](), ObjectJSONL: true, Args: []argSpec{{Name: "chat", Required: true}, {Name: "id", Required: true}, {Name: "emoji", Required: true}}})
+	react.Flags().Bool("remove", false, "remove your reaction from the message")
+	react.Flags().Bool("dry-run", false, "check the action without changing Telegram")
+
+	pin := a.annotate(&cobra.Command{Use: "pin <chat> <id>", Short: "Pin one message for all chat participants", Args: cobra.ExactArgs(2), RunE: a.messagePin}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.PinResult](), ObjectJSONL: true, Args: []argSpec{{Name: "chat", Required: true}, {Name: "id", Required: true}}})
+	pin.Flags().Bool("silent", false, "pin without a notification")
+	pin.Flags().Bool("dry-run", false, "check the action without changing Telegram")
+
+	unpin := a.annotate(&cobra.Command{Use: "unpin <chat> <id>", Short: "Unpin one message", Args: cobra.ExactArgs(2), RunE: a.messageUnpin}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.PinResult](), ObjectJSONL: true, Args: []argSpec{{Name: "chat", Required: true}, {Name: "id", Required: true}}})
+	unpin.Flags().Bool("dry-run", false, "check the action without changing Telegram")
+
+	poll := a.annotate(&cobra.Command{Use: "poll <chat>", Short: "Send a poll or quiz", Args: cobra.ExactArgs(1), RunE: a.messagePoll}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendResult](), ObjectJSONL: true, Args: []argSpec{{Name: "chat", Required: true}}})
+	poll.Flags().String("question", "", "poll question, 1 to 255 characters")
+	poll.Flags().StringArray("option", nil, "answer option, 1 to 100 characters; repeat 2 to 10 times in display order")
+	poll.Flags().Bool("multiple", false, "allow multiple answers")
+	poll.Flags().Bool("public", false, "show who voted")
+	poll.Flags().Bool("quiz", false, "make a quiz with one correct answer")
+	poll.Flags().Int("correct", 0, "correct option number, starting from 1; requires --quiz")
+	poll.Flags().String("explanation", "", "quiz explanation, up to 200 characters and two line feeds")
+	poll.Flags().Int("reply-to", 0, "reply to this message id")
+	poll.Flags().Int("topic", 0, "send in this forum topic")
+	poll.Flags().Bool("silent", false, "send without a notification")
+	poll.Flags().Bool("dry-run", false, "check the action without changing Telegram")
+	return []*cobra.Command{send, a.messageSendMediaCommand(), edit, del, forward, react, pin, unpin, poll}
 }
 
 func (a *app) writeText(cmd *cobra.Command) (string, error) {
@@ -160,4 +184,88 @@ func (a *app) messageForward(cmd *cobra.Command, args []string) error {
 	dry, _ := cmd.Flags().GetBool("dry-run")
 	var result rpc.ForwardResult
 	return a.writeCall(cmd, rpc.MethodMessageForward, rpc.ForwardParams{From: args[0], To: args[1], IDs: ids, Silent: silent, DryRun: dry}, &result)
+}
+
+func (a *app) messageReact(cmd *cobra.Command, args []string) error {
+	id, err := positiveMessageID(args[1])
+	if err != nil {
+		return err
+	}
+	remove, _ := cmd.Flags().GetBool("remove")
+	dry, _ := cmd.Flags().GetBool("dry-run")
+	p := rpc.ReactParams{Chat: args[0], ID: id, Emoji: args[2], Remove: remove, DryRun: dry}
+	if err := rpc.ValidateReactParams(p); err != nil {
+		return translate(err)
+	}
+	var result rpc.ReactResult
+	if err := a.writeCall(cmd, rpc.MethodMessageReact, p, &result); err != nil {
+		return err
+	}
+	if dry {
+		a.warn(cmd, "dry run: no write request was sent to Telegram")
+	}
+	return nil
+}
+
+func (a *app) messagePin(cmd *cobra.Command, args []string) error {
+	id, err := positiveMessageID(args[1])
+	if err != nil {
+		return err
+	}
+	silent, _ := cmd.Flags().GetBool("silent")
+	dry, _ := cmd.Flags().GetBool("dry-run")
+	var result rpc.PinResult
+	if err := a.writeCall(cmd, rpc.MethodMessagePin, rpc.PinParams{Chat: args[0], ID: id, Silent: silent, DryRun: dry}, &result); err != nil {
+		return err
+	}
+	a.warn(cmd, "pinned messages are visible to all chat participants; undo with `tg message unpin %q %d`", args[0], id)
+	if dry {
+		a.warn(cmd, "dry run: no write request was sent to Telegram")
+	}
+	return nil
+}
+
+func (a *app) messageUnpin(cmd *cobra.Command, args []string) error {
+	id, err := positiveMessageID(args[1])
+	if err != nil {
+		return err
+	}
+	dry, _ := cmd.Flags().GetBool("dry-run")
+	var result rpc.PinResult
+	if err := a.writeCall(cmd, rpc.MethodMessageUnpin, rpc.UnpinParams{Chat: args[0], ID: id, DryRun: dry}, &result); err != nil {
+		return err
+	}
+	if dry {
+		a.warn(cmd, "dry run: no write request was sent to Telegram")
+	}
+	return nil
+}
+
+func (a *app) messagePoll(cmd *cobra.Command, args []string) error {
+	p := rpc.PollParams{Chat: args[0]}
+	p.Question, _ = cmd.Flags().GetString("question")
+	p.Options, _ = cmd.Flags().GetStringArray("option")
+	p.Multiple, _ = cmd.Flags().GetBool("multiple")
+	p.Public, _ = cmd.Flags().GetBool("public")
+	p.Quiz, _ = cmd.Flags().GetBool("quiz")
+	p.Correct, _ = cmd.Flags().GetInt("correct")
+	p.Explanation, _ = cmd.Flags().GetString("explanation")
+	p.ReplyTo, _ = cmd.Flags().GetInt("reply-to")
+	p.Topic, _ = cmd.Flags().GetInt("topic")
+	p.Silent, _ = cmd.Flags().GetBool("silent")
+	p.DryRun, _ = cmd.Flags().GetBool("dry-run")
+	if !p.Quiz && (cmd.Flags().Changed("correct") || cmd.Flags().Changed("explanation")) {
+		return fail(exitcode.Usage, "--correct and --explanation require --quiz")
+	}
+	if err := rpc.ValidatePollParams(p); err != nil {
+		return translate(err)
+	}
+	var result rpc.SendResult
+	if err := a.writeCall(cmd, rpc.MethodMessagePoll, p, &result); err != nil {
+		return err
+	}
+	if p.DryRun {
+		a.warn(cmd, "dry run: no write request was sent to Telegram")
+	}
+	return nil
 }

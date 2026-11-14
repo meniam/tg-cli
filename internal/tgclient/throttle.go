@@ -74,7 +74,9 @@ func writeRequest(input bin.Encoder) bool {
 	case *tg.MessagesSendMessageRequest, *tg.MessagesSendMediaRequest, *tg.MessagesSendMultiMediaRequest,
 		*tg.MessagesForwardMessagesRequest,
 		*tg.MessagesEditMessageRequest, *tg.MessagesDeleteMessagesRequest, *tg.ChannelsDeleteMessagesRequest,
-		*tg.MessagesReadHistoryRequest, *tg.ChannelsReadHistoryRequest:
+		*tg.MessagesReadHistoryRequest, *tg.ChannelsReadHistoryRequest,
+		*tg.MessagesSendReactionRequest,
+		*tg.MessagesUpdatePinnedMessageRequest:
 		return true
 	}
 	return false
