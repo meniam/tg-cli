@@ -162,6 +162,18 @@ func (f *fakeTelegram) Chats(_ context.Context, limit int, chatType string) ([]r
 	return out[:min(limit, len(out))], nil
 }
 
+func (f *fakeTelegram) Members(context.Context, chatref.Ref, rpc.MembersParams) (rpc.MembersResult, error) {
+	return rpc.MembersResult{}, nil
+}
+
+func (f *fakeTelegram) Topics(context.Context, chatref.Ref, rpc.TopicsParams) (rpc.TopicsResult, error) {
+	return rpc.TopicsResult{}, nil
+}
+
+func (f *fakeTelegram) CommonChats(context.Context, chatref.Ref, rpc.CommonChatsParams) (rpc.CommonChatsResult, error) {
+	return rpc.CommonChatsResult{}, nil
+}
+
 func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, error) {
 	f.mu.Lock()
 	f.resolveCalls++
