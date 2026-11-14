@@ -19,6 +19,7 @@ import (
 )
 
 type fakeTelegram struct {
+	noChatAdmin
 	ready chan struct{}
 	once  sync.Once
 

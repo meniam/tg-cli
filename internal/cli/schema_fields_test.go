@@ -151,6 +151,16 @@ func TestSchemaFieldsMatchRealResponses(t *testing.T) {
 // other command of the schema is compared with a real response above, so a new
 // command has to be either exercised or listed here with a reason.
 var uncoveredCommands = map[string]string{
+	"chat join":          "account write is covered by net.Pipe CLI tests",
+	"chat leave":         "account write is covered by net.Pipe CLI tests",
+	"chat create":        "account write is covered by net.Pipe CLI tests",
+	"chat edit":          "account write is covered by net.Pipe CLI tests",
+	"chat kick":          "account write is covered by net.Pipe CLI tests",
+	"chat ban":           "account write is covered by net.Pipe CLI tests",
+	"chat unban":         "account write is covered by net.Pipe CLI tests",
+	"chat restrict":      "account write is covered by net.Pipe CLI tests",
+	"chat permissions":   "account write is covered by net.Pipe CLI tests",
+	"chat slow-mode":     "account write is covered by net.Pipe CLI tests",
 	"daemon stop":        "runs last, after the cases that need the daemon it stops, so it is checked separately",
 	"auth login":         "asks for a phone number, a code and a password on stdin",
 	"auth resend":        "needs a login that waits for the code, started by another command",

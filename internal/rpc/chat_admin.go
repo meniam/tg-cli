@@ -27,14 +27,20 @@ type ChatJoinResult struct {
 	Type          string `json:"type,omitempty"`
 	AlreadyMember bool   `json:"already_member,omitempty"`
 	Requested     bool   `json:"requested,omitempty"`
+	DryRun        bool   `json:"dry_run,omitempty"`
+	Action        string `json:"action,omitempty"`
+	Count         int    `json:"count,omitempty"`
 }
 type ChatLeaveParams struct {
 	Chat   string `json:"chat"`
 	DryRun bool   `json:"dry_run,omitempty"`
 }
 type ChatLeaveResult struct {
-	ChatID int64 `json:"chat_id"`
-	Left   bool  `json:"left"`
+	ChatID int64  `json:"chat_id"`
+	Left   bool   `json:"left"`
+	DryRun bool   `json:"dry_run,omitempty"`
+	Action string `json:"action,omitempty"`
+	Count  int    `json:"count,omitempty"`
 }
 type ChatCreateParams struct {
 	Title  string `json:"title"`
@@ -43,10 +49,15 @@ type ChatCreateParams struct {
 	DryRun bool   `json:"dry_run,omitempty"`
 }
 type ChatCreateResult struct {
-	ID     int64  `json:"id"`
-	Type   string `json:"type"`
-	Title  string `json:"title,omitempty"`
-	Closed bool   `json:"closed,omitempty"`
+	ID          int64  `json:"id"`
+	Type        string `json:"type"`
+	Title       string `json:"title,omitempty"`
+	Closed      bool   `json:"closed,omitempty"`
+	DryRun      bool   `json:"dry_run,omitempty"`
+	Action      string `json:"action,omitempty"`
+	Count       int    `json:"count,omitempty"`
+	TitleLength *int   `json:"title_length,omitempty"`
+	AboutLength *int   `json:"about_length,omitempty"`
 }
 type ChatEditParams struct {
 	Chat   string  `json:"chat"`
@@ -55,9 +66,14 @@ type ChatEditParams struct {
 	DryRun bool    `json:"dry_run,omitempty"`
 }
 type ChatEditResult struct {
-	ChatID       int64 `json:"chat_id"`
-	TitleChanged bool  `json:"title_changed"`
-	AboutChanged bool  `json:"about_changed"`
+	ChatID       int64  `json:"chat_id"`
+	TitleChanged bool   `json:"title_changed"`
+	AboutChanged bool   `json:"about_changed"`
+	DryRun       bool   `json:"dry_run,omitempty"`
+	Action       string `json:"action,omitempty"`
+	Count        int    `json:"count,omitempty"`
+	TitleLength  *int   `json:"title_length,omitempty"`
+	AboutLength  *int   `json:"about_length,omitempty"`
 }
 type ChatMemberActionParams struct {
 	Chat   string `json:"chat"`
@@ -92,6 +108,9 @@ type ChatAdminResult struct {
 	Denied  []string `json:"denied,omitempty"`
 	Until   string   `json:"until,omitempty"`
 	Seconds *int     `json:"seconds,omitempty"`
+	DryRun  bool     `json:"dry_run,omitempty"`
+	Action  string   `json:"action,omitempty"`
+	Count   int      `json:"count,omitempty"`
 }
 
 // ChatOwnAdminRights reports freshly fetched permissions for dry-run checks.

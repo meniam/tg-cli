@@ -441,3 +441,28 @@ func ownAdminRights(ctx context.Context, api *tg.Client, p peers.Peer) (rpc.Chat
 	}
 	return rpc.ChatOwnAdminRights{}, rpc.NewError(rpc.CodeTelegram, "Telegram returned no matching chat")
 }
+
+// AdminInviteChat reads the identity exposed by an invitation without joining.
+func (c *Client) AdminInviteChat(ctx context.Context, ref chatref.Ref) (rpc.Chat, bool, error) {
+	if ref.Kind != chatref.Invite {
+		return rpc.Chat{}, false, rpc.NewError(rpc.CodeInvalidParams, "invite link required")
+	}
+	result, err := c.tg.API().MessagesCheckChatInvite(ctx, ref.Invite)
+	if err != nil {
+		return rpc.Chat{}, false, mapChatAdminError(err)
+	}
+	var raw tg.ChatClass
+	switch v := result.(type) {
+	case *tg.ChatInviteAlready:
+		raw = v.Chat
+	case *tg.ChatInvitePeek:
+		raw = v.Chat
+	default:
+		return rpc.Chat{}, false, nil
+	}
+	chat, _, ok := commonChatOf(raw)
+	if !ok {
+		return rpc.Chat{}, false, nil
+	}
+	return rpc.Chat{ID: chat.ID, Type: chat.Type, Title: chat.Title, Username: chat.Username}, true, nil
+}

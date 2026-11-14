@@ -277,6 +277,7 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodHistorySyncStart, d.historySyncStart)
 	d.handle(rpc.MethodHistorySyncStatus, d.historySyncStatus)
 	d.handle(rpc.MethodHistorySyncCancel, d.historySyncCancel)
+	d.registerChatAdmin()
 }
 
 func (d *daemon) ping(context.Context, json.RawMessage) (any, error) {
