@@ -49,6 +49,20 @@ internal/             cli, daemon, rpc, tgclient, throttle, access, fileroot, me
 - A chat is given as `@username`, a Bot API id (write `--` before a negative id), a contact's phone number or a `t.me` link.
 - Live checks on the real account are read-only and slow: keep pauses between reads (a burst of about ten reads got `FLOOD_WAIT`). Writes only into the test chat «Браин Тест» and only when the task says so.
 
+## Herdr layout
+
+The main session runs in herdr and lays parallel work out in tabs:
+
+- `M: two words`: the Manager tab of the main agent, one pane and nobody else. The two words name the whole task.
+- `S1: two words`, `S2: ...`: one tab per parallel stream (a plan, or a part of a plan with its own worktree). It holds the agents of that stream in panes, 2x2 at most, four panes at most. `Sn` is the stream number, the two words name its goal.
+- A coder is Codex started in the stream tab (`herdr agent start <name> --kind codex` in a pane split of that tab, `--cwd` the stream's worktree, one coder per stream). Reviewers and checkers are not left running.
+
+"Organize the agents" or "organize the windows" means: walk `herdr agent list` and `herdr pane list`, then
+1. close agents that are `idle` or `done` when their phase is finished and no next job is assigned (checkers, document agents, coders of a closed stream); never close `working` or `blocked` ones; a coder stays while its stream continues;
+2. close only panes this session created; foreign panes (another main session, another workspace, the human's panes) stay even if idle;
+3. close with `herdr pane close <pane>`; an empty tab goes away, `herdr tab close <tab>` removes one that stayed;
+4. name in the reply what was closed and what was kept, with the reason.
+
 ## Security
 
 - Do not send, edit, delete, forward, react, pin, vote or mark a chat read in a real Telegram account without an explicit instruction in the current task. Writing is possible only into chats listed in `write` of `access.json`. Reading is allowed.
