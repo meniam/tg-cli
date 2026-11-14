@@ -7,7 +7,7 @@
 
 A console tool for a personal Telegram account over MTProto. A persistent daemon holds the connection and the session, so an agent calls it many times in a row without logging in again. By default every answer is one parseable JSON document, and the tool describes its own commands and response fields to the agent. Everything the daemon reads is saved to a local SQLite database you can search offline.
 
-> The project is early. Reading, local storage, notes and search work. Sending, editing and media do not exist yet. See [Status](#status) before you trust it with your account.
+> The project is early. Reading, local storage, notes, search and a live event stream work (the stream is checked by tests only, not on a live account yet). Sending, editing and media do not exist yet. See [Status](#status) before you trust it with your account.
 
 ## Why it exists
 
@@ -19,6 +19,7 @@ What an agent gets:
 - **A contract it can read.** `tg schema` prints every command with its arguments, flags, response fields, safety class and exit codes, without the daemon and without the network.
 - **No repeated logins.** The daemon keeps the connection and the session, and starts in the background with one command. Each CLI call is a short JSON-RPC request.
 - **Offline memory.** Every chat, person and message the daemon reads lands in SQLite with full-text search. Search needs no login and no Telegram connection, only the running daemon.
+- **Live events.** `tg message watch` prints new messages, edits, deletions, reactions, reads, typing and online status as they arrive, one JSON line per event. The daemon keeps the stored events for 7 days (at most 100 000), so an agent resumes from a cursor and gets the stored events it missed, see [Live events](#live-events).
 - **Its own notes.** The agent (or you) attaches tagged notes to chats, people and messages. Notes live apart from Telegram data, and a reload never touches them.
 - **Safe defaults.** Reading is allowed. No command sends, edits or deletes anything in Telegram, because none is implemented. The only thing deleted is your own local notes.
 - **Chats it cannot see.** You can close chats to the agent with a file in the profile directory. A closed chat does not exist for the agent, see [Chat access lists](#chat-access-lists).
@@ -76,8 +77,9 @@ On failure the envelope is `{"ok":false,"error":{"code":"...","message":"..."}}`
   Daemon              one per profile, holds the session, caps concurrent requests
       |
       +--> gotd/td ----> Telegram (MTProto, your user account)
+      |      +--> updates manager: live events and the recovery of missed ones
       |
-      +--> SQLite        one file per profile: chats, people, messages, notes, FTS5 search
+      +--> SQLite        one file per profile: chats, people, messages, notes, FTS5 search, event journal
 ```
 
 - The CLI never talks to Telegram and never opens the database. Both belong to the daemon, so the design rules out a second client on the same session.
@@ -154,7 +156,7 @@ Global flags work in any position:
 | Flag | What it does |
 | --- | --- |
 | `--profile <name>` | Choose the account profile (default `default`) |
-| `--format json\|jsonl\|toon\|human` | Output format, `json` by default; `jsonl` is for list commands only and gives exit code 2 elsewhere (checked after the command has run) |
+| `--format json\|jsonl\|toon\|human` | Output format, `json` by default; `jsonl` is for list commands and `message watch` and gives exit code 2 elsewhere (checked after the command has run) |
 | `--human` | Short for `--format human` |
 | `--fields a.b,c` | Keep only these paths of `data` |
 | `--quiet` | Hide hints and progress on stderr; errors are still printed |
@@ -175,6 +177,7 @@ Global flags work in any position:
 | `message history <chat> [--limit] [--since] [--until] [--topic] [--cursor] [--format]` | Page through a chat from newest to oldest |
 | `message get <chat> <id>` | Read one message |
 | `message pinned <chat>` | Read the pinned messages |
+| `message watch [--chat <chat>]... [--topic N] [--types a,b] [--after <cursor>] [--max-events N]` | Watch live events, one JSON line per event, see [Live events](#live-events) |
 | `note add [--chat] [--person] [--message] [--author owner\|ai] [--model] [--tag] <body\|->` | Add a note to a chat, person or message |
 | `note list [--chat] [--person] [--message] [--author] [--tag] [--before-id]` | List notes, newest first |
 | `note delete <id>` / `note delete --author owner\|ai --yes` | Delete one note, or all notes by an author |
@@ -186,7 +189,7 @@ Reading commands change nothing in Telegram. `history` pages hold 20 messages by
 
 ### Output and exit codes
 
-- Success: `{"ok":true,"data":...}` on stdout, one line.
+- Success: `{"ok":true,"data":...}` on stdout, one line. The exception is `message watch`, a stream: see [Live events](#live-events).
 - `--format jsonl` on list commands: one item per line, then `{"next_cursor":"..."}` when more follow. `note list` has no cursor line, it pages with `--before-id`.
 - `--format toon` prints the whole answer, errors included, as [TOON](https://github.com/toon-format/spec). Before encoding, the keys of the objects in a list are aligned (a missing field becomes `null`) so that a list becomes a table, and numbers stay exact. It is smaller than JSON on flat lists (about 45% of the bytes for a chat list, 86% for live search hits) but larger on message pages with partial nested objects (136%), which is why JSON stays the default. Token counts and how well models read TOON were not measured.
 - `--format human` (or `--human`) prints an object as `key: value` lines, a list as a table with long values cut, and an error as one line with the code name. Text written by others is framed, see [Untrusted text](#untrusted-text), and a list that holds such text is printed item by item, not as a table.
@@ -203,6 +206,7 @@ Reading commands change nothing in Telegram. `history` pages hold 20 messages by
 | 5 | `telegram_error` | Telegram rejected the request |
 | 6 | `flood_wait` | Telegram asked to wait before the next request |
 | 7 | `not_found` | The chat, user or message does not exist or is not visible |
+| 8 | `cursor_expired` | The event cursor is older than the retained event journal; run `message watch` without `--after` |
 
 This is table version 0 and it may grow: existing codes never change meaning, new ones are only appended. The same table is in the answer of `tg schema`. The wait time of `flood_wait` arrives in the `message` text, there is no separate field yet.
 
@@ -253,11 +257,36 @@ What the filter does not cover: `note delete --author` (it also deletes notes of
 
 The mark is a hint for the agent, not a barrier. The barrier is the chat filter above.
 
+### Live events
+
+`tg message watch` follows the account through the daemon: it never talks to Telegram itself. After login the daemon runs the gotd updates manager, which keeps its state in the local database and asks Telegram for what was missed after a break. A first start without state goes "from this moment" and loads no history.
+
+```sh
+tg message watch                                  # all chats the agent can see, jsonl
+tg message watch --chat @release_team --topic 7   # one chat, one forum topic
+tg message watch --types message.new,reaction --max-events 20
+tg message watch --after 812.40117.0.1763111560   # resume from a cursor (illustrative value)
+```
+
+Event types: `message.new`, `message.edit`, `message.delete` and `reaction` are stored in the event journal and can be replayed. `read`, `typing` and `status` are live only: they are never stored and never replayed. `gap` means the updates manager could not recover a hole (or a persistent failure to store an event, `reason: "store"`): read the history with `message history`. `lagged` means the subscriber is too slow.
+
+- **Output.** The default format is `jsonl`: one whole event per line (`id`, `type`, `chat_id`, `time`, `data`), no envelope. `--format json` works only together with `--max-events` and prints one envelope `{"ok":true,"data":{"events":[...]}}` at the end; without `--max-events` it is exit code 2, and `--format toon` is exit code 2. `--human` prints one line per event and frames other people's text with `| ` under a warning. `--quiet` hides the hint, not the frame. `--fields` applies to every event. The hint `watching from cursor <cursor>` goes to stderr.
+- **Cursor.** The `id` of a stored event is a string `<id>.<pts>.<qts>.<date>`. Only the leading `id` matters for resuming; the triple is the state of the updates manager when the cursor is issued and is informational. Live-only events and `gap` have no `id`; do not drop `id` with `--fields` if you want to resume. Pass the last cursor as `--after` and the daemon replays the stored events after it, then the live ones, without a gap or a repeat. Without `--after` the stream starts from the current moment. The journal keeps 7 days or 100 000 events, whichever limit comes first, and is pruned at start and every hour. An `--after` older than the border is `cursor_expired` (exit code 8): run without `--after` and read the missing part with `message history`.
+- **A slow reader.** The queue of a subscriber holds 1000 events. When it overflows, the daemon sends `lagged` and closes the stream; the events stay in the journal, and the command exits with code 1 and a hint to resume with `--after <cursor>`.
+- **Raw JSON-RPC.** The method `subscribe` takes `chats`, `topic`, `types` and `after` and answers `subscription_id` and the start `cursor`; then the daemon sends notifications without `id` (method `event`) on the same connection. One subscription per connection: a second `subscribe` is `busy`. Closing the socket or `unsubscribe` removes the subscription.
+- **Exit codes.** Ctrl-C, SIGTERM or `--max-events` reached: 0. `lagged`: 1. The daemon stopped or the connection closed: 3. No login: 4. A closed or unknown chat: 7. `cursor_expired`: 8.
+- **Local search sees the stream.** Messages from the stream are saved to the local database (an edit keeps the previous version; a deletion sets `deleted_at` only when the event has a chat, see the next item), so `tg search` finds them.
+- **The chat filter applies.** Events of closed chats are dropped before they are stored and before delivery, including `typing`, `read` and `status` (for `status` the chat is the private chat of that user); the policy is applied again on replay. `--chat` is resolved from the local database only (read the chat first, for example with `chat list` or `message history`), and a closed or unknown reference is the same `not_found`. A deletion in a private chat or a basic group comes from Telegram without a chat: only with the filter on does the daemon look the chat up in the local database (it sets `chat_id` only when the messages belong to exactly one chat) and drop the event when the chat is unknown or closed. With the filter off the event goes without `chat_id` and the messages are not marked deleted. `--topic` keeps only `message.new` and `message.edit` of the topic. A `gap` without a chat passes every filter, including `--chat`, `--types` and `--topic`.
+- **An active stream keeps the daemon alive.** `--idle-timeout` does not stop a daemon that has a subscriber.
+- **Other people's text is data.** The `data` of an event is marked `untrusted` in `tg schema`, see [Untrusted text](#untrusted-text).
+
+Known limits: the event sink does not return an error to the updates manager, so after a persistent failure to store an event (three retries) the manager state can advance while the event is lost; the agent sees a `gap`. gotd reports `ChannelDifferenceTooLong` as `gap` too. The stream is checked by tests with fake updates only, not on a live account.
+
 ## Status
 
-Implemented and checked by tests: the daemon, JSON-RPC layer, profiles, login flows, chat and message reading, the local database, notes and search, `schema`, the output formats and `--fields`. Reading and the local database were also checked on a live account (plan checks of 2026-11-13 and 2026-11-14), and so was the background daemon (start in 0.75 s, stop in 0.15 s, idle stop of a 6 s timeout after about 7 s, no secrets in `ps`, socket and journal at `0600`). The request journal was checked by tests only. `daemon logs` was also run as a built binary on a temporary profile; neither was run against a live account. Telegram is never contacted by the test suite.
+Implemented and checked by tests: the daemon, JSON-RPC layer, profiles, login flows, chat and message reading, the local database, notes and search, `schema`, the output formats and `--fields`, and the live event stream (`message watch`, the `subscribe` method and the event journal; fake updates, an in-memory connection and a temporary database). Reading and the local database were also checked on a live account (plan checks of 2026-11-13 and 2026-11-14), and so was the background daemon (start in 0.75 s, stop in 0.15 s, idle stop of a 6 s timeout after about 7 s, no secrets in `ps`, socket and journal at `0600`). The request journal was checked by tests only. `daemon logs` was also run as a built binary on a temporary profile; neither was run against a live account. Telegram is never contacted by the test suite.
 
-Not confirmed on a live account yet: phone login end to end (the code did not arrive during the check), QR login, `auth resend`, `auth cancel`, `--device`, `chat invite-info` on a real group, and resolving a contact by phone number. The chat access lists and the `human` frame were also checked on a live account (read-only, one chat for message reads); `note add|list|delete` and `message pinned` under the filter and `@username`, phone and `t.me` references under it were not. The `people` search scope is covered by tests only. The background start was not run on Linux. The exact status of every requirement is in [`FEATURES.md`](FEATURES.md).
+Not confirmed on a live account yet: the live event stream (incoming events, a daemon restart with a resumed cursor, recovery after a break, a closed chat that yields no events), phone login end to end (the code did not arrive during the check), QR login, `auth resend`, `auth cancel`, `--device`, `chat invite-info` on a real group, and resolving a contact by phone number. The chat access lists and the `human` frame were also checked on a live account (read-only, one chat for message reads); `note add|list|delete` and `message pinned` under the filter and `@username`, phone and `t.me` references under it were not. The `people` search scope is covered by tests only. The background start was not run on Linux. The exact status of every requirement is in [`FEATURES.md`](FEATURES.md).
 
 **Account risk, plainly.** `tg` is an unofficial client for your personal account. With `--client` it presents itself with the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited this way are an open question in [`INTENT.md`](INTENT.md). This project has not assessed it. Do not point this at an account you cannot afford to lose.
 
@@ -267,7 +296,6 @@ Planned, not implemented. [`FEATURES.md`](FEATURES.md) is the source of truth.
 
 - **Writing.** Sending, editing, deleting and forwarding messages, with safety classes and confirmation rules.
 - **Media, reactions, polls, forum topic management**, members and contacts. Reading a topic already works (`message history --topic`).
-- **Live stream** of new messages and events.
 - **Sessions and access.** Export and import of a session string, login without a terminal, an expected-account check, SOCKS and MTProxy, WSS transport.
 - **Local history.** Background sync and deletion tracking, folders. Today only what you read is stored.
 - And more: see the full list in `FEATURES.md`.
@@ -280,13 +308,13 @@ Not goals: the Bot API and bots, a TUI client for humans, replacing the official
 cmd/tg-cli/      entry point and wiring only
 internal/
   cli/           argv, calling the daemon, printing the response
-  daemon/        lifecycle, socket, profile lock, login, reads, notes, search
-  rpc/           JSON-RPC 2.0: frames, dispatcher, client, wire types
-  tgclient/      gotd/td wrapper, one account per client
+  daemon/        lifecycle, socket, profile lock, login, reads, notes, search, live events
+  rpc/           JSON-RPC 2.0: frames, dispatcher, client, wire types, event hub
+  tgclient/      gotd/td wrapper, one account per client, updates manager
   access/        chat access lists: parsing, the allow and block rule, reload
   clientpreset/  official client presets
   chatref/       parses @username, ids, phones and t.me links
-  store/         SQLite: migrations, chats, people, messages, notes, search
+  store/         SQLite: migrations, chats, people, messages, notes, search, event journal
   textnorm/      search normalization and safe FTS5 queries
   output/        JSON envelope, JSONL, TOON, human format and `--fields`
   buildinfo/     version and build revision
