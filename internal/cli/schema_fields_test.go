@@ -39,8 +39,20 @@ const noteIDToken = "@note"
 // realResponseCases are the commands that a response fixture covers, with the
 // arguments of the run. The token noteIDToken is replaced at run time.
 var realResponseCases = map[string][]string{
+	"user profile":     {"user", "profile", "@aliceuser"},
+	"user block":       {"user", "block", "@aliceuser"},
+	"user unblock":     {"user", "unblock", "@aliceuser"},
+	"contact list":     {"contact", "list"},
+	"contact add":      {"contact", "add", "@aliceuser"},
+	"contact delete":   {"contact", "delete", "@aliceuser", "--yes"},
+	"contact search":   {"contact", "search", "ann"},
 	"auth cancel":      {"auth", "cancel"},
 	"auth status":      {"auth", "status"},
+	"folder list":      {"folder", "list"},
+	"chat state":       {"chat", "state"},
+	"account sessions": {"account", "sessions"},
+	"account blocked":  {"account", "blocked"},
+	"account notify":   {"account", "notify"},
 	"chat info":        {"chat", "info", "@teamchat"},
 	"chat invite-info": {"chat", "invite-info", "https://t.me/+AbCdEfGh1234"},
 	"chat list":        {"chat", "list"},
@@ -68,6 +80,12 @@ func realResponses(t *testing.T) map[string][]byte {
 	e := loggedInEnv(t)
 	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
 	if err != nil {
+		t.Fatal(err)
+	}
+	e.tg.mu.Lock()
+	e.tg.peopleFixture = true
+	e.tg.mu.Unlock()
+	if err := os.WriteFile(paths.Access, []byte(`{"write":[5]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(paths.Log, []byte("test line\n"), 0o600); err != nil {
@@ -151,39 +169,47 @@ func TestSchemaFieldsMatchRealResponses(t *testing.T) {
 // other command of the schema is compared with a real response above, so a new
 // command has to be either exercised or listed here with a reason.
 var uncoveredCommands = map[string]string{
-	"chat join":          "account write is covered by net.Pipe CLI tests",
-	"chat leave":         "account write is covered by net.Pipe CLI tests",
-	"chat create":        "account write is covered by net.Pipe CLI tests",
-	"chat edit":          "account write is covered by net.Pipe CLI tests",
-	"chat kick":          "account write is covered by net.Pipe CLI tests",
-	"chat ban":           "account write is covered by net.Pipe CLI tests",
-	"chat unban":         "account write is covered by net.Pipe CLI tests",
-	"chat restrict":      "account write is covered by net.Pipe CLI tests",
-	"chat permissions":   "account write is covered by net.Pipe CLI tests",
-	"chat slow-mode":     "account write is covered by net.Pipe CLI tests",
-	"daemon stop":        "runs last, after the cases that need the daemon it stops, so it is checked separately",
-	"auth login":         "asks for a phone number, a code and a password on stdin",
-	"auth resend":        "needs a login that waits for the code, started by another command",
-	"daemon start":       "runs until the daemon stops, the other cases need the daemon it starts",
-	"message watch":      "requires a live event stream; its net.Pipe contract is checked separately",
-	"message export":     "local export is a JSONL stream covered by net.Pipe CLI tests",
-	"message send":       "account write is covered through net.Pipe tests without a real account",
-	"message send-media": "account write is covered through net.Pipe tests without a real account",
-	"message edit":       "account write is covered through net.Pipe tests without a real account",
-	"message delete":     "account write is covered through net.Pipe tests without a real account",
-	"message forward":    "account write is covered through net.Pipe tests without a real account",
-	"message react":      "account write is covered through net.Pipe tests without a real account",
-	"message pin":        "account write is covered through net.Pipe tests without a real account",
-	"message unpin":      "account write is covered through net.Pipe tests without a real account",
-	"message poll":       "account write is covered through net.Pipe tests without a real account",
-	"message search":     "Telegram discovery is covered by net.Pipe CLI tests",
-	"message context":    "Telegram and local context routing is covered by net.Pipe CLI tests",
-	"message comments":   "channel comments routing is covered by net.Pipe CLI tests",
-	"message link":       "message link routing is covered by net.Pipe CLI tests",
-	"chat mark-read":     "account read-state write is covered by net.Pipe CLI tests",
-	"chat sync start":    "background history command is covered by net.Pipe CLI tests",
-	"chat sync status":   "job status is covered by net.Pipe CLI tests",
-	"chat sync cancel":   "background cancellation is covered by net.Pipe CLI tests",
+	"chat join":                  "account write is covered by net.Pipe CLI tests",
+	"chat leave":                 "account write is covered by net.Pipe CLI tests",
+	"chat create":                "account write is covered by net.Pipe CLI tests",
+	"chat edit":                  "account write is covered by net.Pipe CLI tests",
+	"chat kick":                  "account write is covered by net.Pipe CLI tests",
+	"chat ban":                   "account write is covered by net.Pipe CLI tests",
+	"chat unban":                 "account write is covered by net.Pipe CLI tests",
+	"chat restrict":              "account write is covered by net.Pipe CLI tests",
+	"chat permissions":           "account write is covered by net.Pipe CLI tests",
+	"chat slow-mode":             "account write is covered by net.Pipe CLI tests",
+	"daemon stop":                "runs last, after the cases that need the daemon it stops, so it is checked separately",
+	"auth login":                 "asks for a phone number, a code and a password on stdin",
+	"auth resend":                "needs a login that waits for the code, started by another command",
+	"daemon start":               "runs until the daemon stops, the other cases need the daemon it starts",
+	"message watch":              "requires a live event stream; its net.Pipe contract is checked separately",
+	"message export":             "local export is a JSONL stream covered by net.Pipe CLI tests",
+	"message send":               "account write is covered through net.Pipe tests without a real account",
+	"message send-media":         "account write is covered through net.Pipe tests without a real account",
+	"message edit":               "account write is covered through net.Pipe tests without a real account",
+	"message delete":             "account write is covered through net.Pipe tests without a real account",
+	"message forward":            "account write is covered through net.Pipe tests without a real account",
+	"message react":              "account write is covered through net.Pipe tests without a real account",
+	"message pin":                "account write is covered through net.Pipe tests without a real account",
+	"message unpin":              "account write is covered through net.Pipe tests without a real account",
+	"message poll":               "account write is covered through net.Pipe tests without a real account",
+	"message search":             "Telegram discovery is covered by net.Pipe CLI tests",
+	"message context":            "Telegram and local context routing is covered by net.Pipe CLI tests",
+	"message comments":           "channel comments routing is covered by net.Pipe CLI tests",
+	"message link":               "message link routing is covered by net.Pipe CLI tests",
+	"message scheduled list":     "scheduled commands are covered by net.Pipe CLI tests",
+	"message scheduled delete":   "scheduled commands are covered by net.Pipe CLI tests",
+	"message scheduled send-now": "scheduled commands are covered by net.Pipe CLI tests",
+	"chat draft get":             "draft commands are covered by net.Pipe CLI tests",
+	"chat draft list":            "draft commands are covered by net.Pipe CLI tests",
+	"chat draft set":             "draft commands are covered by net.Pipe CLI tests",
+	"chat draft clear":           "draft commands are covered by net.Pipe CLI tests",
+	"chat typing":                "account write is covered by net.Pipe CLI tests",
+	"chat mark-read":             "account read-state write is covered by net.Pipe CLI tests",
+	"chat sync start":            "background history command is covered by net.Pipe CLI tests",
+	"chat sync status":           "job status is covered by net.Pipe CLI tests",
+	"chat sync cancel":           "background cancellation is covered by net.Pipe CLI tests",
 }
 
 // TestEveryCommandResponseIsCompared makes sure the comparison covers the whole

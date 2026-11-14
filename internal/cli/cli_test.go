@@ -30,9 +30,10 @@ type fakeTelegram struct {
 	wantCode string
 	wantPass string
 
-	messages     []rpc.Message // newest first
-	missing      bool          // the read methods answer "not found"
-	resolveCalls int
+	messages      []rpc.Message // newest first
+	missing       bool          // the read methods answer "not found"
+	resolveCalls  int
+	peopleFixture bool
 }
 
 func (f *fakeTelegram) Run(ctx context.Context) error {
@@ -91,6 +92,26 @@ func (f *fakeTelegram) Comments(context.Context, chatref.Ref, rpc.CommentsParams
 func (f *fakeTelegram) MessageLink(context.Context, chatref.Ref, rpc.LinkParams) (rpc.LinkResult, error) {
 	return rpc.LinkResult{}, errors.New("not implemented")
 }
+func (f *fakeTelegram) DraftGet(context.Context, chatref.Ref) (rpc.Draft, error) {
+	return rpc.Draft{}, nil
+}
+func (f *fakeTelegram) DraftList(context.Context) (rpc.DraftList, error) { return rpc.DraftList{}, nil }
+func (f *fakeTelegram) DraftSet(context.Context, chatref.Ref, rpc.DraftParams) (rpc.DraftWriteResult, error) {
+	return rpc.DraftWriteResult{}, nil
+}
+func (f *fakeTelegram) ScheduledList(context.Context, chatref.Ref) (rpc.ScheduledResult, error) {
+	return rpc.ScheduledResult{}, nil
+}
+func (f *fakeTelegram) ScheduledDelete(context.Context, chatref.Ref, []int) (rpc.ScheduledResult, error) {
+	return rpc.ScheduledResult{}, nil
+}
+func (f *fakeTelegram) ScheduledSendNow(context.Context, chatref.Ref, []int) (rpc.ScheduledResult, error) {
+	return rpc.ScheduledResult{}, nil
+}
+func (f *fakeTelegram) Typing(context.Context, chatref.Ref, rpc.TypingParams) (rpc.TypingResult, error) {
+	return rpc.TypingResult{}, nil
+}
+
 func (f *fakeTelegram) MarkRead(context.Context, chatref.Ref) (rpc.MarkReadResult, error) {
 	return rpc.MarkReadResult{}, errors.New("not implemented")
 }
@@ -200,7 +221,7 @@ func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, er
 	if f.missing {
 		return rpc.Chat{}, rpc.NewError(rpc.CodeNotFound, "not found: no such chat")
 	}
-	if ref.Kind == chatref.Username && ref.Username == "aliceuser" {
+	if ref.Kind == chatref.Username && ref.Username == "aliceuser" || ref.Kind == chatref.ID && ref.ID == 5 {
 		return rpc.Chat{ID: 5, Type: "user", Title: "Ann", Username: "aliceuser"}, nil
 	}
 	return rpc.Chat{ID: 77, Type: "supergroup", Title: "Team", Username: "team"}, nil

@@ -20,7 +20,7 @@ var writeCall = regexp.MustCompile(`^(` + writeVerbs + `)|^(Messages|Channels|Co
 // readFiles are the files that read chats and messages. They must stay
 // read-only: login code lives in other files and is allowed to use sign-in
 // methods. The same rule is stated in the security section of AGENTS.md.
-var readFiles = []string{"history.go", "peers.go", "message.go", "convert.go", "cursor.go", "client.go", "errors.go", "members.go", "topics_common.go"}
+var readFiles = []string{"history.go", "peers.go", "message.go", "convert.go", "cursor.go", "client.go", "errors.go", "members.go", "topics_common.go", "users_read.go"}
 
 func TestReadFilesCallNothingThatWrites(t *testing.T) {
 	fset := token.NewFileSet()
