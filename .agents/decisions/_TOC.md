@@ -31,6 +31,7 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-14 — [Форматы вывода: toon и human рядом с json, режимы quiet и verbose](20261114_0031_toon_human_quiet_verbose_output_modes.md)
 - 2026-11-14 — [Daemon уходит в фон по умолчанию, остановка по простою включается флагом](20261114_0032_daemon_starts_in_background_idle_stop_is_opt_in.md)
 - 2026-11-14 — [Метод execute не делаем](20261114_0033_execute_is_not_built.md)
+- 2026-11-14 — [Дроссель аккаунта один, на 60% от ориентиров ботов, три уровня, автоожидание FLOOD_WAIT до 10 секунд](20261114_0310_throttle_one_account_gate_60_percent_three_levels.md)
 
 ## Open questions
 
