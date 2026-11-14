@@ -46,6 +46,12 @@ func validateMessageIDs(ids []int) error {
 }
 
 func (c *Client) Send(ctx context.Context, ref chatref.Ref, p rpc.SendParams) (rpc.SendResult, error) {
+	accountID, accountErr := c.idempotencyAccount(ctx, p.IdempotencyKey)
+	if accountErr != nil {
+		return rpc.SendResult{}, accountErr
+	}
+	p.AccountID = accountID
+
 	if p.DryRun {
 		return rpc.SendResult{}, rpc.NewError(rpc.CodeInvalidParams, "dry-run must be handled by the daemon")
 	}
@@ -134,6 +140,12 @@ func (c *Client) Delete(ctx context.Context, ref chatref.Ref, p rpc.DeleteParams
 }
 
 func (c *Client) Forward(ctx context.Context, from, to chatref.Ref, p rpc.ForwardParams) (rpc.ForwardResult, error) {
+	accountID, accountErr := c.idempotencyAccount(ctx, p.IdempotencyKey)
+	if accountErr != nil {
+		return rpc.ForwardResult{}, accountErr
+	}
+	p.AccountID = accountID
+
 	if p.DryRun {
 		return rpc.ForwardResult{}, rpc.NewError(rpc.CodeInvalidParams, "dry-run must be handled by the daemon")
 	}
@@ -160,6 +172,14 @@ func sendText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass
 }
 
 func sendPreparedText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.SendParams, prepared preparedText) (rpc.SendResult, error) {
+	wrappedAPI, wrapErr := idempotentAPI(api, p.AccountID, chatID, p.IdempotencyKey)
+	if wrapErr != nil {
+		return rpc.SendResult{}, wrapErr
+	}
+	api = wrappedAPI
+	if p.At != "" {
+		return sendScheduledText(ctx, api, destination, chatID, p, prepared)
+	}
 	sender := message.NewSender(api)
 	builder := sender.To(destination)
 	if p.Silent {
@@ -207,11 +227,7 @@ func sendPreparedText(ctx context.Context, api *tg.Client, destination tg.InputP
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	plainText := prepared.text
-	if prepared.rich != nil {
-		plainText = richTextFromWrittenUpdates(updates, messages[0].ID)
-	}
-	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, PlainText: plainText, Rich: prepared.rich != nil}, nil
+	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date}, nil
 }
 
 func editText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.EditParams) (rpc.SendResult, error) {
@@ -240,42 +256,7 @@ func editPreparedText(ctx context.Context, api *tg.Client, destination tg.InputP
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	plainText := prepared.text
-	if prepared.rich != nil {
-		plainText = richTextFromWrittenUpdates(updates, messages[0].ID)
-	}
-	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, PlainText: plainText, Rich: prepared.rich != nil}, nil
-}
-
-func richTextFromWrittenUpdates(updates tg.UpdatesClass, id int) string {
-	var changes []tg.UpdateClass
-	switch value := updates.(type) {
-	case *tg.UpdateShort:
-		changes = []tg.UpdateClass{value.Update}
-	case *tg.Updates:
-		changes = value.Updates
-	case *tg.UpdatesCombined:
-		changes = value.Updates
-	}
-	for _, change := range changes {
-		var message tg.MessageClass
-		switch value := change.(type) {
-		case *tg.UpdateNewMessage:
-			message = value.Message
-		case *tg.UpdateNewChannelMessage:
-			message = value.Message
-		case *tg.UpdateEditMessage:
-			message = value.Message
-		case *tg.UpdateEditChannelMessage:
-			message = value.Message
-		}
-		if received, ok := message.(*tg.Message); ok && received.ID == id {
-			if rich, present := received.GetRichMessage(); present {
-				return richMessageText(rich)
-			}
-		}
-	}
-	return ""
+	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date}, nil
 }
 
 func writeFormatError(err error, rich bool) error {
@@ -311,6 +292,12 @@ func deleteMessages(ctx context.Context, api *tg.Client, destination tg.InputPee
 }
 
 func forwardMessages(ctx context.Context, api *tg.Client, source, destination tg.InputPeerClass, chatID int64, p rpc.ForwardParams) (rpc.ForwardResult, error) {
+	wrappedAPI, wrapErr := idempotentAPI(api, p.AccountID, chatID, p.IdempotencyKey)
+	if wrapErr != nil {
+		return rpc.ForwardResult{}, wrapErr
+	}
+	api = wrappedAPI
+
 	if err := validateMessageIDs(p.IDs); err != nil {
 		return rpc.ForwardResult{}, err
 	}

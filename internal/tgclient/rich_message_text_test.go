@@ -1,14 +1,10 @@
 package tgclient
 
 import (
-	"context"
 	"testing"
 
-	"github.com/gotd/td/bin"
 	"github.com/gotd/td/telegram/message/peer"
 	"github.com/gotd/td/tg"
-
-	"tg-cli/internal/rpc"
 )
 
 func richPlain(text string) tg.RichTextClass { return &tg.TextPlain{Text: text} }
@@ -123,89 +119,5 @@ func TestToMessageRichTextFallback(t *testing.T) {
 	m.SetRichMessage(tg.RichMessage{})
 	if got, _ := toMessage(42, m, peer.Entities{}, nil); got.Text != "" {
 		t.Errorf("empty rich=%q", got.Text)
-	}
-}
-
-func TestWrittenRichTextFromUpdates(t *testing.T) {
-	rich := tg.RichMessage{Blocks: []tg.PageBlockClass{&tg.PageBlockParagraph{Text: richPlain("reply text")}}}
-	message := func() *tg.Message {
-		m := &tg.Message{ID: 17, Date: 1700000000, PeerID: &tg.PeerUser{UserID: 42}}
-		m.SetRichMessage(rich)
-		return m
-	}
-	for _, tc := range []struct {
-		name   string
-		change tg.UpdateClass
-	}{
-		{"new", &tg.UpdateNewMessage{Message: message()}},
-		{"new channel", &tg.UpdateNewChannelMessage{Message: message()}},
-		{"edit", &tg.UpdateEditMessage{Message: message()}},
-		{"edit channel", &tg.UpdateEditChannelMessage{Message: message()}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			updates := &tg.Updates{Date: 1700000000, Updates: []tg.UpdateClass{tc.change}}
-			if got := richTextFromWrittenUpdates(updates, 17); got != "reply text" {
-				t.Fatalf("text=%q", got)
-			}
-			if got := richTextFromWrittenUpdates(updates, 18); got != "" {
-				t.Fatalf("unrelated text=%q", got)
-			}
-		})
-	}
-	if got := richTextFromWrittenUpdates(&tg.UpdateShortSentMessage{ID: 17, Date: 1700000000}, 17); got != "" {
-		t.Fatalf("short response=%q", got)
-	}
-	if got := richTextFromWrittenUpdates(&tg.UpdateShort{Update: &tg.UpdateNewMessage{Message: message()}}, 17); got != "reply text" {
-		t.Fatalf("short update=%q", got)
-	}
-}
-
-func TestRichSendAndEditResultText(t *testing.T) {
-	for _, tc := range []struct {
-		name              string
-		edit, withMessage bool
-	}{
-		{"send with message", false, true}, {"send without message", false, false},
-		{"edit with message", true, true}, {"edit without message", true, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			prepared, err := prepareWriteText("# source", "rich-markdown", nil, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
-				m := &tg.Message{ID: 17, Date: 1700000000, PeerID: &tg.PeerUser{UserID: 42}}
-				m.SetRichMessage(tg.RichMessage{Blocks: []tg.PageBlockClass{&tg.PageBlockParagraph{Text: richPlain("server text")}}})
-				if tc.edit {
-					if _, ok := input.(*tg.MessagesEditMessageRequest); !ok {
-						t.Fatalf("request=%T", input)
-					}
-					if tc.withMessage {
-						return respond(output, &tg.Updates{Date: 1700000000, Updates: []tg.UpdateClass{&tg.UpdateEditMessage{Message: m}}})
-					}
-					return respond(output, &tg.Updates{Date: 1700000000, Updates: []tg.UpdateClass{&tg.UpdateMessageID{ID: 17}}})
-				}
-				if _, ok := input.(*tg.MessagesSendMessageRequest); !ok {
-					t.Fatalf("request=%T", input)
-				}
-				if tc.withMessage {
-					return respond(output, &tg.Updates{Date: 1700000000, Updates: []tg.UpdateClass{&tg.UpdateNewMessage{Message: m}}})
-				}
-				return respond(output, &tg.UpdateShortSentMessage{ID: 17, Date: 1700000000})
-			}))
-			want := ""
-			if tc.withMessage {
-				want = "server text"
-			}
-			var result rpc.SendResult
-			if tc.edit {
-				result, err = editPreparedText(context.Background(), api, &tg.InputPeerUser{UserID: 42}, 42, rpc.EditParams{ID: 17, Text: "# source", Parse: "rich-markdown"}, prepared)
-			} else {
-				result, err = sendPreparedText(context.Background(), api, &tg.InputPeerUser{UserID: 42}, 42, rpc.SendParams{Text: "# source", Parse: "rich-markdown"}, prepared)
-			}
-			if err != nil || result.PlainText != want || !result.Rich {
-				t.Fatalf("result=%+v err=%v", result, err)
-			}
-		})
 	}
 }

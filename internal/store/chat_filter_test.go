@@ -45,7 +45,11 @@ func TestChatFilterHidesChatOwnedRowsBeforeLimit(t *testing.T) {
 					t.Errorf("hidden chat leaked: %+v", hit)
 				}
 			}
-			if people != 1 || personNotes != 1 {
+			wantPeople := 0
+			if tc.name == "block" {
+				wantPeople = 1
+			}
+			if people != wantPeople || personNotes != 1 {
 				t.Errorf("people=%d personNotes=%d hits=%+v", people, personNotes, hits)
 			}
 			limited, err := db.Search(ctx, SearchOptions{Query: "елка", Scopes: []string{"messages"}, Limit: 1, ChatFilter: tc.filter})

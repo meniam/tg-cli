@@ -52,6 +52,14 @@ const (
 	MethodSubscribe           = "subscribe"
 	MethodUnsubscribe         = "unsubscribe"
 	MethodEvent               = "event"
+
+	MethodUserProfile   = "user.profile"
+	MethodUserBlock     = "user.block"
+	MethodUserUnblock   = "user.unblock"
+	MethodContactList   = "contact.list"
+	MethodContactAdd    = "contact.add"
+	MethodContactDelete = "contact.delete"
+	MethodContactSearch = "contact.search"
 )
 
 // Login states reported by the auth methods.
@@ -93,6 +101,8 @@ type AccessStatus struct {
 	Allow   int  `json:"allow"`
 	Block   int  `json:"block"`
 	Write   int  `json:"write,omitempty"`
+	Admin   int  `json:"admin,omitempty"`
+	Create  bool `json:"create,omitempty"`
 	Closed  bool `json:"closed,omitempty"`
 }
 

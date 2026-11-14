@@ -65,15 +65,19 @@ func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 	d.register()
 	d.srv.SetEventSource(d.hub, d.replayEvents)
 	classes := map[string]string{
+		rpc.MethodUserProfile: "user-ref", rpc.MethodUserBlock: "user-ref", rpc.MethodUserUnblock: "user-ref", rpc.MethodContactAdd: "user-ref", rpc.MethodContactDelete: "user-ref", rpc.MethodContactList: "chat-search", rpc.MethodContactSearch: "chat-search",
 		rpc.MethodPing: "none", rpc.MethodStatus: "none", rpc.MethodShutdown: "none",
 		rpc.MethodAuthStart: "none", rpc.MethodAuthCode: "none", rpc.MethodAuthPassword: "none", rpc.MethodAuthResend: "none", rpc.MethodAuthStartQR: "none", rpc.MethodAuthWait: "none", rpc.MethodAuthCancel: "none",
 		rpc.MethodChatList: "chat-list", rpc.MethodChatResolve: "chat-ref", rpc.MethodChatInfo: "chat-ref", rpc.MethodChatInviteInfo: "chat-ref",
 		rpc.MethodFolderList: "chat-list", rpc.MethodChatState: "chat-ref", rpc.MethodAccountSessions: "none", rpc.MethodAccountBlocked: "chat-list", rpc.MethodAccountNotify: "none",
+		rpc.MethodChatDraftGet: "chat-ref", rpc.MethodChatDraftList: "chat-search", rpc.MethodChatDraftSet: "chat-write", rpc.MethodChatDraftClear: "chat-write",
 		rpc.MethodChatMembers: "chat-ref", rpc.MethodChatTopics: "chat-ref", rpc.MethodChatCommon: "chat-search",
+		rpc.MethodChatJoin: "chat-write", rpc.MethodChatLeave: "chat-write", rpc.MethodChatCreate: "chat-create", rpc.MethodChatEdit: "chat-admin", rpc.MethodChatKick: "chat-admin", rpc.MethodChatBan: "chat-admin", rpc.MethodChatUnban: "chat-admin", rpc.MethodChatRestrict: "chat-admin", rpc.MethodChatPermissions: "chat-admin", rpc.MethodChatSlowMode: "chat-admin",
 		rpc.MethodMessageHistory: "chat-ref", rpc.MethodMessageGet: "chat-ref", rpc.MethodMessagePinned: "chat-ref",
+		rpc.MethodMessageScheduledList: "chat-ref", rpc.MethodMessageScheduledDelete: "chat-write", rpc.MethodMessageScheduledSendNow: "chat-write",
 		rpc.MethodMessageSend: "chat-write", rpc.MethodMessageSendMedia: "chat-write", rpc.MethodMessageEdit: "chat-write", rpc.MethodMessageDelete: "chat-write", rpc.MethodMessageForward: "chat-write",
 		rpc.MethodMessageReact: "chat-write", rpc.MethodMessagePin: "chat-write", rpc.MethodMessageUnpin: "chat-write", rpc.MethodMessagePoll: "chat-write",
-		rpc.MethodMessageSearch: "chat-ref", rpc.MethodMessageContext: "chat-ref", rpc.MethodMessageExportLocal: "chat-ref", rpc.MethodMessageComments: "chat-ref", rpc.MethodMessageLink: "chat-ref", rpc.MethodMessageSearchPublic: "chat-search", rpc.MethodChatMarkRead: "chat-write",
+		rpc.MethodMessageSearch: "chat-ref", rpc.MethodMessageContext: "chat-ref", rpc.MethodMessageExportLocal: "chat-ref", rpc.MethodMessageComments: "chat-ref", rpc.MethodMessageLink: "chat-ref", rpc.MethodMessageSearchPublic: "chat-search", rpc.MethodChatMarkRead: "chat-write", rpc.MethodChatTyping: "chat-write",
 		rpc.MethodNoteAdd: "chat-notes", rpc.MethodNoteList: "chat-notes", rpc.MethodNoteDelete: "chat-notes", rpc.MethodNoteDeleteByAuthor: "none", rpc.MethodSearch: "chat-search",
 		rpc.MethodHistorySyncStart: "chat-ref", rpc.MethodHistorySyncStatus: "chat-search", rpc.MethodHistorySyncCancel: "chat-ref",
 		rpc.MethodSubscribe: "chat-stream", rpc.MethodUnsubscribe: "none",

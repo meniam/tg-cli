@@ -10,6 +10,7 @@ This page covers what every command shares: installation, profiles, the Daemon l
 | [chats.md](chats.md) | `chat list`, `resolve`, `info`, `invite-info`, `members`, `topics`, `common`, `mark-read`; `chat sync start`, `status`, `cancel` |
 | [messages-read.md](messages-read.md) | `message history`, `get`, `pinned`, `search`, `context`, `comments`, `link`, `export`, `watch` |
 | [messages-write.md](messages-write.md) | `message send`, `edit`, `delete`, `forward`, `send-media`, `react`, `pin`, `unpin`, `poll`, text formatting |
+| [users-and-contacts.md](users-and-contacts.md) | `user profile`, `block`, `unblock`; `contact list`, `add`, `delete`, `search` |
 | [notes-and-search.md](notes-and-search.md) | `note add`, `list`, `delete`; `search`; `version`; `schema` |
 | [access.md](access.md) | `access.json`: chat access lists, the `write` list, the `files` roots |
 
@@ -102,9 +103,12 @@ Without a login, a command that needs one exits with code 4 and the message ``no
 
 Global flags work in any position, before or after the command.
 
+`--expect-user <id|@username>` requires the selected profile to belong to that account. A numeric value matches the account ID; `@username` matches the username without regard to case. The flag wins over `TG_CLI_EXPECT_USER`; when the flag is absent, that variable supplies the value. An empty value disables the check. The Daemon applies it before handlers for `chat`, `message`, `note`, `search`, `chat sync` and `message watch`, including its subscription; `daemon`, `auth`, `schema` and `version` are excluded. A missing or different account is exit code 4 `not_authorized`; a mismatch names the expected value and the actual account ID and username, never a phone number.
+
 <!-- schema:global-flags -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
+| `--expect-user` | string | `none` | require account id or @username (or TG_CLI_EXPECT_USER) |
 | `--fields` | string | `none` | only these paths of the result, comma separated, like id,title or messages.sender.name; a path the result does not have is skipped |
 | `--format` | string | `json` | output format: json (one envelope, the default), jsonl (list items or a supported single-result envelope), toon (compact envelope) or human |
 | `--human` | bool | `false` | short for --format human |

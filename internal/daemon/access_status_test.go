@@ -39,6 +39,11 @@ func TestStatusAccessIsOptionalAndNeverShowsIDs(t *testing.T) {
 	if strings.Contains(enabled, "-1001234567890") || strings.Contains(enabled, `"42"`) {
 		t.Errorf("status leaked chat IDs: %s", enabled)
 	}
+	writeAccess(t, path, `{"admin":[42],"create":true}`)
+	st, enabled = status()
+	if st.Access == nil || st.Access.Admin != 1 || !st.Access.Create || strings.Contains(enabled, `"42"`) {
+		t.Errorf("admin status = %s", enabled)
+	}
 	writeAccess(t, path, `{"allow":["secret"]}`)
 	st, invalid := status()
 	if st.Access == nil || !st.Access.Enabled || !st.Access.Closed {

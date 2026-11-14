@@ -39,7 +39,7 @@ func runWriteCLI(t *testing.T, args []string, stdin string, reply func(string, j
 		method string
 		params json.RawMessage
 	}, 1)
-	for _, method := range []string{rpc.MethodMessageSend, rpc.MethodMessageSendMedia, rpc.MethodMessageEdit, rpc.MethodMessageDelete, rpc.MethodMessageForward, rpc.MethodMessageReact, rpc.MethodMessagePin, rpc.MethodMessageUnpin, rpc.MethodMessagePoll} {
+	for _, method := range []string{rpc.MethodMessageSend, rpc.MethodMessageSendMedia, rpc.MethodMessageEdit, rpc.MethodMessageDelete, rpc.MethodMessageForward, rpc.MethodMessageReact, rpc.MethodMessagePin, rpc.MethodMessageUnpin, rpc.MethodMessagePoll, rpc.MethodChatTyping, rpc.MethodMessageScheduledList, rpc.MethodMessageScheduledDelete, rpc.MethodMessageScheduledSendNow, rpc.MethodChatDraftGet, rpc.MethodChatDraftList, rpc.MethodChatDraftSet, rpc.MethodChatDraftClear, rpc.MethodChatJoin, rpc.MethodChatLeave, rpc.MethodChatCreate, rpc.MethodChatEdit, rpc.MethodChatKick, rpc.MethodChatBan, rpc.MethodChatUnban, rpc.MethodChatRestrict, rpc.MethodChatPermissions, rpc.MethodChatSlowMode} {
 		method := method
 		srv.Handle(method, func(_ context.Context, raw json.RawMessage) (any, error) {
 			called <- struct {

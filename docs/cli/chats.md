@@ -338,6 +338,172 @@ With `--dry-run` the answer adds `"dry_run":true`.
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 4.7.
 
+## Managing drafts
+
+### tg chat draft get
+
+Reads the current draft of one visible chat.
+
+```text
+tg chat draft get <chat> [flags]
+```
+
+<!-- schema:flags tg chat draft get -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. **Output formats:** `json`, `toon`, `human`.
+
+The answer has `chat_id`, `text`, `date`, `reply_to`, and `empty`. With no draft, `empty` is true. Draft text is untrusted data. A closed chat is reported as unknown.
+
+```sh
+tg chat draft get @release_team
+```
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"text":"Reply after deploy","date":"2026-11-15T06:00:00Z","reply_to":41,"empty":false}}
+```
+
+**Exit codes.** 0; 3 no Daemon; 4 no login; 5 Telegram rejected the read; 6 `FLOOD_WAIT`; 7 unknown or closed chat.
+
+### tg chat draft list
+
+Lists drafts of chats visible under the access policy.
+
+```text
+tg chat draft list [flags]
+```
+
+<!-- schema:flags tg chat draft list -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. **Output formats:** `json`, `jsonl`, `toon`, `human`.
+
+The command asks Telegram for account drafts and drops drafts in closed chats before it responds. It lists ordinary chat drafts; drafts for forum and saved-message topics are not included. Text is untrusted data.
+
+```sh
+tg chat draft list
+```
+
+```json
+{"ok":true,"data":{"drafts":[{"chat_id":-1001234567890,"text":"Reply after deploy","date":"2026-11-15T06:00:00Z","reply_to":41,"empty":false}]}}
+```
+
+**Exit codes.** 0; 3 no Daemon; 4 no login; 5 Telegram rejected the read; 6 `FLOOD_WAIT`.
+
+### tg chat draft set
+
+Replaces the text draft of one chat.
+
+```text
+tg chat draft set <chat> [flags]
+```
+
+<!-- schema:flags tg chat draft set -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--reply-to` | int | `0` | reply to this message id |
+| `--text` | string | `none` | draft text; reads stdin when absent |
+<!-- /schema:flags -->
+
+**Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+Text comes from `--text` or stdin as for `message send`. It is plain text: formatting flags are unavailable. Text must be non-empty and no more than 4096 characters; `--reply-to` selects a positive message id when present. The chat must be visible and in `write`.
+
+`--dry-run` performs the write checks without saving a draft. Its answer includes `replaces: true` when Telegram reports a non-empty current draft; resolving a non-numeric chat reference or reading that current draft may read Telegram.
+
+```sh
+tg chat draft set @release_team --text 'Reply after deploy' --reply-to 41
+tg chat draft set @release_team --dry-run --text 'Reply after deploy'
+```
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"text_length":18}}
+```
+
+**Exit codes.** 0; 2 invalid text or reply id; 3 no Daemon; 4 no login; 5 Telegram rejected the write; 6 `FLOOD_WAIT` (not repeated); 7 unknown or closed chat; 9 chat is not in `write`.
+
+### tg chat draft clear
+
+Clears the current draft of one chat.
+
+```text
+tg chat draft clear <chat> [flags]
+```
+
+<!-- schema:flags tg chat draft clear -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+**Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+The chat must be visible and in `write`. `--dry-run` performs checks but leaves the draft unchanged. A real call saves an empty draft in Telegram.
+
+```sh
+tg chat draft clear @release_team
+```
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"cleared":true}}
+```
+
+**Exit codes.** 0; 3 no Daemon; 4 no login; 5 Telegram rejected the write; 6 `FLOOD_WAIT` (not repeated); 7 unknown or closed chat; 9 chat is not in `write`.
+
+Live-account verification is tracked only in [FEATURES.md](../../FEATURES.md), item 5.7.
+
+## Showing a typing indicator
+
+### tg chat typing
+
+Sends one typing action to a chat. It does not keep the indicator active: send another command if it is still needed, or use `--cancel` to stop it.
+
+```text
+tg chat typing <chat> [flags]
+```
+
+<!-- schema:flags tg chat typing -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--action` | string | `typing` | typing action |
+| `--cancel` | bool | `false` | cancel the indicator |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--topic` | int | `0` | forum topic id |
+<!-- /schema:flags -->
+
+**Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon, a login, and the chat in the `write` list of `access.json`. It needs no `--yes`. A closed chat is reported as unknown; a non-numeric reference may be resolved through Telegram before that access check.
+
+**Actions.** `typing` (the default), `upload_photo`, `upload_video`, `upload_document`, `record_voice`, `upload_voice`, `record_video`, `choose_sticker`, and `cancel`. `--cancel` selects `cancel`; it conflicts with a different explicit `--action`. `--topic` selects a forum topic and must not be negative.
+
+**How it works.** `--dry-run` performs local and access checks and returns the action without a Telegram write; resolving a non-numeric chat reference may still read Telegram. A real call sends exactly one `messages.setTyping` request. The throttle treats it as a write and does not retry it after `FLOOD_WAIT`.
+
+**Example.**
+
+```sh
+tg chat typing @release_team
+tg chat typing @release_team --action upload_document
+tg chat typing @release_team --topic 42 --cancel
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"action":"typing"}}
+```
+
+With `--dry-run` the answer adds `"dry_run":true`.
+
+**Answer fields** (`data`): `chat_id` integer, `action` string, `dry_run` boolean (optional).
+
+**Exit codes.** 0; 2 an invalid action, a negative topic id, or conflicting `--cancel` and `--action`; 3 no Daemon; 4 no login; 5 Telegram rejected the action; 6 `FLOOD_WAIT` (not repeated); 7 an unknown or closed chat; 9 the chat is not in `write`.
+
+**Verification.** Implemented and covered by tests without a Telegram account. Live-account verification is tracked only in [FEATURES.md](../../FEATURES.md), item 5.8.
+
 ## Loading a whole chat
 
 `message history` stores the pages you read. To pull a whole chat into the local database, ask the Daemon to load it in the background. It loads one chat at a time and keeps the others in a queue. A page is 100 messages going back from the `oldest_id` saved by earlier loads (from the newest message on the first run), with a pause of 2 seconds between pages. A page and its progress (`oldest_id`, `newest_id`, `complete`) are written in one transaction, so an interrupted load never moves `oldest_id` past a message that was not saved. Only an empty answer from Telegram marks the chat `complete`.
@@ -507,3 +673,187 @@ tg chat state --local --limit 20
 ```
 
 The result contains `states` and the Unix timestamp `synced_at`, or null when no snapshot exists. Each state has read markers, unread counts, pin and archive flags, notification settings and its own timestamp. An absent optional notification value is null. Exit codes: 0; 2 invalid arguments; 3 no Daemon; 4 no login for a Telegram read; 6 flood wait; 7 unknown or closed chat.
+## Chat administration
+
+These commands require a running Daemon and a logged-in account. The owner must grant `write` for join and leave, `admin` for moderation and editing, and `create` for creation in `access.json`. Closed chats return not found. Use `--dry-run` to check an action without changing Telegram. The Daemon reads administrator rights for moderation previews. Leave, kick and ban require `--yes` unless `--dry-run` is used. Moderation intent is recorded before the Telegram request.
+
+The safety class is `account_write`; leave, kick and ban are dangerous. The output formats are `json`, `toon` and `human`. A preview of a kick can return:
+
+```json
+{"ok":true,"data":{"dry_run":true,"action":"kick","chat_id":-1001234567890,"user_id":123456789,"count":1}}
+```
+
+### tg chat join
+
+Join a channel or supergroup, or join with an invitation whose chat ID is visible before joining. A link that does not reveal the ID cannot be used to join.
+
+```text
+tg chat join <chat> [--dry-run]
+```
+
+<!-- schema:flags tg chat join -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+Example: `tg chat join @example_group --dry-run`. The result contains `chat_id` and may contain `already_member` or `requested`.
+
+### tg chat leave
+
+Leave a group or channel. Leaving a private chat can remove access to its history.
+
+```text
+tg chat leave <chat> --yes
+```
+
+<!-- schema:flags tg chat leave -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--yes` | bool | `false` | confirm the action |
+<!-- /schema:flags -->
+
+Example: `tg chat leave @example_group --dry-run`. The result contains `chat_id` and `left`.
+
+### tg chat create
+
+Create a supergroup or channel. The owner must add the new chat to the relevant lists before further writes.
+
+```text
+tg chat create <title> --type supergroup|channel [--about TEXT]
+```
+
+<!-- schema:flags tg chat create -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--about` | string | `none` | description |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--type` | string | `none` | chat type: supergroup or channel |
+<!-- /schema:flags -->
+
+Example: `tg chat create "Example group" --type supergroup --dry-run`. The result contains `id` and `type`; a chat hidden by `allow` returns `closed: true`.
+
+### tg chat edit
+
+Change the title or description. An empty `--about` clears the description.
+
+```text
+tg chat edit <chat> [--title TEXT] [--about TEXT]
+```
+
+<!-- schema:flags tg chat edit -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--about` | string | `none` | new description |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--title` | string | `none` | new title |
+<!-- /schema:flags -->
+
+Example: `tg chat edit @example_group --title "New title" --dry-run`. The result reports `title_changed` and `about_changed`.
+
+### tg chat kick
+
+Remove a participant. In a supergroup or channel this bans and then unbans the user. If unbanning fails, the error reports `still_banned: true`.
+
+```text
+tg chat kick <chat> <user> --yes
+```
+
+<!-- schema:flags tg chat kick -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--yes` | bool | `false` | confirm the action |
+<!-- /schema:flags -->
+
+Example: `tg chat kick @example_group @example_user --dry-run`.
+
+### tg chat ban
+
+Ban a user in a supergroup or channel. `--until` is an RFC 3339 time between 30 seconds and 366 days ahead; without it the ban is indefinite.
+
+```text
+tg chat ban <chat> <user> --yes [--until TIME]
+```
+
+<!-- schema:flags tg chat ban -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--until` | string | `none` | expiry in RFC 3339 |
+| `--yes` | bool | `false` | confirm the action |
+<!-- /schema:flags -->
+
+Example: `tg chat ban @example_group @example_user --dry-run`.
+
+### tg chat unban
+
+Remove a user's ban in a supergroup or channel.
+
+```text
+tg chat unban <chat> <user>
+```
+
+<!-- schema:flags tg chat unban -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+Example: `tg chat unban @example_group @example_user --dry-run`.
+
+### tg chat restrict
+
+Replace a user's restrictions in a supergroup with `--deny`, or remove all restrictions with `--clear`. `--until` accepts RFC 3339.
+
+```text
+tg chat restrict <chat> <user> (--deny RIGHTS | --clear)
+```
+
+<!-- schema:flags tg chat restrict -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--clear` | bool | `false` | clear all restrictions |
+| `--deny` | string | `none` | comma-separated denied rights |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--until` | string | `none` | expiry in RFC 3339 |
+<!-- /schema:flags -->
+
+Example: `tg chat restrict @example_group @example_user --deny send-photos --dry-run`.
+
+### tg chat permissions
+
+Replace the default restrictions of a group or supergroup, or clear them.
+
+```text
+tg chat permissions <chat> (--deny RIGHTS | --clear)
+```
+
+<!-- schema:flags tg chat permissions -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--clear` | bool | `false` | clear all restrictions |
+| `--deny` | string | `none` | comma-separated denied rights |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+Example: `tg chat permissions @example_group --deny send-photos --dry-run`.
+
+### tg chat slow-mode
+
+Set slow mode for a supergroup. Accepted values are 0, 10, 30, 60, 300, 900 and 3600 seconds; 0 disables it.
+
+```text
+tg chat slow-mode <chat> <seconds>
+```
+
+<!-- schema:flags tg chat slow-mode -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+Example: `tg chat slow-mode @example_group 30 --dry-run`.
+
+For these administration commands, exit codes are 0 on success, 2 for invalid input or missing confirmation, 3 when the Daemon is unavailable, 4 without a login, 5 for a Telegram error, 6 for `FLOOD_WAIT`, 7 for an unknown or closed chat or user, and 9 when the owner has not granted the required permission. A dry-run returns `dry_run`, `action` and `count`, with IDs and validated parameters when applicable; titles and descriptions are represented by their lengths.
