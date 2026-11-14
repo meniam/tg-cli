@@ -15,6 +15,7 @@ import (
 // Methods return *rpc.Error for failures the caller should see with a
 // specific code (not authorized, flood wait, Telegram errors).
 type Telegram interface {
+	ChatAdmin
 	// Run connects and keeps the connection until ctx ends. It returns
 	// ctx.Err() on a clean stop.
 	Run(ctx context.Context) error

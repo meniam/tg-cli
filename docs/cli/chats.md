@@ -480,3 +480,188 @@ tg chat sync cancel @release_team
 **Exit codes.** 0; 3, 4; 7 an unknown or closed chat.
 
 **Verification.** Cancelling does not shorten an account `FLOOD_WAIT` pause. See [FEATURES.md](../../FEATURES.md), item 10.12.
+
+## Chat administration
+
+These commands require a running Daemon and a logged-in account. The owner must grant `write` for join and leave, `admin` for moderation and editing, and `create` for creation in `access.json`. Closed chats return not found. Use `--dry-run` to check an action without changing Telegram. The Daemon reads administrator rights for moderation previews. Leave, kick and ban require `--yes` unless `--dry-run` is used. Moderation intent is recorded before the Telegram request.
+
+The safety class is `account_write`; leave, kick and ban are dangerous. The output formats are `json`, `toon` and `human`. A preview of a kick can return:
+
+```json
+{"ok":true,"data":{"dry_run":true,"action":"kick","chat_id":-1001234567890,"user_id":123456789,"count":1}}
+```
+
+### tg chat join
+
+Join a channel or supergroup, or join with an invitation whose chat ID is visible before joining. A link that does not reveal the ID cannot be used to join.
+
+```text
+tg chat join <chat> [--dry-run]
+```
+
+<!-- schema:flags tg chat join -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+Example: `tg chat join @example_group --dry-run`. The result contains `chat_id` and may contain `already_member` or `requested`.
+
+### tg chat leave
+
+Leave a group or channel. Leaving a private chat can remove access to its history.
+
+```text
+tg chat leave <chat> --yes
+```
+
+<!-- schema:flags tg chat leave -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--yes` | bool | `false` | confirm the action |
+<!-- /schema:flags -->
+
+Example: `tg chat leave @example_group --dry-run`. The result contains `chat_id` and `left`.
+
+### tg chat create
+
+Create a supergroup or channel. The owner must add the new chat to the relevant lists before further writes.
+
+```text
+tg chat create <title> --type supergroup|channel [--about TEXT]
+```
+
+<!-- schema:flags tg chat create -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--about` | string | `none` | description |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--type` | string | `none` | chat type: supergroup or channel |
+<!-- /schema:flags -->
+
+Example: `tg chat create "Example group" --type supergroup --dry-run`. The result contains `id` and `type`; a chat hidden by `allow` returns `closed: true`.
+
+### tg chat edit
+
+Change the title or description. An empty `--about` clears the description.
+
+```text
+tg chat edit <chat> [--title TEXT] [--about TEXT]
+```
+
+<!-- schema:flags tg chat edit -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--about` | string | `none` | new description |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--title` | string | `none` | new title |
+<!-- /schema:flags -->
+
+Example: `tg chat edit @example_group --title "New title" --dry-run`. The result reports `title_changed` and `about_changed`.
+
+### tg chat kick
+
+Remove a participant. In a supergroup or channel this bans and then unbans the user. If unbanning fails, the error reports `still_banned: true`.
+
+```text
+tg chat kick <chat> <user> --yes
+```
+
+<!-- schema:flags tg chat kick -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--yes` | bool | `false` | confirm the action |
+<!-- /schema:flags -->
+
+Example: `tg chat kick @example_group @example_user --dry-run`.
+
+### tg chat ban
+
+Ban a user in a supergroup or channel. `--until` is an RFC 3339 time between 30 seconds and 366 days ahead; without it the ban is indefinite.
+
+```text
+tg chat ban <chat> <user> --yes [--until TIME]
+```
+
+<!-- schema:flags tg chat ban -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--until` | string | `none` | expiry in RFC 3339 |
+| `--yes` | bool | `false` | confirm the action |
+<!-- /schema:flags -->
+
+Example: `tg chat ban @example_group @example_user --dry-run`.
+
+### tg chat unban
+
+Remove a user's ban in a supergroup or channel.
+
+```text
+tg chat unban <chat> <user>
+```
+
+<!-- schema:flags tg chat unban -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+Example: `tg chat unban @example_group @example_user --dry-run`.
+
+### tg chat restrict
+
+Replace a user's restrictions in a supergroup with `--deny`, or remove all restrictions with `--clear`. `--until` accepts RFC 3339.
+
+```text
+tg chat restrict <chat> <user> (--deny RIGHTS | --clear)
+```
+
+<!-- schema:flags tg chat restrict -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--clear` | bool | `false` | clear all restrictions |
+| `--deny` | string | `none` | comma-separated denied rights |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--until` | string | `none` | expiry in RFC 3339 |
+<!-- /schema:flags -->
+
+Example: `tg chat restrict @example_group @example_user --deny send-photos --dry-run`.
+
+### tg chat permissions
+
+Replace the default restrictions of a group or supergroup, or clear them.
+
+```text
+tg chat permissions <chat> (--deny RIGHTS | --clear)
+```
+
+<!-- schema:flags tg chat permissions -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--clear` | bool | `false` | clear all restrictions |
+| `--deny` | string | `none` | comma-separated denied rights |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+Example: `tg chat permissions @example_group --deny send-photos --dry-run`.
+
+### tg chat slow-mode
+
+Set slow mode for a supergroup. Accepted values are 0, 10, 30, 60, 300, 900 and 3600 seconds; 0 disables it.
+
+```text
+tg chat slow-mode <chat> <seconds>
+```
+
+<!-- schema:flags tg chat slow-mode -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+Example: `tg chat slow-mode @example_group 30 --dry-run`.
+
+For these administration commands, exit codes are 0 on success, 2 for invalid input or missing confirmation, 3 when the Daemon is unavailable, 4 without a login, 5 for a Telegram error, 6 for `FLOOD_WAIT`, 7 for an unknown or closed chat or user, and 9 when the owner has not granted the required permission. A dry-run returns `dry_run`, `action` and `count`, with IDs and validated parameters when applicable; titles and descriptions are represented by their lengths.
