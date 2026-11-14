@@ -13,6 +13,8 @@ import (
 // without a cursor of the old format being misread.
 const cursorVersion = 1
 
+const maxPinnedTopics = 32
+
 type cursorBody struct {
 	V    int   `json:"v"`
 	Chat int64 `json:"c"`
@@ -20,11 +22,12 @@ type cursorBody struct {
 }
 
 type topicsCursor struct {
-	V     int   `json:"v"`
-	Chat  int64 `json:"chat"`
-	Date  int   `json:"date"`
-	ID    int   `json:"id"`
-	Topic int   `json:"topic"`
+	V      int   `json:"v"`
+	Chat   int64 `json:"chat"`
+	Date   int   `json:"date"`
+	ID     int   `json:"id"`
+	Topic  int   `json:"topic"`
+	Pinned []int `json:"pinned,omitempty"`
 }
 
 type commonChatsCursor struct {
@@ -48,6 +51,9 @@ func decodeOpaqueCursor(value string, target any) error {
 
 func encodeTopicsCursor(value topicsCursor) string {
 	value.V = cursorVersion
+	if len(value.Pinned) > maxPinnedTopics {
+		value.Pinned = value.Pinned[:maxPinnedTopics]
+	}
 	return encodeOpaqueCursor(value)
 }
 
@@ -56,8 +62,23 @@ func decodeTopicsCursor(value string, chat int64) (topicsCursor, error) {
 		return topicsCursor{}, nil
 	}
 	var cursor topicsCursor
-	if err := decodeOpaqueCursor(value, &cursor); err != nil || cursor.V != cursorVersion || cursor.Date <= 0 || cursor.ID <= 0 || cursor.Topic <= 0 {
+	if err := decodeOpaqueCursor(value, &cursor); err != nil || cursor.V != cursorVersion || len(cursor.Pinned) > maxPinnedTopics {
 		return topicsCursor{}, invalidCursor()
+	}
+	reset := cursor.Date == 0 && cursor.ID == 0 && cursor.Topic == 0 && len(cursor.Pinned) > 0
+	positioned := cursor.Date > 0 && cursor.ID > 0 && cursor.Topic > 0
+	if !reset && !positioned {
+		return topicsCursor{}, invalidCursor()
+	}
+	seen := make(map[int]struct{}, len(cursor.Pinned))
+	for _, id := range cursor.Pinned {
+		if id <= 0 {
+			return topicsCursor{}, invalidCursor()
+		}
+		if _, exists := seen[id]; exists {
+			return topicsCursor{}, invalidCursor()
+		}
+		seen[id] = struct{}{}
 	}
 	if cursor.Chat != chat {
 		return topicsCursor{}, rpc.NewError(rpc.CodeInvalidParams, "the cursor belongs to another chat")

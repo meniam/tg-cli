@@ -158,10 +158,15 @@ func TestTopicsCursorAndForum(t *testing.T) {
 			t.Errorf("cursor %+v", req)
 		}
 		calls++
-		return respond(output, &tg.MessagesForumTopics{Topics: []tg.ForumTopicClass{
-			&tg.ForumTopic{ID: 10, Date: 1699990000, Peer: &tg.PeerChannel{ChannelID: 9}, Title: "Topic", TopMessage: 100, UnreadCount: 2, FromID: &tg.PeerUser{UserID: 1}, NotifySettings: tg.PeerNotifySettings{}},
+		if calls == 1 {
+			return respond(output, &tg.MessagesForumTopics{Count: 2, Topics: []tg.ForumTopicClass{
+				&tg.ForumTopic{ID: 10, Date: 1699990000, Peer: &tg.PeerChannel{ChannelID: 9}, Title: "Topic", TopMessage: 100, UnreadCount: 2, FromID: &tg.PeerUser{UserID: 1}, NotifySettings: tg.PeerNotifySettings{}},
+				&tg.ForumTopic{ID: 9, Date: 1699980000, Peer: &tg.PeerChannel{ChannelID: 9}, Title: "Other", TopMessage: 90, FromID: &tg.PeerUser{UserID: 1}, NotifySettings: tg.PeerNotifySettings{}},
+			}, Messages: []tg.MessageClass{&tg.Message{ID: 100, Date: 1700000000, PeerID: &tg.PeerChannel{ChannelID: 9}}, &tg.Message{ID: 90, Date: 1699999000, PeerID: &tg.PeerChannel{ChannelID: 9}}}})
+		}
+		return respond(output, &tg.MessagesForumTopics{Count: 2, Topics: []tg.ForumTopicClass{
 			&tg.ForumTopic{ID: 9, Date: 1699980000, Peer: &tg.PeerChannel{ChannelID: 9}, Title: "Other", TopMessage: 90, FromID: &tg.PeerUser{UserID: 1}, NotifySettings: tg.PeerNotifySettings{}},
-		}, Messages: []tg.MessageClass{&tg.Message{ID: 100, Date: 1700000000, PeerID: &tg.PeerChannel{ChannelID: 9}}, &tg.Message{ID: 90, Date: 1699999000, PeerID: &tg.PeerChannel{ChannelID: 9}}}})
+		}, Messages: []tg.MessageClass{&tg.Message{ID: 90, Date: 1699999000, PeerID: &tg.PeerChannel{ChannelID: 9}}}})
 	}))
 	mgr := testPeers(api)
 	forum := channel(9, "Forum", "forum", false, true)
@@ -263,6 +268,7 @@ func TestListsEmptyAndCreationDateCursor(t *testing.T) {
 		case *tg.MessagesGetForumTopicsRequest:
 			return respond(output, &tg.MessagesForumTopics{OrderByCreateDate: true, Count: 2, Topics: []tg.ForumTopicClass{
 				&tg.ForumTopic{ID: 12, Date: 1700000000, Peer: &tg.PeerChannel{ChannelID: 9}, Title: "Created", TopMessage: 120, FromID: &tg.PeerUser{UserID: 1}, NotifySettings: tg.PeerNotifySettings{}},
+				&tg.ForumTopic{ID: 11, Date: 1699990000, Peer: &tg.PeerChannel{ChannelID: 9}, Title: "Older", TopMessage: 110, FromID: &tg.PeerUser{UserID: 1}, NotifySettings: tg.PeerNotifySettings{}},
 			}})
 		case *tg.MessagesGetCommonChatsRequest:
 			return respond(output, &tg.MessagesChats{})

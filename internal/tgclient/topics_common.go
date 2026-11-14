@@ -10,6 +10,9 @@ import (
 	"tg-cli/internal/rpc"
 )
 
+const forumFetchLimit = 100
+const forumMaxRequests = 5
+
 func (c *Client) Topics(ctx context.Context, ref chatref.Ref, p rpc.TopicsParams) (rpc.TopicsResult, error) {
 	limit, err := listLimit(p.Limit, 100)
 	if err != nil {
@@ -32,45 +35,84 @@ func topicsAPI(ctx context.Context, api *tg.Client, peer peers.Peer, token strin
 	if err != nil {
 		return rpc.TopicsResult{}, err
 	}
-	response, err := api.MessagesGetForumTopics(ctx, &tg.MessagesGetForumTopicsRequest{
-		Peer: peer.InputPeer(), OffsetDate: cursor.Date, OffsetID: cursor.ID,
-		OffsetTopic: cursor.Topic, Limit: limit,
-	})
-	if err != nil {
-		return rpc.TopicsResult{}, mapError(err)
-	}
-	dates := make(map[int]int, len(response.Messages))
-	for _, msg := range response.Messages {
-		if message, ok := msg.(tg.NotEmptyMessage); ok {
-			dates[message.GetID()] = message.GetDate()
-		}
+	pinned := append([]int(nil), cursor.Pinned...)
+	seenPinned := make(map[int]struct{}, len(pinned))
+	for _, id := range pinned {
+		seenPinned[id] = struct{}{}
 	}
 	result := rpc.TopicsResult{Topics: []rpc.Topic{}}
-	var last *tg.ForumTopic
-	for _, raw := range response.Topics {
-		topic, ok := raw.(*tg.ForumTopic)
-		if !ok {
-			continue
-		}
-		if len(result.Topics) >= limit {
-			break
-		}
-		result.Topics = append(result.Topics, rpc.Topic{
-			ID: topic.ID, Title: topic.Title, Closed: topic.Closed, Pinned: topic.Pinned,
-			Hidden: topic.Hidden, Unread: topic.UnreadCount, TopMessage: topic.TopMessage,
-			Created: joinedDate(topic.Date),
+	for range forumMaxRequests {
+		previous := cursor
+		// Telegram can return pinned topics beyond a smaller requested limit.
+		response, err := api.MessagesGetForumTopics(ctx, &tg.MessagesGetForumTopicsRequest{
+			Peer: peer.InputPeer(), OffsetDate: cursor.Date, OffsetID: cursor.ID,
+			OffsetTopic: cursor.Topic, Limit: forumFetchLimit,
 		})
-		last = topic
-	}
-	if last != nil && (len(response.Topics) > limit || response.Count > len(response.Topics)) {
-		date := dates[last.TopMessage]
-		if response.OrderByCreateDate {
-			date = last.Date
+		if err != nil {
+			return rpc.TopicsResult{}, mapError(err)
 		}
-		if date <= 0 {
-			return rpc.TopicsResult{}, rpc.NewError(rpc.CodeTelegram, "Telegram did not return the message date needed for the topic cursor")
+		dates := make(map[int]int, len(response.Messages))
+		for _, msg := range response.Messages {
+			if message, ok := msg.(tg.NotEmptyMessage); ok {
+				dates[message.GetID()] = message.GetDate()
+			}
 		}
-		result.NextCursor = encodeTopicsCursor(topicsCursor{Chat: chatID, Date: date, ID: last.TopMessage, Topic: last.ID})
+		var last *tg.ForumTopic
+		processed := 0
+		for _, raw := range response.Topics {
+			topic, ok := raw.(*tg.ForumTopic)
+			if !ok {
+				continue
+			}
+			last = topic // Advance through every examined topic, including a skipped repeat.
+			processed++
+			if topic.Pinned {
+				if _, seen := seenPinned[topic.ID]; seen {
+					continue
+				}
+			}
+			result.Topics = append(result.Topics, rpc.Topic{
+				ID: topic.ID, Title: topic.Title, Closed: topic.Closed, Pinned: topic.Pinned,
+				Hidden: topic.Hidden, Unread: topic.UnreadCount, TopMessage: topic.TopMessage,
+				Created: joinedDate(topic.Date),
+			})
+			if topic.Pinned {
+				seenPinned[topic.ID] = struct{}{}
+				if len(pinned) < maxPinnedTopics {
+					pinned = append(pinned, topic.ID)
+				}
+			}
+			if len(result.Topics) == limit {
+				break
+			}
+		}
+		unprocessed := processed < len(response.Topics)
+		fullWithMore := len(response.Topics) >= forumFetchLimit && response.Count > processed
+		resetWithMore := last != nil && last.Pinned && response.Count > processed
+		more := last != nil && (unprocessed || fullWithMore || resetWithMore)
+		if more {
+			next := topicsCursor{Chat: chatID, Pinned: pinned}
+			if !last.Pinned {
+				next.Date = dates[last.TopMessage]
+				if response.OrderByCreateDate {
+					next.Date = last.Date
+				}
+				if next.Date <= 0 {
+					return rpc.TopicsResult{}, rpc.NewError(rpc.CodeTelegram, "Telegram did not return the message date needed for the topic cursor")
+				}
+				next.ID, next.Topic = last.TopMessage, last.ID
+			}
+			if len(result.Topics) == 0 && next.Date == previous.Date && next.ID == previous.ID && next.Topic == previous.Topic {
+				return rpc.TopicsResult{Topics: []rpc.Topic{}}, nil
+			}
+			cursor = next
+			result.NextCursor = encodeTopicsCursor(cursor)
+		} else {
+			result.NextCursor = ""
+		}
+		if len(result.Topics) > 0 || !more {
+			return result, nil
+		}
 	}
 	return result, nil
 }
