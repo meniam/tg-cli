@@ -28,7 +28,7 @@ func (a *app) messageExportCommand() *cobra.Command {
 	cmd.Flags().String("until", "", "messages sent at this time or earlier (RFC 3339)")
 	cmd.Flags().Bool("include-deleted", false, "include locally marked deleted messages")
 	cmd.Flags().Int("limit", 0, "maximum number of output messages; 0 means no limit")
-	cmd.Flags().Int("after", 0, "resume after this message id; 0 starts at the beginning")
+	cmd.Flags().Int("after", 0, "resume after this message id; 0 means from the beginning")
 	return cmd
 }
 
