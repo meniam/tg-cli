@@ -12,7 +12,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: Steps 4-5 (Daemon: проверка записи, пробный запуск, журнал удалений; CLI: четыре команды). Шаги 1-3 выполнены.
+- Next safe step: Step 6 (документы через `docwriter`) и Step 7 (живая проверка в «Браин Тест»). Шаги 4-5 выполнены.
 
 ## Context and sources
 
@@ -96,8 +96,8 @@ PR: —
 
 - [x] 2. `internal/access`: список `write` (разбор, дубликаты, `WriteAllowed(chatID)`: виден, не в `block`, есть в `write`), счётчик для `daemon status`; тесты.
 - [x] 3. `rpc` и `tgclient`: типы и методы `message.send|edit|delete|forward`, код ошибки `write_disabled`, интерфейс `daemon.Telegram` (`Send`, `Edit`, `Delete`, `Forward`), реализация через gotd, тесты на поддельном `tg.Invoker` (аргументы, ответ, ошибки, без повторов).
-- [ ] 4. Daemon: проверка записи (закрытый чат `not_found`, не в `write` код `write_disabled`), `--dry-run` на уровне метода, журнал удалений (до и после), сохранение в базу, тест полноты пометок доступа; тесты.
-- [ ] 5. CLI: четыре команды, `--text` или stdin, `--yes`, `--dry-run`, класс «запись» и `dangerous: true` в схеме, код выхода 9 `write_disabled`; тесты и схема.
+- [x] 4. Daemon: проверка записи (закрытый чат `not_found`, не в `write` код `write_disabled`), `--dry-run` на уровне метода, журнал удалений (до и после), сохранение в базу, тест полноты пометок доступа; тесты.
+- [x] 5. CLI: четыре команды, `--text` или stdin, `--yes`, `--dry-run`, класс «запись» и `dangerous: true` в схеме, код выхода 9 `write_disabled`; тесты и схема.
 - [ ] 6. Документы: `AGENTS.md` (Running, запрет записи без задачи остаётся, код 9), `FEATURES.md` (5.1, 5.2, 5.5, 9.1, 9.3, 9.6), навык, решение в `.agents/decisions/`; через `docwriter`.
 - [ ] 7. Живая проверка в чате «Браин Тест» (отправка с ответом, правка, удаление обоих видов, пересылка, `--dry-run`, отказ при выключенной записи, закрытый чат).
 
