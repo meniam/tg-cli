@@ -338,6 +338,55 @@ With `--dry-run` the answer adds `"dry_run":true`.
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 4.7.
 
+## Showing a typing indicator
+
+### tg chat typing
+
+Sends one typing action to a chat. It does not keep the indicator active: send another command if it is still needed, or use `--cancel` to stop it.
+
+```text
+tg chat typing <chat> [flags]
+```
+
+<!-- schema:flags tg chat typing -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--action` | string | `typing` | typing action |
+| `--cancel` | bool | `false` | cancel the indicator |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--topic` | int | `0` | forum topic id |
+<!-- /schema:flags -->
+
+**Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon, a login, and the chat in the `write` list of `access.json`. It needs no `--yes`. A closed chat is reported as unknown; a non-numeric reference may be resolved through Telegram before that access check.
+
+**Actions.** `typing` (the default), `upload_photo`, `upload_video`, `upload_document`, `record_voice`, `upload_voice`, `record_video`, `choose_sticker`, and `cancel`. `--cancel` selects `cancel`; it conflicts with a different explicit `--action`. `--topic` selects a forum topic and must not be negative.
+
+**How it works.** `--dry-run` performs local and access checks and returns the action without a Telegram write; resolving a non-numeric chat reference may still read Telegram. A real call sends exactly one `messages.setTyping` request. The throttle treats it as a write and does not retry it after `FLOOD_WAIT`.
+
+**Example.**
+
+```sh
+tg chat typing @release_team
+tg chat typing @release_team --action upload_document
+tg chat typing @release_team --topic 42 --cancel
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"action":"typing"}}
+```
+
+With `--dry-run` the answer adds `"dry_run":true`.
+
+**Answer fields** (`data`): `chat_id` integer, `action` string, `dry_run` boolean (optional).
+
+**Exit codes.** 0; 2 an invalid action, a negative topic id, or conflicting `--cancel` and `--action`; 3 no Daemon; 4 no login; 5 Telegram rejected the action; 6 `FLOOD_WAIT` (not repeated); 7 an unknown or closed chat; 9 the chat is not in `write`.
+
+**Verification.** Implemented and covered by tests without a Telegram account. Live-account verification is tracked only in [FEATURES.md](../../FEATURES.md), item 5.8.
+
 ## Loading a whole chat
 
 `message history` stores the pages you read. To pull a whole chat into the local database, ask the Daemon to load it in the background. It loads one chat at a time and keeps the others in a queue. A page is 100 messages going back from the `oldest_id` saved by earlier loads (from the newest message on the first run), with a pause of 2 seconds between pages. A page and its progress (`oldest_id`, `newest_id`, `complete`) are written in one transaction, so an interrupted load never moves `oldest_id` past a message that was not saved. Only an empty answer from Telegram marks the chat `complete`.
