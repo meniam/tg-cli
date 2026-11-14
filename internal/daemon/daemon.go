@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"tg-cli/internal/access"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
+	"tg-cli/internal/throttle"
 )
 
 // ErrAlreadyRunning means another daemon holds the lock of the profile.
@@ -48,6 +50,8 @@ type Options struct {
 const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
+	account             accountCache
+	idempotencyMu       sync.Mutex
 	opts                Options
 	log                 *slog.Logger
 	srv                 *rpc.Server
@@ -124,17 +128,64 @@ func Run(ctx context.Context, opts Options) error {
 	d.lastActivity.Store(time.Now().UnixNano())
 	d.login = newLoginManager(runCtx, opts.Telegram)
 	authorized := make(chan struct{}, 1)
+	d.login.onUser = d.account.set
 	d.login.onAuthorized = func() {
 		select {
 		case authorized <- struct{}{}:
 		default:
 		}
 	}
+	d.srv.SetRequestGuard(func(req rpc.Request) error {
+		if strings.HasPrefix(req.Method, "user.") || strings.HasPrefix(req.Method, "contact.") {
+			req.Method = "chat." + req.Method
+		}
+		return d.account.check(req)
+	})
 	contactsDone := make(chan struct{})
-	go func() { defer close(contactsDone); d.syncContactsAfterLogin(runCtx, authorized) }()
+	accountDone := make(chan struct{})
+	go func() {
+		defer close(accountDone)
+		select {
+		case <-runCtx.Done():
+			return
+		case <-opts.Telegram.Ready():
+		}
+		user, err := opts.Telegram.Self(runCtx)
+		if err == nil && user != nil {
+			d.account.setIfEmpty(user)
+		}
+	}()
+	go func() {
+		defer close(contactsDone)
+		select {
+		case <-runCtx.Done():
+			return
+		case <-accountDone:
+		}
+		d.account.mu.RLock()
+		hasAccount := d.account.user != nil
+		d.account.mu.RUnlock()
+		if !hasAccount {
+			select {
+			case <-runCtx.Done():
+				return
+			case <-authorized:
+			}
+		}
+		d.contactsMu.Lock()
+		defer d.contactsMu.Unlock()
+		if _, err := d.syncContacts(throttle.WithBackground(runCtx)); err != nil && !errors.Is(err, context.Canceled) {
+			d.log.Warn("contact sync failed")
+		}
+	}()
 	d.register()
 	d.srv.SetEventSource(d.hub, d.replayEvents)
 	opts.Telegram.SetEventSink(d.handleEvent)
+	if _, err := d.store.PruneIdempotency(runCtx, time.Now()); err != nil {
+		d.log.Warn("idempotency cleanup failed")
+	}
+	idempotencyDone := make(chan struct{})
+	go func() { defer close(idempotencyDone); d.pruneIdempotency(runCtx) }()
 	pruneDone := make(chan struct{})
 	go func() { defer close(pruneDone); d.pruneEvents(runCtx, eventPruneEvery, eventRetention, eventKeep) }()
 
@@ -183,6 +234,8 @@ func Run(ctx context.Context, opts Options) error {
 	<-idleDone
 	<-pruneDone
 	<-contactsDone
+	<-idempotencyDone
+	<-accountDone
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), stopGrace)
 	defer stopCancel()
 	if err := d.srv.Shutdown(stopCtx); err != nil {
@@ -289,6 +342,7 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodHistorySyncStatus, d.historySyncStatus)
 	d.handle(rpc.MethodHistorySyncCancel, d.historySyncCancel)
 	d.registerUsers()
+	d.registerChatAdmin()
 }
 
 func (d *daemon) ping(context.Context, json.RawMessage) (any, error) {
@@ -303,8 +357,8 @@ func (d *daemon) status(ctx context.Context, _ json.RawMessage) (any, error) {
 		// The status request itself is active while it runs, do not count it.
 		ActiveRequests: max(d.srv.Active()-1, 0),
 	}
-	if policy := d.policy(); policy.Enabled() || policy.WriteCount() > 0 {
-		st.Access = &rpc.AccessStatus{Enabled: policy.Enabled(), Allow: policy.AllowCount(), Block: policy.BlockCount(), Write: policy.WriteCount(), Closed: policy.Closed()}
+	if policy := d.policy(); policy.Enabled() || policy.WriteCount() > 0 || policy.AdminCount() > 0 || policy.CreateAllowed() {
+		st.Access = &rpc.AccessStatus{Enabled: policy.Enabled(), Allow: policy.AllowCount(), Block: policy.BlockCount(), Write: policy.WriteCount(), Admin: policy.AdminCount(), Create: policy.CreateAllowed(), Closed: policy.Closed()}
 	}
 	select {
 	case <-d.opts.Telegram.Ready():
@@ -380,6 +434,7 @@ func (d *daemon) requireAccount(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	d.account.set(user)
 	if user == nil {
 		return rpc.NewError(rpc.CodeNotAuthorized, "not logged in: run `auth login` first")
 	}

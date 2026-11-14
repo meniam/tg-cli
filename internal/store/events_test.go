@@ -110,7 +110,7 @@ func TestEventsMigrationUpgradesVersionTwoDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if version, err := db.Version(); err != nil || version != 3 {
+	if version, err := db.Version(); err != nil || version != newestMigrationVersion(t) {
 		t.Errorf("version=%d err=%v", version, err)
 	}
 	if _, err := db.write.Exec(`INSERT INTO events(type,created_at,payload) VALUES('bad',1,'not JSON')`); err == nil {

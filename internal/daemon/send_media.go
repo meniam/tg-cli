@@ -2,8 +2,10 @@ package daemon
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"io"
 	"mime"
 	"os"
 	"path/filepath"
@@ -105,13 +107,50 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 			return nil, err
 		}
 	}
+	canonical := p
+	canonical.DryRun = false
+	var fingerprints [][32]byte
+	if p.IdempotencyKey != "" {
+		for _, file := range files {
+			if _, err := file.File.Seek(0, io.SeekStart); err != nil {
+				return nil, err
+			}
+			h := sha256.New()
+			if _, err := io.Copy(h, file.File); err != nil {
+				return nil, err
+			}
+			var digest [32]byte
+			copy(digest[:], h.Sum(nil))
+			fingerprints = append(fingerprints, digest)
+		}
+	}
+	session, saved, available, err := d.beginIdempotency(ctx, chatID, p.IdempotencyKey, rpc.MethodMessageSendMedia, struct {
+		Params rpc.SendMediaParams
+		Files  [][32]byte
+	}{canonical, fingerprints}, p.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer session.unlock()
+	if saved != nil {
+		var replay rpc.SendMediaResult
+		if err := json.Unmarshal(saved, &replay); err != nil {
+			return nil, err
+		}
+		replay.Replayed = true
+		return replay, nil
+	}
 	if p.DryRun {
 		types := make([]string, len(files))
 		sizes := make([]int64, len(files))
 		for i, file := range files {
 			types[i], sizes[i] = p.As, file.Size
 		}
-		return rpc.SendMediaResult{ChatID: chatID, Messages: []rpc.MessageRef{}, DryRun: true, Action: "send_media", Count: len(files), Types: types, Sizes: sizes, CaptionLength: utf8.RuneCountInString(p.Caption)}, nil
+		result := rpc.SendMediaResult{ChatID: chatID, Messages: []rpc.MessageRef{}, DryRun: true, Action: "send_media", Count: len(files), Types: types, Sizes: sizes, CaptionLength: utf8.RuneCountInString(p.Caption)}
+		if p.IdempotencyKey != "" {
+			result.ReplayAvailable = &available
+		}
+		return result, nil
 	}
 	res, err := d.opts.Telegram.SendMedia(ctx, ref, p, files)
 	if err != nil {
@@ -137,6 +176,9 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 		stored = append(stored, rpc.Message{ChatID: chatID, ID: item.ID, Date: item.Date, Text: text, MediaType: p.As, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic})
 	}
 	d.saveMessages(ctx, rpc.MethodMessageSendMedia, stored)
+	if err := session.complete(ctx, res); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 

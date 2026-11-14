@@ -1,0 +1,99 @@
+package tgclient
+
+import (
+	"context"
+	"errors"
+	"io"
+	"testing"
+
+	"github.com/gotd/td/bin"
+	"github.com/gotd/td/tg"
+
+	"tg-cli/internal/rpc"
+)
+
+func TestIdempotentInvokerIDsAndRetry(t *testing.T) {
+	var ids [][]int64
+	calls := 0
+	inv := writeInvoker(func(_ context.Context, input bin.Encoder, _ bin.Decoder) error {
+		calls++
+		switch req := input.(type) {
+		case *tg.MessagesSendMessageRequest:
+			ids = append(ids, []int64{req.RandomID})
+		case *tg.MessagesSendMediaRequest:
+			ids = append(ids, []int64{req.RandomID})
+		case *tg.MessagesSendMultiMediaRequest:
+			ids = append(ids, []int64{req.MultiMedia[0].RandomID, req.MultiMedia[1].RandomID})
+		case *tg.MessagesForwardMessagesRequest:
+			ids = append(ids, append([]int64(nil), req.RandomID...))
+		}
+		if calls == 1 {
+			return io.EOF
+		}
+		return nil
+	})
+	api, err := idempotentAPI(tg.NewClient(inv), 1, 2, "key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	requests := []bin.Encoder{&tg.MessagesSendMessageRequest{}, &tg.MessagesSendMediaRequest{}, &tg.MessagesSendMultiMediaRequest{MultiMedia: make([]tg.InputSingleMedia, 2)}, &tg.MessagesForwardMessagesRequest{ID: []int{3, 4}}}
+	for _, req := range requests {
+		if err := api.Invoker().Invoke(context.Background(), req, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 5 || ids[0][0] == 0 || ids[0][0] != ids[1][0] || ids[1][0] != ids[2][0] || ids[3][0] == ids[3][1] || ids[4][0] != ids[3][0] || ids[4][1] != ids[3][1] {
+		t.Fatalf("calls=%d ids=%v", calls, ids)
+	}
+	if deterministicID(2, 2, "key", 0) == ids[0][0] || deterministicID(1, 3, "key", 0) == ids[0][0] || deterministicID(1, 2, "other", 0) == ids[0][0] {
+		t.Fatal("ID does not depend on tuple")
+	}
+}
+
+func TestIdempotentInvokerDoesNotRetryPermanentOrUnkeyed(t *testing.T) {
+	calls := 0
+	sentinel := errors.New("permanent")
+	base := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { calls++; return sentinel }))
+	api, err := idempotentAPI(base, 1, 2, "key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(api.Invoker().Invoke(context.Background(), &tg.MessagesSendMessageRequest{}, nil), sentinel) || calls != 1 {
+		t.Fatal("permanent error retried")
+	}
+	api, err = idempotentAPI(base, 0, 2, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = api.Invoker().Invoke(context.Background(), &tg.MessagesSendMessageRequest{}, nil)
+	if calls != 2 {
+		t.Fatal("unkeyed request retried")
+	}
+}
+
+func TestSendTextIdempotencyThroughBuilder(t *testing.T) {
+	var ids []int64
+	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
+		req, ok := input.(*tg.MessagesSendMessageRequest)
+		if !ok {
+			t.Fatalf("unexpected request %T", input)
+		}
+		ids = append(ids, req.RandomID)
+		return respond(output, sentUpdate(42))
+	}))
+	p := rpc.SendParams{Text: "hello", IdempotencyKey: "key", AccountID: 123}
+	for range 2 {
+		if _, err := sendText(context.Background(), api, &tg.InputPeerSelf{}, 42, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p.IdempotencyKey = ""
+	for range 2 {
+		if _, err := sendText(context.Background(), api, &tg.InputPeerSelf{}, 42, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if ids[0] == 0 || ids[0] != ids[1] || ids[2] == 0 || ids[3] == 0 || ids[2] == ids[3] {
+		t.Fatalf("IDs: %v", ids)
+	}
+}

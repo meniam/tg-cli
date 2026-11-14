@@ -18,6 +18,7 @@ import (
 )
 
 type fakeTelegram struct {
+	noChatAdmin
 	ready chan struct{}
 
 	mu       sync.Mutex
