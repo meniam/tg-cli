@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ type Policy struct {
 	allow  map[int64]struct{}
 	block  map[int64]struct{}
 	write  map[int64]struct{}
+	files  []string
 	denied bool
 }
 
@@ -54,6 +56,17 @@ func (p Policy) Closed() bool { return p.denied }
 func (p Policy) AllowCount() int { return len(p.allow) }
 func (p Policy) BlockCount() int { return len(p.block) }
 func (p Policy) WriteCount() int { return len(p.write) }
+
+// FileRoots returns a detached copy of the directories allowed for file sending.
+func (p Policy) FileRoots() []string {
+	if p.denied {
+		return nil
+	}
+	return append([]string(nil), p.files...)
+}
+
+// FilesAllowed reports whether file sending has at least one allowed root.
+func (p Policy) FilesAllowed() bool { return !p.denied && len(p.files) > 0 }
 
 // Filter returns a detached snapshot for database queries. A failed policy
 // hides all chats; callers may still show records without a chat ID.
@@ -177,11 +190,40 @@ func parse(data []byte) (Policy, error) {
 				return Policy{}, fmt.Errorf("write: %w", err)
 			}
 			policy.write = ids
+		case "files":
+			if len(value) == 0 || value[0] != '[' {
+				return Policy{}, errors.New("files must be an array of absolute directory paths")
+			}
+			roots, err := parseFileRoots(value)
+			if err != nil {
+				return Policy{}, fmt.Errorf("files: %w", err)
+			}
+			policy.files = roots
 		default:
 			return Policy{}, errors.New("unknown field")
 		}
 	}
 	return policy, nil
+}
+
+func parseFileRoots(data json.RawMessage) ([]string, error) {
+	var roots []string
+	if err := json.Unmarshal(data, &roots); err != nil {
+		return nil, errors.New("expected an array of absolute directory paths")
+	}
+	seen := make(map[string]struct{}, len(roots))
+	for i, root := range roots {
+		if root == "" || !filepath.IsAbs(root) {
+			return nil, errors.New("directory paths must be absolute and nonempty")
+		}
+		root = filepath.Clean(root)
+		if _, duplicate := seen[root]; duplicate {
+			return nil, errors.New("duplicate directory path")
+		}
+		seen[root] = struct{}{}
+		roots[i] = root
+	}
+	return roots, nil
 }
 
 func parseIDs(data json.RawMessage) (map[int64]struct{}, error) {
