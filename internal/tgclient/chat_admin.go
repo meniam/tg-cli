@@ -38,16 +38,23 @@ func joinResult(result tg.MessagesChatInviteJoinResultClass) (rpc.ChatJoinResult
 	}
 }
 func (c *Client) Join(ctx context.Context, ref chatref.Ref) (rpc.ChatJoinResult, error) {
+	if ref.Kind == chatref.Invite {
+		return joinAdminChat(ctx, c.tg.API(), ref.Invite, nil)
+	}
+	p, err := c.resolve(ctx, ref)
+	if err != nil {
+		return rpc.ChatJoinResult{}, err
+	}
+	return joinAdminChat(ctx, c.tg.API(), "", p)
+}
+
+func joinAdminChat(ctx context.Context, api *tg.Client, invite string, p peers.Peer) (rpc.ChatJoinResult, error) {
 	var result tg.MessagesChatInviteJoinResultClass
 	var err error
 	var resolved rpc.ChatJoinResult
-	if ref.Kind == chatref.Invite {
-		result, err = c.tg.API().MessagesImportChatInvite(ctx, ref.Invite)
+	if invite != "" {
+		result, err = api.MessagesImportChatInvite(ctx, invite)
 	} else {
-		p, e := c.resolve(ctx, ref)
-		if e != nil {
-			return rpc.ChatJoinResult{}, e
-		}
 		channel, ok := p.(peers.Channel)
 		if !ok {
 			return rpc.ChatJoinResult{}, rpc.NewError(rpc.CodeInvalidParams, "joining requires a channel or supergroup")
@@ -57,7 +64,7 @@ func (c *Client) Join(ctx context.Context, ref chatref.Ref) (rpc.ChatJoinResult,
 		if channel.Raw().Megagroup {
 			resolved.Type = "supergroup"
 		}
-		result, err = c.tg.API().ChannelsJoinChannel(ctx, channel.InputChannel())
+		result, err = api.ChannelsJoinChannel(ctx, channel.InputChannel())
 	}
 	if tgerr.Is(err, "USER_ALREADY_PARTICIPANT") {
 		resolved.AlreadyMember = true
@@ -77,11 +84,16 @@ func (c *Client) Leave(ctx context.Context, ref chatref.Ref) (rpc.ChatLeaveResul
 	if err != nil {
 		return rpc.ChatLeaveResult{}, err
 	}
+	return leaveAdminChat(ctx, c.tg.API(), p)
+}
+
+func leaveAdminChat(ctx context.Context, api *tg.Client, p peers.Peer) (rpc.ChatLeaveResult, error) {
+	var err error
 	switch v := p.(type) {
 	case peers.Channel:
-		_, err = c.tg.API().ChannelsLeaveChannel(ctx, v.InputChannel())
+		_, err = api.ChannelsLeaveChannel(ctx, v.InputChannel())
 	case peers.Chat:
-		_, err = c.tg.API().MessagesDeleteChatUser(ctx, &tg.MessagesDeleteChatUserRequest{ChatID: v.ID(), UserID: &tg.InputUserSelf{}})
+		_, err = api.MessagesDeleteChatUser(ctx, &tg.MessagesDeleteChatUserRequest{ChatID: v.ID(), UserID: &tg.InputUserSelf{}})
 	default:
 		return rpc.ChatLeaveResult{}, rpc.NewError(rpc.CodeInvalidParams, "leaving requires a group or channel")
 	}
@@ -106,7 +118,11 @@ func (c *Client) CreateChat(ctx context.Context, p rpc.ChatCreateParams) (rpc.Ch
 	if p.Type != "supergroup" && p.Type != "channel" {
 		return rpc.ChatCreateResult{}, rpc.NewError(rpc.CodeInvalidParams, "type must be supergroup or channel")
 	}
-	u, err := c.tg.API().ChannelsCreateChannel(ctx, &tg.ChannelsCreateChannelRequest{Title: p.Title, About: p.About, Megagroup: p.Type == "supergroup", Broadcast: p.Type == "channel"})
+	return createAdminChat(ctx, c.tg.API(), p)
+}
+
+func createAdminChat(ctx context.Context, api *tg.Client, p rpc.ChatCreateParams) (rpc.ChatCreateResult, error) {
+	u, err := api.ChannelsCreateChannel(ctx, &tg.ChannelsCreateChannelRequest{Title: p.Title, About: p.About, Megagroup: p.Type == "supergroup", Broadcast: p.Type == "channel"})
 	if err != nil {
 		return rpc.ChatCreateResult{}, mapChatAdminError(err)
 	}
@@ -137,6 +153,11 @@ func (c *Client) EditChat(ctx context.Context, ref chatref.Ref, p rpc.ChatEditPa
 	if err != nil {
 		return rpc.ChatEditResult{}, err
 	}
+	return editAdminChat(ctx, c.tg.API(), peer, p)
+}
+
+func editAdminChat(ctx context.Context, api *tg.Client, peer peers.Peer, p rpc.ChatEditParams) (rpc.ChatEditResult, error) {
+	var err error
 	r := rpc.ChatEditResult{ChatID: int64(peer.TDLibPeerID())}
 	switch peer.(type) {
 	case peers.Chat, peers.Channel:
@@ -146,9 +167,9 @@ func (c *Client) EditChat(ctx context.Context, ref chatref.Ref, p rpc.ChatEditPa
 	if p.Title != nil {
 		switch v := peer.(type) {
 		case peers.Channel:
-			_, err = c.tg.API().ChannelsEditTitle(ctx, &tg.ChannelsEditTitleRequest{Channel: v.InputChannel(), Title: *p.Title})
+			_, err = api.ChannelsEditTitle(ctx, &tg.ChannelsEditTitleRequest{Channel: v.InputChannel(), Title: *p.Title})
 		case peers.Chat:
-			_, err = c.tg.API().MessagesEditChatTitle(ctx, &tg.MessagesEditChatTitleRequest{ChatID: v.ID(), Title: *p.Title})
+			_, err = api.MessagesEditChatTitle(ctx, &tg.MessagesEditChatTitleRequest{ChatID: v.ID(), Title: *p.Title})
 		}
 		if err != nil && !tgerr.Is(err, "CHAT_NOT_MODIFIED") {
 			return r, mapChatAdminError(err)
@@ -157,7 +178,7 @@ func (c *Client) EditChat(ctx context.Context, ref chatref.Ref, p rpc.ChatEditPa
 	}
 	if p.About != nil {
 		var changed bool
-		changed, err = c.tg.API().MessagesEditChatAbout(ctx, &tg.MessagesEditChatAboutRequest{Peer: peer.InputPeer(), About: *p.About})
+		changed, err = api.MessagesEditChatAbout(ctx, &tg.MessagesEditChatAboutRequest{Peer: peer.InputPeer(), About: *p.About})
 		if err != nil && !tgerr.Is(err, "CHAT_NOT_MODIFIED", "CHAT_ABOUT_NOT_MODIFIED") {
 			return r, mapChatAdminError(err)
 		}
@@ -256,15 +277,20 @@ func (c *Client) Kick(ctx context.Context, chat, user chatref.Ref) (rpc.ChatAdmi
 	if err != nil {
 		return rpc.ChatAdminResult{}, err
 	}
+	return kickAdminMember(ctx, c.tg.API(), p, u)
+}
+
+func kickAdminMember(ctx context.Context, api *tg.Client, p peers.Peer, u peers.User) (rpc.ChatAdminResult, error) {
+	var err error
 	r := rpc.ChatAdminResult{ChatID: int64(p.TDLibPeerID()), UserID: u.ID()}
 	switch v := p.(type) {
 	case peers.Chat:
-		_, err = c.tg.API().MessagesDeleteChatUser(ctx, &tg.MessagesDeleteChatUserRequest{ChatID: v.ID(), UserID: u.InputUser()})
+		_, err = api.MessagesDeleteChatUser(ctx, &tg.MessagesDeleteChatUserRequest{ChatID: v.ID(), UserID: u.InputUser()})
 		if err != nil {
 			return r, mapChatAdminError(err)
 		}
 	case peers.Channel:
-		if err = kickChannel(ctx, c.tg.API(), v, u); err != nil {
+		if err = kickChannel(ctx, api, v, u); err != nil {
 			return r, err
 		}
 	default:
@@ -287,11 +313,15 @@ func (c *Client) memberRights(ctx context.Context, chat, user chatref.Ref, right
 	if err != nil {
 		return rpc.ChatAdminResult{}, err
 	}
+	return setMemberBanned(ctx, c.tg.API(), p, u, rights, until, banned)
+}
+
+func setMemberBanned(ctx context.Context, api *tg.Client, p peers.Peer, u peers.User, rights tg.ChatBannedRights, until string, banned bool) (rpc.ChatAdminResult, error) {
 	ch, ok := p.(peers.Channel)
 	if !ok {
 		return rpc.ChatAdminResult{}, rpc.NewError(rpc.CodeInvalidParams, "operation requires a supergroup or channel")
 	}
-	if err = editBanned(ctx, c.tg.API(), ch, u, rights); err != nil {
+	if err := editBanned(ctx, api, ch, u, rights); err != nil {
 		return rpc.ChatAdminResult{}, mapChatAdminError(err)
 	}
 	return rpc.ChatAdminResult{ChatID: int64(p.TDLibPeerID()), UserID: u.ID(), Banned: &banned, Until: until}, nil
@@ -307,11 +337,15 @@ func (c *Client) Restrict(ctx context.Context, chat, user chatref.Ref, deny []st
 	if err != nil {
 		return rpc.ChatAdminResult{}, err
 	}
+	return restrictAdminMember(ctx, c.tg.API(), p, u, deny, until)
+}
+
+func restrictAdminMember(ctx context.Context, api *tg.Client, p peers.Peer, u peers.User, deny []string, until string) (rpc.ChatAdminResult, error) {
 	ch, ok := p.(peers.Channel)
 	if !ok || !ch.Raw().Megagroup {
 		return rpc.ChatAdminResult{}, rpc.NewError(rpc.CodeInvalidParams, "restrict requires a supergroup")
 	}
-	if err = editBanned(ctx, c.tg.API(), ch, u, bannedRights(deny, untilUnix(until))); err != nil {
+	if err := editBanned(ctx, api, ch, u, bannedRights(deny, untilUnix(until))); err != nil {
 		return rpc.ChatAdminResult{}, mapChatAdminError(err)
 	}
 	return rpc.ChatAdminResult{ChatID: int64(p.TDLibPeerID()), UserID: u.ID(), Denied: deny, Until: until}, nil
@@ -324,6 +358,10 @@ func (c *Client) SetDefaultRights(ctx context.Context, ref chatref.Ref, deny []s
 	if err != nil {
 		return rpc.ChatAdminResult{}, err
 	}
+	return setDefaultChatRights(ctx, c.tg.API(), p, deny)
+}
+
+func setDefaultChatRights(ctx context.Context, api *tg.Client, p peers.Peer, deny []string) (rpc.ChatAdminResult, error) {
 	switch v := p.(type) {
 	case peers.Chat:
 	case peers.Channel:
@@ -333,7 +371,7 @@ func (c *Client) SetDefaultRights(ctx context.Context, ref chatref.Ref, deny []s
 	default:
 		return rpc.ChatAdminResult{}, rpc.NewError(rpc.CodeInvalidParams, "permissions require a group")
 	}
-	_, err = c.tg.API().MessagesEditChatDefaultBannedRights(ctx, &tg.MessagesEditChatDefaultBannedRightsRequest{Peer: p.InputPeer(), BannedRights: bannedRights(deny, 0)})
+	_, err := api.MessagesEditChatDefaultBannedRights(ctx, &tg.MessagesEditChatDefaultBannedRightsRequest{Peer: p.InputPeer(), BannedRights: bannedRights(deny, 0)})
 	if err != nil {
 		return rpc.ChatAdminResult{}, mapChatAdminError(err)
 	}
@@ -347,11 +385,15 @@ func (c *Client) SetSlowMode(ctx context.Context, ref chatref.Ref, seconds int) 
 	if err != nil {
 		return rpc.ChatAdminResult{}, err
 	}
+	return setChatSlowMode(ctx, c.tg.API(), p, seconds)
+}
+
+func setChatSlowMode(ctx context.Context, api *tg.Client, p peers.Peer, seconds int) (rpc.ChatAdminResult, error) {
 	ch, ok := p.(peers.Channel)
 	if !ok || !ch.Raw().Megagroup {
 		return rpc.ChatAdminResult{}, rpc.NewError(rpc.CodeInvalidParams, "slow mode needs a supergroup")
 	}
-	_, err = c.tg.API().ChannelsToggleSlowMode(ctx, &tg.ChannelsToggleSlowModeRequest{Channel: ch.InputChannel(), Seconds: seconds})
+	_, err := api.ChannelsToggleSlowMode(ctx, &tg.ChannelsToggleSlowModeRequest{Channel: ch.InputChannel(), Seconds: seconds})
 	if err != nil {
 		return rpc.ChatAdminResult{}, mapChatAdminError(err)
 	}
@@ -364,16 +406,20 @@ func (c *Client) OwnAdminRights(ctx context.Context, ref chatref.Ref) (rpc.ChatO
 	if err != nil {
 		return rpc.ChatOwnAdminRights{}, err
 	}
+	return ownAdminRights(ctx, c.tg.API(), p)
+}
+
+func ownAdminRights(ctx context.Context, api *tg.Client, p peers.Peer) (rpc.ChatOwnAdminRights, error) {
 	var chats []tg.ChatClass
 	switch v := p.(type) {
 	case peers.Channel:
-		response, e := c.tg.API().ChannelsGetChannels(ctx, []tg.InputChannelClass{v.InputChannel()})
+		response, e := api.ChannelsGetChannels(ctx, []tg.InputChannelClass{v.InputChannel()})
 		if e != nil {
 			return rpc.ChatOwnAdminRights{}, mapChatAdminError(e)
 		}
 		chats = response.GetChats()
 	case peers.Chat:
-		response, e := c.tg.API().MessagesGetFullChat(ctx, v.ID())
+		response, e := api.MessagesGetFullChat(ctx, v.ID())
 		if e != nil {
 			return rpc.ChatOwnAdminRights{}, mapChatAdminError(e)
 		}
