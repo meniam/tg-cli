@@ -10,9 +10,9 @@ PR: —
 
 ## Status
 
-- Current status: approved
+- Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: шаг 0 (рабочее дерево и ветка уже созданы), затем шаг 1 (аудит).
+- Next safe step: шаг 1 (аудит), исполнитель Codex в Herdr, рабочее дерево этого worktree.
 
 ## Context and sources
 
