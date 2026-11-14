@@ -34,7 +34,7 @@ func runDiscoveryCLI(t *testing.T, args []string, reply func(string, json.RawMes
 		method string
 		params json.RawMessage
 	}, 1)
-	for _, method := range []string{rpc.MethodMessageSearch, rpc.MethodMessageSearchPublic, rpc.MethodMessageContext, rpc.MethodMessageComments, rpc.MethodMessageLink, rpc.MethodMessageGet, rpc.MethodChatMarkRead} {
+	for _, method := range []string{rpc.MethodMessageSearch, rpc.MethodMessageSearchPublic, rpc.MethodMessageContext, rpc.MethodMessageComments, rpc.MethodMessageLink, rpc.MethodMessageGet, rpc.MethodChatMarkRead, rpc.MethodChatMembers, rpc.MethodChatTopics, rpc.MethodChatCommon} {
 		method := method
 		server.Handle(method, func(_ context.Context, raw json.RawMessage) (any, error) {
 			calls <- struct {

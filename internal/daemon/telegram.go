@@ -35,6 +35,9 @@ type Telegram interface {
 	// Chats returns up to limit dialogs, newest first. A chat type (user, bot,
 	// group, supergroup, channel) keeps only the dialogs of that type.
 	Chats(ctx context.Context, limit int, chatType string) ([]rpc.Chat, error)
+	Members(ctx context.Context, ref chatref.Ref, p rpc.MembersParams) (rpc.MembersResult, error)
+	Topics(ctx context.Context, ref chatref.Ref, p rpc.TopicsParams) (rpc.TopicsResult, error)
+	CommonChats(ctx context.Context, ref chatref.Ref, p rpc.CommonChatsParams) (rpc.CommonChatsResult, error)
 
 	// The methods below only read. They return *rpc.Error with CodeNotFound
 	// when the chat or message does not exist or is not visible.

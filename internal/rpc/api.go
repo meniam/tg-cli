@@ -15,6 +15,9 @@ const (
 	MethodAuthWait     = "auth.wait"
 	MethodAuthCancel   = "auth.cancel"
 	MethodChatList     = "chat.list"
+	MethodChatMembers  = "chat.members"
+	MethodChatTopics   = "chat.topics"
+	MethodChatCommon   = "chat.common"
 
 	MethodChatResolve         = "chat.resolve"
 	MethodChatInfo            = "chat.info"
