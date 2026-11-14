@@ -8,9 +8,9 @@ PR: —
 
 ## Status
 
-- Current status: in_progress
+- Current status: done
 - Last update: 2026-11-14
-- Next safe step: шаг 6 выполнен; остаётся живая проверка `daemon logs` на реальном Daemon (отметка в шаге 8) и слияние ветки `feature/20261114_2330_request_journal`. После этого план закрывается.
+- Next safe step: нет. Шаги 1-8 выполнены, ветки слиты в `main`. Вне плана: `FEATURES.md` 3.8 (схема не описывает ответ фонового `daemon start`) и ротация журнала на живом Daemon не проверялась.
 
 ## Context and sources
 
@@ -81,9 +81,9 @@ PR: —
 
 ## Step 1. Audit and baseline
 
-- [ ] Базовая проверка: `just check` и `just build` на ветке (результат записан).
-- [ ] Прочитать `internal/cli` (регистрация команд, `emitList`, `format`), `internal/output`, `internal/exitcode`, `internal/rpc/api.go`.
-- [ ] Записать итоги в «Known facts».
+- [x] Базовая проверка: `just check` и `just build` на ветке (результат записан).
+- [x] Прочитать `internal/cli` (регистрация команд, `emitList`, `format`), `internal/output`, `internal/exitcode`, `internal/rpc/api.go`.
+- [x] Записать итоги в «Known facts».
 
 ## Implementation steps
 
@@ -106,15 +106,15 @@ PR: —
 
 | Check | Command | Expected result | Status |
 | --- | --- | --- | --- |
-| Формат, vet, тесты | `just check` | зелёный | not_run |
-| Гонки | `go test -race -count=1 ./...` | зелёный | not_run |
-| Полнота пометок | тест в `internal/cli` | у каждой команды класс, `dangerous`, тип результата | not_run |
-| Схема без Daemon | тест | `schema` отвечает без сокета | not_run |
-| `json` и `jsonl` не изменились | снимки ответов | байт в байт | not_run |
-| TOON | тест | декодируется в те же данные | not_run |
-| Фон и простой | тесты на подмене | процесс запускается, останавливается, при простое завершается | not_run |
-| Журнал запросов (шаг 6, отложен) | тесты | запись на каждый запрос без параметров, права 0600, ротация, `daemon logs` | not_run |
-| Живая проверка | шаг 7 | схема, поля, форматы, фоновый Daemon | not_run |
+| Формат, vet, тесты | `just check` | зелёный | passed |
+| Гонки | `go test -race -count=1 ./...` | зелёный | passed |
+| Полнота пометок | тест в `internal/cli` | у каждой команды класс, `dangerous`, тип результата | passed |
+| Схема без Daemon | тест | `schema` отвечает без сокета | passed |
+| `json` и `jsonl` не изменились | снимки ответов | байт в байт | passed |
+| TOON | тест | декодируется в те же данные | passed |
+| Фон и простой | тесты на подмене | процесс запускается, останавливается, при простое завершается | passed |
+| Журнал запросов (шаг 6, отложен) | тесты | запись на каждый запрос без параметров, права 0600, ротация, `daemon logs` | passed |
+| Живая проверка | шаг 7 | схема, поля, форматы, фоновый Daemon | passed |
 
 ## Deploy / rollback
 
@@ -122,18 +122,18 @@ PR: —
 
 ## Cleanup
 
-- [ ] Временные файлы лежат в `var/agents/plans/20261114_0050_agent_contract/`.
-- [ ] Временные файлы не в git (`/var/` в `.gitignore`).
-- [ ] Нужное позже перенесено в документы или в план.
+- [x] Временные файлы лежат в `var/agents/plans/20261114_0050_agent_contract/`.
+- [x] Временные файлы не в git (`/var/` в `.gitignore`).
+- [x] Нужное позже перенесено в документы или в план.
 
 ## Definition of done
 
-- [ ] Код изменён только в рамках плана.
-- [ ] Главный инвариант выполняется.
-- [ ] Проверки зелёные или отклонения записаны.
-- [ ] Нет шагов `- [0]`.
-- [ ] Нет временных файлов в `.agents/plans`.
-- [ ] Решения записаны в `.agents/decisions/`, `_TOC.md` и `FEATURES.md` обновлены.
+- [x] Код изменён только в рамках плана.
+- [x] Главный инвариант выполняется.
+- [x] Проверки зелёные или отклонения записаны.
+- [x] Нет шагов `- [0]`.
+- [x] Нет временных файлов в `.agents/plans`.
+- [x] Решения записаны в `.agents/decisions/`, `_TOC.md` и `FEATURES.md` обновлены.
 
 ## Known facts
 
