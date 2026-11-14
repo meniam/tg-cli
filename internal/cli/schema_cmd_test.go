@@ -52,10 +52,10 @@ func TestEveryCommandIsAnnotated(t *testing.T) {
 		if spec.ChatResult != nil && (spec.ChatResult.Kind() != reflect.Struct || len(schema.Fields(spec.ChatResult)) == 0) {
 			t.Errorf("%s: invalid chat result type %v", path, spec.ChatResult)
 		}
-		// A command with JSONL says where the items live, and one without it
-		// does not pretend to have them.
+		// JSONL commands expose either a list item path or an explicit
+		// single-result envelope.
 		hasJSONL := slices.Contains(commandFormats(spec), string(output.FormatJSONL))
-		if hasJSONL != (spec.ItemPath != "") {
+		if hasJSONL != (spec.ItemPath != "" || spec.ObjectJSONL) {
 			t.Errorf("%s: format jsonl and item path %q disagree", path, spec.ItemPath)
 		}
 		if !spec.Risk.known() {

@@ -39,7 +39,7 @@ func runWriteCLI(t *testing.T, args []string, stdin string, reply func(string, j
 		method string
 		params json.RawMessage
 	}, 1)
-	for _, method := range []string{rpc.MethodMessageSend, rpc.MethodMessageEdit, rpc.MethodMessageDelete, rpc.MethodMessageForward} {
+	for _, method := range []string{rpc.MethodMessageSend, rpc.MethodMessageEdit, rpc.MethodMessageDelete, rpc.MethodMessageForward, rpc.MethodMessageReact, rpc.MethodMessagePin, rpc.MethodMessageUnpin, rpc.MethodMessagePoll} {
 		method := method
 		srv.Handle(method, func(_ context.Context, raw json.RawMessage) (any, error) {
 			called <- struct {
