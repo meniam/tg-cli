@@ -29,7 +29,7 @@ func (a *app) messageWriteCommands() []*cobra.Command {
 	send := a.annotate(&cobra.Command{Use: "send <chat>", Short: "Send a text message", Long: writeFormatHelp, Args: cobra.ExactArgs(1), RunE: a.messageSend}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: []flagChoices{{Flag: "parse", Values: writeParseModes}}})
 	send.Flags().String("idempotency-key", "", "idempotency key: 1 to 64 characters A-Za-z0-9._:-")
 	send.Flags().String("text", "", "message text; reads stdin when absent (stdin is ignored when --text is given)")
-	send.Flags().String("parse", "", "format: html, markdown, rich-html, rich-markdown")
+	send.Flags().String("parse", "", "format: html, markdown, rich-html or rich-markdown")
 	send.Flags().String("entities", "", "JSON entity array file, or - for stdin")
 	send.Flags().Int("reply-to", 0, "reply to this message id")
 	send.Flags().Int("topic", 0, "send in this forum topic")
@@ -38,7 +38,7 @@ func (a *app) messageWriteCommands() []*cobra.Command {
 
 	edit := a.annotate(&cobra.Command{Use: "edit <chat> <id>", Short: "Edit a message", Long: writeFormatHelp, Args: cobra.ExactArgs(2), RunE: a.messageEdit}, dangerous, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendResult](), Args: []argSpec{{Name: "chat", Required: true}, {Name: "id", Required: true}}, Choices: []flagChoices{{Flag: "parse", Values: writeParseModes}}})
 	edit.Flags().String("text", "", "replacement text; reads stdin when absent")
-	edit.Flags().String("parse", "", "format: html, markdown, rich-html, rich-markdown")
+	edit.Flags().String("parse", "", "format: html, markdown, rich-html or rich-markdown")
 	edit.Flags().String("entities", "", "JSON entity array file, or - for stdin")
 	edit.Flags().Bool("yes", false, "confirm the edit")
 	edit.Flags().Bool("dry-run", false, "describe the edit without changing Telegram")
