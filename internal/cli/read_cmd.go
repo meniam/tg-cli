@@ -9,20 +9,23 @@ import (
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/output"
 	"tg-cli/internal/rpc"
+	"tg-cli/internal/schema"
 )
 
 // emitList prints a list result: the envelope in the chosen format, or one item
 // per line for JSONL. The item lines are built only when they are asked for.
 //
-// --fields names paths inside one item, so the list prefix of the path is
-// dropped: "chats.id" and "id" both keep the id of every chat.
+// --fields accepts result paths and item-relative paths for every format.
 func emitList[T any](a *app, cmd *cobra.Command, settings outputSettings, result any, items []T, nextCursor string) error {
 	var lines func(io.Writer) error
+	itemPath := a.specs[cmd].ItemPath
 	if settings.format == output.FormatJSONL {
-		paths := output.ItemPaths(settings.fields, a.specs[cmd].ItemPath)
+		paths := output.ItemPaths(settings.fields, itemPath)
 		lines = func(w io.Writer) error {
 			return output.SelectLinesWithThrottle(w, items, nextCursor, paths, a.throttledMS)
 		}
+	} else {
+		settings.fields = output.ResultPaths(settings.fields, itemPath, schema.Fields(a.specs[cmd].Result))
 	}
 	return a.emit(settings, result, lines)
 }

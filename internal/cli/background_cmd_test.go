@@ -132,6 +132,36 @@ func TestDaemonStartTwiceKeepsOneClient(t *testing.T) {
 	}
 }
 
+// A live daemon is reported before the caller needs credentials to launch one.
+func TestDaemonStartReportsLiveProfileWithoutCredentials(t *testing.T) {
+	e, f := backgroundEnv(t)
+	e.startDaemon()
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := daemon.Ping(t.Context(), paths.Socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(e.env, "TG_API_ID")
+	delete(e.env, "TG_API_HASH")
+	r := e.run("daemon", "start")
+	if r.code != exitcode.OK {
+		t.Fatalf("existing daemon: exit %d, %q", r.code, r.stdout)
+	}
+	var got backgroundStartedResult
+	if err := json.Unmarshal(parse(t, r).Data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Running || got.PID != pid || got.Profile != daemon.DefaultProfile || got.Socket != paths.Socket || got.Log != paths.Log {
+		t.Errorf("existing daemon response: %+v", got)
+	}
+	if f.calls != 0 {
+		t.Errorf("launcher called %d times for a live profile", f.calls)
+	}
+}
+
 // TestDaemonStopConfirmsTheProcessIsGone checks that a stop waits for the daemon
 // instead of only asking it to stop: after the answer the socket is closed and a
 // second stop says the daemon is not running.

@@ -27,7 +27,7 @@ func (a *app) daemonCommand() *cobra.Command {
 			"The background process has no terminal, writes its journal to\n" +
 			"<profile>/daemon.log and keeps running after this command returns; stop it with\n" +
 			"`tg daemon stop`. With --foreground the daemon runs in this terminal instead,\n" +
-			"as it did before.\n\n" +
+			"and returns {\"stopped\":true} after it stops.\n\n" +
 			"Starting a profile that already has a running daemon is not an error: the\n" +
 			"command reports the daemon that is already there and starts no second one,\n" +
 			"because two processes must never share one Telegram session.\n\n" +
@@ -42,7 +42,7 @@ func (a *app) daemonCommand() *cobra.Command {
 			"is 0, no idle stop.",
 		Args: cobra.NoArgs,
 		RunE: a.daemonStart,
-	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[daemonStartedResult]()})
+	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[backgroundStartedResult]()})
 	start.Flags().String("client", "", "official client preset to use instead of your own application, for example desktop")
 	start.Flags().String("device", "", "device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN)")
 	start.Flags().Bool("foreground", false, "run the daemon in this terminal instead of the background")
@@ -215,6 +215,13 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 // credentials the way a foreground start does: from the environment and the
 // profile files, never from its arguments.
 func (a *app) startBackground(cmd *cobra.Command, profile string, paths daemon.Paths, idle time.Duration) error {
+	// A running daemon needs no credentials from this process. Check it before
+	// resolving keys or saving a new device name.
+	if pid, err := daemon.Ping(cmd.Context(), paths.Socket); err == nil {
+		return a.backgroundStarted(cmd, profile, daemon.Background{PID: pid, Socket: paths.Socket, Log: paths.Log})
+	} else if !rpc.IsNotRunning(err) {
+		return fail(exitcode.Failure, "ask the daemon for its state: %v", err)
+	}
 	// The credentials are resolved here first, so a wrong or missing preset is
 	// an answer of this command and not a silent failure of a process the user
 	// cannot see. Only the client preset name is passed on, and it is saved for
@@ -240,6 +247,10 @@ func (a *app) startBackground(cmd *cobra.Command, profile string, paths daemon.P
 		// hints, not the reason a daemon did not come up.
 		return fail(exitcode.Failure, "%v", err)
 	}
+	return a.backgroundStarted(cmd, profile, bg)
+}
+
+func (a *app) backgroundStarted(cmd *cobra.Command, profile string, bg daemon.Background) error {
 	a.warn(cmd, "daemon is running in the background, journal: %s", bg.Log)
 	return a.success(cmd, backgroundStartedResult{
 		Running: true,

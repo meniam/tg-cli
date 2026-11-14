@@ -166,6 +166,31 @@ func TestNoteCommandsEndToEnd(t *testing.T) {
 	}
 }
 
+// Invalid output flags must fail before bulk deletion, not after its RPC call.
+func TestNoteDeleteRejectsOutputUsageBeforeDeleting(t *testing.T) {
+	e := loggedInEnv(t)
+	note := noteFromResult(t, e.run("note", "add", "--chat", "77", "--author", "ai", "keep this note"))
+	for _, flags := range [][]string{
+		{"--format", "jsonl"},
+		{"--format", "unknown"},
+		{"--fields", "notes..id"},
+	} {
+		args := append([]string{"note", "delete", "--author", "ai", "--yes"}, flags...)
+		wantFailure(t, e.run(args...), exitcode.Usage)
+	}
+	r := e.run("note", "list", "--author", "ai")
+	if r.code != exitcode.OK {
+		t.Fatalf("list after rejected deletes: exit %d, %q", r.code, r.stdout)
+	}
+	var got rpc.NoteListResult
+	if err := json.Unmarshal(parse(t, r).Data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Notes) != 1 || got.Notes[0].ID != note.ID {
+		t.Errorf("rejected delete changed AI notes: %+v", got.Notes)
+	}
+}
+
 func TestSearchCommandsOfflineAndSecrets(t *testing.T) {
 	e := newEnv(t)
 	e.tg.user = &rpc.User{ID: 1, Username: "me"}

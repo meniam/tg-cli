@@ -114,6 +114,11 @@ func (a *app) rootCommand() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
+	// Reject output usage errors before any command can read, write or delete data.
+	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		_, err := a.outputSettingsFor(cmd)
+		return err
+	}
 	root.PersistentFlags().String("profile", daemon.DefaultProfile, "account profile, each has its own session and daemon")
 	addOutputFlags(root)
 	root.AddCommand(

@@ -3,3 +3,4 @@
 *.session
 *.sock
 /var/
+.DS_Store
