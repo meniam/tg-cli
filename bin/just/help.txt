@@ -4,15 +4,15 @@
 
     tg-cli (working name): a console tool for a personal Telegram account.
     Its main user is an AI agent. A persistent daemon holds the connection and
-    the session; the CLI and agents talk to it over JSON-RPC. The project is a
-    Go skeleton that grows plan by plan.
+    the session; the CLI and agents talk to it over JSON-RPC. The project is in
+    early development.
 
   Capabilities
     Build the binary, run it, check formatting, static analysis and tests,
     and tidy the Go dependencies.
 
   Build and run
-    just build                  Build the binary into dist/tg-cli
+    just build                  Build the binary into dist/tg
     just run <arguments>        Run the tool without building
 
   Checks
