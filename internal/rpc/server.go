@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -207,13 +208,13 @@ func (s *Server) call(ctx context.Context, req Request) Response {
 
 	result, err := s.safeCall(ctx, h, req)
 	if err != nil {
-		response.Error = s.toError(err)
+		response.Error = s.toError(req.Method, err)
 		response.ThrottledMS = waitedMilliseconds(waited)
 		return response
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		response.Error = s.toError(err)
+		response.Error = s.toError(req.Method, err)
 		response.ThrottledMS = waitedMilliseconds(waited)
 		return response
 	}
@@ -234,13 +235,14 @@ func waitedMilliseconds(waited *throttle.Wait) int64 {
 func (s *Server) safeCall(ctx context.Context, h Handler, req Request) (result any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
+			s.log.Error("handler panic", "method", req.Method, "stack", string(debug.Stack()))
 			err = fmt.Errorf("handler panic: %v", r)
 		}
 	}()
 	return h(ctx, bytes.Clone(req.Params))
 }
 
-func (s *Server) toError(err error) *Error {
+func (s *Server) toError(method string, err error) *Error {
 	var rpcErr *Error
 	switch {
 	case errors.As(err, &rpcErr):
@@ -250,6 +252,9 @@ func (s *Server) toError(err error) *Error {
 	case errors.Is(err, context.Canceled):
 		return NewError(CodeInternal, "request canceled")
 	}
+	// The client gets no details; the journal keeps the cause for debugging.
+	// The request record above never carries error text.
+	s.log.Error("handler failed", "method", method, "err", err)
 	return NewError(CodeInternal, "internal error")
 }
 

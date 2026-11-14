@@ -29,18 +29,40 @@ func TestRequestJournalRecordsOutcomeWithoutParameters(t *testing.T) {
 			t.Errorf("%s: response = %+v, want code %d", tc.method, response, tc.code)
 		}
 	}
-	lines := strings.Split(strings.TrimSpace(journal.String()), "\n")
-	if len(lines) != 4 {
-		t.Fatalf("journal entries = %d: %q", len(lines), journal.String())
-	}
-	for _, want := range []string{"method=ok", "method=failed", "method=panic", "code=ok", "code=-32602", "code=-32603", "code=-32601", "duration_ms="} {
-		if !strings.Contains(journal.String(), want) {
-			t.Errorf("missing %q: %q", want, journal.String())
+	var requests, failures []string
+	for _, line := range strings.Split(strings.TrimSpace(journal.String()), "\n") {
+		if strings.Contains(line, "msg=request") {
+			requests = append(requests, line)
+		} else {
+			failures = append(failures, line)
 		}
 	}
+	if len(requests) != 4 {
+		t.Fatalf("request records = %d: %q", len(requests), journal.String())
+	}
+	requestText := strings.Join(requests, "\n")
+	for _, want := range []string{"method=ok", "method=failed", "method=panic", "code=ok", "code=-32602", "code=-32603", "code=-32601", "duration_ms="} {
+		if !strings.Contains(requestText, want) {
+			t.Errorf("missing %q: %q", want, requestText)
+		}
+	}
+	// Request records carry no parameters, results, error text or unknown method names.
 	for _, secret := range []string{"secret parameter", "message body", "secret error text", "secret panic text", "secret unknown method"} {
-		if strings.Contains(journal.String(), secret) {
-			t.Errorf("journal leaked %q", secret)
+		if strings.Contains(requestText, secret) {
+			t.Errorf("request record leaked %q", secret)
+		}
+	}
+	// Debug records for unexpected failures keep the cause but never parameters or results.
+	failureText := strings.Join(failures, "\n")
+	if !strings.Contains(failureText, "handler failed") || !strings.Contains(failureText, "secret panic text") {
+		t.Errorf("missing the cause of the panic: %q", failureText)
+	}
+	if !strings.Contains(failureText, "handler panic") || !strings.Contains(failureText, "stack=") {
+		t.Errorf("missing the panic stack: %q", failureText)
+	}
+	for _, secret := range []string{"secret parameter", "message body", "secret error text", "secret unknown method"} {
+		if strings.Contains(failureText, secret) {
+			t.Errorf("failure record leaked %q", secret)
 		}
 	}
 }
