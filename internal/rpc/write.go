@@ -86,6 +86,7 @@ type ReactResult struct {
 	Removed bool   `json:"removed"`
 	DryRun  bool   `json:"dry_run,omitempty"`
 	Action  string `json:"action,omitempty"`
+	Count   int    `json:"count,omitempty"`
 }
 
 type PinResult struct {
@@ -94,6 +95,7 @@ type PinResult struct {
 	Pinned bool   `json:"pinned"`
 	DryRun bool   `json:"dry_run,omitempty"`
 	Action string `json:"action,omitempty"`
+	Count  int    `json:"count,omitempty"`
 }
 
 type DeleteResult struct {
