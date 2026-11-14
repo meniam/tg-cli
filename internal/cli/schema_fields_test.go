@@ -41,6 +41,11 @@ const noteIDToken = "@note"
 var realResponseCases = map[string][]string{
 	"auth cancel":      {"auth", "cancel"},
 	"auth status":      {"auth", "status"},
+	"folder list":      {"folder", "list"},
+	"chat state":       {"chat", "state"},
+	"account sessions": {"account", "sessions"},
+	"account blocked":  {"account", "blocked"},
+	"account notify":   {"account", "notify"},
 	"chat info":        {"chat", "info", "@teamchat"},
 	"chat invite-info": {"chat", "invite-info", "https://t.me/+AbCdEfGh1234"},
 	"chat list":        {"chat", "list"},

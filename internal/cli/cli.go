@@ -137,6 +137,8 @@ func (a *app) rootCommand() *cobra.Command {
 		a.authCommand(),
 		a.chatCommand(),
 		a.messageCommand(),
+		a.folderCommand(),
+		a.accountCommand(),
 		a.noteCommand(),
 		a.searchCommand(),
 		a.versionCommand(),
