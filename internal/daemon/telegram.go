@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"time"
 
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
@@ -48,6 +49,7 @@ type Telegram interface {
 	History(ctx context.Context, ref chatref.Ref, q rpc.HistoryQuery) (rpc.MessagesResult, error)
 	// HistoryPage fetches one raw page for background history sync.
 	HistoryPage(ctx context.Context, ref chatref.Ref, offsetID int) (rpc.HistoryPage, error)
+	FloodWaitRemaining() time.Duration
 	// Message returns one message of a chat.
 	Message(ctx context.Context, ref chatref.Ref, id int) (rpc.Message, error)
 	// Pinned returns up to limit pinned messages of a chat.

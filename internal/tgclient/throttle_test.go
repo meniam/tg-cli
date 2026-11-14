@@ -451,3 +451,20 @@ func TestBackgroundPolicyOnlyAppliesToHistory(t *testing.T) {
 		t.Fatalf("non-history request: err=%v calls=%d", err, calls)
 	}
 }
+
+func TestClientFloodWaitRemaining(t *testing.T) {
+	clock := newThrottleClock()
+	limiter := limiterWithClock(t, clock, nil)
+	client := &Client{throttle: limiter}
+	if got := client.FloodWaitRemaining(); got != 0 {
+		t.Fatalf("initial pause = %s", got)
+	}
+	limiter.PauseBackground(12 * time.Second)
+	clock.Advance(2 * time.Second)
+	if got := client.FloodWaitRemaining(); got != 10*time.Second {
+		t.Fatalf("remaining pause = %s", got)
+	}
+	if got := (&Client{}).FloodWaitRemaining(); got != 0 {
+		t.Fatalf("nil limiter pause = %s", got)
+	}
+}

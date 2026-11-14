@@ -54,6 +54,7 @@ type daemon struct {
 	hub         *rpc.Hub
 	login       *loginManager
 	store       *store.DB
+	sync        *historySyncManager
 	cancel      context.CancelFunc
 	once        sync.Once
 	eventMu     sync.Mutex
@@ -114,6 +115,7 @@ func Run(ctx context.Context, opts Options) error {
 		opts.Access = access.Open(opts.Paths.Access)
 	}
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore}
+	d.sync = newHistorySyncManager(runCtx, d, nil)
 	// A daemon that has just started is not idle: the clock runs from now.
 	d.lastActivity.Store(time.Now().UnixNano())
 	d.login = newLoginManager(runCtx, opts.Telegram)
@@ -162,6 +164,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	log.Info("daemon stopping")
 	cancel()
+	d.sync.close()
 	// Join the idle monitor: a goroutine that outlived the shutdown would keep
 	// the process alive after Run returned.
 	<-idleDone
@@ -192,7 +195,7 @@ func watchIdle(ctx context.Context, cancel context.CancelFunc, log *slog.Logger,
 			return
 		case now := <-ticker.C:
 			// A request in flight is work that must finish, whatever its age.
-			if d.inFlight.Load() > 0 || d.hub.Subscribers() > 0 {
+			if d.inFlight.Load() > 0 || d.hub.Subscribers() > 0 || d.sync != nil && d.sync.hasActive() {
 				continue
 			}
 			last := time.Unix(0, d.lastActivity.Load())
@@ -258,6 +261,9 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodNoteDelete, d.noteDelete)
 	d.handle(rpc.MethodNoteDeleteByAuthor, d.noteDeleteByAuthor)
 	d.handle(rpc.MethodSearch, d.search)
+	d.handle(rpc.MethodHistorySyncStart, d.historySyncStart)
+	d.handle(rpc.MethodHistorySyncStatus, d.historySyncStatus)
+	d.handle(rpc.MethodHistorySyncCancel, d.historySyncCancel)
 }
 
 func (d *daemon) ping(context.Context, json.RawMessage) (any, error) {

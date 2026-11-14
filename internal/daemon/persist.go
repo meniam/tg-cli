@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"tg-cli/internal/rpc"
@@ -87,6 +88,27 @@ func (d *daemon) saveMessages(ctx context.Context, op string, messages []rpc.Mes
 }
 
 func (d *daemon) persistMessages(ctx context.Context, op string, messages []rpc.Message) error {
+	stored, people, skipped, err := convertStoredMessages(messages, false)
+	if err != nil {
+		return err
+	}
+	if skipped > 0 {
+		d.log.Warn("messages skipped with invalid dates", "op", op, "count", skipped)
+	}
+	if len(stored) > 0 {
+		if err := d.store.UpsertMessages(ctx, stored); err != nil {
+			return err
+		}
+	}
+	if len(people) > 0 {
+		return d.store.UpsertPeople(ctx, people)
+	}
+	return nil
+}
+
+// convertStoredMessages keeps the ordinary best-effort read path unchanged;
+// strict history sync must fail rather than advance past an invalid message.
+func convertStoredMessages(messages []rpc.Message, strict bool) ([]store.Message, []store.Person, int, error) {
 	stored := make([]store.Message, 0, len(messages))
 	people := make([]store.Person, 0)
 	personIndex := make(map[int64]int)
@@ -94,12 +116,15 @@ func (d *daemon) persistMessages(ctx context.Context, op string, messages []rpc.
 	for _, message := range messages {
 		date, err := time.Parse(time.RFC3339, message.Date)
 		if err != nil {
+			if strict {
+				return nil, nil, 0, fmt.Errorf("invalid message date for %d/%d: %w", message.ChatID, message.ID, err)
+			}
 			skipped++
 			continue
 		}
 		raw, err := json.Marshal(message)
 		if err != nil {
-			return err
+			return nil, nil, 0, err
 		}
 		item := store.Message{
 			ChatID: message.ChatID, ID: message.ID, Date: date.Unix(),
@@ -131,18 +156,7 @@ func (d *daemon) persistMessages(ctx context.Context, op string, messages []rpc.
 		}
 		stored = append(stored, item)
 	}
-	if skipped > 0 {
-		d.log.Warn("messages skipped with invalid dates", "op", op, "count", skipped)
-	}
-	if len(stored) > 0 {
-		if err := d.store.UpsertMessages(ctx, stored); err != nil {
-			return err
-		}
-	}
-	if len(people) > 0 {
-		return d.store.UpsertPeople(ctx, people)
-	}
-	return nil
+	return stored, people, skipped, nil
 }
 
 func positiveIntPointer(value int) *int64 {

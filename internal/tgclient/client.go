@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/peers"
@@ -55,6 +56,7 @@ type Client struct {
 	authReady chan struct{}
 	updates   *updates.Manager
 	stateKV   StateKV
+	throttle  *throttle.Limiter
 	sinkMu    sync.RWMutex
 	sink      func(rpc.Event)
 
@@ -68,7 +70,7 @@ type Client struct {
 
 // New creates a client. It does not connect until Run is called.
 func New(cfg Config) *Client {
-	c := &Client{appID: cfg.AppID, appHash: cfg.AppHash, ready: make(chan struct{}), authReady: make(chan struct{}, 1), stateKV: cfg.StateKV}
+	c := &Client{appID: cfg.AppID, appHash: cfg.AppHash, ready: make(chan struct{}), authReady: make(chan struct{}, 1), stateKV: cfg.StateKV, throttle: cfg.Throttle}
 	options := telegram.Options{
 		SessionStorage: &telegram.FileSessionStorage{Path: cfg.SessionPath},
 		Device:         deviceConfig(cfg.DeviceModel),
@@ -81,6 +83,14 @@ func New(cfg Config) *Client {
 	c.mgr = peers.Options{Storage: &peers.InmemoryStorage{}}.Build(c.tg.API())
 	c.updates = updates.New(c.updateConfig())
 	return c
+}
+
+// FloodWaitRemaining reports the current account-wide flood gate delay.
+func (c *Client) FloodWaitRemaining() time.Duration {
+	if c.throttle == nil {
+		return 0
+	}
+	return c.throttle.PausedFor()
 }
 
 // Run connects and keeps the connection until ctx ends. It is single-use.

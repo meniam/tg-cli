@@ -355,3 +355,20 @@ func TestDisabledAutoWaitKeepsNormalQueueing(t *testing.T) {
 	clock.Advance(120 * time.Second)
 	receive(t, normal).Release()
 }
+
+func TestPausedFor(t *testing.T) {
+	clock := newFakeClock()
+	l := limiterForTest(t, clock, nil)
+	if got := l.PausedFor(); got != 0 {
+		t.Fatalf("initial pause = %s", got)
+	}
+	l.PauseBackground(120 * time.Second)
+	clock.Advance(30 * time.Second)
+	if got := l.PausedFor(); got != 90*time.Second {
+		t.Fatalf("remaining pause = %s", got)
+	}
+	clock.Advance(90 * time.Second)
+	if got := l.PausedFor(); got != 0 {
+		t.Fatalf("expired pause = %s", got)
+	}
+}

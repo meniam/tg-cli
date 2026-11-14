@@ -37,6 +37,9 @@ const (
 	MethodNoteDelete          = "note.delete"
 	MethodNoteDeleteByAuthor  = "note.delete_by_author"
 	MethodSearch              = "search"
+	MethodHistorySyncStart    = "history_sync.start"
+	MethodHistorySyncStatus   = "history_sync.status"
+	MethodHistorySyncCancel   = "history_sync.cancel"
 	MethodSubscribe           = "subscribe"
 	MethodUnsubscribe         = "unsubscribe"
 	MethodEvent               = "event"
@@ -264,6 +267,46 @@ type HistoryPage struct {
 	OldestID        int       `json:"oldest_id"`
 	RawNextOffsetID int       `json:"raw_next_offset_id"`
 	Empty           bool      `json:"empty"`
+}
+
+// HistorySyncParams identifies one chat for starting or cancelling a sync.
+type HistorySyncParams struct {
+	Chat string `json:"chat"`
+}
+
+// HistorySyncStatusParams optionally selects one chat; an empty chat lists jobs.
+type HistorySyncStatusParams struct {
+	Chat string `json:"chat,omitempty"`
+}
+
+const (
+	HistorySyncQueued       = "queued"
+	HistorySyncRunning      = "running"
+	HistorySyncWaitingFlood = "waiting_flood"
+	HistorySyncDone         = "done"
+	HistorySyncFailed       = "failed"
+	HistorySyncCancelled    = "cancelled"
+)
+
+// HistorySyncJob is the in-memory state of one background history load.
+type HistorySyncJob struct {
+	ChatID      int64  `json:"chat_id"`
+	State       string `json:"state"`
+	Pages       int    `json:"pages"`
+	Loaded      int    `json:"loaded"`
+	OldestID    *int   `json:"oldest_id"`
+	NewestID    *int   `json:"newest_id"`
+	Complete    bool   `json:"complete"`
+	WaitSeconds int    `json:"wait_seconds,omitempty"`
+	ErrorCode   int    `json:"error_code,omitempty"`
+	Error       string `json:"error,omitempty"`
+	StartedAt   string `json:"started_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// HistorySyncJobs is the status result when no chat was selected.
+type HistorySyncJobs struct {
+	Jobs []HistorySyncJob `json:"jobs"`
 }
 
 // MessageGetParams are the parameters of MethodMessageGet.

@@ -160,6 +160,13 @@ func validRate(v float64) bool { return v > 0 && !math.IsInf(v, 0) && !math.IsNa
 // FloodAutoWait is the configured maximum automatic flood wait.
 func (l *Limiter) FloodAutoWait() time.Duration { return l.cfg.FloodAutoWait }
 
+// PausedFor returns the remaining account-wide flood pause.
+func (l *Limiter) PausedFor() time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return max(0, l.pausedUntil.Sub(l.clock.Now()))
+}
+
 // Permit holds one concurrency slot. Release must be called after the attempt.
 type Permit struct {
 	limiter *Limiter
