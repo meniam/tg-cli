@@ -12,7 +12,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: шаг 1 (аудит), исполнитель Codex в Herdr, рабочее дерево этого worktree.
+- Next safe step: шаг 2 (`rpc` и `tgclient`), исполнитель Codex `tg-format` в Herdr, рабочее дерево этого worktree.
 
 ## Context and sources
 
@@ -71,23 +71,25 @@ PR: —
 | 2026-11-14 | Поддерживаем все типы форматирования, включая RichMessage в HTML и в Markdown | Выбор владельца | Мязин Евгений: «хочу поддержку всех типов форматирования», «Включая RichMessage HTML markdown» |
 | 2026-11-14 | Флаги `--parse html|markdown|rich-html|rich-markdown` и `--entities`, взаимоисключающие, на `send` и `edit` | Один набор способов вместо отдельных команд | Мязин Евгений: «--parse и --entities, взаимно исключающие (Recommended)» |
 | 2026-11-14 | Прочитанный RichMessage отдаётся в `text` как простой текст блоков | Иначе агент видит пустое сообщение | Мязин Евгений: «Простым текстом блоков в text (Recommended)» |
+| 2026-11-14 | Упоминание по id (`tg://user?id=N` в HTML и Markdown, `mention_name` в `--entities`) разрешается тем же способом, что числовая ссылка на чат: через кэш пиров сессии (нужен access hash); неизвестный id даёт код 2 `unknown user id for this session`; store access hash не хранит и в разрешении не участвует | Аудит: gotd требует `InputUser` с access hash | Автор плана, ждёт подтверждения |
+| 2026-11-14 | После успешной отправки и правки Daemon сохраняет в базу и в ответ клиента ИТОГОВЫЙ простой текст (без разметки), а не исходный `p.Text`: клиент возвращает его в результате (внутреннее поле, не в JSON) | Аудит: сегодня Daemon пишет `p.Text`, а в режимах разбора это исходная разметка | Автор плана, ждёт подтверждения |
 | 2026-11-14 | Если сервер не принимает RichMessage от пользовательского аккаунта, режимы остаются с понятной ошибкой, остальное работает | Не блокировать остальные режимы | Мязин Евгений: «Оставить режимы с ошибкой (Recommended)» |
 
 ## Step 0. Fix decisions before changes
 
 - [x] Состав форматов подтверждён владельцем (2026-11-14).
-- [ ] Исполнитель Go-кода загрузил скилл `expert-golang` и подтвердил это в начале работы.
+- [x] Исполнитель Go-кода (Codex `tg-format`) прочитал `expert-golang` и `testing.md` и подтвердил это в отчёте аудита.
 - [x] Ветка `feature/20261114_1932_text_formatting` создана от `main` в отдельном worktree `../tg-cli-format`, в заголовок записан `Branch`.
 
 ## Step 1. Audit and baseline
 
-- [ ] `just check` и `just build` на чистом дереве; результат в Known facts.
-- [ ] По исходникам gotd: `message/html`, `message/markdown` (поддерживаемые теги и синтаксис, упоминания, разрешитель пользователей, спойлер, цитата, пользовательские эмодзи), `entity` (типы и единицы смещения), `rich` (`rich.HTML`, `rich.Markdown`, `ParseHTML`, `ParseMarkdown`, `spec.md`), `Builder.RichMessage` и `EditMessageBuilder.RichMessage`; какие сущности у gotd поддержаны для ручной передачи.
-- [ ] Как `rich_message` приходит в `tg.Message` и в обновлениях (`updateNewMessage`, `updateEditMessage`); в каком поле лежит текст и как его извлечь (`PageBlock`, `RichText`); собственная функция плоского текста.
-- [ ] Предельные длины: текст сообщения, подпись, RichMessage; где gotd или схема их называет (`config`).
-- [ ] Как `internal/tgclient/convert.go` строит `rpc.Message` из `tg.Message` и где добавить текст RichMessage; как это попадёт в `persistMessages` и в события.
-- [ ] Как Daemon и CLI передают `--dry-run`, `--text`, stdin, `--yes` у `message send` и `message edit` (`internal/daemon/write.go`, `internal/cli/write_cmd.go`).
-- [ ] Записать итоги в Known facts, непокрытое в Risks и Open questions.
+- [x] `just check` и `just build` на чистом дереве; результат в Known facts.
+- [x] По исходникам gotd: `message/html`, `message/markdown` (поддерживаемые теги и синтаксис, упоминания, разрешитель пользователей, спойлер, цитата, пользовательские эмодзи), `entity` (типы и единицы смещения), `rich` (`rich.HTML`, `rich.Markdown`, `ParseHTML`, `ParseMarkdown`, `spec.md`), `Builder.RichMessage` и `EditMessageBuilder.RichMessage`; какие сущности у gotd поддержаны для ручной передачи.
+- [x] Как `rich_message` приходит в `tg.Message` и в обновлениях (`updateNewMessage`, `updateEditMessage`); в каком поле лежит текст и как его извлечь (`PageBlock`, `RichText`); собственная функция плоского текста.
+- [x] Предельные длины: текст сообщения, подпись, RichMessage; где gotd или схема их называет (`config`).
+- [x] Как `internal/tgclient/convert.go` строит `rpc.Message` из `tg.Message` и где добавить текст RichMessage; как это попадёт в `persistMessages` и в события.
+- [x] Как Daemon и CLI передают `--dry-run`, `--text`, stdin, `--yes` у `message send` и `message edit` (`internal/daemon/write.go`, `internal/cli/write_cmd.go`).
+- [x] Записать итоги в Known facts, непокрытое в Risks и Open questions.
 
 ## Implementation steps
 
@@ -135,6 +137,17 @@ PR: —
 
 ## Known facts
 
+- Аудит шага 1 (Codex, 2026-11-14, отчёт `var/agents/plans/20261114_1932_text_formatting/audit.md`, в git не входит):
+  - Смещения сущностей считаются в UTF-16 (`entity.Builder`, `UTF16Len`); `--entities` обязан отвергать границы внутри суррогатной пары. gotd имеет конструкторы всех плановых сущностей; TL-имя даты `MessageEntityFormattedDate`, JSON-имя `date_time` надо отобразить отдельно; принятие её сервером при отправке не подтверждено.
+  - HTML: `b/strong`, `i/em`, `u/ins`, `s/strike/del`, `a`, `code`, `pre` (язык из `class=language-X`), `tg-spoiler`, `tg-emoji emoji-id`, `blockquote expandable`, `tg-time`; ошибка разбора ссылки в HTML молча заменяется отсутствием форматтера, поэтому нужен отдельный строгий контроль. Markdown gotd: CommonMark плюс зачёркнутый и `||спойлер||`, код с языком, ссылки, `![x](tg://emoji?id=N)`, цитата; заголовки и списки остаются обычным текстом.
+  - Упоминание по id (`tg://user?id=N`) требует разрешителя `InputUser` с access hash; `store.Person` hash не хранит.
+  - `rich.HTML` и `rich.Markdown` создают исходник для серверного разбора; локальные `ParseHTML` и `ParseMarkdown` лишь подмножество. `message.Builder.RichMessage` и `EditMessageBuilder.RichMessage` кладут аргумент в `rich_message` запроса.
+  - В прочитанном `tg.Message` поле `Message` самостоятельно, дерево доступно через `GetRichMessage()` (флаг `Flags2` бит 13); для чтения нужна своя функция плоского текста (`richMessageText`, `richTextText`: `TextPlain`, `TextConcat`, обёртки, `TextMath.Source`, `TextCustomEmoji.Alt`; блоки через `\n`, список по элементам, таблица строками, ячейки через tab, вложенные блоки рекурсивно); готовая `plainText` в gotd покрывает только `TextPlain` и `TextConcat`.
+  - Сообщение в `rpc.Message` строит `internal/tgclient/message.go:17` (не `convert.go`): текст берётся только из `m.Message`; история, `get`, закреплённые, контекст, поиск и события потока вызывают один `toMessage`, поэтому одна правка покрывает всё.
+  - Длины: `config` отдаёт `CaptionLengthMax` и `MessageLengthMax` без чисел; отдельного предела RichMessage нет; текущие CLI, Daemon и tgclient жёстко держат 4096 рун (не UTF-16).
+  - Daemon после успешных send и edit сохраняет `p.Text` (`internal/daemon/write.go:99,126`): в режимах разбора это исходная разметка, что неверно.
+  - `just check` в песочнице Codex падает на сокетах (ограничение среды).
+
 - gotd v0.166.0 содержит `telegram/message/html`, `markdown`, `entity`, `styling`, `rich` и методы `Builder.RichMessage`, `EditMessageBuilder.RichMessage`; слой схемы 233.
 - В `tg.Message` есть поле `RichMessage`; `messages.sendMessage` и `messages.editMessage` принимают `rich_message`.
 - Спецификация Rich Markdown лежит в `telegram/message/rich/spec.md` (GFM плюс спойлер, выделение, формулы, таблицы, детали, коллажи).
@@ -144,5 +157,5 @@ PR: —
 | Question | Why it blocks | Options | Recommendation | Status |
 | --- | --- | --- | --- | --- |
 | Принимает ли сервер `rich_message` от пользовательского аккаунта | Решает, работают ли режимы `rich-*` | проба на живом аккаунте | шаг 5; при отказе понятная ошибка и документы | open, не блокирует |
-| Упоминание по id в HTML и Markdown | Нужен разрешитель пользователя | известные люди базы; запрет с кодом 2 | разрешитель из базы, иначе код 2 | open, решает шаг 1 |
-| Предел длины RichMessage | Проверка до Telegram | как простой текст; свой предел | уточнит шаг 1 и проба | open, не блокирует |
+| Упоминание по id в HTML и Markdown | Нужен разрешитель пользователя | кэш пиров сессии; запрет с кодом 2 | кэш пиров сессии, иначе код 2 (решение выше) | closed |
+| Предел длины RichMessage | Проверка до Telegram | как простой текст; свой предел | в аудите предел не найден: до пробы только непустой разобранный текст и ошибка сервера | open, не блокирует |
