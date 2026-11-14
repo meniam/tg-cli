@@ -108,6 +108,9 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	if err := decodeParams(raw, &p); err != nil {
 		return nil, err
 	}
+	canonical := p
+	canonical.DryRun = false
+	scheduledAt, scheduleErr := rpc.ScheduleTime(p.At, p.In, time.Now())
 	if err := validWriteSource(p); err != nil {
 		return nil, err
 	}
@@ -125,8 +128,18 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 			return nil, err
 		}
 	}
-	canonical := p
-	canonical.DryRun = false
+	if scheduleErr != nil {
+		if p.IdempotencyKey == "" {
+			return nil, scheduleErr
+		}
+		_, _, replayAvailable, err := d.beginIdempotency(ctx, id, p.IdempotencyKey, rpc.MethodMessageSend, canonical, true)
+		if err != nil {
+			return nil, err
+		}
+		if !replayAvailable {
+			return nil, scheduleErr
+		}
+	}
 	session, saved, available, err := d.beginIdempotency(ctx, id, p.IdempotencyKey, rpc.MethodMessageSend, canonical, p.DryRun)
 	if err != nil {
 		return nil, err
@@ -139,6 +152,29 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 		}
 		replay.Replayed = true
 		return replay, nil
+	}
+	if scheduleErr != nil {
+		return nil, scheduleErr
+	}
+	if p.IdempotencyKey != "" && p.In != "" && !p.DryRun {
+		record, found, err := d.store.GetIdempotency(ctx, id, p.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			return nil, rpc.NewError(rpc.CodeTelegram, "idempotency reservation is missing")
+		}
+		scheduledAt, err = rpc.ScheduleTime("", p.In, record.CreatedAt.Add(time.Second))
+		if err != nil {
+			return nil, err
+		}
+		if scheduledAt.Before(time.Now().Add(10 * time.Second)) {
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "reserved schedule time is too close or in the past")
+		}
+	}
+	if !scheduledAt.IsZero() {
+		p.At = scheduledAt.Format(time.RFC3339)
+		p.In = ""
 	}
 	if p.DryRun {
 		result := rpc.SendResult{ChatID: id, DryRun: true, Action: "send", Count: 1, TextLength: utf8.RuneCountInString(p.Text)}
@@ -155,7 +191,9 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, err
 	}
 	res.ChatID = id
-	d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+	if !res.Scheduled {
+		d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+	}
 	if err := session.complete(ctx, res); err != nil {
 		return nil, err
 	}
