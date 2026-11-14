@@ -23,7 +23,7 @@ Every command of `tg schema` has its own section in `docs/cli/` with a heading `
 | --- | --- |
 | why the tool exists, what the agent must get, what is not a goal, open questions (Russian) | [INTENT.md](../INTENT.md) |
 | the feature list as an FRD with tags, acceptance lines and the implementation status of every requirement, including what is checked on a live account (Russian) | [FEATURES.md](../FEATURES.md) |
-| detailed contracts of the behavior of shipped features: request journal, throttle, deep history load, local export, access lists, live event stream, message writing and the rest | [.agents/rules/project/contracts.md](../.agents/rules/project/contracts.md) (moved in step 3 to `docs/contracts.md`; update this link then) |
+| detailed contracts of the behavior of shipped features: request journal, throttle, deep history load, local export, access lists, live event stream, message writing and the rest | [contracts.md](contracts.md) |
 | the decisions with their alternatives (Russian) | [.agents/decisions/_TOC.md](../.agents/decisions/_TOC.md) |
 | the plans, their steps, status and open questions (Russian) | [.agents/plans/](../.agents/plans/) |
 | the instructions for agents that work in this repository | [AGENTS.md](../AGENTS.md) |

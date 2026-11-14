@@ -22,7 +22,7 @@ tg chat list [flags]
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--limit` | int | `50` | maximum number of chats, 1 to 500 |
+| `--limit` | int | `50` | maximum number of chats, 1 to 500; `0` is read as the default 50 |
 | `--type` | string | none | only chats of this type: user, bot, group, supergroup, channel. One of: `user`, `bot`, `group`, `supergroup`, `channel` |
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
@@ -45,9 +45,9 @@ tg chat list --limit 2 --format jsonl
 
 **Answer fields** (`data`): `chats` array, `chats.id` integer, `chats.type` string, `chats.title` string (untrusted), `chats.username` string (optional, untrusted), `chats.unread` integer.
 
-**Exit codes.** 0; 2 `--limit` outside 1 to 500 or an unknown `--type`; 3 no Daemon; 4 no login; 6 `FLOOD_WAIT` longer than the auto-wait.
+**Exit codes.** 0; 2 `--limit` below 0 or above 500, or an unknown `--type`; 3 no Daemon; 4 no login; 6 `FLOOD_WAIT` longer than the auto-wait.
 
-**Limits and live check.** Checked on a live account (`chat list --limit 5`, `--type`, `--format jsonl`). The count of unread messages is in `unread`, the unread messages themselves and the unread topics are not available. `--limit 0` is accepted today as the default 50 instead of being refused with exit code 2 (a known gap, [FEATURES.md](../../FEATURES.md) 7.1.4). Per-method throttle buckets are an open item: `getDialogs` hits `FLOOD_WAIT` before the general bucket, so keep pauses between live reads.
+**Limits and live check.** Checked on a live account (`chat list --limit 5`, `--type`, `--format jsonl`). The count of unread messages is in `unread`, the unread messages themselves and the unread topics are not available. `--limit 0` is accepted and counts as the default 50; a negative value and a value above 500 are exit code 2 ([FEATURES.md](../../FEATURES.md) 7.1.4). Per-method throttle buckets are an open item: `getDialogs` hits `FLOOD_WAIT` before the general bucket, so keep pauses between live reads.
 
 ### tg chat resolve
 

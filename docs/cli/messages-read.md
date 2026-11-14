@@ -51,7 +51,7 @@ tg message history <chat> [flags]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--cursor` | string | none | continue after a previous page, the value of next_cursor |
-| `--limit` | int | `20` | messages per page, 1 to 100 (default 20) |
+| `--limit` | int | `20` | messages per page, 1 to 100 (default 20); `0` is read as the default 20 |
 | `--since` | string | none | only messages sent at this time or later (RFC 3339) |
 | `--topic` | int | `0` | read one topic of a forum chat, by the topic id |
 | `--until` | string | none | only messages sent at this time or earlier (RFC 3339) |
@@ -78,7 +78,7 @@ tg message history --limit 20 --topic 7 -- -1001234567890
 
 **Answer fields** (`data`): `messages` array, `messages.id` integer, `messages.chat_id` integer, `messages.date` string, `messages.sender` object (optional), `messages.sender.id` integer (optional), `messages.sender.name` string (optional, untrusted), `messages.sender.username` string (optional, untrusted), `messages.text` string (untrusted), `messages.out` boolean (optional), `messages.reply_to` integer (optional), `messages.topic_id` integer (optional), `messages.media_type` string (optional), `messages.edited` boolean (optional), `messages.pinned` boolean (optional), `messages.service` string (optional), `next_cursor` string (optional).
 
-**Exit codes.** 0; 2 `--limit` above 100 or negative, a time that is not RFC 3339, a malformed reference (`--limit 0` is not refused: it counts as the default 20, as a run showed); 3, 4; 5 a Telegram error; 6 `FLOOD_WAIT`; 7 the chat does not exist or is closed.
+**Exit codes.** 0; 2 `--limit` above 100 or negative, a time that is not RFC 3339, a malformed reference (`--limit 0` is not refused: the Daemon reads it as the default 20); 3, 4; 5 a Telegram error; 6 `FLOOD_WAIT`; 7 the chat does not exist or is closed.
 
 **Limits and live check.** Checked on a live account: history with `--since`, `--until` and a forum topic, and paging by cursor (pages do not overlap and ids decrease). Not checked: cutting a page by the size of the response frame on very long messages.
 
@@ -126,7 +126,7 @@ tg message pinned <chat> [flags]
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--limit` | int | `20` | how many pinned messages, 1 to 100 (default 20) |
+| `--limit` | int | `20` | how many pinned messages, 1 to 100 (default 20); `0` is read as the default 20 |
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -147,7 +147,7 @@ tg message pinned @release_team --limit 5
 
 **Answer fields** (`data`): `messages` array, `messages.id` integer, `messages.chat_id` integer, `messages.date` string, `messages.sender` object (optional), `messages.sender.id` integer (optional), `messages.sender.name` string (optional, untrusted), `messages.sender.username` string (optional, untrusted), `messages.text` string (untrusted), `messages.out` boolean (optional), `messages.reply_to` integer (optional), `messages.topic_id` integer (optional), `messages.media_type` string (optional), `messages.edited` boolean (optional), `messages.pinned` boolean (optional), `messages.service` string (optional), `next_cursor` string (optional).
 
-**Exit codes.** 0; 2 `--limit` above 100 or negative (`--limit 0` is not refused by the CLI and is read as the default 20; this was not run for `pinned`); 3, 4; 6; 7 the chat does not exist or is closed.
+**Exit codes.** 0; 2 `--limit` above 100 or negative (`--limit 0` is not refused: the Daemon reads it as the default 20); 3, 4; 6; 7 the chat does not exist or is closed.
 
 **Limits and live check.** Checked on a live account: in the chosen chat 100 pinned messages came back, all with `pinned`. `message pinned` under an active access filter was not checked.
 
