@@ -39,6 +39,13 @@ const noteIDToken = "@note"
 // realResponseCases are the commands that a response fixture covers, with the
 // arguments of the run. The token noteIDToken is replaced at run time.
 var realResponseCases = map[string][]string{
+	"user profile":     {"user", "profile", "@aliceuser"},
+	"user block":       {"user", "block", "@aliceuser"},
+	"user unblock":     {"user", "unblock", "@aliceuser"},
+	"contact list":     {"contact", "list"},
+	"contact add":      {"contact", "add", "@aliceuser"},
+	"contact delete":   {"contact", "delete", "@aliceuser", "--yes"},
+	"contact search":   {"contact", "search", "ann"},
 	"auth cancel":      {"auth", "cancel"},
 	"auth status":      {"auth", "status"},
 	"chat info":        {"chat", "info", "@teamchat"},
@@ -68,6 +75,12 @@ func realResponses(t *testing.T) map[string][]byte {
 	e := loggedInEnv(t)
 	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
 	if err != nil {
+		t.Fatal(err)
+	}
+	e.tg.mu.Lock()
+	e.tg.peopleFixture = true
+	e.tg.mu.Unlock()
+	if err := os.WriteFile(paths.Access, []byte(`{"write":[5]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(paths.Log, []byte("test line\n"), 0o600); err != nil {

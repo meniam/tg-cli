@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"tg-cli/internal/access"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
+	"tg-cli/internal/throttle"
 )
 
 // ErrAlreadyRunning means another daemon holds the lock of the profile.
@@ -61,6 +63,7 @@ type daemon struct {
 	once                sync.Once
 	eventMu             sync.Mutex
 	deletionsMu         sync.Mutex
+	contactsMu          sync.Mutex
 	addEvent            func(context.Context, store.Event) (int64, bool, error)
 	findMessageChats    func(context.Context, []int) ([]int64, error)
 	markMessagesDeleted func(context.Context, int64, []int) (int, error)
@@ -124,8 +127,21 @@ func Run(ctx context.Context, opts Options) error {
 	// A daemon that has just started is not idle: the clock runs from now.
 	d.lastActivity.Store(time.Now().UnixNano())
 	d.login = newLoginManager(runCtx, opts.Telegram)
+	authorized := make(chan struct{}, 1)
 	d.login.onUser = d.account.set
-	d.srv.SetRequestGuard(d.account.check)
+	d.login.onAuthorized = func() {
+		select {
+		case authorized <- struct{}{}:
+		default:
+		}
+	}
+	d.srv.SetRequestGuard(func(req rpc.Request) error {
+		if strings.HasPrefix(req.Method, "user.") || strings.HasPrefix(req.Method, "contact.") {
+			req.Method = "chat." + req.Method
+		}
+		return d.account.check(req)
+	})
+	contactsDone := make(chan struct{})
 	accountDone := make(chan struct{})
 	go func() {
 		defer close(accountDone)
@@ -137,6 +153,29 @@ func Run(ctx context.Context, opts Options) error {
 		user, err := opts.Telegram.Self(runCtx)
 		if err == nil && user != nil {
 			d.account.setIfEmpty(user)
+		}
+	}()
+	go func() {
+		defer close(contactsDone)
+		select {
+		case <-runCtx.Done():
+			return
+		case <-accountDone:
+		}
+		d.account.mu.RLock()
+		hasAccount := d.account.user != nil
+		d.account.mu.RUnlock()
+		if !hasAccount {
+			select {
+			case <-runCtx.Done():
+				return
+			case <-authorized:
+			}
+		}
+		d.contactsMu.Lock()
+		defer d.contactsMu.Unlock()
+		if _, err := d.syncContacts(throttle.WithBackground(runCtx)); err != nil && !errors.Is(err, context.Canceled) {
+			d.log.Warn("contact sync failed")
 		}
 	}()
 	d.register()
@@ -194,6 +233,7 @@ func Run(ctx context.Context, opts Options) error {
 	// the process alive after Run returned.
 	<-idleDone
 	<-pruneDone
+	<-contactsDone
 	<-idempotencyDone
 	<-accountDone
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), stopGrace)
@@ -309,6 +349,7 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodHistorySyncStart, d.historySyncStart)
 	d.handle(rpc.MethodHistorySyncStatus, d.historySyncStatus)
 	d.handle(rpc.MethodHistorySyncCancel, d.historySyncCancel)
+	d.registerUsers()
 	d.registerChatAdmin()
 }
 
