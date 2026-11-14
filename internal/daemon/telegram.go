@@ -75,6 +75,7 @@ type Telegram interface {
 	Comments(ctx context.Context, ref chatref.Ref, p rpc.CommentsParams) (rpc.MessagesResult, error)
 	MessageLink(ctx context.Context, ref chatref.Ref, p rpc.LinkParams) (rpc.LinkResult, error)
 	// MarkRead changes the read state and requires write access in the Daemon.
+	Typing(ctx context.Context, ref chatref.Ref, p rpc.TypingParams) (rpc.TypingResult, error)
 	MarkRead(ctx context.Context, ref chatref.Ref) (rpc.MarkReadResult, error)
 }
 

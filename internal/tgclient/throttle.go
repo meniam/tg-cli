@@ -71,7 +71,7 @@ func classifyPeer(peer tg.InputPeerClass) (throttle.Class, string) {
 
 func writeRequest(input bin.Encoder) bool {
 	switch input.(type) {
-	case *tg.MessagesSendMessageRequest, *tg.MessagesSendMediaRequest, *tg.MessagesSendMultiMediaRequest,
+	case *tg.MessagesSetTypingRequest, *tg.MessagesSendMessageRequest, *tg.MessagesSendMediaRequest, *tg.MessagesSendMultiMediaRequest,
 		*tg.MessagesForwardMessagesRequest,
 		*tg.MessagesEditMessageRequest, *tg.MessagesDeleteMessagesRequest, *tg.ChannelsDeleteMessagesRequest,
 		*tg.MessagesReadHistoryRequest, *tg.ChannelsReadHistoryRequest,

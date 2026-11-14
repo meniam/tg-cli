@@ -66,6 +66,10 @@ func (f *fakeTelegram) CheckText(_ context.Context, p rpc.SendParams) (rpc.TextC
 	return rpc.TextCheck{Mode: "plain", PlainLength: len([]rune(p.Text))}, nil
 }
 
+func (f *fakeTelegram) Typing(context.Context, chatref.Ref, rpc.TypingParams) (rpc.TypingResult, error) {
+	return rpc.TypingResult{}, nil
+}
+
 func (f *fakeTelegram) Send(context.Context, chatref.Ref, rpc.SendParams) (rpc.SendResult, error) {
 	return rpc.SendResult{}, errors.New("not implemented")
 }

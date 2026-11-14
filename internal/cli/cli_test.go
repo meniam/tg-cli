@@ -90,6 +90,10 @@ func (f *fakeTelegram) Comments(context.Context, chatref.Ref, rpc.CommentsParams
 func (f *fakeTelegram) MessageLink(context.Context, chatref.Ref, rpc.LinkParams) (rpc.LinkResult, error) {
 	return rpc.LinkResult{}, errors.New("not implemented")
 }
+func (f *fakeTelegram) Typing(context.Context, chatref.Ref, rpc.TypingParams) (rpc.TypingResult, error) {
+	return rpc.TypingResult{}, nil
+}
+
 func (f *fakeTelegram) MarkRead(context.Context, chatref.Ref) (rpc.MarkReadResult, error) {
 	return rpc.MarkReadResult{}, errors.New("not implemented")
 }
