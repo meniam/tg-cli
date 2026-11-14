@@ -12,7 +12,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: шаг 1 (аудит), исполнитель Codex в Herdr, рабочее дерево этого worktree.
+- Next safe step: шаг 2 (`rpc` и `tgclient`), исполнитель Codex `tg-actions` в Herdr, рабочее дерево этого worktree.
 
 ## Context and sources
 
@@ -70,30 +70,32 @@ PR: —
 | 2026-11-14 | Реакции только обычными эмодзи | Выбор владельца | Мязин Евгений: «Обычные эмодзи (Recommended)» |
 | 2026-11-14 | Опросы обычные с малым числом вариантов, с флагами `--multiple`, `--public`, викториной | Выбор владельца | Мязин Евгений: «Обычные, малые выборы (Recommended)» |
 | 2026-11-14 | Команды `message react`, `message pin`, `message unpin`, `message poll`; без `--yes`, не `dangerous` | Действия обратимы и не уничтожают данные | Мязин Евгений: «Не нужны, действия обратимы (Recommended)» |
+| 2026-11-14 | После успешного `pin` и `unpin` Daemon сразу обновляет признак `pinned` у сохранённого сообщения в базе (best-effort, если сообщение сохранено) | Поток не обрабатывает `UpdatePinned*`, без этого локальные поиск и выгрузка показывали бы устаревшее | Автор плана, ждёт подтверждения |
+| 2026-11-14 | Текст вопроса опроса отдаётся в `text` при чтении (правка `toMessage`), для отправленного опроса в базу пишется `text = вопрос`, `media_type = poll` | Аудит: сегодня текст опроса при чтении пуст | Автор плана, ждёт подтверждения |
 | 2026-11-14 | Закрепление по умолчанию с уведомлением, `--silent` отключает | Так ведёт себя Telegram | Мязин Евгений: «С уведомлением, --silent отключает (Recommended)» |
 
 ## Step 0. Fix decisions before changes
 
 - [x] Реакции и опросы подтверждены владельцем (2026-11-14).
-- [ ] Исполнитель Go-кода загрузил скилл `expert-golang` и подтвердил это в начале работы.
+- [x] Исполнитель Go-кода (Codex `tg-actions`) прочитал `expert-golang` и `testing.md` и подтвердил это в отчёте аудита.
 - [x] Ветка `feature/20261114_1933_reactions_pins_polls` создана от `main` в отдельном worktree `../tg-cli-actions`, в заголовок записан `Branch`.
 
 ## Step 1. Audit and baseline
 
-- [ ] `just check` и `just build` на чистом дереве; результат в Known facts.
-- [ ] По исходникам gotd: `messages.sendReaction` (реакция как `ReactionEmoji`, снятие пустым списком, `big`, `add_to_recent`), `messages.updatePinnedMessage` (`silent`, `unpin`, `pm_oneside`), `Builder.Poll` и `tg.InputMediaPoll`, `tg.Poll`, `tg.PollAnswer`, поля викторины (`CorrectAnswers`, `Solution`), пределы строк.
-- [ ] Как Telegram возвращает результат этих вызовов (updates) и как достать `id` и `date` нового сообщения опроса через `writtenMessages`; что приходит при закреплении (служебное сообщение).
-- [ ] Как `internal/tgclient/throttle.go` распознаёт запись (`writeRequest`, `classifyRequest`) и что туда добавить.
-- [ ] Как Daemon и CLI строят команды записи (`internal/daemon/write.go`, `internal/cli/write_cmd.go`, `--dry-run`), как схема описывает класс записи.
-- [ ] Как опрос читается в истории (`media_type`, текст) и сохраняется в базу.
-- [ ] Записать итоги в Known facts, непокрытое в Risks и Open questions.
+- [x] `just check` и `just build` на чистом дереве; результат в Known facts.
+- [x] По исходникам gotd: `messages.sendReaction` (реакция как `ReactionEmoji`, снятие пустым списком, `big`, `add_to_recent`), `messages.updatePinnedMessage` (`silent`, `unpin`, `pm_oneside`), `Builder.Poll` и `tg.InputMediaPoll`, `tg.Poll`, `tg.PollAnswer`, поля викторины (`CorrectAnswers`, `Solution`), пределы строк.
+- [x] Как Telegram возвращает результат этих вызовов (updates) и как достать `id` и `date` нового сообщения опроса через `writtenMessages`; что приходит при закреплении (служебное сообщение).
+- [x] Как `internal/tgclient/throttle.go` распознаёт запись (`writeRequest`, `classifyRequest`) и что туда добавить.
+- [x] Как Daemon и CLI строят команды записи (`internal/daemon/write.go`, `internal/cli/write_cmd.go`, `--dry-run`), как схема описывает класс записи.
+- [x] Как опрос читается в истории (`media_type`, текст) и сохраняется в базу.
+- [x] Записать итоги в Known facts, непокрытое в Risks и Open questions.
 
 ## Implementation steps
 
 Каждый шаг выполняет Codex, проверяет Claude (тесты, дифф, `just check`), коммитит Claude.
 
-- [ ] 2. `rpc` и `tgclient`: типы и методы `message.react`, `message.pin`, `message.unpin`, `message.poll`, клиентские `React`, `Pin`, `Unpin`, `SendPoll`, добавление новых запросов в `writeRequest` дросселя, перевод ошибок (`REACTION_INVALID`, `MESSAGE_ID_INVALID`, `CHAT_ADMIN_REQUIRED`, `POLL_*`) в понятные коды; проверка параметров опроса до обращения к Telegram (пределы строк, число вариантов, викторина и `--multiple`, номер правильного варианта); тесты на подмене Telegram: параметры каждого запроса, снятие реакции, закрепление с `silent` и без, открепление, опрос обычный, множественный, неанонимный, викторина с пояснением, пределы на границах, FLOOD_WAIT без повтора, ошибка прав.
-- [ ] 3. Daemon: обработчики четырёх методов по образцу записи (видимость чата, `write`, `--dry-run`, ответ), сохранение отправленного опроса в базу, журнал без параметров и текстов, тест полноты методов; тесты без сокетов: чат вне `write` код 9 без вызова Telegram, закрытый чат `not_found`, `--dry-run`, успех каждого метода, ошибка Telegram в код.
+- [ ] 2. `rpc` и `tgclient` (опрос отправляется прямым `MessagesSendMediaRequest` с `InputMediaPoll`, не через `message.Poll`; снятие реакции ненулевым пустым списком; плюс извлечение вопроса опроса в `text` в `toMessage` с тестом на `MessageMediaPoll`): типы и методы `message.react`, `message.pin`, `message.unpin`, `message.poll`, клиентские `React`, `Pin`, `Unpin`, `SendPoll`, добавление новых запросов в `writeRequest` дросселя, перевод ошибок (`REACTION_INVALID`, `MESSAGE_ID_INVALID`, `CHAT_ADMIN_REQUIRED`, `POLL_*`) в понятные коды; проверка параметров опроса до обращения к Telegram (пределы строк, число вариантов, викторина и `--multiple`, номер правильного варианта); тесты на подмене Telegram: параметры каждого запроса, снятие реакции, закрепление с `silent` и без, открепление, опрос обычный, множественный, неанонимный, викторина с пояснением, пределы на границах, FLOOD_WAIT без повтора, ошибка прав.
+- [ ] 3. Daemon (плюс обновление признака `pinned` в базе после успешного `pin` и `unpin`, метод хранилища и тест): обработчики четырёх методов по образцу записи (видимость чата, `write`, `--dry-run`, ответ), сохранение отправленного опроса в базу, журнал без параметров и текстов, тест полноты методов; тесты без сокетов: чат вне `write` код 9 без вызова Telegram, закрытый чат `not_found`, `--dry-run`, успех каждого метода, ошибка Telegram в код.
 - [ ] 4. CLI: `message react`, `message pin`, `message unpin`, `message poll` с флагами, повторяемый `--option`, схема (класс «запись в аккаунт», не `dangerous`), коды выхода, форматы; тесты по образцу `internal/cli` и тест полноты схемы.
 - [ ] 5. Документы через `docwriter`: `AGENTS.md` (Running: четыре команды, правила, что видят другие), `FEATURES.md` (5.3 и подпункты, что проверено), `README.md`, навык `docs/skill/tg-cli/` (предупреждение про закрепление), решение в `.agents/decisions/` и строка в `_TOC.md`.
 - [ ] 6. Живая проверка Claude в «Браин Тест» (временный `access.json` с `write` для чата, затем удалён): реакция и её снятие на тестовом сообщении, опрос обычный, множественный, викторина, закрепление и открепление (с `--silent`), `--dry-run`, чат вне `write` код 9; проверка по `message get` и `message history` (`media_type`, `pinned`) и числам; тестовые сообщения удаляются командой `message delete`; текст в вывод не попадает.
@@ -132,6 +134,15 @@ PR: —
 
 ## Known facts
 
+- Аудит шага 1 (Codex, 2026-11-14, отчёт `var/agents/plans/20261114_1933_reactions_pins_polls/audit.md`, в git не входит):
+  - Реакция: `MessagesSendReactionRequest{Peer, MsgID, Reaction []ReactionClass, Big, AddToRecent}`, эмодзи это `tg.ReactionEmoji{Emoticon}`; снятие это ненулевой пустой `[]tg.ReactionClass{}` (`nil` не выставляет флаг); `Big` и `AddToRecent` остаются `false`; ответ `UpdatesClass` без id сообщения; изменение приходит `UpdateMessageReactions`, поток его уже обрабатывает.
+  - Закрепление: `MessagesUpdatePinnedMessageRequest{Peer, ID, Silent, Unpin, PmOneside}`; `PmOneside` остаётся `false`, иначе личный чат меняется только локально; ответ `UpdatesClass`; может прийти служебное сообщение `pin_message` (конвертер его читает), а отдельные `UpdatePinned*` поток сегодня не обрабатывает.
+  - Опрос: в gotd `message.Poll(...)` это функция, а не метод `Builder.Poll`; прямой путь `tg.MessagesSendMediaRequest` с `tg.InputMediaPoll{Poll, CorrectAnswers, Solution}`; gotd длины не проверяет; пояснение 0 до 200 символов и не больше двух переводов строки, число вариантов ограничено серверным `poll_answers_max`, числа 255, 100 и 10 это договорные ограничения плана, а не факт исходников.
+  - Находка: сегодня текст вопроса опроса при чтении не отдаётся (`toMessage` берёт только `tg.Message.Message`, а вопрос лежит в `MessageMediaPoll.Poll.Question.Text`); без правки обещание «текст вопроса» в плане не выполняется; ранее сохранённые опросы с пустым текстом обновятся при повторном чтении.
+  - `writeRequest` не содержит `MessagesSendReactionRequest`, `MessagesUpdatePinnedMessageRequest`, `MessagesSendMediaRequest`: на FLOOD_WAIT middleware мог бы повторить запись, их надо добавить (для `MessagesSendMediaRequest` явно, чтобы инвариант не зависел от классификации).
+  - Результат опроса берётся из `writtenMessages` (`messages[0]`); для реакции и закрепления `writtenMessages` не применяется.
+  - `just check` в песочнице Codex падает на сокетах (ограничение среды).
+
 - Запись проходит через список `write`, `--dry-run` и не повторяется (решение о записи сообщений).
 - `writeRequest` в `internal/tgclient/throttle.go` решает, какие запросы не повторяются на FLOOD_WAIT.
 
@@ -139,5 +150,5 @@ PR: —
 
 | Question | Why it blocks | Options | Recommendation | Status |
 | --- | --- | --- | --- | --- |
-| Пределы опроса на этом аккаунте | Проверка до Telegram | 255/100/10/200 как в документации; читать из конфигурации | жёсткие значения, шаг 1 сверит | open, не блокирует |
+| Пределы опроса на этом аккаунте | Проверка до Telegram | 255/100/10/200 как в документации; читать из конфигурации | жёсткие значения как договорные (аудит: исходники их не подтверждают, предел вариантов серверный) | open, не блокирует |
 | Реакции разрешены не в каждом чате | Ошибка при недоступной реакции | вызвать `getAvailableReactions` заранее; полагаться на ошибку | полагаться на ошибку Telegram | open, не блокирует |
