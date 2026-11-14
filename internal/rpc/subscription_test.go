@@ -124,6 +124,24 @@ func TestSubscriptionReplaysThenLivesWithoutDuplicates(t *testing.T) {
 	}
 }
 
+func TestSubscriptionWithoutAfterKeepsEventsDuringStart(t *testing.T) {
+	hub := NewHub()
+	srv := NewServer(nil)
+	srv.SetEventSource(hub, func(context.Context, SubscribeParams) (ReplayPlan, error) {
+		hub.Publish(Event{ID: "2.0.0.0", Type: EventMessageNew, Time: "2026-11-14T00:00:00Z"})
+		return ReplayPlan{Cursor: "2.0.0.0"}, nil
+	})
+	conn, reader, _ := pipeSubscriptionServer(t, srv)
+	sendPipeRequest(t, conn, 1, MethodSubscribe, SubscribeParams{})
+	var response Response
+	if err := json.Unmarshal(readPipeFrame(t, conn, reader), &response); err != nil || response.Error != nil {
+		t.Fatalf("subscribe: %+v %v", response, err)
+	}
+	if event := readEvent(t, conn, reader); event.ID != "2.0.0.0" {
+		t.Fatalf("event during start lost: %+v", event)
+	}
+}
+
 func TestSubscriptionOverflowSendsLaggedAndCloses(t *testing.T) {
 	hub := NewHub()
 	srv := NewServer(nil)
@@ -259,6 +277,11 @@ func TestSubscriptionTypesDescribeEventAndCursor(t *testing.T) {
 	}
 	if _, err := CursorID("bad.10.11.12"); err == nil {
 		t.Error("bad cursor accepted")
+	}
+	for _, cursor := range []string{"1", "1.2.3", "1.2.3.4.5", "1.bad.3.4", "1.-1.3.4"} {
+		if _, err := CursorID(cursor); err == nil {
+			t.Errorf("invalid cursor %q accepted", cursor)
+		}
 	}
 	result := schema.Fields(reflect.TypeOf(SubscribeResult{}))
 	if len(result) != 2 || result[0].Path != "subscription_id" || result[1].Path != "cursor" {

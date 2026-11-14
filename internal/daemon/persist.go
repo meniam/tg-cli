@@ -82,63 +82,67 @@ func (d *daemon) saveMessages(ctx context.Context, op string, messages []rpc.Mes
 		return
 	}
 	d.save(ctx, op, func(ctx context.Context) error {
-		stored := make([]store.Message, 0, len(messages))
-		people := make([]store.Person, 0)
-		personIndex := make(map[int64]int)
-		skipped := 0
-		for _, message := range messages {
-			date, err := time.Parse(time.RFC3339, message.Date)
-			if err != nil {
-				skipped++
-				continue
-			}
-			raw, err := json.Marshal(message)
-			if err != nil {
-				return err
-			}
-			item := store.Message{
-				ChatID: message.ChatID, ID: message.ID, Date: date.Unix(),
-				Text: message.Text, Out: boolPointer(message.Out), Pinned: boolPointer(message.Pinned),
-				ReplyTo: positiveIntPointer(message.ReplyTo), TopicID: positiveIntPointer(message.TopicID),
-				MediaType: optionalText(message.MediaType), Service: optionalText(message.Service), Raw: raw,
-			}
-			if message.Sender != nil {
-				if message.Sender.ID != 0 {
-					item.SenderID = int64Pointer(message.Sender.ID)
-				}
-				item.SenderName = optionalText(message.Sender.Name)
-				if message.Sender.ID > 0 {
-					if index, exists := personIndex[message.Sender.ID]; exists {
-						if message.Sender.Username != "" {
-							people[index].Username = optionalText(message.Sender.Username)
-						}
-						if message.Sender.Name != "" {
-							people[index].FirstName = optionalText(message.Sender.Name)
-						}
-					} else {
-						personIndex[message.Sender.ID] = len(people)
-						people = append(people, store.Person{
-							ID: message.Sender.ID, Username: optionalText(message.Sender.Username),
-							FirstName: optionalText(message.Sender.Name),
-						})
-					}
-				}
-			}
-			stored = append(stored, item)
-		}
-		if skipped > 0 {
-			d.log.Warn("messages skipped with invalid dates", "op", op, "count", skipped)
-		}
-		if len(stored) > 0 {
-			if err := d.store.UpsertMessages(ctx, stored); err != nil {
-				return err
-			}
-		}
-		if len(people) > 0 {
-			return d.store.UpsertPeople(ctx, people)
-		}
-		return nil
+		return d.persistMessages(ctx, op, messages)
 	})
+}
+
+func (d *daemon) persistMessages(ctx context.Context, op string, messages []rpc.Message) error {
+	stored := make([]store.Message, 0, len(messages))
+	people := make([]store.Person, 0)
+	personIndex := make(map[int64]int)
+	skipped := 0
+	for _, message := range messages {
+		date, err := time.Parse(time.RFC3339, message.Date)
+		if err != nil {
+			skipped++
+			continue
+		}
+		raw, err := json.Marshal(message)
+		if err != nil {
+			return err
+		}
+		item := store.Message{
+			ChatID: message.ChatID, ID: message.ID, Date: date.Unix(),
+			Text: message.Text, Out: boolPointer(message.Out), Pinned: boolPointer(message.Pinned),
+			ReplyTo: positiveIntPointer(message.ReplyTo), TopicID: positiveIntPointer(message.TopicID),
+			MediaType: optionalText(message.MediaType), Service: optionalText(message.Service), Raw: raw,
+		}
+		if message.Sender != nil {
+			if message.Sender.ID != 0 {
+				item.SenderID = int64Pointer(message.Sender.ID)
+			}
+			item.SenderName = optionalText(message.Sender.Name)
+			if message.Sender.ID > 0 {
+				if index, exists := personIndex[message.Sender.ID]; exists {
+					if message.Sender.Username != "" {
+						people[index].Username = optionalText(message.Sender.Username)
+					}
+					if message.Sender.Name != "" {
+						people[index].FirstName = optionalText(message.Sender.Name)
+					}
+				} else {
+					personIndex[message.Sender.ID] = len(people)
+					people = append(people, store.Person{
+						ID: message.Sender.ID, Username: optionalText(message.Sender.Username),
+						FirstName: optionalText(message.Sender.Name),
+					})
+				}
+			}
+		}
+		stored = append(stored, item)
+	}
+	if skipped > 0 {
+		d.log.Warn("messages skipped with invalid dates", "op", op, "count", skipped)
+	}
+	if len(stored) > 0 {
+		if err := d.store.UpsertMessages(ctx, stored); err != nil {
+			return err
+		}
+	}
+	if len(people) > 0 {
+		return d.store.UpsertPeople(ctx, people)
+	}
+	return nil
 }
 
 func positiveIntPointer(value int) *int64 {

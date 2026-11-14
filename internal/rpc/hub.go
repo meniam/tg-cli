@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"bytes"
+	"encoding/json"
 	"sync"
 )
 
@@ -26,6 +27,7 @@ type Subscription struct {
 	once   sync.Once
 	types  map[string]struct{} // guarded by hub.mu
 	chats  map[int64]struct{}  // guarded by hub.mu
+	topic  int
 }
 
 // Subscribe registers before history is read, so events published during
@@ -83,11 +85,18 @@ func (s *Subscription) SetFilter(filter EventFilter) {
 			s.chats[id] = struct{}{}
 		}
 	}
+	s.topic = filter.Topic
 	s.hub.mu.Unlock()
 }
 
 // matches is called under hub.mu by Publish and by the buffered-event reader.
 func (s *Subscription) matches(event Event) bool {
+	if event.Type == EventGap && event.ChatID == nil {
+		return true
+	}
+	if s.topic > 0 && !MatchesTopic(event, s.topic) {
+		return false
+	}
 	if len(s.types) > 0 {
 		if _, ok := s.types[event.Type]; !ok {
 			return false
@@ -102,6 +111,20 @@ func (s *Subscription) matches(event Event) bool {
 		}
 	}
 	return true
+}
+
+// MatchesTopic keeps only message events in the requested topic.
+func MatchesTopic(event Event, topic int) bool {
+	if topic == 0 {
+		return true
+	}
+	if event.Type != EventMessageNew && event.Type != EventMessageEdit {
+		return false
+	}
+	var message struct {
+		TopicID int `json:"topic_id"`
+	}
+	return json.Unmarshal(event.Data, &message) == nil && message.TopicID == topic
 }
 
 func (s *Subscription) accepts(event Event) bool {

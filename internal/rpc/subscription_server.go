@@ -139,6 +139,12 @@ func (s *Server) sendEvents(ctx context.Context, sc *serverConn, w *frameWriter,
 	if len(plan.Events) == 0 {
 		lastDelivered = plan.Cursor
 	}
+	if plan.resume == "" {
+		// The live queue was registered before the starting cursor was read.
+		// It may contain events at or below that cursor, and they must be sent.
+		lastID = 0
+		lastDelivered = "0.0.0.0"
+	}
 	for _, event := range plan.Events {
 		if stopped(ctx, sub) {
 			return

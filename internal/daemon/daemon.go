@@ -48,13 +48,16 @@ type Options struct {
 const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
-	opts   Options
-	log    *slog.Logger
-	srv    *rpc.Server
-	login  *loginManager
-	store  *store.DB
-	cancel context.CancelFunc
-	once   sync.Once
+	opts     Options
+	log      *slog.Logger
+	srv      *rpc.Server
+	hub      *rpc.Hub
+	login    *loginManager
+	store    *store.DB
+	cancel   context.CancelFunc
+	once     sync.Once
+	eventMu  sync.Mutex
+	addEvent func(context.Context, store.Event) (int64, bool, error)
 	// lastActivity is the Unix time of the last request that started or ended,
 	// in nanoseconds. A request is often shorter than the idle check, so the
 	// count of requests in flight alone would miss it.
@@ -109,11 +112,15 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.Access == nil {
 		opts.Access = access.Open(opts.Paths.Access)
 	}
-	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), cancel: cancel, store: ownedStore}
+	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore}
 	// A daemon that has just started is not idle: the clock runs from now.
 	d.lastActivity.Store(time.Now().UnixNano())
 	d.login = newLoginManager(runCtx, opts.Telegram)
 	d.register()
+	d.srv.SetEventSource(d.hub, d.replayEvents)
+	opts.Telegram.SetEventSink(d.handleEvent)
+	pruneDone := make(chan struct{})
+	go func() { defer close(pruneDone); d.pruneEvents(runCtx, eventPruneEvery, eventRetention, eventKeep) }()
 
 	tgDone := make(chan error, 1)
 	go func() { tgDone <- opts.Telegram.Run(runCtx) }()
@@ -157,6 +164,7 @@ func Run(ctx context.Context, opts Options) error {
 	// Join the idle monitor: a goroutine that outlived the shutdown would keep
 	// the process alive after Run returned.
 	<-idleDone
+	<-pruneDone
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), stopGrace)
 	defer stopCancel()
 	if err := d.srv.Shutdown(stopCtx); err != nil {
@@ -183,7 +191,7 @@ func watchIdle(ctx context.Context, cancel context.CancelFunc, log *slog.Logger,
 			return
 		case now := <-ticker.C:
 			// A request in flight is work that must finish, whatever its age.
-			if d.inFlight.Load() > 0 {
+			if d.inFlight.Load() > 0 || d.hub.Subscribers() > 0 {
 				continue
 			}
 			last := time.Unix(0, d.lastActivity.Load())

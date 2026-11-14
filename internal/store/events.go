@@ -121,15 +121,51 @@ func (db *DB) LastEventID(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
+// EventHighWater includes the last real event removed by retention.
+func (db *DB) EventHighWater(ctx context.Context) (int64, error) {
+	var id int64
+	if err := db.read.QueryRowContext(ctx, `SELECT MAX(COALESCE((SELECT MAX(id) FROM events),0), COALESCE((SELECT CAST(value AS INTEGER) FROM account_state WHERE key='events.high_water'),0))`).Scan(&id); err != nil {
+		return 0, fmt.Errorf("event high water: %w", err)
+	}
+	return id, nil
+}
+
+// FirstEventID is zero when no retained events exist.
+func (db *DB) FirstEventID(ctx context.Context) (int64, error) {
+	var id int64
+	if err := db.read.QueryRowContext(ctx, `SELECT COALESCE(MIN(id),0) FROM events`).Scan(&id); err != nil {
+		return 0, fmt.Errorf("first event id: %w", err)
+	}
+	return id, nil
+}
+
 // PruneEvents removes entries older than the cutoff or outside the newest keep.
 func (db *DB) PruneEvents(ctx context.Context, olderThan time.Time, keep int) (int, error) {
 	if keep < 0 {
 		return 0, errors.New("event retention count must not be negative")
 	}
-	result, err := db.write.ExecContext(ctx, `DELETE FROM events WHERE created_at<? OR id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT ?)`, olderThan.Unix(), keep)
+	tx, err := db.write.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin event prune: %w", err)
+	}
+	defer tx.Rollback()
+	var last int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(id),0) FROM events`).Scan(&last); err != nil {
+		return 0, fmt.Errorf("read event high water: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO account_state(key,value,updated_at) VALUES('events.high_water',?,?) ON CONFLICT(key) DO UPDATE SET value=MAX(CAST(value AS INTEGER), CAST(excluded.value AS INTEGER)),updated_at=excluded.updated_at`, fmt.Sprint(last), db.now().Unix()); err != nil {
+		return 0, fmt.Errorf("save event high water: %w", err)
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM events WHERE created_at<? OR id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT ?)`, olderThan.Unix(), keep)
 	if err != nil {
 		return 0, fmt.Errorf("prune events: %w", err)
 	}
 	deleted, err := result.RowsAffected()
-	return int(deleted), err
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit event prune: %w", err)
+	}
+	return int(deleted), nil
 }

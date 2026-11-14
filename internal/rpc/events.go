@@ -23,7 +23,7 @@ const (
 // Event is a journal or live event. ID is a string cursor. Durable cursors
 // start with the database event ID; live-only events may reuse the last cursor.
 type Event struct {
-	ID     string          `json:"id"`
+	ID     string          `json:"id,omitempty"`
 	Type   string          `json:"type"`
 	ChatID *int64          `json:"chat_id,omitempty"`
 	Time   string          `json:"time"`
@@ -96,11 +96,11 @@ type UnsubscribeResult struct {
 type EventFilter struct {
 	Types   []string
 	ChatIDs []int64
+	Topic   int
 }
 
-// ReplayPlan contains durable history and a cursor for that history. Filter
-// applies to subsequent live events. The cursor must name the
-// highest durable event in Events, or the requested cursor when Events is empty.
+// ReplayPlan contains durable history and the journal high-water cursor.
+// Filter applies to subsequent live events.
 type ReplayPlan struct {
 	Events []Event
 	Cursor string
@@ -118,10 +118,19 @@ func CursorID(cursor string) (int64, error) {
 	if cursor == "" {
 		return 0, nil
 	}
-	head, _, _ := strings.Cut(cursor, ".")
-	id, err := strconv.ParseInt(head, 10, 64)
-	if err != nil || id < 0 {
+	parts := strings.Split(cursor, ".")
+	if len(parts) != 4 {
 		return 0, errors.New("invalid event cursor")
+	}
+	var id int64
+	for i, part := range parts {
+		value, err := strconv.ParseInt(part, 10, 64)
+		if err != nil || value < 0 {
+			return 0, errors.New("invalid event cursor")
+		}
+		if i == 0 {
+			id = value
+		}
 	}
 	return id, nil
 }

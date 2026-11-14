@@ -507,3 +507,28 @@ func (db *DB) MarkMessagesDeleted(ctx context.Context, chatID int64, ids []int) 
 	}
 	return changed, nil
 }
+
+// ChatsOfMessages finds non-channel chats containing any of the account-wide message IDs.
+func (db *DB) ChatsOfMessages(ctx context.Context, ids []int) ([]int64, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := db.read.QueryContext(ctx, `SELECT DISTINCT chat_id FROM messages WHERE id IN (`+placeholders(len(ids))+`) AND chat_id > -1000000000000`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("find message chats: %w", err)
+	}
+	defer rows.Close()
+	var chats []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan message chat: %w", err)
+		}
+		chats = append(chats, id)
+	}
+	return chats, rows.Err()
+}

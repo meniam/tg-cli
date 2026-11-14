@@ -27,7 +27,7 @@ func accessTestDaemon(t *testing.T) (*daemon, *fakeTelegram, *store.DB, string) 
 	tg.user = &rpc.User{ID: 42}
 	path := filepath.Join(dir, "access.json")
 	logger := slog.New(slog.DiscardHandler)
-	d := &daemon{opts: Options{Telegram: tg, Access: access.Open(path)}, store: db, log: logger, srv: rpc.NewServer(logger)}
+	d := &daemon{opts: Options{Telegram: tg, Access: access.Open(path)}, store: db, log: logger, srv: rpc.NewServer(logger), hub: rpc.NewHub()}
 	return d, tg, db, path
 }
 
@@ -63,12 +63,14 @@ func sameRPCError(t *testing.T, got, want error) {
 func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 	d, _, _, _ := accessTestDaemon(t)
 	d.register()
+	d.srv.SetEventSource(d.hub, d.replayEvents)
 	classes := map[string]string{
 		rpc.MethodPing: "none", rpc.MethodStatus: "none", rpc.MethodShutdown: "none",
 		rpc.MethodAuthStart: "none", rpc.MethodAuthCode: "none", rpc.MethodAuthPassword: "none", rpc.MethodAuthResend: "none", rpc.MethodAuthStartQR: "none", rpc.MethodAuthWait: "none", rpc.MethodAuthCancel: "none",
 		rpc.MethodChatList: "chat-list", rpc.MethodChatResolve: "chat-ref", rpc.MethodChatInfo: "chat-ref", rpc.MethodChatInviteInfo: "chat-ref",
 		rpc.MethodMessageHistory: "chat-ref", rpc.MethodMessageGet: "chat-ref", rpc.MethodMessagePinned: "chat-ref",
 		rpc.MethodNoteAdd: "chat-notes", rpc.MethodNoteList: "chat-notes", rpc.MethodNoteDelete: "chat-notes", rpc.MethodNoteDeleteByAuthor: "none", rpc.MethodSearch: "chat-search",
+		rpc.MethodSubscribe: "chat-stream", rpc.MethodUnsubscribe: "none",
 	}
 	methods := d.srv.Methods()
 	if len(methods) != len(classes) {
