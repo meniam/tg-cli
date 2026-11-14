@@ -29,9 +29,10 @@ type fakeTelegram struct {
 	wantCode string
 	wantPass string
 
-	messages     []rpc.Message // newest first
-	missing      bool          // the read methods answer "not found"
-	resolveCalls int
+	messages      []rpc.Message // newest first
+	missing       bool          // the read methods answer "not found"
+	resolveCalls  int
+	peopleFixture bool
 }
 
 func (f *fakeTelegram) Run(ctx context.Context) error {
@@ -199,7 +200,7 @@ func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, er
 	if f.missing {
 		return rpc.Chat{}, rpc.NewError(rpc.CodeNotFound, "not found: no such chat")
 	}
-	if ref.Kind == chatref.Username && ref.Username == "aliceuser" {
+	if ref.Kind == chatref.Username && ref.Username == "aliceuser" || ref.Kind == chatref.ID && ref.ID == 5 {
 		return rpc.Chat{ID: 5, Type: "user", Title: "Ann", Username: "aliceuser"}, nil
 	}
 	return rpc.Chat{ID: 77, Type: "supergroup", Title: "Team", Username: "team"}, nil

@@ -59,6 +59,7 @@ type daemon struct {
 	once                sync.Once
 	eventMu             sync.Mutex
 	deletionsMu         sync.Mutex
+	contactsMu          sync.Mutex
 	addEvent            func(context.Context, store.Event) (int64, bool, error)
 	findMessageChats    func(context.Context, []int) ([]int64, error)
 	markMessagesDeleted func(context.Context, int64, []int) (int, error)
@@ -122,6 +123,15 @@ func Run(ctx context.Context, opts Options) error {
 	// A daemon that has just started is not idle: the clock runs from now.
 	d.lastActivity.Store(time.Now().UnixNano())
 	d.login = newLoginManager(runCtx, opts.Telegram)
+	authorized := make(chan struct{}, 1)
+	d.login.onAuthorized = func() {
+		select {
+		case authorized <- struct{}{}:
+		default:
+		}
+	}
+	contactsDone := make(chan struct{})
+	go func() { defer close(contactsDone); d.syncContactsAfterLogin(runCtx, authorized) }()
 	d.register()
 	d.srv.SetEventSource(d.hub, d.replayEvents)
 	opts.Telegram.SetEventSink(d.handleEvent)
@@ -172,6 +182,7 @@ func Run(ctx context.Context, opts Options) error {
 	// the process alive after Run returned.
 	<-idleDone
 	<-pruneDone
+	<-contactsDone
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), stopGrace)
 	defer stopCancel()
 	if err := d.srv.Shutdown(stopCtx); err != nil {
@@ -277,6 +288,7 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodHistorySyncStart, d.historySyncStart)
 	d.handle(rpc.MethodHistorySyncStatus, d.historySyncStatus)
 	d.handle(rpc.MethodHistorySyncCancel, d.historySyncCancel)
+	d.registerUsers()
 }
 
 func (d *daemon) ping(context.Context, json.RawMessage) (any, error) {
