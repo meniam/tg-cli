@@ -85,6 +85,7 @@ type Telegram interface {
 	// MarkRead changes the read state and requires write access in the Daemon.
 	Typing(ctx context.Context, ref chatref.Ref, p rpc.TypingParams) (rpc.TypingResult, error)
 	MarkRead(ctx context.Context, ref chatref.Ref) (rpc.MarkReadResult, error)
+	ownerStateTelegram
 }
 
 // TelegramConfig is what a Telegram client needs to be created.

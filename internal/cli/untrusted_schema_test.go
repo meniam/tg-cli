@@ -7,6 +7,9 @@ import (
 
 func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 	want := map[string][]string{
+		"folder list":                {"folders.title", "folders.pinned.title", "folders.include.title", "folders.exclude.title"},
+		"account blocked":            {"peers.title", "peers.username"},
+		"account sessions":           {"sessions.device_model", "sessions.platform", "sessions.system_version", "sessions.app_name", "sessions.app_version"},
 		"user profile":               {"first_name", "last_name", "username", "bio"},
 		"contact list":               {"contacts.first_name", "contacts.last_name", "contacts.username"},
 		"contact search":             {"contacts.first_name", "contacts.last_name", "contacts.username"},
