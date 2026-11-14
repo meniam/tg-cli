@@ -80,7 +80,7 @@ func (c *Client) resolve(ctx context.Context, ref chatref.Ref) (peers.Peer, erro
 	if err != nil {
 		if isNotFound(err) {
 			if ref.Kind == chatref.ID {
-				return nil, rpc.NewError(rpc.CodeNotFound, "not found: this session does not know that id; use @username, or read the chat list first")
+				return nil, rpc.ErrUnknownChatID()
 			}
 			return nil, notFound()
 		}

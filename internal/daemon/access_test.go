@@ -86,29 +86,32 @@ func TestChatAccessRejectsDirectReferencesAndPreservesMissingError(t *testing.T)
 	ctx := context.Background()
 	writeAccess(t, path, `{"allow":[42],"block":[77]}`)
 	tg.resolved = &rpc.Chat{ID: 77, Type: "group", Title: "Private"}
+	// A closed numeric id answers like an id the session does not know; other
+	// references answer like a missing chat.
 	checks := []struct {
 		name string
+		want *rpc.Error
 		run  func() error
 	}{
-		{"resolve ID", func() error { _, err := d.chatResolve(ctx, params(t, rpc.ChatRefParams{Chat: "77"})); return err }},
-		{"resolve username", func() error {
+		{"resolve ID", rpc.ErrUnknownChatID(), func() error { _, err := d.chatResolve(ctx, params(t, rpc.ChatRefParams{Chat: "77"})); return err }},
+		{"resolve username", rpc.ErrChatNotFound(), func() error {
 			_, err := d.chatResolve(ctx, params(t, rpc.ChatRefParams{Chat: "@privatechat"}))
 			return err
 		}},
-		{"info", func() error { _, err := d.chatInfo(ctx, params(t, rpc.ChatRefParams{Chat: "77"})); return err }},
-		{"invite", func() error {
+		{"info", rpc.ErrUnknownChatID(), func() error { _, err := d.chatInfo(ctx, params(t, rpc.ChatRefParams{Chat: "77"})); return err }},
+		{"invite", rpc.ErrChatNotFound(), func() error {
 			_, err := d.chatInviteInfo(ctx, params(t, rpc.ChatRefParams{Chat: "https://t.me/+AbCdEfGh1234"}))
 			return err
 		}},
-		{"history", func() error { _, err := d.messageHistory(ctx, params(t, rpc.HistoryParams{Chat: "77"})); return err }},
-		{"message", func() error {
+		{"history", rpc.ErrUnknownChatID(), func() error { _, err := d.messageHistory(ctx, params(t, rpc.HistoryParams{Chat: "77"})); return err }},
+		{"message", rpc.ErrUnknownChatID(), func() error {
 			_, err := d.messageGet(ctx, params(t, rpc.MessageGetParams{Chat: "77", ID: 1}))
 			return err
 		}},
-		{"pinned", func() error { _, err := d.messagePinned(ctx, params(t, rpc.PinnedParams{Chat: "77"})); return err }},
+		{"pinned", rpc.ErrUnknownChatID(), func() error { _, err := d.messagePinned(ctx, params(t, rpc.PinnedParams{Chat: "77"})); return err }},
 	}
 	for _, tc := range checks {
-		t.Run(tc.name, func(t *testing.T) { sameRPCError(t, tc.run(), rpc.ErrChatNotFound()) })
+		t.Run(tc.name, func(t *testing.T) { sameRPCError(t, tc.run(), tc.want) })
 	}
 	if tg.resolveCalls != 1 {
 		t.Errorf("Resolve calls = %d, want only the username lookup", tg.resolveCalls)
@@ -227,25 +230,28 @@ func TestAccessFileRecoveryAndNoFileCompatibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeAccess(t, path, `{"allow":["secret"]}`)
-	for _, run := range []func() error{
-		func() error { _, err := d.chatResolve(ctx, params(t, rpc.ChatRefParams{Chat: "77"})); return err },
-		func() error { _, err := d.chatInfo(ctx, params(t, rpc.ChatRefParams{Chat: "77"})); return err },
-		func() error {
+	for _, tc := range []struct {
+		want *rpc.Error
+		run  func() error
+	}{
+		{rpc.ErrUnknownChatID(), func() error { _, err := d.chatResolve(ctx, params(t, rpc.ChatRefParams{Chat: "77"})); return err }},
+		{rpc.ErrUnknownChatID(), func() error { _, err := d.chatInfo(ctx, params(t, rpc.ChatRefParams{Chat: "77"})); return err }},
+		{rpc.ErrChatNotFound(), func() error {
 			_, err := d.chatInviteInfo(ctx, params(t, rpc.ChatRefParams{Chat: "https://t.me/+AbCdEfGh1234"}))
 			return err
-		},
-		func() error { _, err := d.messageHistory(ctx, params(t, rpc.HistoryParams{Chat: "77"})); return err },
-		func() error {
+		}},
+		{rpc.ErrUnknownChatID(), func() error { _, err := d.messageHistory(ctx, params(t, rpc.HistoryParams{Chat: "77"})); return err }},
+		{rpc.ErrUnknownChatID(), func() error {
 			_, err := d.messageGet(ctx, params(t, rpc.MessageGetParams{Chat: "77", ID: 1}))
 			return err
-		},
-		func() error { _, err := d.messagePinned(ctx, params(t, rpc.PinnedParams{Chat: "77"})); return err },
-		func() error {
+		}},
+		{rpc.ErrUnknownChatID(), func() error { _, err := d.messagePinned(ctx, params(t, rpc.PinnedParams{Chat: "77"})); return err }},
+		{rpc.ErrChatNotFound(), func() error {
 			_, err := d.noteAdd(ctx, params(t, rpc.NoteAddParams{Kind: "chat", Chat: "77", Body: "new"}))
 			return err
-		},
+		}},
 	} {
-		sameRPCError(t, run(), rpc.ErrChatNotFound())
+		sameRPCError(t, tc.run(), tc.want)
 	}
 	list, err := d.chatList(ctx, params(t, rpc.ChatListParams{Limit: 1}))
 	if err != nil || len(list.(rpc.ChatListResult).Chats) != 0 {

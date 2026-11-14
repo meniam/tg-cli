@@ -119,6 +119,7 @@ func (c *Client) chats(ctx context.Context, limit int, chatType string, requireC
 	users := map[int64]tg.UserClass{}
 	var groups []tg.ChatClass
 	seen := map[int64]bool{}
+	listed := map[int64]bool{} // the dialog iterator may repeat a boundary dialog between pages
 	for len(chats) < limit && it.Next(ctx) {
 		elem := it.Value()
 		for id, u := range elem.Entities.Users() {
@@ -136,7 +137,8 @@ func (c *Client) chats(ctx context.Context, limit int, chatType string, requireC
 				groups = append(groups, ch)
 			}
 		}
-		if chat, ok := toChat(elem); ok && (chatType == "" || chat.Type == chatType) {
+		if chat, ok := toChat(elem); ok && (chatType == "" || chat.Type == chatType) && !listed[chat.ID] {
+			listed[chat.ID] = true
 			chats = append(chats, chat)
 		}
 	}

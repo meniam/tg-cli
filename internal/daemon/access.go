@@ -33,7 +33,8 @@ func (d *daemon) requireAllowedChat(ctx context.Context, ref chatref.Ref) (*rpc.
 	policy := d.policy()
 	if policy.Enabled() {
 		if ref.Kind == chatref.ID && !policy.Allowed(ref.ID) {
-			return nil, rpc.ErrChatNotFound()
+			// The answer for an id the session does not know: a closed id must match it.
+			return nil, rpc.ErrUnknownChatID()
 		}
 		if ref.Kind == chatref.Invite && !policy.InviteAllowed() {
 			return nil, rpc.ErrChatNotFound()
