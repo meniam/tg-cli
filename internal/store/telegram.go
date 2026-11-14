@@ -364,7 +364,16 @@ func (db *DB) UpsertPeople(ctx context.Context, people []Person) error {
 		return fmt.Errorf("begin people upsert: %w", err)
 	}
 	defer tx.Rollback()
-	now := db.now().Unix()
+	if err := upsertPeopleTx(ctx, tx, people, db.now().Unix()); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit people: %w", err)
+	}
+	return nil
+}
+
+func upsertPeopleTx(ctx context.Context, tx *sql.Tx, people []Person, now int64) error {
 	const insert = `INSERT INTO people (` + personColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,first_name=excluded.first_name,last_name=excluded.last_name,phone=excluded.phone,bio=excluded.bio,is_bot=excluded.is_bot,is_contact=excluded.is_contact,raw=excluded.raw,last_seen_at=excluded.last_seen_at`
 	for _, incoming := range people {
 		old, err := scanPerson(tx.QueryRowContext(ctx, `SELECT `+personColumns+` FROM people WHERE id=?`, incoming.ID))
@@ -381,9 +390,6 @@ func (db *DB) UpsertPeople(ctx context.Context, people []Person) error {
 		if err != nil {
 			return fmt.Errorf("upsert person %d: %w", p.ID, err)
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit people: %w", err)
 	}
 	return nil
 }
@@ -412,21 +418,38 @@ func mergeMessage(old, incoming Message, exists bool, now int64) Message {
 
 // UpsertMessages stores a batch, preserving old text when it changes.
 func (db *DB) UpsertMessages(ctx context.Context, messages []Message) error {
-	last := make(map[[2]int64]int, len(messages))
-	for i, m := range messages {
-		last[[2]int64{m.ChatID, int64(m.ID)}] = i
-	}
-	for i, m := range messages {
-		if last[[2]int64{m.ChatID, int64(m.ID)}] == i && !json.Valid(m.Raw) {
-			return fmt.Errorf("message %d/%d raw: invalid JSON", m.ChatID, m.ID)
-		}
+	last, err := messageLastIndexes(messages, false)
+	if err != nil {
+		return err
 	}
 	tx, err := db.write.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin message upsert: %w", err)
 	}
 	defer tx.Rollback()
-	now := db.now().Unix()
+	if err := upsertMessagesTx(ctx, tx, messages, last, db.now().Unix()); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit messages: %w", err)
+	}
+	return nil
+}
+
+func messageLastIndexes(messages []Message, strict bool) (map[[2]int64]int, error) {
+	last := make(map[[2]int64]int, len(messages))
+	for i, m := range messages {
+		last[[2]int64{m.ChatID, int64(m.ID)}] = i
+	}
+	for i, m := range messages {
+		if (strict || last[[2]int64{m.ChatID, int64(m.ID)}] == i) && !json.Valid(m.Raw) {
+			return nil, fmt.Errorf("message %d/%d raw: invalid JSON", m.ChatID, m.ID)
+		}
+	}
+	return last, nil
+}
+
+func upsertMessagesTx(ctx context.Context, tx *sql.Tx, messages []Message, last map[[2]int64]int, now int64) error {
 	const insertNew = `INSERT INTO messages (` + messageColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,id) DO NOTHING`
 	newStmt, err := tx.PrepareContext(ctx, insertNew)
 	if err != nil {
@@ -475,9 +498,6 @@ func (db *DB) UpsertMessages(ctx context.Context, messages []Message) error {
 	}
 	if err := newStmt.Close(); err != nil {
 		return fmt.Errorf("close message insert: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit messages: %w", err)
 	}
 	return nil
 }
