@@ -74,6 +74,7 @@ type AccessStatus struct {
 	Enabled bool `json:"enabled"`
 	Allow   int  `json:"allow"`
 	Block   int  `json:"block"`
+	Write   int  `json:"write,omitempty"`
 	Closed  bool `json:"closed,omitempty"`
 }
 

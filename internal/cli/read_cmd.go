@@ -65,7 +65,7 @@ func (a *app) chatInviteInfo(cmd *cobra.Command, args []string) error {
 }
 
 func (a *app) messageCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "message", Short: "Read messages of a chat"}
+	cmd := &cobra.Command{Use: "message", Short: "Read and write messages"}
 
 	history := a.annotate(&cobra.Command{
 		Use:   "history <chat>",
@@ -103,6 +103,7 @@ func (a *app) messageCommand() *cobra.Command {
 	pinned.Flags().Int("limit", 0, "how many pinned messages, 1 to 100 (default 20)")
 
 	cmd.AddCommand(history, get, pinned, a.watchCommand())
+	cmd.AddCommand(a.messageWriteCommands()...)
 	return cmd
 }
 

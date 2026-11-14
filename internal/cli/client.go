@@ -92,6 +92,8 @@ func exitForRPC(e *rpc.Error) int {
 		return exitcode.NotFound
 	case rpc.CodeCursorExpired:
 		return exitcode.CursorExpired
+	case rpc.CodeWriteDisabled:
+		return exitcode.WriteDisabled
 	case rpc.CodeInvalidParams, rpc.CodeMethodNotFound:
 		return exitcode.Usage
 	}

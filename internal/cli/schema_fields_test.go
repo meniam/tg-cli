@@ -148,11 +148,15 @@ func TestSchemaFieldsMatchRealResponses(t *testing.T) {
 // other command of the schema is compared with a real response above, so a new
 // command has to be either exercised or listed here with a reason.
 var uncoveredCommands = map[string]string{
-	"daemon stop":   "runs last, after the cases that need the daemon it stops, so it is checked separately",
-	"auth login":    "asks for a phone number, a code and a password on stdin",
-	"auth resend":   "needs a login that waits for the code, started by another command",
-	"daemon start":  "runs until the daemon stops, the other cases need the daemon it starts",
-	"message watch": "requires a live event stream; its net.Pipe contract is checked separately",
+	"daemon stop":     "runs last, after the cases that need the daemon it stops, so it is checked separately",
+	"auth login":      "asks for a phone number, a code and a password on stdin",
+	"auth resend":     "needs a login that waits for the code, started by another command",
+	"daemon start":    "runs until the daemon stops, the other cases need the daemon it starts",
+	"message watch":   "requires a live event stream; its net.Pipe contract is checked separately",
+	"message send":    "account write is covered through net.Pipe tests without a real account",
+	"message edit":    "account write is covered through net.Pipe tests without a real account",
+	"message delete":  "account write is covered through net.Pipe tests without a real account",
+	"message forward": "account write is covered through net.Pipe tests without a real account",
 }
 
 // TestEveryCommandResponseIsCompared makes sure the comparison covers the whole

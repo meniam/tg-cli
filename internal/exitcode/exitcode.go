@@ -23,6 +23,8 @@ const (
 	NotFound = 7
 	// CursorExpired means an event cursor is older than the retained journal.
 	CursorExpired = 8
+	// WriteDisabled means the owner did not allow writes to this chat.
+	WriteDisabled = 9
 )
 
 var names = map[int]string{
@@ -35,6 +37,7 @@ var names = map[int]string{
 	FloodWait:        "flood_wait",
 	NotFound:         "not_found",
 	CursorExpired:    "cursor_expired",
+	WriteDisabled:    "write_disabled",
 }
 
 var notes = map[int]string{
@@ -47,6 +50,7 @@ var notes = map[int]string{
 	FloodWait:        "Telegram asked to wait before the next request",
 	NotFound:         "the chat, user, message or note does not exist or is not visible",
 	CursorExpired:    "the event cursor is older than the retained journal",
+	WriteDisabled:    "the owner did not allow writes to the chat in access.json",
 }
 
 // Note returns a one-line description of a code, or "" for an undefined one.
@@ -65,7 +69,7 @@ func Name(code int) string {
 // All returns every defined code.
 func All() []int {
 	codes := make([]int, 0, len(names))
-	for c := OK; c <= CursorExpired; c++ {
+	for c := OK; c <= WriteDisabled; c++ {
 		if _, ok := names[c]; ok {
 			codes = append(codes, c)
 		}

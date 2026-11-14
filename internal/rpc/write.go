@@ -21,6 +21,7 @@ type DeleteParams struct {
 	Chat   string `json:"chat"`
 	IDs    []int  `json:"ids"`
 	Revoke bool   `json:"revoke"`
+	ForMe  bool   `json:"for_me,omitempty"`
 	DryRun bool   `json:"dry_run,omitempty"`
 }
 
@@ -33,16 +34,21 @@ type ForwardParams struct {
 }
 
 type SendResult struct {
-	ChatID int64  `json:"chat_id"`
-	ID     int    `json:"id,omitempty"`
-	Date   string `json:"date,omitempty"`
-	DryRun bool   `json:"dry_run,omitempty"`
+	ChatID     int64  `json:"chat_id"`
+	ID         int    `json:"id,omitempty"`
+	Date       string `json:"date,omitempty"`
+	DryRun     bool   `json:"dry_run,omitempty"`
+	Action     string `json:"action,omitempty"`
+	Count      int    `json:"count,omitempty"`
+	TextLength int    `json:"text_length,omitempty"`
 }
 
 type DeleteResult struct {
-	ChatID  int64 `json:"chat_id"`
-	Deleted []int `json:"deleted"`
-	DryRun  bool  `json:"dry_run,omitempty"`
+	ChatID  int64  `json:"chat_id"`
+	Deleted []int  `json:"deleted"`
+	DryRun  bool   `json:"dry_run,omitempty"`
+	Action  string `json:"action,omitempty"`
+	Count   int    `json:"count,omitempty"`
 }
 
 type ForwardedMessage struct {
@@ -54,6 +60,8 @@ type ForwardResult struct {
 	ChatID   int64              `json:"chat_id"`
 	Messages []ForwardedMessage `json:"messages"`
 	DryRun   bool               `json:"dry_run,omitempty"`
+	Action   string             `json:"action,omitempty"`
+	Count    int                `json:"count,omitempty"`
 }
 
 // ErrWriteDisabled tells the caller how the owner can enable this chat.

@@ -37,6 +37,8 @@ type Paths struct {
 	Database string
 	// Access is the human-managed chat access list.
 	Access string
+	// Deletions records intent and outcome for each Telegram deletion.
+	Deletions string
 	// Log is the journal of a daemon started in the background, mode 0600.
 	// Request entries contain only a registered method, duration and code.
 	Log string
@@ -59,15 +61,16 @@ func ResolvePaths(home, profile string) (Paths, error) {
 	}
 	dir := filepath.Join(home, profile)
 	p := Paths{
-		Dir:      dir,
-		Socket:   filepath.Join(dir, "daemon.sock"),
-		Lock:     filepath.Join(dir, "daemon.lock"),
-		Session:  filepath.Join(dir, "session.json"),
-		Client:   filepath.Join(dir, "client"),
-		Device:   filepath.Join(dir, "device"),
-		Database: filepath.Join(dir, "store.db"),
-		Access:   filepath.Join(dir, "access.json"),
-		Log:      filepath.Join(dir, "daemon.log"),
+		Dir:       dir,
+		Socket:    filepath.Join(dir, "daemon.sock"),
+		Lock:      filepath.Join(dir, "daemon.lock"),
+		Session:   filepath.Join(dir, "session.json"),
+		Client:    filepath.Join(dir, "client"),
+		Device:    filepath.Join(dir, "device"),
+		Database:  filepath.Join(dir, "store.db"),
+		Access:    filepath.Join(dir, "access.json"),
+		Deletions: filepath.Join(dir, "deletions.jsonl"),
+		Log:       filepath.Join(dir, "daemon.log"),
 	}
 	if len(p.Socket) > MaxSocketPath {
 		return Paths{}, fmt.Errorf("socket path %q is %d bytes, the limit is %d: set TG_CLI_HOME to a shorter directory", p.Socket, len(p.Socket), MaxSocketPath)
