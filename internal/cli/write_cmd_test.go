@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"os"
 	"reflect"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
@@ -138,7 +141,7 @@ func TestMessageWriteCLIFlagsAndInput(t *testing.T) {
 func TestMessageWriteCLIValidationBeforeDaemon(t *testing.T) {
 	cases := [][]string{
 		{"message", "send", "42"},
-		{"message", "send", "42", "--text", "hi"},
+		{"message", "send", "42", "--text", "   "},
 		{"message", "send", "42", "--text", strings.Repeat("x", 4097)},
 		{"message", "send", "42", "--text", "hi", "--reply-to", "-1"},
 		{"message", "edit", "42", "11", "--text", "hi"},
@@ -150,11 +153,7 @@ func TestMessageWriteCLIValidationBeforeDaemon(t *testing.T) {
 	}
 	for i, args := range cases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			stdin := ""
-			if i == 1 {
-				stdin = "also stdin"
-			}
-			r := runWriteCLI(t, args, stdin, nil, nil)
+			r := runWriteCLI(t, args, "", nil, nil)
 			if r.code != exitcode.Usage || r.method != "" {
 				t.Fatalf("validation: %+v", r)
 			}
@@ -211,5 +210,25 @@ func TestMessageWriteSchema(t *testing.T) {
 		if (name == "message edit" || name == "message delete") && !command.Dangerous {
 			t.Errorf("not dangerous: %s", name)
 		}
+	}
+}
+
+type failingReader struct{ t *testing.T }
+
+func (r failingReader) Read([]byte) (int, error) {
+	r.t.Error("stdin must not be read when --text is given")
+	return 0, io.EOF
+}
+
+func TestWriteTextIgnoresStdinWhenTextIsGiven(t *testing.T) {
+	cmd := &cobra.Command{Use: "send"}
+	cmd.Flags().String("text", "", "")
+	if err := cmd.Flags().Set("text", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	a := &app{deps: Deps{Stdin: failingReader{t}}}
+	got, err := a.writeText(cmd)
+	if err != nil || got != "hello" {
+		t.Fatalf("writeText = %q, %v", got, err)
 	}
 }

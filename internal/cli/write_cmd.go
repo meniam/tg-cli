@@ -17,7 +17,7 @@ const maxTextInputBytes = 64 << 10
 
 func (a *app) messageWriteCommands() []*cobra.Command {
 	send := a.annotate(&cobra.Command{Use: "send <chat>", Short: "Send a plain text message", Args: cobra.ExactArgs(1), RunE: a.messageSend}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendResult](), Args: []argSpec{{Name: "chat", Required: true}}})
-	send.Flags().String("text", "", "message text; reads stdin when absent")
+	send.Flags().String("text", "", "message text; reads stdin when absent (stdin is ignored when --text is given)")
 	send.Flags().Int("reply-to", 0, "reply to this message id")
 	send.Flags().Int("topic", 0, "send in this forum topic")
 	send.Flags().Bool("silent", false, "send without a notification")
@@ -43,21 +43,19 @@ func (a *app) messageWriteCommands() []*cobra.Command {
 func (a *app) writeText(cmd *cobra.Command) (string, error) {
 	specified := cmd.Flags().Changed("text")
 	value, _ := cmd.Flags().GetString("text")
-	var stdin []byte
-	if a.deps.Stdin != nil && (!specified || !terminalInput(a.deps.Stdin)) {
-		var err error
-		stdin, err = io.ReadAll(io.LimitReader(a.deps.Stdin, maxTextInputBytes+1))
+	// With --text the standard input is never read: an open pipe or a terminal
+	// would block the command, and a script may keep stdin open for other uses.
+	if !specified {
+		if a.deps.Stdin == nil || terminalInput(a.deps.Stdin) {
+			return "", fail(exitcode.Usage, "message text is required: use --text or pipe it to stdin")
+		}
+		stdin, err := io.ReadAll(io.LimitReader(a.deps.Stdin, maxTextInputBytes+1))
 		if err != nil {
 			return "", fail(exitcode.Failure, "read message text: %v", err)
 		}
 		if len(stdin) > maxTextInputBytes {
 			return "", fail(exitcode.Usage, "message text is too long")
 		}
-	}
-	if specified && len(stdin) > 0 {
-		return "", fail(exitcode.Usage, "use either --text or stdin, not both")
-	}
-	if !specified {
 		value = string(stdin)
 	}
 	if strings.TrimSpace(value) == "" {
