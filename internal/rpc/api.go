@@ -52,6 +52,14 @@ const (
 	MethodSubscribe           = "subscribe"
 	MethodUnsubscribe         = "unsubscribe"
 	MethodEvent               = "event"
+
+	MethodUserProfile   = "user.profile"
+	MethodUserBlock     = "user.block"
+	MethodUserUnblock   = "user.unblock"
+	MethodContactList   = "contact.list"
+	MethodContactAdd    = "contact.add"
+	MethodContactDelete = "contact.delete"
+	MethodContactSearch = "contact.search"
 )
 
 // Login states reported by the auth methods.
