@@ -17,6 +17,8 @@ type Policy struct {
 	allow  map[int64]struct{}
 	block  map[int64]struct{}
 	write  map[int64]struct{}
+	admin  map[int64]struct{}
+	create bool
 	files  []string
 	denied bool
 }
@@ -41,6 +43,18 @@ func (p Policy) WriteAllowed(chatID int64) bool {
 	_, listed := p.write[chatID]
 	return listed && p.Allowed(chatID)
 }
+
+// AdminAllowed requires an explicitly listed and visible chat.
+func (p Policy) AdminAllowed(chatID int64) bool {
+	_, listed := p.admin[chatID]
+	return listed && p.Allowed(chatID)
+}
+
+// CreateAllowed reports whether creating chats is enabled.
+func (p Policy) CreateAllowed() bool { return !p.denied && p.create }
+
+// AdminCount returns the number of explicitly listed chats.
+func (p Policy) AdminCount() int { return len(p.admin) }
 
 // InviteAllowed reports whether an invitation may be inspected. An invitation
 // has no known chat ID before it is resolved, so a nonempty allow list closes it.
@@ -190,6 +204,20 @@ func parse(data []byte) (Policy, error) {
 				return Policy{}, fmt.Errorf("write: %w", err)
 			}
 			policy.write = ids
+		case "admin":
+			if len(value) == 0 || value[0] != '[' {
+				return Policy{}, errors.New("admin must be an array of integer chat IDs")
+			}
+			ids, err := parseIDs(value)
+			if err != nil {
+				return Policy{}, fmt.Errorf("admin: %w", err)
+			}
+			policy.admin = ids
+		case "create":
+			if !bytes.Equal(value, []byte("true")) && !bytes.Equal(value, []byte("false")) {
+				return Policy{}, errors.New("create must be a boolean")
+			}
+			policy.create = bytes.Equal(value, []byte("true"))
 		case "files":
 			if len(value) == 0 || value[0] != '[' {
 				return Policy{}, errors.New("files must be an array of absolute directory paths")
