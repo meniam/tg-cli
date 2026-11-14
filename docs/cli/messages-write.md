@@ -22,7 +22,7 @@ Writing is off by default. The owner adds chat ids (Bot API form, nonzero intege
 - **Who can bypass it.** An agent running as the same user can edit `write` in `access.json`: the list protects against accidental writes and against writes induced through a chat, not against an agent that deliberately bypasses it.
 - **Not done.** Scheduled messages, drafts and the typing indicator.
 
-Writing was checked by tests and on a live account in one test chat on 2026-11-14 (judged by exit codes): send, reply, edit, silent send, forward, both kinds of deletion, `--dry-run`, and the refusals for a missing `access.json`, a chat outside `write` and a closed chat. Not checked on a live account: `FLOOD_WAIT` on a write, a reply inside a forum topic, deletion in a channel, editing someone else's message (Telegram forbids it).
+Verification and remaining work for account writes are tracked in [FEATURES.md](../../FEATURES.md), items 5.1, 5.2 and 9.1.
 
 Common errors of this page: 2 for bad arguments (checked before the Daemon where possible), 3 no Daemon, 4 no login, 5 Telegram rejected the write, 6 `FLOOD_WAIT`, 7 an unknown or closed chat (or a message that is not found), 9 the chat is not in `write`.
 
@@ -106,10 +106,10 @@ The syntax of the rich modes is Telegram's own and is parsed by the server; the 
 
   `mode` is `html`, `markdown`, `rich-html`, `rich-markdown` or `entities`. A rich mode reports `plain_length` and `entities` as 0, because Telegram parses the text.
 - **What is saved locally.** The database gets the final plain text without markup: after `--parse markdown` of `**hi**` it holds `hi`. For a rich message it is the text of the blocks in the answer of Telegram; if the answer does not carry it, nothing is saved at send time (an edit leaves the saved row unchanged), and the next read of the message saves it.
-- **Reading a rich message.** It comes back through `message get`, history, pinned messages, context, search and the live stream with its `text` built from the blocks, see [messages-read.md](messages-read.md#rules-shared-by-message-reads). Only `message get` was read back on a live account; the other paths share the same conversion code and are covered by tests.
+- **Reading a rich message.** `message get`, history, pinned messages, context, search and the live stream return `text` built from rich blocks; see [messages-read.md](messages-read.md#rules-shared-by-message-reads) and [FEATURES.md](../../FEATURES.md), item 4.10.
 - **Editing.** `message edit` can change the kind of a message: plain to rich, rich to plain, and between the formatting modes.
 
-Checked by tests on a fake Telegram, a Daemon without sockets and the CLI: the request of every mode (also as a reply and inside a forum topic), emoji and characters outside the Basic Multilingual Plane, nested styles, a quote and a code block with a language, links, a mention by id, all entity types, the errors above without any Telegram write call, the length limits, `--dry-run`, the unchanged plain requests, the refusal of a rich message and the reading of rich blocks as text. Checked on a live account (one test chat, 2026-11-14): Telegram accepted a rich message from a user account in both rich modes, every mode was accepted, `message get` returned the expected text of each, edits worked between the modes in every direction, `--dry-run` returned the fields above, and the refusals before Telegram were exit code 2. The mention of a known user and of the own id was accepted, and an unknown id was exit code 2. Not checked on a live account: the length limit of a rich message, the `date_time` and `custom_emoji` entities, `--reply-to` and `--topic` together with formatting, old Telegram clients, and `FLOOD_WAIT` on a formatted write. Not done: formatting of media captions, entities on read, `message forward` with formatting, link previews, a rich message with attached files and the MarkdownV2 dialect of the Bot API.
+Verification and remaining work for text formatting are tracked in [FEATURES.md](../../FEATURES.md), item 5.4.
 
 ## Text messages
 
@@ -160,7 +160,7 @@ With `--dry-run`: `{"chat_id":-1001234567890,"dry_run":true,"action":"send","cou
 
 **Exit codes.** 0; 2 empty or too long text, no text on a terminal, `--parse` with `--entities`, bad formatting; 3, 4; 5; 6 not repeated; 7 an unknown or closed chat; 9 the chat is not in `write`.
 
-**Limits and live check.** Checked on a live account in the test chat: send, reply with the text from stdin, silent send. Not checked: a reply inside a forum topic, `FLOOD_WAIT` on a write.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 5.1.
 
 ### tg message edit
 
@@ -202,7 +202,7 @@ echo "Fixed text" | tg message edit @release_team 4103 --yes
 
 **Exit codes.** 0; 2 no `--yes` and no `--dry-run`, bad text or formatting; 3, 4; 5; 6; 7; 9.
 
-**Limits and live check.** Checked on a live account: an edit with `--yes` and the refusal without it. Not checked: editing someone else's message (Telegram forbids it).
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 5.2.
 
 ### tg message delete
 
@@ -247,7 +247,7 @@ tg message delete @release_team 4103 4104 --revoke --yes
 
 **Exit codes.** 0; 2 not exactly one of `--revoke` and `--for-me`, no `--yes` and no `--dry-run`, `--for-me` in a channel; 3, 4; 5; 6; 7 an unknown or closed chat, or an id the guard does not know; 9.
 
-**Limits and live check.** Checked on a live account: both kinds of deletion, the journal without text with mode `0600`. Not checked: deletion in a channel.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 5.2 and 9.3.
 
 ### tg message forward
 
@@ -286,7 +286,7 @@ tg message forward --silent @release_team @archive_team 4102
 
 **Exit codes.** 0; 2 fewer than three arguments; 3, 4; 5; 6; 7 an unknown or closed source or target; 9 the target is not in `write`.
 
-**Limits and live check.** Checked on a live account: a forward into the same chat.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 5.2.
 
 ## Files
 
@@ -342,7 +342,7 @@ A mismatch is exit code 2 with the hint `--as document`. WebP, GIF, MOV, WAV, FL
 
 **Metadata flags.** For `video` the Daemon reads the duration and the size from the MP4 (`mvhd`, `tkhd`), for `voice` the duration from the last Ogg page. If that gives nothing, the command is exit code 2 and asks for `--duration --width --height` (video) or `--duration` (voice). The flags override what was read and apply to every file of an album. `audio` has no automatic duration: `--duration` sets it. `photo` and `document` ignore the flags.
 
-**Deadline and retries.** The call waits for the upload and the send, up to 600 seconds in the Daemon and in the CLI; other methods keep 120 seconds. At the deadline the command ends with exit code 1 and the outcome is unknown. The upload runs in one stream and the parts wait in the lower queue of the throttle, so ordinary commands go first. On a live account a 30 MiB document went up in 42 seconds (about 0.7 MiB/s), so 100 MiB should take about 140 seconds (an estimate from this one measurement). A send is never repeated. `FLOOD_WAIT`, during the upload or on the send, is exit code 6 with the seconds in the message, and the whole account pauses for that time; when it comes during the upload, nothing has been sent yet. A lost answer while an album is being sent leaves the outcome unknown: look at `message history` before you send again.
+**Deadline and retries.** The call waits for the upload and the send, up to 600 seconds in the Daemon and in the CLI; other methods keep 120 seconds. At the deadline the command ends with exit code 1 and the outcome is unknown. The upload runs in one stream and the parts wait in the lower queue of the throttle, so ordinary commands go first. A send is never repeated. `FLOOD_WAIT`, during the upload or on the send, is exit code 6 with the seconds in the message, and the whole account pauses for that time; when it comes during the upload, nothing has been sent yet. A lost answer while an album is being sent leaves the outcome unknown: look at `message history` before you send again.
 
 **Dry run.** `--dry-run` runs every check, including the file content, and uploads nothing. The answer holds `dry_run: true`, `action: "send_media"`, `count`, `types`, `sizes`, `caption_length` and an empty `messages`. Use `--format json`, `toon` or `human` to see it: `jsonl` prints one line per sent message.
 
@@ -366,13 +366,13 @@ tg message send-media --as video --duration 12 --width 1280 --height 720 --file 
 
 **Exit codes.** 0; 2 wrong arguments, a path outside the roots, a file that does not match the type, a size over the limit, a missing `--as`; 5 Telegram rejected the upload or the send; 6 `FLOOD_WAIT`; 7 the chat or the file is not found; 9 the chat is not in `write` or `files` is empty; 1 the deadline or another failure; 3 and 4 as everywhere.
 
-**Limits and live check.** Checked by tests on a fake Telegram and temporary directories: the parameters of every type, an album of three with the caption on the first file, an upload that breaks before anything is sent, `FLOOD_WAIT` on the send, a file over 10 MiB uploaded in big parts one at a time, a cancel or a closed file during the upload, every refusal before Telegram is called, the symlink and `..` cases, and a journal without paths and captions. Checked on a live account (2026-11-14, one test chat, a temporary `access.json`, the test messages deleted afterwards): the server accepted all five types (photo, document, MP3 audio, Ogg Opus voice, MP4 video with metadata read from the file), two albums (two photos with a caption on the first item only, and two documents), and the sent messages were saved with the right `media_type`; `--dry-run`, the refusals (no `--as`, a chat outside `write`, `write` without `files`, a file over 100 MiB, a wrong type, a voice message of two files), the same answer for a path outside the roots, a missing root, a symlink out and `..`, and the speed of a 30 MiB upload. Not checked: a whole 100 MiB file, `FLOOD_WAIT` during an upload, the caption limit of your account (only a short caption was sent), `--reply-to` and `--topic` for media, an MP4 with `moov` at the end (the metadata cannot be read and the flags are required), an Ogg file without a final page and other codecs. Not done: files over 100 MiB, mixed albums, thumbnails and covers, a file name other than the original, sending by URL or file id, stickers, GIFs, round videos, spoilers, caption formatting, resuming an interrupted upload, a file from stdin and downloading media.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 6.1.
 
 ## Reactions, pins and polls
 
 Four commands write to the account under the rules of [Writing is off until the owner allows it](#writing-is-off-until-the-owner-allows-it): the chat must be in `write` (exit code 9 otherwise), none needs `--yes` or is dangerous, `--dry-run` runs every check and calls no Telegram write method, and a write is never repeated (`FLOOD_WAIT` is exit code 6). The formats are `json`, `jsonl` (the one envelope as one line), `toon` and `human`. A negative chat id goes after `--`, the flags before it.
 
-Checked by tests on a fake Telegram, Daemon and CLI (the parameters of every request, removing a reaction, a pin with and without `--silent`, unpinning, a plain, multiple-answer, public and quiz poll, the limits at their edges, exit code 9 outside `write`, `--dry-run` without a Telegram call, no retry on `FLOOD_WAIT`, the `pinned` update). Also checked on a live account in one test chat (2026-11-14, exit codes and answers), see the commands below. Not checked on a live account: the state of a reaction after it is set (reading reactions is not implemented, so only the answer of the server confirms it), a pin in a channel or a private chat, the notification of a pin without `--silent`, a non-anonymous poll in a channel, the real limits of the server for a poll (255, 100, 10 and 200 are limits of the tool), `--reply-to` and `--topic` of a poll, `FLOOD_WAIT` on these methods. Not done: custom and paid reactions, reading the reactions of a message, unpinning all messages, voting in and stopping a poll, formatting of the question and the options. The updating of `pinned` after a pin and the poll question in `text` are choices of the author: both are confirmed live, but still wait for the confirmation of the owner.
+Verification and remaining work for reactions, pins and polls are tracked in [FEATURES.md](../../FEATURES.md), item 5.3.
 
 ### tg message react
 
@@ -412,7 +412,7 @@ tg message react @release_team 4102 👍 --remove
 
 **Exit codes.** 0; 2 a bad emoji or a reaction the message does not allow; 3, 4; 5 for example `MESSAGE_NOT_MODIFIED` when you remove a reaction that is not set; 6; 7; 9.
 
-**Limits and live check.** Checked on a live account: Telegram acknowledged setting and removing a reaction; an emoji with a space was exit code 2 before Telegram; a rare emoji that the message does not allow was exit code 2; removing a reaction that was not set was exit code 5 `MESSAGE_NOT_MODIFIED`.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 5.3.
 
 ### tg message pin
 
@@ -450,7 +450,7 @@ tg message pin @release_team 4102 --silent
 
 **Exit codes.** 0; 3, 4; 5 admin rights are required; 6; 7; 9.
 
-**Limits and live check.** Checked on a live account: pinning with and without `--silent`; the `pinned` flag in Telegram and in the local database matched, and both pins created a `pin_message` service message in the chat. Not checked: a pin in a channel or a private chat, the notification of a pin without `--silent`.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 5.3.
 
 ### tg message unpin
 
@@ -487,7 +487,7 @@ tg message unpin @release_team 4102
 
 **Exit codes.** 0; 3, 4; 5; 6; 7; 9.
 
-**Limits and live check.** Checked on a live account together with `pin`: the `pinned` flag matched in Telegram and in the database.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 5.3.
 
 ### tg message poll
 
@@ -539,4 +539,4 @@ tg message poll @release_team --question "2 + 2?" --option 3 --option 4 --quiz -
 
 **Exit codes.** 0; 2 limits, a quiz with `--multiple`, `--correct` or `--explanation` without `--quiz`, fewer than 2 options; 3, 4; 5; 6; 7; 9.
 
-**Limits and live check.** Checked on a live account: polls of three kinds (plain, multiple-answer public, quiz with an explanation) were accepted; `message get` showed `media_type` `poll` and `text` equal to the question, and the polls were saved locally; a poll with one option and a quiz with `--multiple` were exit code 2 before Telegram, a chat outside `write` was exit code 9, `--dry-run` changed nothing, and the test messages were deleted afterwards. Not checked: a non-anonymous poll in a channel, the real limits of the server, `--reply-to` and `--topic` of a poll, `FLOOD_WAIT`.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 5.3.

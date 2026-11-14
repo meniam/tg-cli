@@ -60,7 +60,7 @@ TG_API_ID=12345 TG_API_HASH=0123456789abcdef0123456789abcdef tg daemon start --i
 
 **Exit codes.** 0 started or already running; 2 no or two credential sources, a bad `TG_API_ID`, an unknown preset, a bad `--device` name, a negative `--idle-timeout`, a bad `TG_CLI_THROTTLE_PERCENT` or `TG_CLI_FLOOD_AUTOWAIT` (see [Request throttle](overview.md#request-throttle-and-flood_wait)); 1 the process exited early, the socket did not answer in 15 seconds, the preset could not be downloaded, or a `--foreground` Daemon was refused because one already runs.
 
-**Limits and live check.** Checked on a live profile: the start takes about 0.75 seconds, `daemon stop` about 0.15 seconds, an idle timeout of 6 seconds stopped the Daemon after about 7 seconds, `ps` shows no application keys, and the socket and the journal have mode `0600`. Not checked: the background start on Linux, and the journal rotation on a live Daemon. The schema of `daemon start` describes the answer of the background start (`running`, `pid`, `profile`, `socket`, `log`) and does not describe the `--foreground` answer (`stopped`), see [FEATURES.md](../../FEATURES.md) 3.8. `--device` was not checked on a live account.
+**Verification.** The schema describes the background start result; `--foreground` returns `stopped`. See [FEATURES.md](../../FEATURES.md), item 2.12 and 3.8.
 
 ### tg daemon status
 
@@ -103,7 +103,7 @@ A fresh profile without a login and without `access.json`:
 
 **Exit codes.** 0; 3 no Daemon is running for the profile.
 
-**Limits and live check.** Checked on a live account.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 12.1.
 
 ### tg daemon stop
 
@@ -138,7 +138,7 @@ tg daemon stop
 
 **Exit codes.** 0; 3 no Daemon is running; the command fails when the process is still alive after 10 seconds.
 
-**Limits and live check.** A stop takes about 0.15 seconds on a live profile. A running history load (`chat sync`) is lost: jobs live in the memory of the Daemon and are not resumed on the next start. What the load had saved stays in the database. A stop of the Daemon in the middle of a load or an export was not checked on a live account.
+**Verification.** Stopping the Daemon loses an in-memory history sync job; saved messages remain. See [FEATURES.md](../../FEATURES.md), item 2.3 and 10.12.
 
 ### tg daemon logs
 
@@ -186,11 +186,11 @@ tg daemon logs --follow --format jsonl
 
 **Exit codes.** 0; 2 `--tail` outside 1 to 10000 (`--tail 0` included: `--tail must be between 1 and 10000`); 7 no journal file (`daemon journal does not exist: <path>`).
 
-**Limits and live check.** Checked by tests and as a built binary on a temporary profile; not run against a live account. The rotation was not checked on a live Daemon.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 12.3.
 
 ## Login
 
-Login runs through the Daemon and is interactive. The login code and the two-factor password are asked on the terminal and are never accepted as flags, so they stay out of the shell history, the argument list and the logs. In Claude Code, ask the user to type `! tg auth login` themselves. A whole login is bounded to 5 minutes (`login timed out`). Phone login, QR login, `auth resend`, `auth cancel` and `--device` were not confirmed end to end on a live account (the code did not arrive during the check; at the QR check Telegram asked for the 2FA password at once).
+Login runs through the Daemon and is interactive. The login code and two-factor password are asked on the terminal, never as flags, so they stay out of shell history, arguments and logs. In Claude Code, ask the user to type `! tg auth login` themselves. A whole login is bounded to 5 minutes (`login timed out`). See [FEATURES.md](../../FEATURES.md), items 1.1 and 15.1.
 
 ### tg auth login
 
@@ -239,7 +239,7 @@ tg auth login --qr
 
 **Exit codes.** 0 logged in; 1 the login was interrupted or the login state does not fit; 2 an unreadable input; 3 no Daemon; 5 Telegram rejected the step (a wrong code ends the login with the reason of Telegram, start again).
 
-**Limits and live check.** Not checked on a live account: phone login end to end (the code did not arrive), QR drawing and scanning. A wrong `api_id` gives `telegram_error` `API_ID_INVALID` at the first step.
+**Verification.** A wrong `api_id` returns `telegram_error` `API_ID_INVALID` at the first step. See [FEATURES.md](../../FEATURES.md), item 1.1 and 15.1.
 
 ### tg auth status
 
@@ -274,7 +274,7 @@ tg auth status
 
 **Exit codes.** 0; 3 no Daemon.
 
-**Limits and live check.** Checked on a live account: the answer showed that the account was logged in, the connection state and the account id.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 1.11.
 
 ### tg auth resend
 
@@ -311,7 +311,7 @@ The example values are illustrative.
 
 **Exit codes.** 0; 1 the login is not waiting for a code (`login is not waiting for the code; the current state is none`); 3 no Daemon; 5 Telegram refused the resend.
 
-**Limits and live check.** Not checked on a live account.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 1.12.
 
 ### tg auth cancel
 
@@ -346,4 +346,4 @@ tg auth cancel
 
 **Exit codes.** 0; 3 no Daemon.
 
-**Limits and live check.** Not checked on a live account.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 1.10.

@@ -98,4 +98,4 @@ The mark `untrusted` in `tg schema` and the `| ` frame of `--human` are hints fo
 
 ## Checks
 
-Checked by tests, and on a live account (read-only, one chat for message reads): a closed chat answered like an unknown one, `chat invite-info` was closed, global search returned no hits of a closed chat, a `block` list was topped up to the requested size, and a broken file or a mode of `0666` closed everything and the restored file opened it again. `note add|list|delete` and `message pinned` under the filter, and `@username`, phone and `t.me` references under it, were not checked on a live account.
+Verification of the access filter is tracked in [FEATURES.md](../../FEATURES.md), item 9.2.

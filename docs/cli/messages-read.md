@@ -82,7 +82,7 @@ tg message history --limit 20 --topic 7 -- -1001234567890
 
 **Exit codes.** 0; 2 `--limit` above 100 or negative, a time that is not RFC 3339, a malformed reference (`--limit 0` is not refused: the Daemon reads it as the default 20); 3, 4; 5 a Telegram error; 6 `FLOOD_WAIT`; 7 the chat does not exist or is closed.
 
-**Limits and live check.** Checked on a live account: history with `--since`, `--until` and a forum topic, and paging by cursor (pages do not overlap and ids decrease). Not checked: cutting a page by the size of the response frame on very long messages.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 4.1 and 4.8.
 
 ### tg message get
 
@@ -118,7 +118,7 @@ tg message get https://t.me/release_team/4102
 
 **Exit codes.** 0; 2 a malformed reference or link; 3, 4; 6; 7 the chat or the message does not exist or is not visible.
 
-**Limits and live check.** Checked on a live account. `message get` is the only path through which a rich message was read back on a live account.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 4.2 and 4.10.
 
 ### tg message pinned
 
@@ -155,7 +155,7 @@ tg message pinned @release_team --limit 5
 
 **Exit codes.** 0; 2 `--limit` above 100 or negative (`--limit 0` is not refused: the Daemon reads it as the default 20); 3, 4; 6; 7 the chat does not exist or is closed.
 
-**Limits and live check.** Checked on a live account: in the chosen chat 100 pinned messages came back, all with `pinned`. `message pinned` under an active access filter was not checked.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 4.2.
 
 ## Finding messages
 
@@ -213,7 +213,7 @@ With `--public`:
 
 **Exit codes.** 0; 2 `--limit` outside 1 to 100, a bad `--media`, an empty query without `--media`, `--media` with `--public`, a wrong number of arguments (all before the Daemon is called); 3, 4; 6 `FLOOD_WAIT`; 7 the chat does not exist or is closed.
 
-**Limits and live check.** Checked on a live account: search in a chat and `--public`. Not checked: the contents of global search and closed chats in it, and continuing a search by cursor. Global search runs into `FLOOD_WAIT` quickly: make one or two probes with pauses, do not raise the default limit of 20 without need, and note that the throttle does not repeat the call past the threshold.
+**Verification.** Global search can hit `FLOOD_WAIT` quickly; keep pauses between probes. See [FEATURES.md](../../FEATURES.md), item 4.3 and 4.9.
 
 ### tg message context
 
@@ -236,7 +236,7 @@ tg message context <chat> <id> | context <message-link> [flags]
 
 **Preconditions.** A running Daemon. Without `--local` a login is needed too. `--local` reads only the local database: no Telegram and no login, only messages that are not deleted, and an unknown message is `not_found`. Give `<chat> <id>` or a message link.
 
-**How it works.** The default window is 5 messages before and 5 after, 0 to 50 on each side (zero is allowed), ascending by id, the message itself included. Without `--local` the window comes from Telegram and depends on the `add_offset` semantics, which no live account has fully confirmed: at the edges of a chat it can differ from the expected one.
+**How it works.** The default window is 5 messages before and 5 after, 0 to 50 on each side, ascending by id and including the target. Without `--local`, Telegram determines the window at chat edges; see [FEATURES.md](../../FEATURES.md), item 4.5.
 
 **Example.**
 
@@ -255,7 +255,7 @@ tg message context https://t.me/release_team/4102 --local
 
 **Exit codes.** 0; 2 `--before` or `--after` outside 0 to 50, a malformed reference or link; 3; 4 (not for `--local`); 6; 7 the chat or the message is unknown or closed.
 
-**Limits and live check.** Checked on a live account at the newest message of a channel (a window of 3 messages). Not checked: a window that contains deleted messages.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 4.5.
 
 ### tg message comments
 
@@ -293,7 +293,7 @@ tg message comments https://t.me/news_channel/88 --limit 20
 
 **Exit codes.** 0; 2 `--limit` outside 1 to 100, a malformed link, a chat that is not a channel; 3, 4; 6; 7 no discussion, or an unknown or closed chat.
 
-**Limits and live check.** Checked on a live account only as a refusal for a channel without a discussion. Not checked: comments on a post that has a discussion.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 4.4.
 
 ### tg message link
 
@@ -333,7 +333,7 @@ tg message link --topic 7 @release_forum 4102
 
 **Exit codes.** 0; 2 a private chat or a basic group, a malformed reference; 3, 4; 6; 7 an unknown or closed chat.
 
-**Limits and live check.** Checked on a live account: a link out and back through `message get`.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 3.10.
 
 ## Exporting saved messages
 
@@ -392,7 +392,7 @@ tg message export --local --after 4102 -- -1001234567890
 
 **Exit codes.** 0 the export reached its end or `--limit` (zero lines is a success too); 1 a message that does not fit into a page, or the connection to the Daemon broke; 2 no `--local`, `json` or `toon`, a negative `--limit` or `--after`, a bad time, a `--since` later than `--until`; 3 no Daemon; 7 an unknown or closed chat. The code 4 does not occur: no login is needed.
 
-**Limits and live check.** Checked by tests without Telegram (page order and borders, filters, hidden and shown deleted messages, a closed chat also between pages, no Telegram calls, a message larger than a page, an error after printed lines, an edit and a deletion from the stream) and on a live account on 2026-11-14 (message text was not read): a chat of 219 saved messages gave 215 lines, 4 of them deleted, and `--include-deleted` gave 219 lines with `deleted: true` on the four; another chat gave 3097 lines equal to the database, ascending by `id`, with no repeats; `--since`, `--until` (an empty result is exit code 0), `--limit`, `--after` and the exit code 2 cases worked; a closed chat answered like `message context --local` for an unknown id; the Daemon journal held only `message.export_local`, one `message.context` and one `status`. Not checked on a live account: a chat of tens of thousands of messages (time, memory, line size), a message larger than a page, closing a chat between pages, the `human` format, a stop of the Daemon during an export, a stream writing into the same chat during an export, and the `deleted` mark that comes from a deletion made in another client. Not done: export from Telegram, earlier versions of edits, a file output (`--output`), CSV, several chats at once, a filter by topic, participants and subscribers.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.4.
 
 ## Live events
 
@@ -469,4 +469,4 @@ tg message watch --after 812.40117.0.1763111560   # resume from a cursor (illust
 
 **Exit codes.** 0 Ctrl-C, SIGTERM or `--max-events` reached; 1 `lagged` (with the hint `--after <cursor>`); 2 `--format json` without `--max-events`, `--format toon`, an unknown type in `--types`; 3 the Daemon stopped or the connection closed; 4 no login; 7 a closed or unknown chat in `--chat`; 8 `cursor_expired`.
 
-**Limits and live check.** Known limit: the event sink does not return an error to the updates manager, so after a persistent failure to store an event (three retries) the manager state can advance while the event is lost; the agent then sees a `gap`. The library reports `ChannelDifferenceTooLong` as `gap` too. Checked by tests (fake updates, an in-memory connection, a temporary database) and on a live account on 2026-11-14, read-only: in 5.5 minutes 62 events came (`status`, `message.new`, `message.edit`, `message.delete`) with monotonic cursors and no repeats; after a Daemon restart `--after <last cursor>` returned 70 stored events with no repeats; with an `access.json` of one chat only events of that chat came. Not checked live: reactions, reads and typing events, recovery after a real connection break, `cursor_expired`, `lagged`, and the database mark from a deletion made in another client in a private chat or basic group.
+**Verification.** A persistent journal write failure can advance the updates manager and produce a `gap`; `ChannelDifferenceTooLong` also produces a `gap`. See [FEATURES.md](../../FEATURES.md), item 8.2 and 8.4.

@@ -49,7 +49,7 @@ tg chat list --limit 2 --format jsonl
 
 **Exit codes.** 0; 2 `--limit` below 0 or above 500, or an unknown `--type`; 3 no Daemon; 4 no login; 6 `FLOOD_WAIT` longer than the auto-wait.
 
-**Limits and live check.** Checked on a live account (`chat list --limit 5`, `--type`, `--format jsonl`). The count of unread messages is in `unread`, the unread messages themselves and the unread topics are not available. `--limit 0` is accepted and counts as the default 50; a negative value and a value above 500 are exit code 2 ([FEATURES.md](../../FEATURES.md) 7.1.4). Per-method throttle buckets are an open item: `getDialogs` hits `FLOOD_WAIT` before the general bucket, so keep pauses between live reads.
+**Verification.** Unread message counts are returned in `unread`; unread messages and unread topics are unavailable. See [FEATURES.md](../../FEATURES.md), item 7.1.
 
 ### tg chat resolve
 
@@ -84,7 +84,7 @@ tg chat resolve @release_team
 
 **Exit codes.** 0; 2 a malformed reference (for example a username that is not 5 to 32 letters, digits and underscores starting with a letter); 3, 4; 7 the chat does not exist, is not visible, or a numeric id is unknown to the session.
 
-**Limits and live check.** Checked on a live account for `@username` and numeric ids of a user, a bot, a group, a supergroup and a channel. A phone number from the contacts was not checked.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 3.9 and 7.2.
 
 ### tg chat info
 
@@ -121,7 +121,7 @@ tg chat info @release_team
 
 **Exit codes.** 0; 2 a malformed reference; 3, 4; 7 the chat does not exist or is not visible.
 
-**Limits and live check.** Checked on a live account for `@username` and numeric ids. The description, the member count and the forum and verified flags are saved to the database as they are read. Chat settings of the owner (archive, pin, sound, folder) are not saved.
+**Verification.** The description, member count, forum flag and verified flag are saved when read; the owner's archive, pin, sound and folder settings are not saved. See [FEATURES.md](../../FEATURES.md), item 7.2.
 
 ### tg chat invite-info
 
@@ -156,7 +156,7 @@ tg chat invite-info https://t.me/+AbCdEfGhIjKlMnOp
 
 **Exit codes.** 0; 2 a malformed link; 3, 4; 7 the link leads nowhere or invitations are closed by `allow`.
 
-**Limits and live check.** Not checked on a live account for a real group: only a nonexistent link was run (exit code 7).
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 7.2.
 
 ## Members, topics and common chats
 
@@ -212,7 +212,7 @@ tg chat members --offset 200 -- -1001234567890
 
 **Exit codes.** 0; 2 `--limit` outside 1 to 200, a negative `--offset`, a wrong `--filter`, a private chat or a bot as `<chat>`; 3, 4; 5 a channel without administrator rights (`CHAT_ADMIN_REQUIRED: administrator access is required to list channel members`) or a basic group that hides its participants; 6 `FLOOD_WAIT`; 7 the chat does not exist or is closed.
 
-**Limits and live check.** Checked on a live account on 2026-11-14, read-only: members of a basic group without and with `--search`, `--offset` and `--filter admins`, members of one supergroup, and four channels without administrator rights (all four answered exit code 5, so an administrator-less channel is an error, not an empty list). Not checked: the member list of a channel for an administrator, the page size limit and the offset on a large supergroup.
+**Verification.** A channel without administrator access returns an error. See [FEATURES.md](../../FEATURES.md), item 7.4.
 
 ### tg chat topics
 
@@ -252,7 +252,7 @@ tg chat topics @release_forum --limit 20
 
 **Exit codes.** 0; 2 `--limit` outside 1 to 100, a chat that is not a forum, a wrong cursor; 3, 4; 6; 7 the chat does not exist or is closed.
 
-**Limits and live check.** Checked on a live forum of 16 topics with `--limit` 5, 3, 1 and 16: every topic came exactly once. The error for a chat that is not a forum was checked too.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 7.4.
 
 ### tg chat common
 
@@ -292,7 +292,7 @@ tg chat common @alice_example
 
 **Exit codes.** 0; 2 `--limit` outside 1 to 100, a chat or channel instead of a user, a wrong cursor; 3, 4; 6; 7 the user is unknown or not visible.
 
-**Limits and live check.** Checked on a live account: the shared chats of one user, where a closed chat (a temporary `access.json` with `block`) was not in the answer, and the saving of the user. Not checked: continuing by `next_cursor` and the page size limit of Telegram (how it pages by the id of the last chat).
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 7.7.
 
 ## Marking a chat read
 
@@ -336,7 +336,7 @@ With `--dry-run` the answer adds `"dry_run":true`.
 
 **Exit codes.** 0; 3, 4; 6 `FLOOD_WAIT` (not repeated); 7 an unknown or closed chat; 9 the chat is not in `write` (a hint says to add it).
 
-**Limits and live check.** Checked on a live account by exit codes only: no `write` gave 9, `--dry-run`, a write in the test chat, another chat gave 9. What the other side sees after the call was not checked.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 4.7.
 
 ## Loading a whole chat
 
@@ -364,7 +364,7 @@ Rules that hold for all three commands:
 - **Size.** The database grows with the chat, and there is no size limit. Tell the user before loading a chat of thousands of messages and more; 10 000 messages are 100 pages and at least 200 seconds of pauses, the waits of the throttle are added. For fresh messages `message history` with a cursor is enough.
 - **Idle stop.** A running load keeps `--idle-timeout` from stopping the Daemon.
 
-Checked on a live account on 2026-11-14 (message texts were not read): a group of 215 messages loaded in 4 pages (the last one empty) in 7 seconds and became `complete`; a repeated `start` on it answered `done` at once, with no pages and no Telegram call. A bot chat was cancelled after 2 pages (200 messages), then `start` resumed from the saved `oldest_id` and loaded 2897 more messages in 30 pages in 63 seconds, about 2.1 seconds per page, with no overlap and no duplicates (3097 messages in total). `status` showed `queued`, `running`, `done` and `cancelled`. Not checked on a live account: `FLOOD_WAIT` during a load (it did not happen) and the exit code 6 of other commands in that pause, a closed chat during a load, a stop of the Daemon during a load, a channel or a forum, a chat of tens of thousands of messages, and a load that runs while the live event stream writes the same chat. Not done: page size and pause as flags, loading several chats with one command, a schedule or an automatic start, detecting deleted messages, loading media, folders.
+Verification and remaining work for history sync are tracked in [FEATURES.md](../../FEATURES.md), item 10.12.
 
 ### tg chat sync start
 
@@ -400,7 +400,7 @@ tg chat sync start -- -1001234567890
 
 **Exit codes.** 0; 3, 4; 7 an unknown or closed chat.
 
-**Limits and live check.** See the checks above.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.12.
 
 ### tg chat sync status
 
@@ -444,7 +444,7 @@ With a chat the job fields are at the top level of `data`; without a chat they a
 
 **Exit codes.** 0 (also for a `failed` job); 2 `--format jsonl` with a chat; 3; 4 a chat reference that needs Telegram without a login; 7 an unknown or closed chat.
 
-**Limits and live check.** `status` showed `queued`, `running`, `done` and `cancelled` on a live account. The states `waiting_flood` and `failed` were checked by tests only.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.12.
 
 ### tg chat sync cancel
 
@@ -479,4 +479,4 @@ tg chat sync cancel @release_team
 
 **Exit codes.** 0; 3, 4; 7 an unknown or closed chat.
 
-**Limits and live check.** A bot chat was cancelled after 2 pages on a live account and resumed without overlap. Cancelling does not shorten a `FLOOD_WAIT` pause of the account.
+**Verification.** Cancelling does not shorten an account `FLOOD_WAIT` pause. See [FEATURES.md](../../FEATURES.md), item 10.12.

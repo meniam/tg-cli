@@ -15,7 +15,7 @@ An index of the documentation of `tg`, a console client for a personal Telegram 
 | to decide which chats the agent sees, where it may write and which directories it may send files from | [cli/access.md](cli/access.md) |
 | an agent skill with the working rules for an AI agent (in Russian) | [skill/tg-cli/SKILL.md](skill/tg-cli/SKILL.md) |
 
-Every command of `tg schema` has its own section in `docs/cli/` with a heading `tg <command path>`: purpose, syntax, flags, safety class, preconditions, an example, an example answer, exit codes, and what is not checked on a live account. The authoritative machine-readable contract is `tg schema`; these pages explain it.
+Every command of `tg schema` has its own section in `docs/cli/` with a heading `tg <command path>`: purpose, syntax, flags, safety class, preconditions, an example, an example answer and exit codes. The authoritative machine-readable contract is `tg schema`; verification status is tracked in [FEATURES.md](../FEATURES.md).
 
 ## For people who build and maintain the tool
 

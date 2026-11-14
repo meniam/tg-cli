@@ -13,7 +13,7 @@ This page covers what every command shares: installation, profiles, the Daemon l
 | [notes-and-search.md](notes-and-search.md) | `note add`, `list`, `delete`; `search`; `version`; `schema` |
 | [access.md](access.md) | `access.json`: chat access lists, the `write` list, the `files` roots |
 
-The tool is early. Each command page says what was checked on a live account and what was not. Do not point the tool at an account you cannot afford to lose: `tg` is an unofficial client, and with `--client` it presents the credentials of an official app. Telegram's rules for user clients, and the chance that an account gets limited this way, are an open question in [INTENT.md](../../INTENT.md) that the project has not assessed.
+The tool is early. Verification status is tracked in [FEATURES.md](../../FEATURES.md). Do not point the tool at an account you cannot afford to lose: `tg` is an unofficial client, and with `--client` it presents the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited are open questions in [INTENT.md](../../INTENT.md).
 
 ## Install and run
 
@@ -42,7 +42,7 @@ Commands that take `<chat>` accept four forms:
 | --- | --- | --- |
 | `@username` | `@release_team` | 5 to 32 letters, digits and underscores, starting with a letter |
 | Bot API id | `987654321`, `-1001234567890` | users are positive, groups negative, channels start from `-1000000000000` |
-| Phone number of a contact | `+15551234567` | a phone number was not checked on a live account |
+| Phone number of a contact | `+15551234567` | see [FEATURES.md](../../FEATURES.md), item 3.9 |
 | `t.me` link | `https://t.me/release_team` | |
 
 Put `--` before a negative id and keep the flags before `--`, after it everything is an argument: `tg message history --limit 5 -- -1001234567890`. Commands that read one message (`message get`, `context`, `comments`) also accept a message link instead of the pair `<chat> <id>`, see [messages-read.md](messages-read.md#message-links).
@@ -262,7 +262,7 @@ Two variables tune the throttle. Set them in the environment of `tg daemon start
 | `TG_CLI_THROTTLE_PERCENT` | a decimal number from 1 to 100: the share of the reference limits | 60 |
 | `TG_CLI_FLOOD_AUTOWAIT` | a Go duration such as `10s`; `0` turns the auto-wait off, and commands then queue during a pause | `10s` |
 
-The numbers come from the limits of bots and were not measured on a live account; the auto-wait of `FLOOD_WAIT` and the limit of the send bucket were not checked live either, because `FLOOD_WAIT` was never provoked on purpose (what the Daemon did with the 8-second pause above was not recorded). The throttle was run on a live account: a burst of about ten reads in a minute still got `FLOOD_WAIT` (8 seconds), because `getDialogs` hits it before the general bucket (per-method buckets are an open item), so keep pauses between live reads. CDN pools, downloads through a foreign invoker, the init call, ping and ack bypass the throttle, and the Telegram library keeps its own retries after `FLOOD_WAIT` in the updates manager, the downloader and `QR.Auth`.
+Per-method buckets remain an open item: `getDialogs` can hit `FLOOD_WAIT` before the general bucket, so keep pauses between reads. CDN pools, downloads through a foreign invoker, the init call, ping and ack bypass the throttle; the Telegram library keeps its own retries after `FLOOD_WAIT` in the updates manager, downloader and `QR.Auth`. See [FEATURES.md](../../FEATURES.md), item 11.4.
 
 ## The tool describes itself
 

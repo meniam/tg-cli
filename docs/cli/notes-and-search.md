@@ -54,7 +54,7 @@ tg note add --person 987654321 -- "Prefers short messages"
 
 **Exit codes.** 0; 2 no target, a bad `--author`, `--model` without `--author ai`; 3 no Daemon; 4 only for an `@username` that needs Telegram; 7 the chat is closed or unknown.
 
-**Limits and live check.** Checked by tests and on a live account (the test notes were deleted). A note about a person is not filtered by the access lists.
+**Verification.** Notes about people are not filtered by chat access lists. See [FEATURES.md](../../FEATURES.md), item 10.8.
 
 ### tg note list
 
@@ -99,7 +99,7 @@ tg note list --before-id 3 --format jsonl --fields id,body
 
 **Exit codes.** 0; 2 `--message` without `--chat` or with `--person`, a bad `--author`; 3 no Daemon.
 
-**Limits and live check.** Checked on a live account. Under an access filter `note list` was checked by tests only, not on a live account.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 9.2 and 10.8.
 
 ### tg note delete
 
@@ -138,7 +138,7 @@ tg note delete --author ai --yes
 
 **Exit codes.** 0; 2 no id and no author, both, or no `--yes` for the author mode; 3; 7 the note does not exist (`not found`) or belongs to a closed chat.
 
-**Limits and live check.** Checked on a live account (the test notes were deleted).
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.8.
 
 ## Local search
 
@@ -183,7 +183,7 @@ tg search contract --scope notes --author ai
 
 **Exit codes.** 0 (also with no hits); 2 a bad `--scope` or `--author`, no query; 3 no Daemon.
 
-**Limits and live check.** Checked on a live account for chats, messages and notes. The `people` scope is covered by tests only. Hiding closed chats in `search` is covered by tests.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.9.
 
 ## The tool describes itself
 
@@ -221,7 +221,7 @@ tg version --human
 
 **Exit codes.** 0.
 
-**Limits and live check.** A build with `just build` reports the version `dev`. The `revision` field tells this tool from the old npm `tg` (`@miolamio/tg-cli`, gramjs), which is another tool with another contract.
+**Version.** A build with `just build` reports `dev`; `revision` distinguishes it from the old npm `tg`.
 
 ### tg schema
 
@@ -270,4 +270,4 @@ tg schema --fields exit_codes
 
 **Exit codes.** 0.
 
-**Limits and live check.** Checked by tests. The schema of `daemon start` describes the answer of the background start and not the `--foreground` answer (`stopped`).
+**Limits.** The schema describes the background `daemon start` result, not the `--foreground` result. See [FEATURES.md](../../FEATURES.md), item 3.8.
