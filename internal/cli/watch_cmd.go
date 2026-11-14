@@ -35,9 +35,9 @@ func (a *app) watchCommand() *cobra.Command {
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[watchResult](), ItemPath: "events", Formats: []output.Format{output.FormatJSONL, output.FormatJSON, output.FormatHuman}, SubscriptionMethod: rpc.MethodSubscribe, Choices: []flagChoices{{Flag: "types", Values: watchTypes()}}})
 	cmd.Flags().StringArray("chat", nil, "watch a chat by reference; repeat for more chats")
 	cmd.Flags().Int("topic", 0, "watch one forum topic by id")
-	cmd.Flags().String("types", "", "comma-separated event types")
-	cmd.Flags().String("after", "", "resume after an event cursor")
-	cmd.Flags().Int("max-events", 0, "stop after this many events")
+	cmd.Flags().String("types", "", "comma-separated event types: message.new, message.edit, message.delete, reaction, read, typing, status, gap or lagged")
+	cmd.Flags().String("after", "", "resume after an event cursor; empty starts at the current cursor")
+	cmd.Flags().Int("max-events", 0, "stop after this many events; default 0 means no limit, an explicit value must be positive")
 	return cmd
 }
 
