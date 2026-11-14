@@ -33,7 +33,7 @@ func chatPerson(chat rpc.Chat) (store.Person, bool) {
 		return store.Person{}, false
 	}
 	isBot := chat.Type == "bot"
-	return store.Person{ID: chat.ID, Username: optionalText(chat.Username), FirstName: optionalText(chat.Title), IsBot: &isBot}, true
+	return store.Person{ID: chat.ID, Username: optionalText(chat.Username), DisplayName: optionalText(chat.Title), IsBot: &isBot}, true
 }
 
 func (d *daemon) saveChats(ctx context.Context, op string, chats []rpc.Chat, includeUnread bool) {
@@ -82,7 +82,7 @@ func (d *daemon) saveMembers(ctx context.Context, members []rpc.Member) {
 		isBot := member.IsBot
 		people = append(people, store.Person{
 			ID: member.ID, Username: optionalText(member.Username),
-			FirstName: optionalText(member.Name), IsBot: &isBot,
+			DisplayName: optionalText(member.Name), IsBot: &isBot,
 		})
 	}
 	if len(people) == 0 {
@@ -172,13 +172,13 @@ func convertStoredMessages(messages []rpc.Message, strict bool) ([]store.Message
 						people[index].Username = optionalText(message.Sender.Username)
 					}
 					if message.Sender.Name != "" {
-						people[index].FirstName = optionalText(message.Sender.Name)
+						people[index].DisplayName = optionalText(message.Sender.Name)
 					}
 				} else {
 					personIndex[message.Sender.ID] = len(people)
 					people = append(people, store.Person{
 						ID: message.Sender.ID, Username: optionalText(message.Sender.Username),
-						FirstName: optionalText(message.Sender.Name),
+						DisplayName: optionalText(message.Sender.Name),
 					})
 				}
 			}

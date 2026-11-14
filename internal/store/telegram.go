@@ -40,6 +40,7 @@ type Person struct {
 	ID          int64
 	Username    *string
 	FirstName   *string
+	DisplayName *string
 	LastName    *string
 	Phone       *string
 	Bio         *string
@@ -346,6 +347,12 @@ func mergePerson(old, incoming Person, exists bool, now int64) Person {
 		p.FirstSeenAt = old.FirstSeenAt
 	} else {
 		p.FirstSeenAt = now
+	}
+	if incoming.DisplayName != nil && *incoming.DisplayName != "" {
+		if strings.TrimSpace(textValue(p.FirstName)+" "+textValue(p.LastName)) != *incoming.DisplayName {
+			p.FirstName = incoming.DisplayName
+			p.LastName = nil
+		}
 	}
 	p.LastSeenAt = now
 	p.SearchText = textnorm.Normalize(strings.Join([]string{textValue(p.FirstName), textValue(p.LastName), textValue(p.Username), phoneDigits(p.Phone), textValue(p.Bio)}, " "))
