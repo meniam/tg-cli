@@ -12,7 +12,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: шаг 2 (`rpc` и `tgclient`), исполнитель Codex `tg-members` в Herdr, рабочее дерево этого worktree.
+- Next safe step: шаг 3 (Daemon), исполнитель Codex `tg-members` в Herdr.
 
 ## Context and sources
 
@@ -99,7 +99,7 @@ PR: —
 
 Каждый шаг выполняет Codex, проверяет Claude (тесты, дифф, `just check`), коммитит Claude.
 
-- [ ] 2. `rpc` и `tgclient`: типы `Member`, `MembersResult`, `Topic`, `TopicsResult`, `CommonChat`, `CommonChatsResult`, константы методов `chat.members`, `chat.topics`, `chat.common`; методы клиента `Members`, `Topics`, `CommonChats`; пометки `untrusted`; тесты на подмене Telegram: каналы, супергруппы и обычные группы, фильтры `recent`, `admins`, `bots`, поиск, смещение и признак продолжения, роли, обычная группа (поиск, смещение, фильтр по полному списку), форум и не форум, пустые ответы, ошибка прав канала, закрытый пользователь.
+- [x] 2. `rpc` и `tgclient`: типы `Member`, `MembersResult`, `Topic`, `TopicsResult`, `CommonChat`, `CommonChatsResult`, константы методов `chat.members`, `chat.topics`, `chat.common`; методы клиента `Members`, `Topics`, `CommonChats`; пометки `untrusted`; тесты на подмене Telegram: каналы, супергруппы и обычные группы, фильтры `recent`, `admins`, `bots`, поиск, смещение и признак продолжения, роли, обычная группа (поиск, смещение, фильтр по полному списку), форум и не форум, пустые ответы, ошибка прав канала, закрытый пользователь.
 - [ ] 3. Daemon: обработчики трёх методов, проверка доступа до Telegram, проверка параметров (границы `--limit`, `--offset`, несовместимые флаги, пользователь вместо чата и наоборот), сохранение людей и чатов, фильтр закрытых чатов в `chat.common` с догрузкой страниц (до десяти запросов), тест полноты методов; тесты без сокетов на подмене Telegram: закрытый чат, закрытый чат внутри общих чатов, пустая страница после фильтра, догрузка до результата, лимит запросов, ошибка записи в базу не ломает ответ, люди попадают в `people`.
 - [ ] 4. CLI: `chat members`, `chat topics`, `chat common` с флагами, схема (класс «чтение», типы результатов, `untrusted`), форматы, коды выхода, подсказки stderr; тесты по образцу `internal/cli`; тест полноты схемы.
 - [ ] 5. Документы через `docwriter`: `AGENTS.md`, `FEATURES.md` (7.4.1, 7.4.2, 7.7.1), `README.md`, навык `docs/skill/tg-cli/`, решение в `.agents/decisions/` и строка в `_TOC.md`.
