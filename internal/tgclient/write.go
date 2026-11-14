@@ -6,9 +6,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 	"unicode/utf8"
 
+	"github.com/gotd/td/constant"
 	"github.com/gotd/td/telegram/message"
 	"github.com/gotd/td/telegram/message/peer"
 	"github.com/gotd/td/telegram/peers"
@@ -81,10 +83,30 @@ func (c *Client) Edit(ctx context.Context, ref chatref.Ref, p rpc.EditParams) (r
 
 func (c *Client) mentionResolver(ctx context.Context) userResolver {
 	return func(id int64) (tg.InputUserClass, error) {
-		peer, err := c.resolve(ctx, chatref.Ref{Kind: chatref.ID, ID: id})
+		m, err := c.manager(ctx)
 		if err != nil {
+			return nil, err
+		}
+		// Use the same session peer manager as numeric chat references, but
+		// classify its raw error before the general RPC error mapper erases it.
+		peer, err := m.ResolveTDLibID(ctx, constant.TDLibPeerID(id))
+		if err != nil && isNotFound(err) && c.preloadDialogs(ctx) {
+			peer, err = m.ResolveTDLibID(ctx, constant.TDLibPeerID(id))
+		}
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
+			var timeout net.Error
+			if errors.As(err, &timeout) && timeout.Timeout() {
+				return nil, err
+			}
+			// mapError classifies typed peer and Telegram errors. All other
+			// lookup failures, including gotd's "got empty user", mean this
+			// session cannot name the requested user.
+			err = mapError(err)
 			var rpcErr *rpc.Error
-			if errors.As(err, &rpcErr) && rpcErr.Code != rpc.CodeNotFound {
+			if errors.As(err, &rpcErr) && (rpcErr.Code == rpc.CodeNotAuthorized || rpcErr.Code == rpc.CodeFloodWait) {
 				return nil, err
 			}
 			return nil, rpc.NewError(rpc.CodeInvalidParams, "unknown user id for this session")

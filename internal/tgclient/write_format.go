@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -158,6 +159,13 @@ func validateHTMLLinks(source string, resolve userResolver) error {
 				if string(key) == "href" {
 					foundHref = true
 					if err := validateLink(string(value), resolve); err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+							return err
+						}
+						var timeout net.Error
+						if errors.As(err, &timeout) && timeout.Timeout() {
+							return err
+						}
 						var rpcErr *rpc.Error
 						if errors.As(err, &rpcErr) && (rpcErr.Message == "unknown user id for this session" || rpcErr.Code != rpc.CodeInvalidParams) {
 							return rpcErr
@@ -222,6 +230,13 @@ func resolveUser(resolve userResolver, id int64) (tg.InputUserClass, error) {
 	}
 	user, err := resolve(id)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+		var timeout net.Error
+		if errors.As(err, &timeout) && timeout.Timeout() {
+			return nil, err
+		}
 		var rpcErr *rpc.Error
 		if errors.As(err, &rpcErr) && rpcErr.Code != rpc.CodeNotFound && rpcErr.Code != rpc.CodeInvalidParams {
 			return nil, err

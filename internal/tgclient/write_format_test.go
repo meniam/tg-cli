@@ -3,6 +3,7 @@ package tgclient
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 
+	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
 )
 
@@ -368,6 +370,86 @@ func TestMentionResolverUsesPeerCache(t *testing.T) {
 	}
 	if u, ok := user.(*tg.InputUser); !ok || u.AccessHash != 123 {
 		t.Fatalf("resolved user=%v", user)
+	}
+	for _, p := range mentionParams(7) {
+		if _, err := c.CheckText(ctx, p); err != nil {
+			t.Fatalf("cached mention: %v", err)
+		}
+	}
+}
+
+func mentionParams(id int64) []rpc.SendParams {
+	return []rpc.SendParams{
+		{Text: fmt.Sprintf(`<a href="tg://user?id=%d">x</a>`, id), Parse: "html"},
+		{Text: fmt.Sprintf(`[x](tg://user?id=%d)`, id), Parse: "markdown"},
+		{Text: "x", Entities: []rpc.Entity{{Type: "mention_name", Offset: 0, Length: 1, UserID: id}}},
+	}
+}
+
+type mentionTimeout struct{}
+
+func (*mentionTimeout) Error() string   { return "lookup timed out" }
+func (*mentionTimeout) Timeout() bool   { return true }
+func (*mentionTimeout) Temporary() bool { return true }
+
+func TestUnknownMentionResolutionErrors(t *testing.T) {
+	timeout := &mentionTimeout{}
+	for _, tc := range []struct {
+		name         string
+		invoke       func(bin.Decoder) error
+		code         int
+		wantText     string
+		contextError error
+	}{
+		{"empty user", func(out bin.Decoder) error {
+			return respond(out, &tg.UserClassVector{Elems: []tg.UserClass{&tg.UserEmpty{ID: 999999999}}})
+		}, rpc.CodeInvalidParams, "unknown user id for this session", nil},
+		{"empty result", func(out bin.Decoder) error { return respond(out, &tg.UserClassVector{}) }, rpc.CodeInvalidParams, "unknown user id for this session", nil},
+		{"USER_ID_INVALID", func(bin.Decoder) error { return tgerr.New(400, "USER_ID_INVALID") }, rpc.CodeInvalidParams, "unknown user id for this session", nil},
+		{"PEER_ID_INVALID", func(bin.Decoder) error { return tgerr.New(400, "PEER_ID_INVALID") }, rpc.CodeInvalidParams, "unknown user id for this session", nil},
+		{"user not found", func(bin.Decoder) error { return errors.New("user not found") }, rpc.CodeInvalidParams, "unknown user id for this session", nil},
+		{"FLOOD_WAIT", func(bin.Decoder) error { return tgerr.New(420, "FLOOD_WAIT_8") }, rpc.CodeFloodWait, "", nil},
+		{"not authorized", func(bin.Decoder) error { return tgerr.New(401, "AUTH_KEY_UNREGISTERED") }, rpc.CodeNotAuthorized, "", nil},
+		{"canceled", func(bin.Decoder) error { return context.Canceled }, 0, "", context.Canceled},
+		{"deadline", func(bin.Decoder) error { return context.DeadlineExceeded }, 0, "", context.DeadlineExceeded},
+		{"timeout", func(bin.Decoder) error { return timeout }, 0, "", timeout},
+	} {
+		for _, p := range mentionParams(999999999) {
+			name := tc.name + " / " + p.Parse
+			if p.Entities != nil {
+				name += "entities"
+			}
+			t.Run(name, func(t *testing.T) {
+				calls := 0
+				api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, out bin.Decoder) error {
+					if _, ok := input.(*tg.UsersGetUsersRequest); !ok {
+						t.Fatalf("unexpected Telegram request %T", input)
+					}
+					calls++
+					return tc.invoke(out)
+				}))
+				c := &Client{mgr: peers.Options{}.Build(api), mgrReady: true, preloaded: true}
+				check := func(err error) {
+					if tc.contextError != nil {
+						if !errors.Is(err, tc.contextError) {
+							t.Fatalf("context error=%v", err)
+						}
+						return
+					}
+					var rpcErr *rpc.Error
+					if !errors.As(err, &rpcErr) || rpcErr.Code != tc.code || (tc.wantText != "" && rpcErr.Message != tc.wantText) {
+						t.Fatalf("error=%v", err)
+					}
+				}
+				_, err := c.CheckText(context.Background(), p)
+				check(err)
+				_, err = c.Send(context.Background(), chatref.Ref{Kind: chatref.ID, ID: 42}, p)
+				check(err)
+				if calls != 2 {
+					t.Fatalf("resolution calls=%d", calls)
+				}
+			})
+		}
 	}
 }
 
