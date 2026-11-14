@@ -12,7 +12,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: шаг 1 (аудит), исполнитель Codex в Herdr, рабочее дерево этого worktree.
+- Next safe step: шаг 2 (`rpc` и `tgclient`), исполнитель Codex `tg-members` в Herdr, рабочее дерево этого worktree.
 
 ## Context and sources
 
@@ -83,17 +83,17 @@ PR: —
 ## Step 0. Fix decisions before changes
 
 - [x] Фильтры, база и имена команд подтверждены владельцем (2026-11-14).
-- [ ] Исполнитель Go-кода загрузил скилл `expert-golang` и подтвердил это в начале работы.
+- [x] Исполнитель Go-кода (Codex `tg-members`) прочитал `expert-golang` и `testing.md` и подтвердил это в отчёте аудита.
 - [x] Ветка `feature/20261114_1911_chat_members_topics_common` создана от `main` (отдельный worktree `../tg-cli-members`), в заголовок записан `Branch`, статус `in_progress`.
 
 ## Step 1. Audit and baseline
 
-- [ ] `just check` и `just build` на чистом дереве; результат в Known facts.
-- [ ] По исходникам gotd: `channels.getParticipants` (фильтры, лимит, смещение, поля `ChannelParticipant*`), `messages.getFullChat` (`ChatParticipants`, роли и даты), `channels.getForumTopics` (параметры, поля `ForumTopic`, курсор по `offset_date`, `offset_id`, `offset_topic`), `messages.getCommonChats` (`max_id`, лимит).
-- [ ] Как `internal/tgclient/errors.go` сопоставляет ошибки (в том числе `CHAT_ADMIN_REQUIRED`, `CHANNEL_PRIVATE`, `USER_ID_INVALID`) и как это попадёт в коды 2, 5, 7.
-- [ ] Как в `internal/tgclient/history.go` и `cursor.go` устроен непрозрачный курсор и можно ли его переиспользовать для топиков и общих чатов.
-- [ ] Как Daemon сегодня сохраняет людей и чаты «по пути» (`persist.go`) и какие поля уже есть в `store.Person` и `store.Chat`.
-- [ ] Записать итоги в Known facts, непокрытое в Risks и Open questions.
+- [x] `just check` и `just build` на чистом дереве; результат в Known facts.
+- [x] По исходникам gotd: `channels.getParticipants` (фильтры, лимит, смещение, поля `ChannelParticipant*`), `messages.getFullChat` (`ChatParticipants`, роли и даты), `channels.getForumTopics` (параметры, поля `ForumTopic`, курсор по `offset_date`, `offset_id`, `offset_topic`), `messages.getCommonChats` (`max_id`, лимит).
+- [x] Как `internal/tgclient/errors.go` сопоставляет ошибки (в том числе `CHAT_ADMIN_REQUIRED`, `CHANNEL_PRIVATE`, `USER_ID_INVALID`) и как это попадёт в коды 2, 5, 7.
+- [x] Как в `internal/tgclient/history.go` и `cursor.go` устроен непрозрачный курсор и можно ли его переиспользовать для топиков и общих чатов.
+- [x] Как Daemon сегодня сохраняет людей и чаты «по пути» (`persist.go`) и какие поля уже есть в `store.Person` и `store.Chat`.
+- [x] Записать итоги в Known facts, непокрытое в Risks и Open questions.
 
 ## Implementation steps
 
@@ -139,6 +139,17 @@ PR: —
 
 ## Known facts
 
+- Аудит шага 1 (Codex, 2026-11-14, отчёт `var/agents/plans/20261114_1911_chat_members_topics_common/audit.md`, в git не входит):
+  - Участники супергруппы и канала: `channels.getParticipants` с фильтрами `Recent`, `Admins`, `Bots`, `Search{Q}`, ответ `Count`, `Participants`, `Users`; предел `Limit` в генерированном коде не назван, 200 это решение плана, а не факт gotd. Роли: `member`, `creator`, `admin`, `left`; для `ChannelParticipantBanned`: `banned`, если `BannedRights.ViewMessages`, иначе `restricted`; даты нет у `creator` и `left`.
+  - Обычная группа: `messages.getFullChat`, участники в `ChatFull.Participants` (возможен `ChatParticipantsForbidden`), список приходит целиком, поэтому порядок по `id`, поиск, смещение и фильтр Daemon применяет сам.
+  - Топики: метод называется `messages.getForumTopics` (не `channels.*`) с `Peer`, `Q`, `OffsetDate`, `OffsetID`, `OffsetTopic`, `Limit`; `ForumTopic` даёт `ID`, `Date`, `Title`, `Closed`, `Pinned`, `Hidden`, `TopMessage`, `UnreadCount`.
+  - Общие чаты: `messages.getCommonChats` с `InputUser`, `MaxID`, `Limit`; в какой записи идёт `MaxID` (сырой TL или Bot API) по исходникам не доказано, закрепляется тестом.
+  - Ошибки: `CHANNEL_PRIVATE`, `CHANNEL_INVALID`, `USER_ID_INVALID` в `notFoundErrors` (код 7); `CHAT_ADMIN_REQUIRED` в списке нет, даёт код 5 (как в плане); код 2 только от локальной проверки.
+  - Курсор истории `{v,c,i}` (Bot API id чата, id сообщения) для топиков и общих чатов не подходит: нужны `{v,chat,date,id,topic}` и `{v,user,max_id}` на том же механизме кодирования.
+  - Сохранение людей: `daemon.save` не ломает ответ при ошибке базы, `saveChats` пишет user и bot в `people` (`FirstName` из названия, `IsBot`); для участников нужна отдельная best-effort запись.
+  - Доступ: `requireAllowedChat` для числового id отклоняет закрытый до Telegram, имя сначала разрешается через Telegram; для пользователя подходит `resolveStoredReference`.
+  - `just check` в песочнице Codex падает на сокетах (ограничение среды).
+
 - Люди из авторов сообщений и личных чатов уже сохраняются в `people` (`internal/daemon/persist.go`).
 - `chat info` уже возвращает признак форума (`ChatInfo.Forum`).
 
@@ -146,6 +157,6 @@ PR: —
 
 | Question | Why it blocks | Options | Recommendation | Status |
 | --- | --- | --- | --- | --- |
-| Предел страницы участников | Telegram позволяет до 200 за запрос | 200; 100 | 200, проверит шаг 1 | open, не блокирует |
+| Предел страницы участников | В генерированном коде предела нет | 200; 100 | 200 как проектное ограничение, сервер может ответить меньше | open, не блокирует |
 | Есть ли форум для живой проверки топиков | Без него топики остаются без живой проверки | любой форум с доступом; только тесты | любой форум; иначе честно «не проверено» | open, не блокирует |
-| Набор ролей участника | Зависит от типов `ChannelParticipant*` | `creator`, `admin`, `member`, `restricted`, `banned`, `left` | как в списке, шаг 1 уточнит | open, не блокирует |
+| Набор ролей участника | Зависит от типов `ChannelParticipant*` | `creator`, `admin`, `member`, `restricted`, `banned`, `left` | как в списке | closed (аудит подтвердил) |
