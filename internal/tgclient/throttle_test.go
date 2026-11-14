@@ -269,6 +269,8 @@ func TestThrottleWriteFloodNeverRetries(t *testing.T) {
 		request bin.Encoder
 	}{
 		{"edit", &tg.MessagesEditMessageRequest{Peer: &tg.InputPeerUser{UserID: 1}, ID: 3}},
+		{"send media", &tg.MessagesSendMediaRequest{Peer: &tg.InputPeerUser{UserID: 1}}},
+		{"send album", &tg.MessagesSendMultiMediaRequest{Peer: &tg.InputPeerUser{UserID: 1}}},
 		{"delete", &tg.MessagesDeleteMessagesRequest{ID: []int{3}}},
 		{"channel delete", &tg.ChannelsDeleteMessagesRequest{Channel: &tg.InputChannel{ChannelID: 2}, ID: []int{3}}},
 		{"mark read", &tg.MessagesReadHistoryRequest{Peer: &tg.InputPeerUser{UserID: 1}, MaxID: 3}},
@@ -283,6 +285,31 @@ func TestThrottleWriteFloodNeverRetries(t *testing.T) {
 				t.Fatalf("err=%v calls=%d", err, calls)
 			}
 		})
+	}
+}
+
+func TestUploadPartFloodHasNoMiddlewareRetryAndOrdinaryGate(t *testing.T) {
+	for _, request := range []bin.Encoder{&tg.UploadSaveFilePartRequest{}, &tg.UploadSaveBigFilePartRequest{}} {
+		clock := newThrottleClock()
+		limiter := limiterWithClock(t, clock, nil)
+		flood := tgerr.New(420, "FLOOD_WAIT_11")
+		calls := 0
+		invoke := throttleMiddleware(limiter).Handle(telegram.InvokeFunc(func(context.Context, bin.Encoder, bin.Decoder) error {
+			calls++
+			if calls == 1 {
+				return flood
+			}
+			return nil
+		}))
+		if err := invoke(context.Background(), request, nil); err != flood || calls != 1 {
+			t.Fatalf("upload part: err=%v calls=%d", err, calls)
+		}
+		ordinary := invokeAsync(invoke, context.Background(), &tg.MessagesGetHistoryRequest{})
+		clock.awaitTimer(t, clock.Now().Add(11*time.Second))
+		clock.Advance(11 * time.Second)
+		if err := invokeResult(t, ordinary); err != nil || calls != 2 {
+			t.Fatalf("ordinary request after upload flood: err=%v calls=%d", err, calls)
+		}
 	}
 }
 

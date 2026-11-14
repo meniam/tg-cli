@@ -51,7 +51,7 @@ func (a *app) connect(ctx context.Context, cmd *cobra.Command) (*rpc.Client, err
 // call runs one RPC and turns failures into command errors with exit codes. It
 // reports the call on stderr under --verbose.
 func (a *app) call(ctx context.Context, cmd *cobra.Command, c *rpc.Client, method string, params, result any) error {
-	ctx, cancel := context.WithTimeout(ctx, a.deps.CallTimeout)
+	ctx, cancel := context.WithTimeout(ctx, a.callTimeout(method))
 	defer cancel()
 	started := time.Now()
 	a.diagnose(cmd, "call method=%s", method)

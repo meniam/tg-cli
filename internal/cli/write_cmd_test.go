@@ -39,7 +39,7 @@ func runWriteCLI(t *testing.T, args []string, stdin string, reply func(string, j
 		method string
 		params json.RawMessage
 	}, 1)
-	for _, method := range []string{rpc.MethodMessageSend, rpc.MethodMessageEdit, rpc.MethodMessageDelete, rpc.MethodMessageForward} {
+	for _, method := range []string{rpc.MethodMessageSend, rpc.MethodMessageSendMedia, rpc.MethodMessageEdit, rpc.MethodMessageDelete, rpc.MethodMessageForward} {
 		method := method
 		srv.Handle(method, func(_ context.Context, raw json.RawMessage) (any, error) {
 			called <- struct {
@@ -48,6 +48,9 @@ func runWriteCLI(t *testing.T, args []string, stdin string, reply func(string, j
 			}{method, raw}
 			if reply != nil {
 				return reply(method, raw)
+			}
+			if method == rpc.MethodMessageSendMedia {
+				return rpc.SendMediaResult{ChatID: 42, Messages: []rpc.MessageRef{{ID: 11, Date: "2026-11-14T10:00:00Z"}}}, nil
 			}
 			return rpc.SendResult{ChatID: 42, ID: 11, Date: "2026-11-14T10:00:00Z"}, nil
 		})

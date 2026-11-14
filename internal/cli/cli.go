@@ -18,6 +18,14 @@ import (
 
 // defaultCallTimeout bounds one RPC call, matching the daemon request deadline.
 const defaultCallTimeout = 2 * time.Minute
+const mediaCallTimeout = 600 * time.Second
+
+func (a *app) callTimeout(method string) time.Duration {
+	if method == rpc.MethodMessageSendMedia {
+		return mediaCallTimeout
+	}
+	return a.deps.CallTimeout
+}
 
 // Deps are the things the commands need from the outside world. Tests replace
 // them; main fills them with the real ones.

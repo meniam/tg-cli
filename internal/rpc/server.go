@@ -45,13 +45,14 @@ type Server struct {
 	active     atomic.Int64
 	nextSub    atomic.Uint64
 
-	mu        sync.Mutex
-	handlers  map[string]Handler
-	conns     map[*serverConn]struct{}
-	listeners map[net.Listener]struct{}
-	closing   bool
-	hub       *Hub
-	replay    ReplayFunc
+	mu             sync.Mutex
+	handlers       map[string]Handler
+	methodTimeouts map[string]time.Duration
+	conns          map[*serverConn]struct{}
+	listeners      map[net.Listener]struct{}
+	closing        bool
+	hub            *Hub
+	replay         ReplayFunc
 }
 
 type serverConn struct {
@@ -76,6 +77,7 @@ func NewServer(log *slog.Logger) *Server {
 		baseCancel:     cancel,
 		sem:            make(chan struct{}, MaxConcurrent),
 		handlers:       map[string]Handler{},
+		methodTimeouts: map[string]time.Duration{},
 		conns:          map[*serverConn]struct{}{},
 		listeners:      map[net.Listener]struct{}{},
 	}
@@ -89,6 +91,19 @@ func (s *Server) Handle(method string, h Handler) {
 		panic("rpc: duplicate handler for " + method)
 	}
 	s.handlers[method] = h
+}
+
+// SetMethodTimeout overrides RequestTimeout for a registered method.
+func (s *Server) SetMethodTimeout(method string, timeout time.Duration) {
+	if timeout <= 0 {
+		panic("rpc: method timeout must be positive")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.handlers[method] == nil {
+		panic("rpc: timeout for unregistered method " + method)
+	}
+	s.methodTimeouts[method] = timeout
 }
 
 // Methods returns a sorted snapshot of registered method names.
@@ -259,13 +274,17 @@ func (s *Server) call(ctx context.Context, req Request) Response {
 	method := req.Method
 	s.mu.Lock()
 	h := s.handlers[req.Method]
+	timeout := s.methodTimeouts[req.Method]
 	s.mu.Unlock()
 	if h == nil {
 		// An unknown method is untrusted input and may contain a secret.
 		s.log.Info("request", "method", "unknown", "duration_ms", time.Since(started).Milliseconds(), "code", CodeMethodNotFound)
 		return errorResponse(req.ID, CodeMethodNotFound, "method not found: "+req.Method)
 	}
-	ctx, cancel := context.WithTimeout(ctx, s.RequestTimeout)
+	if timeout == 0 {
+		timeout = s.RequestTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	waited := new(throttle.Wait)
 	ctx = throttle.WithWait(ctx, waited)

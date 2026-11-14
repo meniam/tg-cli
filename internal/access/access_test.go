@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestPolicyRules(t *testing.T) {
@@ -47,7 +48,7 @@ func TestPolicyRules(t *testing.T) {
 
 func TestMissingFileDisablesFilter(t *testing.T) {
 	policy, err := Open(filepath.Join(t.TempDir(), "access.json")).Policy()
-	if err != nil || policy.Enabled() || !policy.Allowed(42) || !policy.InviteAllowed() {
+	if err != nil || policy.Enabled() || policy.FilesAllowed() || !policy.Allowed(42) || !policy.InviteAllowed() {
 		t.Errorf("missing file: policy=%+v, err=%v", policy, err)
 	}
 }
@@ -95,6 +96,8 @@ func TestInvalidFileDeniesAllAndDoesNotLeakContent(t *testing.T) {
 		`{"allow":null}`,
 		`{"allow":[1.5]}`,
 		`{"allow":[9223372036854775808]}`,
+		`{"files":null}`,
+		`{"files":["secret"]}`,
 		`{"secret":[]}`,
 		`{"allow":[42],"block":`,
 	}
@@ -229,5 +232,96 @@ func TestFilterReturnsDetachedSortedLists(t *testing.T) {
 	hide, _, _ = denyAll.Filter()
 	if !hide {
 		t.Fatal("denied policy must hide all")
+	}
+}
+
+func TestFileRootsAreExplicitAndDetached(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "files")
+	for _, raw := range []string{"{}", `{"files":[]}`} {
+		p, err := parse([]byte(raw))
+		if err != nil || p.FilesAllowed() || len(p.FileRoots()) != 0 || p.Enabled() || !p.Allowed(42) {
+			t.Fatalf("files disabled: policy=%+v err=%v", p, err)
+		}
+	}
+	p, err := parse([]byte(fmt.Sprintf(`{"files":[%q],"write":[42]}`, root+string(filepath.Separator)+".")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.FilesAllowed() || p.Enabled() || !p.Allowed(42) || !p.WriteAllowed(42) {
+		t.Fatalf("files changed chat policy: %+v", p)
+	}
+	roots := p.FileRoots()
+	if len(roots) != 1 || roots[0] != root {
+		t.Fatalf("FileRoots() = %q", roots)
+	}
+	roots[0] = "changed"
+	if p.FileRoots()[0] != root {
+		t.Fatal("FileRoots exposed policy storage")
+	}
+	if denyAll.FilesAllowed() || len(denyAll.FileRoots()) != 0 {
+		t.Fatal("denied policy allowed files")
+	}
+}
+
+func TestInvalidFileRootsDenyAll(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "files")
+	cases := []string{
+		`{"files":null}`, `{"files":"secret"}`, `{"files":42}`,
+		`{"files":[null]}`, `{"files":[42]}`, `{"files":[""]}`,
+		`{"files":["relative"]}`,
+		fmt.Sprintf(`{"files":[%q,%q]}`, root, root+string(filepath.Separator)+"."),
+	}
+	for _, raw := range cases {
+		p, err := parse([]byte(raw))
+		if err == nil || p.FilesAllowed() {
+			t.Errorf("invalid roots accepted: %q, policy=%+v, err=%v", raw, p, err)
+		}
+	}
+}
+
+func TestFileRootsReloadAndPermissions(t *testing.T) {
+	base := t.TempDir()
+	path := filepath.Join(base, "access.json")
+	first, second := filepath.Join(base, "a"), filepath.Join(base, "b")
+	write := func(root string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(fmt.Sprintf(`{"files":[%q]}`, root)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(first)
+	loader := Open(path)
+	p, err := loader.Policy()
+	if err != nil || !p.FilesAllowed() || p.FileRoots()[0] != first {
+		t.Fatalf("first policy=%+v err=%v", p, err)
+	}
+	write(second)
+	stamp := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(path, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	p, err = loader.Policy()
+	if err != nil || p.FileRoots()[0] != second {
+		t.Fatalf("reloaded policy=%+v err=%v", p, err)
+	}
+	third := filepath.Join(base, "a-longer-name")
+	write(third)
+	p, err = loader.Policy()
+	if err != nil || p.FileRoots()[0] != third {
+		t.Fatalf("size-changed policy=%+v err=%v", p, err)
+	}
+	if err := os.Chmod(path, 0o622); err != nil {
+		t.Fatal(err)
+	}
+	p, err = loader.Policy()
+	if err == nil || p.FilesAllowed() || p.Allowed(42) {
+		t.Fatalf("unsafe mode policy=%+v err=%v", p, err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p, err = loader.Policy()
+	if err != nil || p.FileRoots()[0] != third {
+		t.Fatalf("restored mode policy=%+v err=%v", p, err)
 	}
 }

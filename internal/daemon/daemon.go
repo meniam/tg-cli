@@ -62,6 +62,7 @@ type daemon struct {
 	addEvent            func(context.Context, store.Event) (int64, bool, error)
 	findMessageChats    func(context.Context, []int) ([]int64, error)
 	markMessagesDeleted func(context.Context, int64, []int) (int, error)
+	openMediaFile       func([]string, string, int64) (*os.File, int64, error)
 	// lastActivity is the Unix time of the last request that started or ended,
 	// in nanoseconds. A request is often shorter than the idle check, so the
 	// count of requests in flight alone would miss it.
@@ -249,6 +250,8 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodMessageGet, d.messageGet)
 	d.handle(rpc.MethodMessagePinned, d.messagePinned)
 	d.handle(rpc.MethodMessageSend, d.messageSend)
+	d.handle(rpc.MethodMessageSendMedia, d.messageSendMedia)
+	d.srv.SetMethodTimeout(rpc.MethodMessageSendMedia, 600*time.Second)
 	d.handle(rpc.MethodMessageEdit, d.messageEdit)
 	d.handle(rpc.MethodMessageDelete, d.messageDelete)
 	d.handle(rpc.MethodMessageForward, d.messageForward)

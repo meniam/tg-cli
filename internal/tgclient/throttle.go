@@ -71,7 +71,8 @@ func classifyPeer(peer tg.InputPeerClass) (throttle.Class, string) {
 
 func writeRequest(input bin.Encoder) bool {
 	switch input.(type) {
-	case *tg.MessagesSendMessageRequest, *tg.MessagesForwardMessagesRequest,
+	case *tg.MessagesSendMessageRequest, *tg.MessagesSendMediaRequest, *tg.MessagesSendMultiMediaRequest,
+		*tg.MessagesForwardMessagesRequest,
 		*tg.MessagesEditMessageRequest, *tg.MessagesDeleteMessagesRequest, *tg.ChannelsDeleteMessagesRequest,
 		*tg.MessagesReadHistoryRequest, *tg.ChannelsReadHistoryRequest:
 		return true
@@ -84,9 +85,12 @@ func throttleMiddleware(limiter *throttle.Limiter) telegram.Middleware {
 		return func(ctx context.Context, input bin.Encoder, output bin.Decoder) error {
 			class, peer := classifyRequest(input)
 			_, isHistory := input.(*tg.MessagesGetHistoryRequest)
-			background := isHistory && historyPageFromContext(ctx)
+			history := isHistory && historyPageFromContext(ctx)
+			_, smallPart := input.(*tg.UploadSaveFilePartRequest)
+			_, bigPart := input.(*tg.UploadSaveBigFilePartRequest)
+			uploadPart := smallPart || bigPart
 			admissionCtx := ctx
-			if background {
+			if history || uploadPart {
 				admissionCtx = throttle.WithBackground(ctx)
 			}
 			invoke := func() error {
@@ -101,7 +105,7 @@ func throttleMiddleware(limiter *throttle.Limiter) telegram.Middleware {
 				defer permit.Release()
 				err = next.Invoke(ctx, input, output)
 				if delay, ok := tgerr.AsFloodWait(err); ok {
-					if background {
+					if history {
 						limiter.PauseBackground(delay)
 					} else {
 						limiter.Pause(delay)
@@ -109,7 +113,7 @@ func throttleMiddleware(limiter *throttle.Limiter) telegram.Middleware {
 				}
 				return err
 			}
-			if background {
+			if history {
 				for {
 					err := invoke()
 					if _, flood := tgerr.AsFloodWait(err); !flood {
@@ -122,7 +126,7 @@ func throttleMiddleware(limiter *throttle.Limiter) telegram.Middleware {
 			}
 			err := invoke()
 			delay, flood := tgerr.AsFloodWait(err)
-			if !flood || class != throttle.General || writeRequest(input) || limiter.FloodAutoWait() == 0 || delay > limiter.FloodAutoWait() {
+			if !flood || class != throttle.General || uploadPart || writeRequest(input) || limiter.FloodAutoWait() == 0 || delay > limiter.FloodAutoWait() {
 				return err
 			}
 			return invoke()

@@ -37,7 +37,7 @@ func (a *app) messageWriteCommands() []*cobra.Command {
 	forward := a.annotate(&cobra.Command{Use: "forward <from> <to> <id>...", Short: "Forward messages", Args: cobra.MinimumNArgs(3), RunE: a.messageForward}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.ForwardResult](), Args: []argSpec{{Name: "from", Required: true}, {Name: "to", Required: true}, {Name: "id", Required: true, Variadic: true}}})
 	forward.Flags().Bool("silent", false, "forward without a notification")
 	forward.Flags().Bool("dry-run", false, "describe the action without forwarding")
-	return []*cobra.Command{send, edit, del, forward}
+	return []*cobra.Command{send, a.messageSendMediaCommand(), edit, del, forward}
 }
 
 func (a *app) writeText(cmd *cobra.Command) (string, error) {
