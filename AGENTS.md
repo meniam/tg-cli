@@ -37,13 +37,13 @@ internal/             cli, daemon, rpc, tgclient, throttle, access, fileroot, me
 
 - Code lives only in `cmd/` and `internal/`. Do not create `src/`, `pkg/`, `models/`, `utils/`.
 - `internal/cli` must not import `tgclient`, gotd or `store` (`store` is reachable only through `daemon`, which owns the database). It may import `rpc`, `output`, `exitcode`, `clientpreset`, `chatref` and `daemon` (paths and `Run`). `main` injects the Telegram client into the Daemon.
-- The package that uses an interface declares it. A package with only `doc.go` is a stub: add logic when a task needs it.
+- The package that uses an interface declares it.
 - Tests sit next to the code, fixtures in `testdata/`. Do not run tests against live Telegram by default. `internal/cli` has a test that fails when a command or flag of `tg schema` has no section in `docs/cli/` or when a Markdown link is broken: write the section together with the command.
 - The executor of Go code loads the `expert-golang` skill first.
 
 ## Running
 
-- `daemon start` takes credentials from `--client <preset>` (official client preset, remembered per profile) or from `TG_API_ID` and `TG_API_HASH` (your own application), never both. `TG_CLI_HOME` is the optional base directory of profiles. Never print or log keys or hashes.
+- `daemon start` takes credentials from `--client <preset>` (official client preset, remembered per profile) or from `TG_API_ID` and `TG_API_HASH` (your own application), never both. `TG_CLI_HOME` is the optional base directory of profiles.
 - Start the Daemon before `auth login`. Login, session and the socket belong to the Daemon: never run a second client on its session.
 - Every command prints one JSON envelope on stdout; prompts and logs go to stderr. Exit codes are in `internal/exitcode` and in [docs/cli/overview.md](docs/cli/overview.md).
 - A chat is given as `@username`, a Bot API id (write `--` before a negative id), a contact's phone number or a `t.me` link.
@@ -51,9 +51,10 @@ internal/             cli, daemon, rpc, tgclient, throttle, access, fileroot, me
 
 ## Roles and models
 
-- Planner: Claude Opus 5.5. It writes and revises plans (requirement audit, decision questions, the plan file). Start it with the Agent tool, `model: opus`.
-- Manager (the main session) and every other Claude agent: Claude Sonnet 5.5, unless a skill or an agent definition sets another model.
-- Coder: Codex Terra (`gpt-6.1-terra`) in a herdr pane, as described in "Herdr layout".
+- Every agent runs in a herdr pane (see "Herdr layout"), not as a Claude subagent.
+- Planner: Claude Opus 5.5 (`herdr agent start <name> --kind claude -- --model opus`). It writes and revises plans: requirement audit, decision questions, the plan file.
+- Manager (the main session): Claude Sonnet 5.5, unless a skill or an agent definition sets another model.
+- Everything else (code, tests, audits, documents, checks) goes to Codex. The agent that starts the job picks the Codex model by the task and says which one it chose: Terra (`gpt-6.1-terra`) is the default for Go code, a lighter model for mechanical edits, a stronger one for hard design or review. Claude does other work only when a skill or agent definition requires it.
 
 ## Herdr layout
 
@@ -61,10 +62,10 @@ The main session runs in herdr and lays parallel work out in tabs:
 
 - `M: two words`: the Manager tab of the main agent, one pane and nobody else. The two words name the whole task.
 - `S1: two words`, `S2: ...`: one tab per parallel stream (a plan, or a part of a plan with its own worktree). It holds the agents of that stream in panes, 2x2 at most, four panes at most. `Sn` is the stream number, the two words name its goal.
-- A coder is Codex started in the stream tab (`herdr agent start <name> --kind codex` in a pane split of that tab, `--cwd` the stream's worktree, one coder per stream). Reviewers and checkers are not left running.
+- A coder is Codex in a pane of the stream tab, `--cwd` the stream's worktree, one coder per stream. Reviewers and checkers are not left running.
 
 "Organize the agents" or "organize the windows" means: walk `herdr agent list` and `herdr pane list`, then
-1. close agents that are `idle` or `done` when their phase is finished and no next job is assigned (checkers, document agents, coders of a closed stream); never close `working` or `blocked` ones; a coder stays while its stream continues;
+1. close `idle` or `done` agents whose phase is finished and who have no next job; never close `working` or `blocked` ones; a coder stays while its stream continues;
 2. close only panes this session created; foreign panes (another main session, another workspace, the human's panes) stay even if idle;
 3. close with `herdr pane close <pane>`; an empty tab goes away, `herdr tab close <tab>` removes one that stayed;
 4. name in the reply what was closed and what was kept, with the reason.
