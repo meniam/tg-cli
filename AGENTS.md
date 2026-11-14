@@ -49,6 +49,12 @@ internal/             cli, daemon, rpc, tgclient, throttle, access, fileroot, me
 - A chat is given as `@username`, a Bot API id (write `--` before a negative id), a contact's phone number or a `t.me` link.
 - Live checks on the real account are read-only and slow: keep pauses between reads (a burst of about ten reads got `FLOOD_WAIT`). Writes only into the test chat «Браин Тест» and only when the task says so.
 
+## Roles and models
+
+- Planner: Claude Opus 5.5. It writes and revises plans (requirement audit, decision questions, the plan file). Start it with the Agent tool, `model: opus`.
+- Manager (the main session) and every other Claude agent: Claude Sonnet 5.5, unless a skill or an agent definition sets another model.
+- Coder: Codex Sol (`gpt-6-sol`) in a herdr pane, as described in "Herdr layout".
+
 ## Herdr layout
 
 The main session runs in herdr and lays parallel work out in tabs:
