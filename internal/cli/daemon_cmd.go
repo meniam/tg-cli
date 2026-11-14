@@ -178,6 +178,10 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if idle < 0 {
 		return fail(exitcode.Usage, "--idle-timeout must not be negative")
 	}
+	_, limiter, err := a.daemonThrottle()
+	if err != nil {
+		return err
+	}
 	if !foreground {
 		return a.startBackground(cmd, profile, paths, idle)
 	}
@@ -185,6 +189,7 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	cfg.Throttle = limiter
 	if cfg.DeviceModel, err = a.deviceModel(cmd, paths); err != nil {
 		return err
 	}

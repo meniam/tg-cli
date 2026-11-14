@@ -33,5 +33,6 @@ func newTelegram(cfg daemon.TelegramConfig) (daemon.Telegram, error) {
 		AppHash:     cfg.AppHash,
 		SessionPath: cfg.SessionPath,
 		DeviceModel: cfg.DeviceModel,
+		Throttle:    cfg.Throttle,
 	}), nil
 }

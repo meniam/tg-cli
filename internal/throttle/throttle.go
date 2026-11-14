@@ -36,7 +36,7 @@ type Config struct {
 	GeneralPerSecond float64
 	PrivatePerSecond float64
 	GroupPerMinute   float64
-	Percent          int
+	Percent          float64
 	GeneralBurst     int
 	PrivateBurst     int
 	GroupBurst       int
@@ -127,7 +127,8 @@ type Limiter struct {
 
 // New constructs a limiter. A nil clock uses the system clock.
 func New(cfg Config, clock Clock) (*Limiter, error) {
-	if cfg.Percent < 1 || cfg.Percent > 100 || cfg.Concurrency < 1 || cfg.Concurrency > DefaultConcurrency ||
+	if cfg.Percent < 1 || cfg.Percent > 100 || math.IsNaN(cfg.Percent) || math.IsInf(cfg.Percent, 0) ||
+		cfg.Concurrency < 1 || cfg.Concurrency > DefaultConcurrency ||
 		cfg.GeneralBurst < 1 || cfg.PrivateBurst < 1 || cfg.GroupBurst < 1 || cfg.FloodAutoWait < 0 ||
 		!validRate(cfg.GeneralPerSecond) || !validRate(cfg.PrivatePerSecond) || !validRate(cfg.GroupPerMinute) {
 		return nil, errors.New("invalid throttle configuration")
@@ -297,7 +298,7 @@ func (l *Limiter) run() {
 }
 
 func (l *Limiter) rates() (float64, float64, float64) {
-	p := float64(l.cfg.Percent) / 100
+	p := l.cfg.Percent / 100
 	return l.cfg.GeneralPerSecond * p, l.cfg.PrivatePerSecond * p, l.cfg.GroupPerMinute * p / 60
 }
 

@@ -5,6 +5,7 @@ import (
 
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
+	"tg-cli/internal/throttle"
 )
 
 // Telegram is what the daemon needs from a Telegram client. It is declared
@@ -57,4 +58,6 @@ type TelegramConfig struct {
 	SessionPath string
 	// DeviceModel is the device name Telegram shows for this session.
 	DeviceModel string
+	// Throttle limits this account's Telegram requests when set.
+	Throttle *throttle.Limiter
 }
