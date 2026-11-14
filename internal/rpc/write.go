@@ -5,6 +5,8 @@ import "os"
 // SendParams sends text to a chat. The caller validates authorization.
 type SendParams struct {
 	Chat     string   `json:"chat"`
+	At       string   `json:"at,omitempty"`
+	In       string   `json:"in,omitempty"`
 	Text     string   `json:"text"`
 	ReplyTo  int      `json:"reply_to,omitempty"`
 	Topic    int      `json:"topic,omitempty"`
@@ -129,6 +131,7 @@ type PollParams struct {
 }
 
 type SendResult struct {
+	Scheduled   bool   `json:"scheduled,omitempty"`
 	ChatID      int64  `json:"chat_id"`
 	ID          int    `json:"id,omitempty"`
 	Date        string `json:"date,omitempty"`

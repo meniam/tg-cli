@@ -66,6 +66,22 @@ func (f *fakeTelegram) CheckText(_ context.Context, p rpc.SendParams) (rpc.TextC
 	return rpc.TextCheck{Mode: "plain", PlainLength: len([]rune(p.Text))}, nil
 }
 
+func (f *fakeTelegram) DraftGet(context.Context, chatref.Ref) (rpc.Draft, error) {
+	return rpc.Draft{}, nil
+}
+func (f *fakeTelegram) DraftList(context.Context) (rpc.DraftList, error) { return rpc.DraftList{}, nil }
+func (f *fakeTelegram) DraftSet(context.Context, chatref.Ref, rpc.DraftParams) (rpc.DraftWriteResult, error) {
+	return rpc.DraftWriteResult{}, nil
+}
+func (f *fakeTelegram) ScheduledList(context.Context, chatref.Ref) (rpc.ScheduledResult, error) {
+	return rpc.ScheduledResult{}, nil
+}
+func (f *fakeTelegram) ScheduledDelete(context.Context, chatref.Ref, []int) (rpc.ScheduledResult, error) {
+	return rpc.ScheduledResult{}, nil
+}
+func (f *fakeTelegram) ScheduledSendNow(context.Context, chatref.Ref, []int) (rpc.ScheduledResult, error) {
+	return rpc.ScheduledResult{}, nil
+}
 func (f *fakeTelegram) Typing(context.Context, chatref.Ref, rpc.TypingParams) (rpc.TypingResult, error) {
 	return rpc.TypingResult{}, nil
 }

@@ -109,6 +109,14 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	if err := decodeParams(raw, &p); err != nil {
 		return nil, err
 	}
+	scheduledAt, err := rpc.ScheduleTime(p.At, p.In, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	if !scheduledAt.IsZero() {
+		p.At = scheduledAt.Format(time.RFC3339)
+		p.In = ""
+	}
 	if err := validWriteSource(p); err != nil {
 		return nil, err
 	}
@@ -142,7 +150,7 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	if formatRequested(p) {
 		text = res.PlainText
 	}
-	if !richRequested(p.Parse) || text != "" {
+	if !res.Scheduled && (!richRequested(p.Parse) || text != "") {
 		d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
 	}
 	return res, nil

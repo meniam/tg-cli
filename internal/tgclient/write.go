@@ -160,6 +160,9 @@ func sendText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass
 }
 
 func sendPreparedText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.SendParams, prepared preparedText) (rpc.SendResult, error) {
+	if p.At != "" {
+		return sendScheduledText(ctx, api, destination, chatID, p, prepared)
+	}
 	sender := message.NewSender(api)
 	builder := sender.To(destination)
 	if p.Silent {

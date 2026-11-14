@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
@@ -27,6 +28,8 @@ const writeFormatHelp = "Format text with --parse html|markdown|rich-html|rich-m
 
 func (a *app) messageWriteCommands() []*cobra.Command {
 	send := a.annotate(&cobra.Command{Use: "send <chat>", Short: "Send a text message", Long: writeFormatHelp, Args: cobra.ExactArgs(1), RunE: a.messageSend}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: []flagChoices{{Flag: "parse", Values: writeParseModes}}})
+	send.Flags().String("at", "", "schedule delivery at an RFC 3339 time")
+	send.Flags().String("in", "", "schedule delivery after a Go duration")
 	send.Flags().String("text", "", "message text; reads stdin when absent (stdin is ignored when --text is given)")
 	send.Flags().String("parse", "", "format: html, markdown, rich-html or rich-markdown")
 	send.Flags().String("entities", "", "JSON entity array file, or - for stdin")
@@ -229,8 +232,13 @@ func (a *app) messageSend(cmd *cobra.Command, args []string) error {
 	}
 	silent, _ := cmd.Flags().GetBool("silent")
 	dry, _ := cmd.Flags().GetBool("dry-run")
+	at, _ := cmd.Flags().GetString("at")
+	in, _ := cmd.Flags().GetString("in")
+	if _, err := rpc.ScheduleTime(at, in, time.Now()); err != nil {
+		return fail(exitcode.Usage, "%v", err)
+	}
 	var result rpc.SendResult
-	return a.writeCall(cmd, rpc.MethodMessageSend, rpc.SendParams{Chat: args[0], Text: text, ReplyTo: reply, Topic: topic, Silent: silent, DryRun: dry, Parse: parse, Entities: entities}, &result)
+	return a.writeCall(cmd, rpc.MethodMessageSend, rpc.SendParams{Chat: args[0], At: at, In: in, Text: text, ReplyTo: reply, Topic: topic, Silent: silent, DryRun: dry, Parse: parse, Entities: entities}, &result)
 }
 func (a *app) messageEdit(cmd *cobra.Command, args []string) error {
 	parse, entities, err := a.writeFormatting(cmd)
