@@ -126,6 +126,45 @@ func receive(t *testing.T, result <-chan acquireResult) *Permit {
 	}
 }
 
+func TestLowPriorityUploadAdmissionYieldsToNormalRequest(t *testing.T) {
+	clock := newFakeClock()
+	l := limiterForTest(t, clock, func(cfg *Config) {
+		cfg.Concurrency = 1
+		cfg.GeneralBurst = 5
+	})
+	held, err := l.Acquire(context.Background(), General, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	low := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
+	deadline := time.After(2 * time.Second)
+	for {
+		l.mu.Lock()
+		queued := len(l.backgroundQueue)
+		l.mu.Unlock()
+		if queued == 1 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("upload part did not enter low-priority queue")
+		default:
+			runtime.Gosched()
+		}
+	}
+	high := acquireAsync(l, context.Background(), General, "", nil)
+	awaitQueue(t, l, 1)
+	held.Release()
+	first := receive(t, high)
+	select {
+	case <-low:
+		t.Fatal("low-priority part overtook a normal request")
+	default:
+	}
+	first.Release()
+	receive(t, low).Release()
+}
+
 func TestRatesBurstsAndPeerKeys(t *testing.T) {
 	clock := newFakeClock()
 	l := limiterForTest(t, clock, nil)

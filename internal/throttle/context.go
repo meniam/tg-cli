@@ -16,7 +16,7 @@ func WaitFromContext(ctx context.Context) *Wait {
 	return waited
 }
 
-// WithBackground marks one history-page request for low-priority admission.
+// WithBackground marks one request for low-priority admission.
 func WithBackground(ctx context.Context) context.Context {
 	return context.WithValue(ctx, backgroundContextKey{}, true)
 }

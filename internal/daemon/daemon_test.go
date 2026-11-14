@@ -66,6 +66,9 @@ func (f *fakeTelegram) FloodWaitRemaining() time.Duration { return 0 }
 func (f *fakeTelegram) Send(context.Context, chatref.Ref, rpc.SendParams) (rpc.SendResult, error) {
 	return rpc.SendResult{}, errors.New("not implemented")
 }
+func (f *fakeTelegram) SendMedia(context.Context, chatref.Ref, rpc.SendMediaParams, []rpc.MediaFile) (rpc.SendMediaResult, error) {
+	return rpc.SendMediaResult{}, errors.New("not implemented")
+}
 func (f *fakeTelegram) Edit(context.Context, chatref.Ref, rpc.EditParams) (rpc.SendResult, error) {
 	return rpc.SendResult{}, errors.New("not implemented")
 }
