@@ -36,6 +36,7 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-14 — [Живые события идут из менеджера обновлений gotd через журнал SQLite с курсором по id, subscribe шлёт уведомления, message watch печатает jsonl](20261114_1000_live_events_through_gotd_updates_with_stored_cursor.md)
 - 2026-11-14 — [Запись выключена, пока человек не внёс чат в список write, удаление идёт с --yes и журналом, повторов нет](20261114_1100_writes_are_off_until_the_owner_lists_the_chat.md)
 - 2026-11-14 — [Поиск в Telegram, контекст, комментарии и ссылки идут через Daemon, ссылка строится без channels.exportMessageLink, chat mark-read это запись под write](20261114_1200_discovery_reads_and_links_through_the_daemon.md)
+- 2026-11-14 — [Глубокая загрузка истории идёт фоновой задачей Daemon через общий дроссель, задачи живут в памяти, сама после перезапуска не возобновляется](20261114_1353_deep_history_sync_is_a_background_job_behind_the_shared_throttle.md)
 
 ## Open questions
 
