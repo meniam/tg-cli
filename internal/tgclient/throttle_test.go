@@ -261,6 +261,27 @@ func TestThrottleSendFloodPausesWithoutRetry(t *testing.T) {
 	}
 }
 
+func TestThrottleWriteFloodNeverRetries(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		request bin.Encoder
+	}{
+		{"edit", &tg.MessagesEditMessageRequest{Peer: &tg.InputPeerUser{UserID: 1}, ID: 3}},
+		{"delete", &tg.MessagesDeleteMessagesRequest{ID: []int{3}}},
+		{"channel delete", &tg.ChannelsDeleteMessagesRequest{Channel: &tg.InputChannel{ChannelID: 2}, ID: []int{3}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			limiter := limiterWithClock(t, newThrottleClock(), nil)
+			flood := tgerr.New(420, "FLOOD_WAIT_2")
+			calls := 0
+			invoke := throttleMiddleware(limiter).Handle(telegram.InvokeFunc(func(context.Context, bin.Encoder, bin.Decoder) error { calls++; return flood }))
+			if err := invoke(context.Background(), tc.request, nil); err != flood || calls != 1 {
+				t.Fatalf("err=%v calls=%d", err, calls)
+			}
+		})
+	}
+}
+
 func TestThrottleSlowmodeDoesNotPause(t *testing.T) {
 	clock := newThrottleClock()
 	l := limiterWithClock(t, clock, nil)

@@ -62,6 +62,19 @@ func (f *fakeTelegram) Run(ctx context.Context) error {
 func (f *fakeTelegram) Ready() <-chan struct{}       { return f.ready }
 func (f *fakeTelegram) SetEventSink(func(rpc.Event)) {}
 
+func (f *fakeTelegram) Send(context.Context, chatref.Ref, rpc.SendParams) (rpc.SendResult, error) {
+	return rpc.SendResult{}, errors.New("not implemented")
+}
+func (f *fakeTelegram) Edit(context.Context, chatref.Ref, rpc.EditParams) (rpc.SendResult, error) {
+	return rpc.SendResult{}, errors.New("not implemented")
+}
+func (f *fakeTelegram) Delete(context.Context, chatref.Ref, rpc.DeleteParams) (rpc.DeleteResult, error) {
+	return rpc.DeleteResult{}, errors.New("not implemented")
+}
+func (f *fakeTelegram) Forward(context.Context, chatref.Ref, chatref.Ref, rpc.ForwardParams) (rpc.ForwardResult, error) {
+	return rpc.ForwardResult{}, errors.New("not implemented")
+}
+
 func (f *fakeTelegram) Self(context.Context) (*rpc.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

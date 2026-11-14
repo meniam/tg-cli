@@ -68,6 +68,15 @@ func classifyPeer(peer tg.InputPeerClass) (throttle.Class, string) {
 	return throttle.GroupSend, "unknown"
 }
 
+func writeRequest(input bin.Encoder) bool {
+	switch input.(type) {
+	case *tg.MessagesSendMessageRequest, *tg.MessagesForwardMessagesRequest,
+		*tg.MessagesEditMessageRequest, *tg.MessagesDeleteMessagesRequest, *tg.ChannelsDeleteMessagesRequest:
+		return true
+	}
+	return false
+}
+
 func throttleMiddleware(limiter *throttle.Limiter) telegram.Middleware {
 	return telegram.MiddlewareFunc(func(next tg.Invoker) telegram.InvokeFunc {
 		return func(ctx context.Context, input bin.Encoder, output bin.Decoder) error {
@@ -86,7 +95,7 @@ func throttleMiddleware(limiter *throttle.Limiter) telegram.Middleware {
 			}
 			err := invoke()
 			delay, flood := tgerr.AsFloodWait(err)
-			if !flood || class != throttle.General || limiter.FloodAutoWait() == 0 || delay > limiter.FloodAutoWait() {
+			if !flood || class != throttle.General || writeRequest(input) || limiter.FloodAutoWait() == 0 || delay > limiter.FloodAutoWait() {
 				return err
 			}
 			return invoke()

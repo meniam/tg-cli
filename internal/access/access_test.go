@@ -52,9 +52,44 @@ func TestMissingFileDisablesFilter(t *testing.T) {
 	}
 }
 
+func TestWriteRequiresExplicitVisibleChat(t *testing.T) {
+	missing, err := Open(filepath.Join(t.TempDir(), "access.json")).Policy()
+	if err != nil || missing.WriteAllowed(42) || missing.WriteCount() != 0 {
+		t.Fatalf("missing policy: %+v %v", missing, err)
+	}
+	for _, tc := range []struct {
+		name, file                 string
+		visible, writable, enabled bool
+		count                      int
+	}{
+		{"no write", `{"allow":[42]}`, true, false, true, 0},
+		{"write only", `{"write":[42]}`, true, true, false, 1},
+		{"allow and write", `{"allow":[42],"write":[42,-77]}`, true, true, true, 2},
+		{"closed by allow", `{"allow":[-77],"write":[42]}`, false, false, true, 1},
+		{"blocked", `{"block":[42],"write":[42]}`, false, false, true, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := parse([]byte(tc.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.Allowed(42) != tc.visible || p.WriteAllowed(42) != tc.writable || p.Enabled() != tc.enabled || p.WriteCount() != tc.count {
+				t.Fatalf("policy: %+v", p)
+			}
+		})
+	}
+	if denyAll.WriteAllowed(42) {
+		t.Fatal("denied policy allowed writing")
+	}
+}
+
 func TestInvalidFileDeniesAllAndDoesNotLeakContent(t *testing.T) {
 	cases := []string{
 		`{"allow":[42,42]}`,
+		`{"write":[42,42]}`,
+		`{"write":[0]}`,
+		`{"write":null}`,
+		`{"write":["secret"]}`,
 		`{"block":[0]}`,
 		`{"allow":["secret"]}`,
 		`{"allow":null}`,

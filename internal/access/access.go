@@ -15,6 +15,7 @@ import (
 type Policy struct {
 	allow  map[int64]struct{}
 	block  map[int64]struct{}
+	write  map[int64]struct{}
 	denied bool
 }
 
@@ -33,6 +34,12 @@ func (p Policy) Allowed(chatID int64) bool {
 	return allowed
 }
 
+// WriteAllowed requires an explicit writable and visible chat.
+func (p Policy) WriteAllowed(chatID int64) bool {
+	_, listed := p.write[chatID]
+	return listed && p.Allowed(chatID)
+}
+
 // InviteAllowed reports whether an invitation may be inspected. An invitation
 // has no known chat ID before it is resolved, so a nonempty allow list closes it.
 func (p Policy) InviteAllowed() bool { return !p.denied && len(p.allow) == 0 }
@@ -46,6 +53,7 @@ func (p Policy) Closed() bool { return p.denied }
 // AllowCount and BlockCount expose list sizes without exposing identifiers.
 func (p Policy) AllowCount() int { return len(p.allow) }
 func (p Policy) BlockCount() int { return len(p.block) }
+func (p Policy) WriteCount() int { return len(p.write) }
 
 // Filter returns a detached snapshot for database queries. A failed policy
 // hides all chats; callers may still show records without a chat ID.
@@ -160,6 +168,15 @@ func parse(data []byte) (Policy, error) {
 				return Policy{}, fmt.Errorf("block: %w", err)
 			}
 			policy.block = ids
+		case "write":
+			if len(value) == 0 || value[0] != '[' {
+				return Policy{}, errors.New("write must be an array of integer chat IDs")
+			}
+			ids, err := parseIDs(value)
+			if err != nil {
+				return Policy{}, fmt.Errorf("write: %w", err)
+			}
+			policy.write = ids
 		default:
 			return Policy{}, errors.New("unknown field")
 		}
