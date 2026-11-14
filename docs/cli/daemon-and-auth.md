@@ -12,12 +12,14 @@ Starts the Daemon of the profile in the background and waits until it answers on
 tg daemon start [flags]
 ```
 
+<!-- schema:flags tg daemon start -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--client` | string | none | official client preset to use instead of your own application, for example desktop |
-| `--device` | string | none | device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN) |
+| `--client` | string | `none` | official client preset to use instead of your own application, for example desktop |
+| `--device` | string | `none` | device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN) |
 | `--foreground` | bool | `false` | run the daemon in this terminal instead of the background |
 | `--idle-timeout` | duration | `0s` | stop the daemon after this long without a request, like 30m; 0 means never |
+<!-- /schema:flags -->
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -68,7 +70,9 @@ Shows the state of the Daemon and of the account: whether it is connected and lo
 tg daemon status [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg daemon status -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -109,7 +113,9 @@ Asks the Daemon to stop and waits until the process is gone.
 tg daemon stop [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg daemon stop -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -142,10 +148,12 @@ Reads the journal of the profile without a running Daemon. It is the tool for de
 tg daemon logs [flags]
 ```
 
+<!-- schema:flags tg daemon logs -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--follow` | bool | `false` | print new lines until interrupted, including after rotation |
-| `--tail` | int | `0 (all lines)` | last N lines (1 to 10000); default: all lines, up to 10000 |
+| `--tail` | int | `0` | last N lines (1 to 10000); default: all lines, up to 10000 |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -192,10 +200,12 @@ Logs the profile in by phone number, login code and two-factor password, or by a
 tg auth login [flags]
 ```
 
+<!-- schema:flags tg auth login -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--phone` | string | none | phone number in international format; asked when omitted |
+| `--phone` | string | `none` | phone number in international format; asked when omitted |
 | `--qr` | bool | `false` | log in by scanning a QR code in the Telegram app of a logged-in device, no code is needed |
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -239,7 +249,9 @@ Shows whether the profile is logged in, and as whom.
 tg auth status [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg auth status -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -272,7 +284,9 @@ Asks Telegram to send the login code another way, for example by SMS. Run it fro
 tg auth resend [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg auth resend -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -307,7 +321,9 @@ Cancels a login that waits for a code or a password.
 tg auth cancel [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg auth cancel -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 

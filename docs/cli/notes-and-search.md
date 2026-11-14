@@ -18,14 +18,16 @@ Adds a note to a chat, a person or a message.
 tg note add [flags] <body|->
 ```
 
+<!-- schema:flags tg note add -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--author` | string | `owner` | note author: owner or ai. One of: `owner`, `ai` |
-| `--chat` | string | none | chat reference for a chat or message note |
-| `--message` | int | `0` | message id when --chat identifies a message note |
-| `--model` | string | none | AI model name, only with --author ai |
-| `--person` | string | none | person reference for a person note |
-| `--tag` | string, repeatable | none | tag to add; repeat for multiple tags |
+| `--author` | string | `owner` | note author: owner or ai |
+| `--chat` | string | `none` | chat reference for a chat or message note |
+| `--message` | int64 | `0` | message id when --chat identifies a message note |
+| `--model` | string | `none` | AI model name, only with --author ai |
+| `--person` | string | `none` | person reference for a person note |
+| `--tag` | stringArray | `[]` | tag to add; repeat for multiple tags |
+<!-- /schema:flags -->
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -62,15 +64,17 @@ Lists local notes, newest first.
 tg note list [flags]
 ```
 
+<!-- schema:flags tg note list -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--author` | string | none | filter by owner or ai. One of: `owner`, `ai` |
-| `--before-id` | int | `0` | return notes with a smaller id |
-| `--chat` | string | none | filter by chat reference |
-| `--limit` | int | `50` | notes per page, default 50, maximum 500 |
-| `--message` | int | `0` | filter one message id, requires --chat |
-| `--person` | string | none | filter by person reference |
-| `--tag` | string | none | filter by tag |
+| `--author` | string | `none` | filter by owner or ai |
+| `--before-id` | int64 | `0` | return notes with a smaller id |
+| `--chat` | string | `none` | filter by chat reference |
+| `--limit` | int | `0` | notes per page, default 50, maximum 500 |
+| `--message` | int64 | `0` | filter one message id, requires --chat |
+| `--person` | string | `none` | filter by person reference |
+| `--tag` | string | `none` | filter by tag |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -105,10 +109,12 @@ Deletes one note by id, or all notes of one author.
 tg note delete <id> | --author owner|ai --yes [flags]
 ```
 
+<!-- schema:flags tg note delete -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--author` | string | none | delete all notes by this author: owner or ai. One of: `owner`, `ai` |
+| `--author` | string | `none` | delete all notes by this author: owner or ai |
 | `--yes` | bool | `false` | confirm deletion of all notes by author |
+<!-- /schema:flags -->
 
 **Safety class:** `local_write`. Dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -144,14 +150,16 @@ Full-text search in the local database: chats, people, messages and notes. It ne
 tg search [flags] <query>
 ```
 
+<!-- schema:flags tg search -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--author` | string | none | filter note hits by owner or ai. One of: `owner`, `ai` |
-| `--chat` | string | none | restrict message and note hits to this chat |
+| `--author` | string | `none` | filter note hits by owner or ai |
+| `--chat` | string | `none` | restrict message and note hits to this chat |
 | `--deleted` | bool | `false` | include messages marked deleted |
-| `--limit` | int | `20` | hits per scope, default 20, maximum 100 |
+| `--limit` | int | `0` | hits per scope, default 20, maximum 100 |
 | `--prefix` | bool | `false` | match the last query term as a prefix |
-| `--scope` | string, repeatable or comma list | none | scopes: chats, people, messages, notes; repeat or separate with commas. One of: `chats`, `people`, `messages`, `notes` |
+| `--scope` | stringSlice | `[]` | scopes: chats, people, messages, notes; repeat or separate with commas |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -187,7 +195,9 @@ Prints the version of the tool and the revision it was built from. It needs no D
 tg version [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg version -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -221,7 +231,9 @@ Prints the machine description of every command, argument, flag and exit code. I
 tg schema [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg schema -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 

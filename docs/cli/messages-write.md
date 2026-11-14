@@ -121,15 +121,17 @@ Sends a text message, plain or formatted.
 tg message send <chat> [flags]
 ```
 
+<!-- schema:flags tg message send -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | describe the action without sending |
-| `--entities` | string | none | JSON entity array file, or - for stdin |
-| `--parse` | string | none | format: html, markdown, rich-html, rich-markdown. One of: `html`, `markdown`, `rich-html`, `rich-markdown` |
+| `--entities` | string | `none` | JSON entity array file, or - for stdin |
+| `--parse` | string | `none` | format: html, markdown, rich-html, rich-markdown |
 | `--reply-to` | int | `0` | reply to this message id |
 | `--silent` | bool | `false` | send without a notification |
-| `--text` | string | none | message text; reads stdin when absent (stdin is ignored when --text is given) |
+| `--text` | string | `none` | message text; reads stdin when absent (stdin is ignored when --text is given) |
 | `--topic` | int | `0` | send in this forum topic |
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -168,13 +170,15 @@ Edits the text of a message.
 tg message edit <chat> <id> [flags]
 ```
 
+<!-- schema:flags tg message edit -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | describe the edit without changing Telegram |
-| `--entities` | string | none | JSON entity array file, or - for stdin |
-| `--parse` | string | none | format: html, markdown, rich-html, rich-markdown. One of: `html`, `markdown`, `rich-html`, `rich-markdown` |
-| `--text` | string | none | replacement text; reads stdin when absent |
+| `--entities` | string | `none` | JSON entity array file, or - for stdin |
+| `--parse` | string | `none` | format: html, markdown, rich-html, rich-markdown |
+| `--text` | string | `none` | replacement text; reads stdin when absent |
 | `--yes` | bool | `false` | confirm the edit |
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -208,12 +212,14 @@ Deletes messages.
 tg message delete <chat> <id>... [flags]
 ```
 
+<!-- schema:flags tg message delete -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | describe the deletion without changing Telegram |
 | `--for-me` | bool | `false` | delete only for this account |
 | `--revoke` | bool | `false` | delete for everyone |
 | `--yes` | bool | `false` | confirm the deletion |
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -251,10 +257,12 @@ Forwards messages from one chat to another.
 tg message forward <from> <to> <id>... [flags]
 ```
 
+<!-- schema:flags tg message forward -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | describe the action without forwarding |
 | `--silent` | bool | `false` | forward without a notification |
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -290,18 +298,20 @@ Sends one file or an album of 2 to 10 files as photos, videos, audio, voice mess
 tg message send-media <chat> [flags]
 ```
 
+<!-- schema:flags tg message send-media -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--as` | string | none | required media type: photo, video, audio, voice or document. One of: `photo`, `video`, `audio`, `voice`, `document` |
-| `--caption` | string | none | caption for the first file (up to 1024 characters) |
+| `--as` | string | `none` | required media type: photo, video, audio, voice or document |
+| `--caption` | string | `none` | caption for the first file (up to 1024 characters) |
 | `--dry-run` | bool | `false` | check files and describe the action without uploading |
 | `--duration` | int | `0` | media duration in seconds; overrides detected duration |
-| `--file` | string, repeatable | none | file path; repeat for an album (1 to 10 files) |
+| `--file` | stringArray | `[]` | file path; repeat for an album (1 to 10 files) |
 | `--height` | int | `0` | video height; overrides detected height |
 | `--reply-to` | int | `0` | reply to this message id |
 | `--silent` | bool | `false` | send without a notification |
 | `--topic` | int | `0` | send in this forum topic |
 | `--width` | int | `0` | video width; overrides detected width |
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -372,10 +382,12 @@ Sets one emoji reaction on a message, or removes yours with `--remove`.
 tg message react <chat> <id> <emoji> [flags]
 ```
 
+<!-- schema:flags tg message react -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | check the action without changing Telegram |
 | `--remove` | bool | `false` | remove your reaction from the message |
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -410,10 +422,12 @@ Pins one message for all chat participants.
 tg message pin <chat> <id> [flags]
 ```
 
+<!-- schema:flags tg message pin -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | check the action without changing Telegram |
 | `--silent` | bool | `false` | pin without a notification |
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -446,9 +460,11 @@ Unpins one message. There is no command to unpin everything.
 tg message unpin <chat> <id> [flags]
 ```
 
+<!-- schema:flags tg message unpin -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | check the action without changing Telegram |
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -481,19 +497,21 @@ Sends a poll or a quiz.
 tg message poll <chat> [flags]
 ```
 
+<!-- schema:flags tg message poll -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--correct` | int | `0` | correct option number, starting from 1; requires --quiz |
 | `--dry-run` | bool | `false` | check the action without changing Telegram |
-| `--explanation` | string | none | quiz explanation, up to 200 characters and two line feeds |
+| `--explanation` | string | `none` | quiz explanation, up to 200 characters and two line feeds |
 | `--multiple` | bool | `false` | allow multiple answers |
-| `--option` | string, repeatable | none | answer option, 1 to 100 characters; repeat 2 to 10 times in display order |
+| `--option` | stringArray | `[]` | answer option, 1 to 100 characters; repeat 2 to 10 times in display order |
 | `--public` | bool | `false` | show who voted |
-| `--question` | string | none | poll question, 1 to 255 characters |
+| `--question` | string | `none` | poll question, 1 to 255 characters |
 | `--quiz` | bool | `false` | make a quiz with one correct answer |
 | `--reply-to` | int | `0` | reply to this message id |
 | `--silent` | bool | `false` | send without a notification |
 | `--topic` | int | `0` | send in this forum topic |
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 

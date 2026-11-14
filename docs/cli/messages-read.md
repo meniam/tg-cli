@@ -48,13 +48,15 @@ Reads a chat from the newest message to the oldest.
 tg message history <chat> [flags]
 ```
 
+<!-- schema:flags tg message history -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--cursor` | string | none | continue after a previous page, the value of next_cursor |
-| `--limit` | int | `20` | messages per page, 1 to 100 (default 20); `0` is read as the default 20 |
-| `--since` | string | none | only messages sent at this time or later (RFC 3339) |
+| `--cursor` | string | `none` | continue after a previous page, the value of next_cursor |
+| `--limit` | int | `0` | messages per page, 1 to 100 (default 20) |
+| `--since` | string | `none` | only messages sent at this time or later (RFC 3339) |
 | `--topic` | int | `0` | read one topic of a forum chat, by the topic id |
-| `--until` | string | none | only messages sent at this time or earlier (RFC 3339) |
+| `--until` | string | `none` | only messages sent at this time or earlier (RFC 3339) |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -90,7 +92,9 @@ Reads one message by its id, or by a message link.
 tg message get <chat> <id> | get <message-link> [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg message get -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -124,9 +128,11 @@ Reads the pinned messages of a chat.
 tg message pinned <chat> [flags]
 ```
 
+<!-- schema:flags tg message pinned -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--limit` | int | `20` | how many pinned messages, 1 to 100 (default 20); `0` is read as the default 20 |
+| `--limit` | int | `0` | how many pinned messages, 1 to 100 (default 20) |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -163,12 +169,14 @@ Searches the messages of one chat, or across Telegram with `--public`.
 tg message search <chat> <query> | search --public <query> [flags]
 ```
 
+<!-- schema:flags tg message search -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--cursor` | string | none | continue after a previous page |
+| `--cursor` | string | `none` | continue after a previous page |
 | `--limit` | int | `20` | results per page, 1 to 100 |
-| `--media` | string | none | filter by media type in one chat. One of: `photo`, `video`, `document`, `voice`, `audio`, `link`, `gif`, `pinned` |
+| `--media` | string | `none` | filter by media type in one chat |
 | `--public` | bool | `false` | search globally rather than inside one chat |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -215,11 +223,13 @@ Reads the messages around one message.
 tg message context <chat> <id> | context <message-link> [flags]
 ```
 
+<!-- schema:flags tg message context -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--after` | int | `5` | messages after the target, 0 to 50 (default 5) |
 | `--before` | int | `5` | messages before the target, 0 to 50 (default 5) |
 | `--local` | bool | `false` | read only the local database, without Telegram |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -255,10 +265,12 @@ Reads the comments (the discussion) under a channel post.
 tg message comments <chat> <id> | comments <message-link> [flags]
 ```
 
+<!-- schema:flags tg message comments -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--cursor` | string | none | continue after a previous page |
+| `--cursor` | string | `none` | continue after a previous page |
 | `--limit` | int | `20` | comments per page, 1 to 100 |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -291,9 +303,11 @@ Builds a link to a channel or supergroup message.
 tg message link <chat> <id> [flags]
 ```
 
+<!-- schema:flags tg message link -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--topic` | int | `0` | forum topic id, when the message belongs to a topic |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -331,14 +345,16 @@ Streams the messages that the local database already holds for one chat, oldest 
 tg message export <chat> [flags]
 ```
 
+<!-- schema:flags tg message export -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--after` | int | `0 (from the beginning)` | resume after this message id; 0 starts at the beginning |
+| `--after` | int | `0` | resume after this message id; 0 starts at the beginning |
 | `--include-deleted` | bool | `false` | include locally marked deleted messages |
-| `--limit` | int | `0 (no limit)` | maximum number of output messages; 0 means no limit |
+| `--limit` | int | `0` | maximum number of output messages; 0 means no limit |
 | `--local` | bool | `false` | read only messages already stored locally |
-| `--since` | string | none | messages sent at this time or later (RFC 3339) |
-| `--until` | string | none | messages sent at this time or earlier (RFC 3339) |
+| `--since` | string | `none` | messages sent at this time or later (RFC 3339) |
+| `--until` | string | `none` | messages sent at this time or earlier (RFC 3339) |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `jsonl`, `human`.
 
@@ -388,13 +404,15 @@ Watches live Telegram events through the Daemon: new messages, edits, deletions,
 tg message watch [flags]
 ```
 
+<!-- schema:flags tg message watch -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--after` | string | none | resume after an event cursor |
-| `--chat` | string, repeatable | none | watch a chat by reference; repeat for more chats |
-| `--max-events` | int | `0 (no limit)` | stop after this many events |
+| `--after` | string | `none` | resume after an event cursor |
+| `--chat` | stringArray | `[]` | watch a chat by reference; repeat for more chats |
+| `--max-events` | int | `0` | stop after this many events |
 | `--topic` | int | `0` | watch one forum topic by id |
-| `--types` | string | none | comma-separated event types. One of: `message.new`, `message.edit`, `message.delete`, `reaction`, `read`, `typing`, `status`, `gap`, `lagged` |
+| `--types` | string | `none` | comma-separated event types |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `jsonl`, `json`, `human`.
 

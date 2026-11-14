@@ -78,6 +78,16 @@ check help="":
     go vet ./...
     go test ./...
 
+# Rebuild generated CLI documentation tables
+[group('maintenance')]
+[arg("help", long="help", short="h", value="1")]
+docs help="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ -z "{{ help }}" ]] || exec bash bin/lib/recipe-help.sh docs
+    set -x
+    go test ./internal/cli -run TestDocsGenerated -update-docs
+
 # Tidy go.mod and go.sum
 [group('maintenance')]
 [arg("help", long="help", short="h", value="1")]

@@ -87,7 +87,7 @@ TG_API_ID=... TG_API_HASH=... tg daemon start
 
 Use one source or the other, never both. A preset is remembered per profile and is downloaded from GitHub on every start that uses it. A repeated `tg daemon start` on a running profile answers `running: true` with the same PID, needs no credentials and starts nothing. The journal, `--foreground`, `--idle-timeout` and `tg daemon logs` are in [daemon-and-auth.md](docs/cli/daemon-and-auth.md).
 
-**2. Log in.** The login code and the 2FA password are asked interactively and are never accepted as flags. Phone login is not yet confirmed end to end on a live account, see [Status](#status).
+**2. Log in.** The login code and the 2FA password are asked interactively and are never accepted as flags. Phone login is not confirmed end to end on a live account: see [`FEATURES.md`](FEATURES.md) 1.1.
 
 ```sh
 tg auth login --phone +15551234567
@@ -110,7 +110,7 @@ A chat is addressed as `@username`, a Bot API id (users positive, groups negativ
 
 ## What it can do
 
-Every command has its own section in the [command reference](docs/cli/overview.md#all-commands) with flags, an example, an example answer, exit codes and what is not checked live.
+Every command has its own section in the [command reference](docs/cli/overview.md#all-commands) with flags, an example, an example answer and exit codes.
 
 | Capability | Commands | Reference |
 | --- | --- | --- |
@@ -149,7 +149,7 @@ Details: [access.md](docs/cli/access.md), [writing is off until the owner allows
 
 Every command of `tg schema` is implemented and covered by tests; the test suite never contacts Telegram. The main path was also run on a live account (checks of 2026-11-13 and 2026-11-14, write checks only in one test chat) for: reading, the local database, notes and search; the live event stream (new messages, edits, deletions, statuses, a resume from a cursor after a daemon restart, the chat filter); Telegram-side search, context and links, and `chat mark-read` (exit codes only); members, topics and common chats; the whole-chat load and the export of saved messages; sending, editing, deleting and forwarding, files, reactions, pins, polls and text formatting; the access lists; and the background daemon.
 
-Not confirmed on a live account yet: phone login end to end (the code did not arrive during the check), QR login, `auth resend`, `auth cancel`, `--device`, `chat invite-info` on a real group, resolving a contact by phone number, comments on a post that has a discussion, the reactions, reads and typing events, recovery after a real connection break, `cursor_expired`, `lagged`, `FLOOD_WAIT` on writes and during a load, the background start on Linux, and how clients show formatted and rich messages. The "Limits and live check" paragraph of every command in the [reference](docs/cli/overview.md#all-commands) lists exactly what was and was not run. The status of every requirement is in [`FEATURES.md`](FEATURES.md).
+What is not checked on a live account is listed only in [`FEATURES.md`](FEATURES.md): the items marked `[0]` in its status list and the paragraph "Не проверено на живом аккаунте". The status of every requirement is there too.
 
 **Account risk, plainly.** `tg` is an unofficial client for your personal account. With `--client` it presents itself with the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited this way are an open question in [`INTENT.md`](INTENT.md). This project has not assessed it. Do not point this at an account you cannot afford to lose.
 

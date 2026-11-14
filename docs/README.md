@@ -36,3 +36,7 @@ Every command of `tg schema` has its own section in `docs/cli/` with a heading `
 ## Keeping the pages true
 
 A page of `docs/cli/` must not disagree with the built tool. When you change a command, change its section in the same commit and compare it with `tg schema` and `tg <command> --help`. Keep `docs/skill/tg-cli/` in step with `tg schema` too.
+
+## Generated tables
+
+Command and global flag tables and the exit-code table in `docs/cli/` come from the Cobra command tree and `tg schema`. They are enclosed by `<!-- schema:flags ... -->`, `<!-- schema:global-flags -->` or `<!-- schema:exit-codes -->` markers. Run `just docs` to rebuild them. Do not edit the marked blocks by hand.

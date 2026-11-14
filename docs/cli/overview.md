@@ -102,14 +102,16 @@ Without a login, a command that needs one exits with code 4 and the message ``no
 
 Global flags work in any position, before or after the command.
 
+<!-- schema:global-flags -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--fields` | string | none | only these paths of the result, comma separated, like id,title or messages.sender.name; a path the result does not have is skipped |
+| `--fields` | string | `none` | only these paths of the result, comma separated, like id,title or messages.sender.name; a path the result does not have is skipped |
 | `--format` | string | `json` | output format: json (one envelope, the default), jsonl (list items or a supported single-result envelope), toon (compact envelope) or human |
 | `--human` | bool | `false` | short for --format human |
 | `--profile` | string | `default` | account profile, each has its own session and daemon |
 | `--quiet` | bool | `false` | hide hints and progress on stderr; errors are still printed |
 | `--verbose` | bool | `false` | print diagnostics about the call on stderr |
+<!-- /schema:global-flags -->
 
 `--fields` takes dotted paths of `data`. For a list command a path may name an item field: `--fields id,title` equals `chats.id,chats.title`. A top-level field such as `next_cursor` is named in full. A path that is not in the answer is skipped silently, because optional fields are sometimes absent, so `tg version --fields nothing` answers `{"ok":true,"data":{}}`. An impossible path such as `a..b` is exit code 2 with the message `--fields: "a..b" has an empty level`. List commands report that before the request, other commands after they have run, so a writing command such as `note delete` is not stopped by it. The error envelope is never filtered. Keep `id` in `--fields` when you want to resume a stream by cursor. `tg schema` lists the fields each command can return.
 
@@ -198,6 +200,7 @@ error (daemon_not_running): the daemon is not running for profile "default": sta
 
 The table is the one `tg schema` prints; the codes are defined in `internal/exitcode`. It is table version 0: existing codes never change meaning, new ones are only appended.
 
+<!-- schema:exit-codes -->
 | Code | Name | Meaning |
 | --- | --- | --- |
 | 0 | `ok` | the command succeeded |
@@ -210,6 +213,7 @@ The table is the one `tg schema` prints; the codes are defined in `internal/exit
 | 7 | `not_found` | the chat, user, message or note does not exist or is not visible |
 | 8 | `cursor_expired` | the event cursor is older than the retained journal |
 | 9 | `write_disabled` | the owner did not allow writes to the chat in access.json |
+<!-- /schema:exit-codes -->
 
 Which codes a command can return is listed on its page. A few rules hold for all commands:
 

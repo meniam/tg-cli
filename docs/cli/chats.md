@@ -20,10 +20,12 @@ Lists the chats of the account, newest first.
 tg chat list [flags]
 ```
 
+<!-- schema:flags tg chat list -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--limit` | int | `50` | maximum number of chats, 1 to 500; `0` is read as the default 50 |
-| `--type` | string | none | only chats of this type: user, bot, group, supergroup, channel. One of: `user`, `bot`, `group`, `supergroup`, `channel` |
+| `--limit` | int | `50` | maximum number of chats, 1 to 500 |
+| `--type` | string | `none` | only chats of this type: user, bot, group, supergroup, channel |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -57,7 +59,9 @@ Finds a chat by `@username`, id, phone number of a contact or `t.me` link, and p
 tg chat resolve <chat> [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg chat resolve -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -90,7 +94,9 @@ Shows a chat with its description and size.
 tg chat info <chat> [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg chat info -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -125,7 +131,9 @@ Shows what an invite link leads to, without joining.
 tg chat invite-info <link> [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg chat invite-info -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -164,12 +172,14 @@ Lists the members of a group, supergroup or channel.
 tg chat members <chat> [flags]
 ```
 
+<!-- schema:flags tg chat members -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--filter` | string | none | select recent members, admins or bots. One of: `recent`, `admins`, `bots` |
+| `--filter` | string | `none` | select recent members, admins or bots |
 | `--limit` | int | `50` | members per page, 1 to 200 |
 | `--offset` | int | `0` | number of members to skip, 0 or greater |
-| `--search` | string | none | find members by name or username |
+| `--search` | string | `none` | find members by name or username |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -212,10 +222,12 @@ Lists the topics of a forum chat.
 tg chat topics <chat> [flags]
 ```
 
+<!-- schema:flags tg chat topics -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--cursor` | string | none | continue after a previous page |
+| `--cursor` | string | `none` | continue after a previous page |
 | `--limit` | int | `50` | topics per page, 1 to 100 |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -250,10 +262,12 @@ Lists the chats that the account shares with a user. Closed chats are hidden.
 tg chat common <user> [flags]
 ```
 
+<!-- schema:flags tg chat common -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--cursor` | string | none | continue after a previous page |
+| `--cursor` | string | `none` | continue after a previous page |
 | `--limit` | int | `50` | shared chats per page, 1 to 100 |
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -290,9 +304,11 @@ Marks a chat as read (`messages.readHistory` or `channels.readHistory`).
 tg chat mark-read <chat> [flags]
 ```
 
+<!-- schema:flags tg chat mark-read -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | check write access without marking the chat read |
+<!-- /schema:flags -->
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -358,7 +374,9 @@ Starts or resumes a background load of one chat's history. The command returns a
 tg chat sync start <chat> [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg chat sync start -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
@@ -392,7 +410,9 @@ Shows the load jobs of the Daemon, or one chat's job or saved progress.
 tg chat sync status [<chat>] [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg chat sync status -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
@@ -434,7 +454,9 @@ Cancels a queued or running history load. Messages that are already saved remain
 tg chat sync cancel <chat> [flags]
 ```
 
-This command has no flags of its own. The global flags apply.
+<!-- schema:flags tg chat sync cancel -->
+No command flags.
+<!-- /schema:flags -->
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
