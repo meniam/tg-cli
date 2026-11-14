@@ -48,7 +48,6 @@ func validWriteSource(p rpc.SendParams) error {
 }
 
 func formatRequested(p rpc.SendParams) bool { return p.Parse != "" || p.Entities != nil }
-func richRequested(parse string) bool       { return parse == "rich-html" || parse == "rich-markdown" }
 
 func applyTextCheck(result *rpc.SendResult, check rpc.TextCheck) {
 	result.Mode = check.Mode
@@ -138,13 +137,7 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, err
 	}
 	res.ChatID = id
-	text := p.Text
-	if formatRequested(p) {
-		text = res.PlainText
-	}
-	if !richRequested(p.Parse) || text != "" {
-		d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
-	}
+	d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
 	return res, nil
 }
 
@@ -183,13 +176,7 @@ func (d *daemon) messageEdit(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, err
 	}
 	res.ChatID = id
-	text := p.Text
-	if formatRequested(checkParams) {
-		text = res.PlainText
-	}
-	if !richRequested(p.Parse) || text != "" {
-		d.saveMessages(ctx, rpc.MethodMessageEdit, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: text, Out: true}})
-	}
+	d.saveMessages(ctx, rpc.MethodMessageEdit, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Text, Out: true}})
 	return res, nil
 }
 

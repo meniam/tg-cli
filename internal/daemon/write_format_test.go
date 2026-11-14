@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"strings"
 	"testing"
 
 	"tg-cli/internal/rpc"
-	"tg-cli/internal/store"
 )
 
 func TestFormattedDryRunAndAccess(t *testing.T) {
@@ -107,16 +105,16 @@ func TestPlainDryRunJSONUnchanged(t *testing.T) {
 
 func TestFormattedMessageStorage(t *testing.T) {
 	for _, tc := range []struct {
-		name, parse, source, plain string
-		entities                   []rpc.Entity
-		rich                       bool
+		name, parse, source string
+		entities            []rpc.Entity
+		rich                bool
 	}{
-		{"plain", "", "plain", "plain", nil, false},
-		{"html", "html", "<b>hello</b>", "hello", nil, false},
-		{"markdown", "markdown", "**hello**", "hello", nil, false},
-		{"entities", "", "hello", "hello", []rpc.Entity{{Type: "bold", Length: 5}}, false},
-		{"rich with reply", "rich-html", "<h1>hello</h1>", "hello", nil, true},
-		{"rich without reply", "rich-markdown", "# hello", "", nil, true},
+		{"plain", "", "plain", nil, false},
+		{"html", "html", "<b>hello</b>", nil, false},
+		{"markdown", "markdown", "**hello**", nil, false},
+		{"entities", "", "hello", []rpc.Entity{{Type: "bold", Length: 5}}, false},
+		{"rich html", "rich-html", "<h1>hello</h1>", nil, true},
+		{"rich markdown", "rich-markdown", "# hello", nil, true},
 	} {
 		for _, edit := range []bool{false, true} {
 			t.Run(tc.name+map[bool]string{true: " edit", false: " send"}[edit], func(t *testing.T) {
@@ -127,8 +125,8 @@ func TestFormattedMessageStorage(t *testing.T) {
 				}
 				var journal bytes.Buffer
 				d.log = slog.New(slog.NewTextHandler(&journal, nil))
-				fake.check = rpc.TextCheck{Mode: tc.parse, PlainLength: len(tc.plain), Rich: tc.rich}
-				fake.sendResult = rpc.SendResult{ID: 11, Date: "2026-11-14T10:00:00Z", PlainText: tc.plain, Rich: tc.rich}
+				fake.check = rpc.TextCheck{Mode: tc.parse, PlainLength: len(tc.source), Rich: tc.rich}
+				fake.sendResult = rpc.SendResult{ID: 11, Date: "2026-11-14T10:00:00Z"}
 				fake.editResult = fake.sendResult
 				var err error
 				if edit {
@@ -154,21 +152,33 @@ func TestFormattedMessageStorage(t *testing.T) {
 					t.Fatal("send format lost")
 				}
 				got, getErr := db.GetMessage(context.Background(), 42, 11)
-				if tc.rich && tc.plain == "" {
-					if edit {
-						if getErr != nil || got.Text != "prior" {
-							t.Fatalf("rich empty edit changed row: %+v %v", got, getErr)
-						}
-					} else if !errors.Is(getErr, store.ErrNotFound) {
-						t.Fatalf("rich empty send saved row: %+v %v", got, getErr)
-					}
-				} else if getErr != nil || got.Text != tc.plain {
-					t.Fatalf("stored=%+v err=%v want=%q", got, getErr, tc.plain)
+				if getErr != nil || got.Text != tc.source {
+					t.Fatalf("stored=%+v err=%v want=%q", got, getErr, tc.source)
 				}
 				if strings.Contains(journal.String(), tc.source) && tc.source != "" {
 					t.Fatalf("journal leaked text: %s", journal.String())
 				}
 			})
 		}
+	}
+}
+
+func TestReadReplacesSourceMarkupAndKeepsVersion(t *testing.T) {
+	d, fake, db, path := writeDaemon(t)
+	writeAccess(t, path, `{"write":[42]}`)
+	fake.sendResult = rpc.SendResult{ID: 11, Date: "2026-11-14T10:00:00Z"}
+	ctx := context.Background()
+	source := "<b>hello</b>"
+	if _, err := d.messageSend(ctx, params(t, rpc.SendParams{Chat: "42", Text: source, Parse: "html"})); err != nil {
+		t.Fatal(err)
+	}
+	d.saveMessages(ctx, rpc.MethodMessageGet, []rpc.Message{{ChatID: 42, ID: 11, Date: "2026-11-14T10:00:00Z", Text: "hello", Out: true}})
+	got, err := db.GetMessage(ctx, 42, 11)
+	if err != nil || got.Text != "hello" {
+		t.Fatalf("message after read=%+v err=%v", got, err)
+	}
+	versions, err := db.MessageVersions(ctx, 42, 11)
+	if err != nil || len(versions) != 1 || versions[0].Text != source {
+		t.Fatalf("markup version=%+v err=%v", versions, err)
 	}
 }

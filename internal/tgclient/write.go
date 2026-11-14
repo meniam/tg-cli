@@ -207,11 +207,7 @@ func sendPreparedText(ctx context.Context, api *tg.Client, destination tg.InputP
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	plainText := prepared.text
-	if prepared.rich != nil {
-		plainText = richTextFromWrittenUpdates(updates, messages[0].ID)
-	}
-	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, PlainText: plainText, Rich: prepared.rich != nil}, nil
+	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date}, nil
 }
 
 func editText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.EditParams) (rpc.SendResult, error) {
@@ -240,42 +236,7 @@ func editPreparedText(ctx context.Context, api *tg.Client, destination tg.InputP
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	plainText := prepared.text
-	if prepared.rich != nil {
-		plainText = richTextFromWrittenUpdates(updates, messages[0].ID)
-	}
-	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, PlainText: plainText, Rich: prepared.rich != nil}, nil
-}
-
-func richTextFromWrittenUpdates(updates tg.UpdatesClass, id int) string {
-	var changes []tg.UpdateClass
-	switch value := updates.(type) {
-	case *tg.UpdateShort:
-		changes = []tg.UpdateClass{value.Update}
-	case *tg.Updates:
-		changes = value.Updates
-	case *tg.UpdatesCombined:
-		changes = value.Updates
-	}
-	for _, change := range changes {
-		var message tg.MessageClass
-		switch value := change.(type) {
-		case *tg.UpdateNewMessage:
-			message = value.Message
-		case *tg.UpdateNewChannelMessage:
-			message = value.Message
-		case *tg.UpdateEditMessage:
-			message = value.Message
-		case *tg.UpdateEditChannelMessage:
-			message = value.Message
-		}
-		if received, ok := message.(*tg.Message); ok && received.ID == id {
-			if rich, present := received.GetRichMessage(); present {
-				return richMessageText(rich)
-			}
-		}
-	}
-	return ""
+	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date}, nil
 }
 
 func writeFormatError(err error, rich bool) error {
