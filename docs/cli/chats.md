@@ -480,3 +480,30 @@ tg chat sync cancel @release_team
 **Exit codes.** 0; 3, 4; 7 an unknown or closed chat.
 
 **Verification.** Cancelling does not shorten an account `FLOOD_WAIT` pause. See [FEATURES.md](../../FEATURES.md), item 10.12.
+
+### tg chat state
+
+Reads the state of one dialog or up to the first 500 dialogs. `--local` reads saved state without a Telegram connection or login. A running Daemon is required.
+
+```text
+tg chat state [chat] [--limit N] [--local]
+```
+
+<!-- schema:flags tg chat state -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--limit` | int | `100` | maximum dialogs when no chat is given, 1 to 500 |
+| `--local` | bool | `false` | read saved state without Telegram |
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Formats: `json`, `jsonl`, `toon`, `human`. Closed chats are hidden. Use `--` before a negative chat id. `--limit` cannot accompany a chat.
+
+```sh
+tg chat state --local --limit 20
+```
+
+```json
+{"ok":true,"data":{"states":[],"synced_at":null}}
+```
+
+The result contains `states` and the Unix timestamp `synced_at`, or null when no snapshot exists. Each state has read markers, unread counts, pin and archive flags, notification settings and its own timestamp. An absent optional notification value is null. Exit codes: 0; 2 invalid arguments; 3 no Daemon; 4 no login for a Telegram read; 6 flood wait; 7 unknown or closed chat.
