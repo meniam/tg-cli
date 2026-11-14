@@ -105,13 +105,15 @@ TG_API_ID=... TG_API_HASH=... tg daemon start
 
 Use one source or the other, never both. A preset is remembered per profile, so the next start needs no flag. Every start that uses a preset downloads it from GitHub, so the daemon needs network access to `raw.githubusercontent.com` then.
 
-The command prints `running`, the PID, the socket and the journal. The background process has no terminal and writes its journal to `daemon.log` in the profile directory (mode `0600`, cut to 1 MiB whenever a new daemon starts). Your credentials never appear in its arguments. If the process exits early, the command fails and shows the tail of the journal; if the socket does not answer within 15 seconds, the error names the journal. Starting again on a profile whose daemon is already running reports the same PID and starts no second one, provided the credentials are available to the command (the environment, or a remembered preset and network access to download it); without credentials the repeat fails with exit code 2, without the network with exit code 1. `TG_API_ID` and `TG_API_HASH` in the environment avoid the download.
+The command prints `running`, the PID, the socket and the journal. The background process has no terminal and writes its journal to `daemon.log` in the profile directory (mode `0600`, rotated at 10 MiB with three archive copies, `daemon.log.1` to `daemon.log.3`). Your credentials never appear in its arguments. If the process exits early, the command fails and shows the tail of the journal; if the socket does not answer within 15 seconds, the error names the journal. Starting again on a profile whose daemon is already running reports the same PID and starts no second one, provided the credentials are available to the command (the environment, or a remembered preset and network access to download it); without credentials the repeat fails with exit code 2, without the network with exit code 1. `TG_API_ID` and `TG_API_HASH` in the environment avoid the download.
 
 Options:
 
-- `--foreground` keeps the daemon in your terminal, as it was before.
+- `--foreground` keeps the daemon in your terminal, as it was before. Its journal goes to stderr and there is no `daemon.log`.
 - `--idle-timeout 30m` stops the daemon after that long without a request. It is off by default, so the daemon runs until `tg daemon stop` or a failure.
 - `tg daemon stop` waits until the process is gone and fails if it is still alive after 10 seconds.
+
+The journal also holds one record per request: the time, the method, `duration_ms` and the result code (`ok` or a numeric JSON-RPC code). A request record never holds request parameters, message text or error text. When a handler fails unexpectedly, a separate error record keeps the cause (and a panic adds the stack), still without request parameters or results. `tg daemon logs` reads the current `daemon.log` without a running daemon: `--tail N` (1 to 10000) selects the last lines, and without it you get all lines, or the last 10000 when there are more; `--follow` prints new lines until Ctrl-C and keeps going after a rotation (in `json` each update is a separate result). With no file the command exits with code 7. Archive copies are not read. With `--format jsonl` each journal line is its own JSON string.
 
 **2. Log in.** Phone login is not yet confirmed end to end on a live account, see [Status](#status). The login code and the 2FA password are asked interactively and are never accepted as flags.
 
@@ -160,6 +162,7 @@ Global flags work in any position:
 | --- | --- |
 | `daemon start [--client preset] [--device name] [--foreground] [--idle-timeout duration]` | Start the daemon in the background, or in the terminal with `--foreground` |
 | `daemon status` / `daemon stop` | Show the state of the daemon and the account / stop it and wait until the process is gone |
+| `daemon logs [--tail N] [--follow]` | Read the current daemon journal; needs no running daemon |
 | `auth login [--phone number \| --qr]` | Log in by phone, code and 2FA password, or by QR code |
 | `auth status` | Show whether the profile is logged in, and as whom |
 | `auth resend` / `auth cancel` | Ask Telegram to send the code another way / cancel a pending login |
@@ -227,7 +230,7 @@ Today `note delete` is the only command marked dangerous, although it is a `loca
 
 ## Status
 
-Implemented and checked by tests: the daemon, JSON-RPC layer, profiles, login flows, chat and message reading, the local database, notes and search, `schema`, the output formats and `--fields`. Reading and the local database were also checked on a live account (plan checks of 2026-11-13 and 2026-11-14), and so was the background daemon (start in 0.75 s, stop in 0.15 s, idle stop of a 6 s timeout after about 7 s, no secrets in `ps`, socket and journal at `0600`). Telegram is never contacted by the test suite.
+Implemented and checked by tests: the daemon, JSON-RPC layer, profiles, login flows, chat and message reading, the local database, notes and search, `schema`, the output formats and `--fields`. Reading and the local database were also checked on a live account (plan checks of 2026-11-13 and 2026-11-14), and so was the background daemon (start in 0.75 s, stop in 0.15 s, idle stop of a 6 s timeout after about 7 s, no secrets in `ps`, socket and journal at `0600`). The request journal was checked by tests only. `daemon logs` was also run as a built binary on a temporary profile; neither was run against a live account. Telegram is never contacted by the test suite.
 
 Not confirmed on a live account yet: phone login end to end (the code did not arrive during the check), QR login, `auth resend`, `auth cancel`, `--device`, `chat invite-info` on a real group, and resolving a contact by phone number. The `people` search scope is covered by tests only. The background start was not run on Linux. The exact status of every requirement is in [`FEATURES.md`](FEATURES.md).
 
@@ -237,7 +240,6 @@ Not confirmed on a live account yet: phone login end to end (the code did not ar
 
 Planned, not implemented. [`FEATURES.md`](FEATURES.md) is the source of truth.
 
-- **Request journal.** One record per daemon request in `daemon.log` (method, time, duration, result code, no parameters or message text), rotation, and a `daemon logs` command. Today the journal holds only the start and stop of a background daemon.
 - **Writing.** Sending, editing, deleting and forwarding messages, with safety classes and confirmation rules.
 - **Media, reactions, polls, forum topic management**, members and contacts. Reading a topic already works (`message history --topic`).
 - **Live stream** of new messages and events.

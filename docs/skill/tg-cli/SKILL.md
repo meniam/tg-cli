@@ -30,6 +30,7 @@ description: >
 ```bash
 tg daemon start --client desktop   # фон; пресет запоминается в профиле, дальше без флага
 tg daemon status                   # профиль, подключение, вход, активные запросы
+tg daemon logs --tail 50           # журнал запросов и ошибок Daemon для отладки (--follow следит)
 tg auth login                      # интерактивно: номер, код, 2FA (или --qr)
 tg auth status                     # вошёл ли аккаунт и кто
 ```
