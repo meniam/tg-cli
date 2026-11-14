@@ -246,11 +246,8 @@ func TestFormattedWriteRequests(t *testing.T) {
 					return respond(output, &tg.UpdateShortSentMessage{ID: 17, Date: 1700000000})
 				}))
 				out, err := sendPreparedText(context.Background(), api, &tg.InputPeerUser{UserID: 42, AccessHash: 99}, 42, p, prepared)
-				if err != nil || calls != 1 || out.ID != 17 || out.Rich != strings.HasPrefix(mode, "rich") {
+				if err != nil || calls != 1 || out.ID != 17 {
 					t.Fatalf("out=%+v err=%v calls=%d", out, err, calls)
-				}
-				if out.Rich && out.PlainText != "" {
-					t.Fatal("rich source leaked into plain text")
 				}
 			})
 		}
@@ -333,7 +330,7 @@ func TestPlainWriteRequestIsUnchanged(t *testing.T) {
 		return respond(output, &tg.UpdateShortSentMessage{ID: 17, Date: 1700000000})
 	}))
 	out, err := sendText(context.Background(), api, &tg.InputPeerUser{UserID: 42, AccessHash: 99}, 42, rpc.SendParams{Text: "plain"})
-	if err != nil || out.PlainText != "plain" || out.Rich {
+	if err != nil || out.ID != 17 {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
 }
@@ -348,7 +345,7 @@ func TestPlainEditRequestIsUnchanged(t *testing.T) {
 		return respond(output, &tg.Updates{Date: 1700000000, Updates: []tg.UpdateClass{&tg.UpdateEditMessage{Message: &tg.Message{ID: 5, Date: 1700000000, PeerID: &tg.PeerUser{UserID: 42}}}}})
 	}))
 	out, err := editText(context.Background(), api, &tg.InputPeerUser{UserID: 42, AccessHash: 99}, 42, rpc.EditParams{ID: 5, Text: "plain"})
-	if err != nil || out.PlainText != "plain" || out.Rich {
+	if err != nil || out.ID != 5 {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
 }

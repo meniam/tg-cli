@@ -152,8 +152,6 @@ type SendResult struct {
 	PlainLength     *int   `json:"plain_length,omitempty"`
 	EntityCount     *int   `json:"entities,omitempty"`
 	RichMode        *bool  `json:"rich,omitempty"`
-	PlainText       string `json:"-"`
-	Rich            bool   `json:"-"`
 }
 
 // TextCheck is a local formatting preview without a Telegram write.
