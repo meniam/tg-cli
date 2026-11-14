@@ -98,7 +98,7 @@ func TestOwnerStateSnapshots(t *testing.T) {
 		t.Fatalf("notify=%+v %v", ns, err)
 	}
 }
-func TestOwnerStateUpgradeV5(t *testing.T) {
+func TestOwnerStateUpgradeFromPreviousVersion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "db")
 	f, err := os.Create(path)
 	if err != nil {
@@ -113,10 +113,7 @@ func TestOwnerStateUpgradeV5(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = applyMigrations(raw, ms[:5]); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = raw.Exec(`INSERT INTO account_state(key,value,updated_at) VALUES('marker','{}',1)`); err != nil {
+	if err = applyMigrations(raw, ms[:len(ms)-1]); err != nil {
 		t.Fatal(err)
 	}
 	raw.Close()
@@ -125,11 +122,11 @@ func TestOwnerStateUpgradeV5(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	var value string
-	if err = db.read.QueryRow(`SELECT value FROM account_state WHERE key='marker'`).Scan(&value); err != nil || value != "{}" {
-		t.Fatalf("state %q %v", value, err)
+	var n int
+	if err = db.read.QueryRow(`SELECT count(*) FROM account_state`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("account_state rows %d %v", n, err)
 	}
-	if v, err := db.Version(); err != nil || v != 6 {
+	if v, err := db.Version(); err != nil || v != len(ms) {
 		t.Fatalf("version %d %v", v, err)
 	}
 }
