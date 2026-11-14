@@ -52,7 +52,7 @@ tg message history <chat> [flags]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--cursor` | string | `none` | continue after a previous page, the value of next_cursor |
-| `--limit` | int | `0` | messages per page, 1 to 100 (default 20) |
+| `--limit` | int | `0` | messages per page, 1 to 100; 0 means 20 |
 | `--since` | string | `none` | only messages sent at this time or later (RFC 3339) |
 | `--topic` | int | `0` | read one topic of a forum chat, by the topic id |
 | `--until` | string | `none` | only messages sent at this time or earlier (RFC 3339) |
@@ -131,7 +131,7 @@ tg message pinned <chat> [flags]
 <!-- schema:flags tg message pinned -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--limit` | int | `0` | how many pinned messages, 1 to 100 (default 20) |
+| `--limit` | int | `0` | pinned messages per page, 1 to 100; 0 means 20 |
 <!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
@@ -174,7 +174,7 @@ tg message search <chat> <query> | search --public <query> [flags]
 | --- | --- | --- | --- |
 | `--cursor` | string | `none` | continue after a previous page |
 | `--limit` | int | `20` | results per page, 1 to 100 |
-| `--media` | string | `none` | filter by media type in one chat |
+| `--media` | string | `none` | media filter in one chat: photo, video, document, voice, audio, link, gif or pinned |
 | `--public` | bool | `false` | search globally rather than inside one chat |
 <!-- /schema:flags -->
 
@@ -348,7 +348,7 @@ tg message export <chat> [flags]
 <!-- schema:flags tg message export -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--after` | int | `0` | resume after this message id; 0 starts at the beginning |
+| `--after` | int | `0` | resume after this message id; 0 means from the beginning |
 | `--include-deleted` | bool | `false` | include locally marked deleted messages |
 | `--limit` | int | `0` | maximum number of output messages; 0 means no limit |
 | `--local` | bool | `false` | read only messages already stored locally |
@@ -407,11 +407,11 @@ tg message watch [flags]
 <!-- schema:flags tg message watch -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--after` | string | `none` | resume after an event cursor |
+| `--after` | string | `none` | resume after an event cursor; empty starts at the current cursor |
 | `--chat` | stringArray | `[]` | watch a chat by reference; repeat for more chats |
-| `--max-events` | int | `0` | stop after this many events |
+| `--max-events` | int | `0` | stop after this many events; default 0 means no limit, an explicit value must be positive |
 | `--topic` | int | `0` | watch one forum topic by id |
-| `--types` | string | `none` | comma-separated event types |
+| `--types` | string | `none` | comma-separated event types: message.new, message.edit, message.delete, reaction, read, typing, status, gap or lagged |
 <!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `jsonl`, `json`, `human`.

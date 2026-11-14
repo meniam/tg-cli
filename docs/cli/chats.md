@@ -23,8 +23,8 @@ tg chat list [flags]
 <!-- schema:flags tg chat list -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--limit` | int | `50` | maximum number of chats, 1 to 500 |
-| `--type` | string | `none` | only chats of this type: user, bot, group, supergroup, channel |
+| `--limit` | int | `50` | maximum number of chats, 1 to 500; 0 means 50 |
+| `--type` | string | `none` | chat type: user, bot, group, supergroup or channel |
 <!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
@@ -175,7 +175,7 @@ tg chat members <chat> [flags]
 <!-- schema:flags tg chat members -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--filter` | string | `none` | select recent members, admins or bots |
+| `--filter` | string | `none` | member filter: recent, admins or bots |
 | `--limit` | int | `50` | members per page, 1 to 200 |
 | `--offset` | int | `0` | number of members to skip, 0 or greater |
 | `--search` | string | `none` | find members by name or username |

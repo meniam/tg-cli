@@ -126,7 +126,7 @@ tg message send <chat> [flags]
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | describe the action without sending |
 | `--entities` | string | `none` | JSON entity array file, or - for stdin |
-| `--parse` | string | `none` | format: html, markdown, rich-html, rich-markdown |
+| `--parse` | string | `none` | format: html, markdown, rich-html or rich-markdown |
 | `--reply-to` | int | `0` | reply to this message id |
 | `--silent` | bool | `false` | send without a notification |
 | `--text` | string | `none` | message text; reads stdin when absent (stdin is ignored when --text is given) |
@@ -175,7 +175,7 @@ tg message edit <chat> <id> [flags]
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | describe the edit without changing Telegram |
 | `--entities` | string | `none` | JSON entity array file, or - for stdin |
-| `--parse` | string | `none` | format: html, markdown, rich-html, rich-markdown |
+| `--parse` | string | `none` | format: html, markdown, rich-html or rich-markdown |
 | `--text` | string | `none` | replacement text; reads stdin when absent |
 | `--yes` | bool | `false` | confirm the edit |
 <!-- /schema:flags -->

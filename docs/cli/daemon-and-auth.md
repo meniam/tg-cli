@@ -152,7 +152,7 @@ tg daemon logs [flags]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--follow` | bool | `false` | print new lines until interrupted, including after rotation |
-| `--tail` | int | `0` | last N lines (1 to 10000); default: all lines, up to 10000 |
+| `--tail` | int | `0` | last N lines, 1 to 10000; 0 means up to 10000 lines |
 <!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.

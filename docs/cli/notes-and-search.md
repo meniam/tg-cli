@@ -70,7 +70,7 @@ tg note list [flags]
 | `--author` | string | `none` | filter by owner or ai |
 | `--before-id` | int64 | `0` | return notes with a smaller id |
 | `--chat` | string | `none` | filter by chat reference |
-| `--limit` | int | `0` | notes per page, default 50, maximum 500 |
+| `--limit` | int | `0` | notes per page, 1 to 500; 0 means 50 |
 | `--message` | int64 | `0` | filter one message id, requires --chat |
 | `--person` | string | `none` | filter by person reference |
 | `--tag` | string | `none` | filter by tag |
@@ -156,7 +156,7 @@ tg search [flags] <query>
 | `--author` | string | `none` | filter note hits by owner or ai |
 | `--chat` | string | `none` | restrict message and note hits to this chat |
 | `--deleted` | bool | `false` | include messages marked deleted |
-| `--limit` | int | `0` | hits per scope, default 20, maximum 100 |
+| `--limit` | int | `0` | hits per scope, 1 to 100; 0 means 20 |
 | `--prefix` | bool | `false` | match the last query term as a prefix |
 | `--scope` | stringSlice | `[]` | scopes: chats, people, messages, notes; repeat or separate with commas |
 <!-- /schema:flags -->
