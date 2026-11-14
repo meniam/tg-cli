@@ -48,6 +48,8 @@ type Options struct {
 const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
+	account             accountCache
+	idempotencyMu       sync.Mutex
 	opts                Options
 	log                 *slog.Logger
 	srv                 *rpc.Server
@@ -122,9 +124,29 @@ func Run(ctx context.Context, opts Options) error {
 	// A daemon that has just started is not idle: the clock runs from now.
 	d.lastActivity.Store(time.Now().UnixNano())
 	d.login = newLoginManager(runCtx, opts.Telegram)
+	d.login.onUser = d.account.set
+	d.srv.SetRequestGuard(d.account.check)
+	accountDone := make(chan struct{})
+	go func() {
+		defer close(accountDone)
+		select {
+		case <-runCtx.Done():
+			return
+		case <-opts.Telegram.Ready():
+		}
+		user, err := opts.Telegram.Self(runCtx)
+		if err == nil && user != nil {
+			d.account.setIfEmpty(user)
+		}
+	}()
 	d.register()
 	d.srv.SetEventSource(d.hub, d.replayEvents)
 	opts.Telegram.SetEventSink(d.handleEvent)
+	if _, err := d.store.PruneIdempotency(runCtx, time.Now()); err != nil {
+		d.log.Warn("idempotency cleanup failed")
+	}
+	idempotencyDone := make(chan struct{})
+	go func() { defer close(idempotencyDone); d.pruneIdempotency(runCtx) }()
 	pruneDone := make(chan struct{})
 	go func() { defer close(pruneDone); d.pruneEvents(runCtx, eventPruneEvery, eventRetention, eventKeep) }()
 
@@ -172,6 +194,8 @@ func Run(ctx context.Context, opts Options) error {
 	// the process alive after Run returned.
 	<-idleDone
 	<-pruneDone
+	<-idempotencyDone
+	<-accountDone
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), stopGrace)
 	defer stopCancel()
 	if err := d.srv.Shutdown(stopCtx); err != nil {
@@ -368,6 +392,7 @@ func (d *daemon) requireAccount(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	d.account.set(user)
 	if user == nil {
 		return rpc.NewError(rpc.CodeNotAuthorized, "not logged in: run `auth login` first")
 	}

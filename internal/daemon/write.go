@@ -126,8 +126,26 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 			return nil, err
 		}
 	}
+	canonical := p
+	canonical.DryRun = false
+	session, saved, available, err := d.beginIdempotency(ctx, id, p.IdempotencyKey, rpc.MethodMessageSend, canonical, p.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer session.unlock()
+	if saved != nil {
+		var replay rpc.SendResult
+		if err := json.Unmarshal(saved, &replay); err != nil {
+			return nil, err
+		}
+		replay.Replayed = true
+		return replay, nil
+	}
 	if p.DryRun {
 		result := rpc.SendResult{ChatID: id, DryRun: true, Action: "send", Count: 1, TextLength: utf8.RuneCountInString(p.Text)}
+		if p.IdempotencyKey != "" {
+			result.ReplayAvailable = &available
+		}
 		if formatRequested(p) {
 			applyTextCheck(&result, check)
 		}
@@ -144,6 +162,9 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	if !richRequested(p.Parse) || text != "" {
 		d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+	}
+	if err := session.complete(ctx, res); err != nil {
+		return nil, err
 	}
 	return res, nil
 }
@@ -266,14 +287,36 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 	if err != nil {
 		return nil, err
 	}
+	canonical := p
+	canonical.DryRun = false
+	session, saved, available, err := d.beginIdempotency(ctx, id, p.IdempotencyKey, rpc.MethodMessageForward, canonical, p.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer session.unlock()
+	if saved != nil {
+		var replay rpc.ForwardResult
+		if err := json.Unmarshal(saved, &replay); err != nil {
+			return nil, err
+		}
+		replay.Replayed = true
+		return replay, nil
+	}
 	if p.DryRun {
-		return rpc.ForwardResult{ChatID: id, Messages: []rpc.ForwardedMessage{}, DryRun: true, Action: "forward", Count: len(p.IDs)}, nil
+		result := rpc.ForwardResult{ChatID: id, Messages: []rpc.ForwardedMessage{}, DryRun: true, Action: "forward", Count: len(p.IDs)}
+		if p.IdempotencyKey != "" {
+			result.ReplayAvailable = &available
+		}
+		return result, nil
 	}
 	res, err := d.opts.Telegram.Forward(ctx, from, to, p)
 	if err != nil {
 		return nil, err
 	}
 	res.ChatID = id
+	if err := session.complete(ctx, res); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 
@@ -368,8 +411,27 @@ func (d *daemon) messagePoll(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, err
 	}
+	canonical := p
+	canonical.DryRun = false
+	session, saved, available, err := d.beginIdempotency(ctx, id, p.IdempotencyKey, rpc.MethodMessagePoll, canonical, p.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer session.unlock()
+	if saved != nil {
+		var replay rpc.SendResult
+		if err := json.Unmarshal(saved, &replay); err != nil {
+			return nil, err
+		}
+		replay.Replayed = true
+		return replay, nil
+	}
 	if p.DryRun {
-		return rpc.SendResult{ChatID: id, DryRun: true, Action: "poll", Count: 1, TextLength: utf8.RuneCountInString(p.Question)}, nil
+		result := rpc.SendResult{ChatID: id, DryRun: true, Action: "poll", Count: 1, TextLength: utf8.RuneCountInString(p.Question)}
+		if p.IdempotencyKey != "" {
+			result.ReplayAvailable = &available
+		}
+		return result, nil
 	}
 	res, err := d.opts.Telegram.SendPoll(ctx, ref, p)
 	if err != nil {
@@ -377,6 +439,9 @@ func (d *daemon) messagePoll(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	res.ChatID = id
 	d.saveMessages(ctx, rpc.MethodMessagePoll, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Question, MediaType: "poll", Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+	if err := session.complete(ctx, res); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 

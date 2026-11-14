@@ -35,6 +35,7 @@ type Handler func(ctx context.Context, params json.RawMessage) (any, error)
 // Server dispatches JSON-RPC requests to handlers. It never logs request
 // parameters: they can carry login codes and passwords.
 type Server struct {
+	requestGuard func(Request) error
 	// RequestTimeout is the deadline of one request, DefaultRequestTimeout by default.
 	RequestTimeout time.Duration
 
@@ -82,6 +83,9 @@ func NewServer(log *slog.Logger) *Server {
 		listeners:      map[net.Listener]struct{}{},
 	}
 }
+
+// SetRequestGuard installs a check applied before all request handlers.
+func (s *Server) SetRequestGuard(guard func(Request) error) { s.requestGuard = guard }
 
 // Handle registers a handler. It panics on a duplicate method.
 func (s *Server) Handle(method string, h Handler) {
@@ -239,6 +243,13 @@ func (s *Server) readLoop(ctx context.Context, sc *serverConn, fr *frameReader, 
 			var sub *Subscription
 			var plan ReplayPlan
 			started := time.Now()
+			if s.requestGuard != nil && (req.Method == MethodSubscribe || req.Method == MethodUnsubscribe) {
+				if err := s.requestGuard(req); err != nil {
+					e := s.toError(req.Method, err)
+					_ = w.write(Response{JSONRPC: Version, ID: req.ID, Error: e})
+					return
+				}
+			}
 			switch req.Method {
 			case MethodSubscribe:
 				resp, sub, plan = s.subscribe(ctx, sc, req)
@@ -297,6 +308,12 @@ func (s *Server) call(ctx context.Context, req Request) Response {
 		s.log.Info("request", "method", method, "duration_ms", time.Since(started).Milliseconds(), "code", code)
 	}()
 
+	if s.requestGuard != nil {
+		if err := s.requestGuard(req); err != nil {
+			response.Error = s.toError(req.Method, err)
+			return response
+		}
+	}
 	result, err := s.safeCall(ctx, h, req)
 	if err != nil {
 		response.Error = s.toError(req.Method, err)

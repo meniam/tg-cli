@@ -24,6 +24,7 @@ func (a *app) messageSendMediaCommand() *cobra.Command {
 		Args: cobra.ExactArgs(1), RunE: a.messageSendMedia,
 	}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendMediaResult](),
 		Args: []argSpec{{Name: "chat", Required: true}}, Choices: []flagChoices{{Flag: "as", Values: mediaTypes}}, ItemPath: "messages"})
+	cmd.Flags().String("idempotency-key", "", "idempotency key: 1 to 64 characters A-Za-z0-9._:-")
 	cmd.Flags().String("as", "", "required media type: photo, video, audio, voice or document")
 	cmd.Flags().StringArray("file", nil, "file path; repeat for an album (1 to 10 files)")
 	cmd.Flags().String("caption", "", "caption for the first file (up to 1024 characters)")
@@ -78,8 +79,12 @@ func (a *app) messageSendMedia(cmd *cobra.Command, args []string) error {
 	p := rpc.SendMediaParams{Chat: args[0], As: as, Files: files, Caption: caption,
 		ReplyTo: reply, Topic: topic, Silent: silent, DryRun: dry,
 		Duration: duration, Width: width, Height: height}
+	keyed, err := withIdempotencyKey(cmd, p)
+	if err != nil {
+		return err
+	}
 	var result rpc.SendMediaResult
-	if err := a.callOne(cmd, rpc.MethodMessageSendMedia, p, &result); err != nil {
+	if err := a.callOne(cmd, rpc.MethodMessageSendMedia, keyed, &result); err != nil {
 		if ce, ok := err.(*cmdError); ok && ce.exit == exitcode.WriteDisabled {
 			if strings.Contains(ce.msg, "files in access.json") {
 				a.warn(cmd, "ask the owner to add the file directory to files in this profile's access.json")

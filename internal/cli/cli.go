@@ -130,6 +130,7 @@ func (a *app) rootCommand() *cobra.Command {
 		_, err := a.outputSettingsFor(cmd)
 		return err
 	}
+	root.PersistentFlags().String("expect-user", "", "require account id or @username (or TG_CLI_EXPECT_USER)")
 	root.PersistentFlags().String("profile", daemon.DefaultProfile, "account profile, each has its own session and daemon")
 	addOutputFlags(root)
 	root.AddCommand(

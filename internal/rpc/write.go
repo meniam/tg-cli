@@ -47,15 +47,16 @@ type MediaFile struct {
 type MessageRef = ForwardedMessage
 
 type SendMediaResult struct {
-	Replayed      bool         `json:"replayed,omitempty"`
-	ChatID        int64        `json:"chat_id"`
-	Messages      []MessageRef `json:"messages"`
-	DryRun        bool         `json:"dry_run,omitempty"`
-	Action        string       `json:"action,omitempty"`
-	Count         int          `json:"count,omitempty"`
-	Types         []string     `json:"types,omitempty"`
-	Sizes         []int64      `json:"sizes,omitempty"`
-	CaptionLength int          `json:"caption_length,omitempty"`
+	ReplayAvailable *bool        `json:"replay_available,omitempty"`
+	Replayed        bool         `json:"replayed,omitempty"`
+	ChatID          int64        `json:"chat_id"`
+	Messages        []MessageRef `json:"messages"`
+	DryRun          bool         `json:"dry_run,omitempty"`
+	Action          string       `json:"action,omitempty"`
+	Count           int          `json:"count,omitempty"`
+	Types           []string     `json:"types,omitempty"`
+	Sizes           []int64      `json:"sizes,omitempty"`
+	CaptionLength   int          `json:"caption_length,omitempty"`
 }
 
 type EditParams struct {
@@ -138,20 +139,21 @@ type PollParams struct {
 }
 
 type SendResult struct {
-	Replayed    bool   `json:"replayed,omitempty"`
-	ChatID      int64  `json:"chat_id"`
-	ID          int    `json:"id,omitempty"`
-	Date        string `json:"date,omitempty"`
-	DryRun      bool   `json:"dry_run,omitempty"`
-	Action      string `json:"action,omitempty"`
-	Count       int    `json:"count,omitempty"`
-	TextLength  int    `json:"text_length,omitempty"`
-	Mode        string `json:"mode,omitempty"`
-	PlainLength *int   `json:"plain_length,omitempty"`
-	EntityCount *int   `json:"entities,omitempty"`
-	RichMode    *bool  `json:"rich,omitempty"`
-	PlainText   string `json:"-"`
-	Rich        bool   `json:"-"`
+	ReplayAvailable *bool  `json:"replay_available,omitempty"`
+	Replayed        bool   `json:"replayed,omitempty"`
+	ChatID          int64  `json:"chat_id"`
+	ID              int    `json:"id,omitempty"`
+	Date            string `json:"date,omitempty"`
+	DryRun          bool   `json:"dry_run,omitempty"`
+	Action          string `json:"action,omitempty"`
+	Count           int    `json:"count,omitempty"`
+	TextLength      int    `json:"text_length,omitempty"`
+	Mode            string `json:"mode,omitempty"`
+	PlainLength     *int   `json:"plain_length,omitempty"`
+	EntityCount     *int   `json:"entities,omitempty"`
+	RichMode        *bool  `json:"rich,omitempty"`
+	PlainText       string `json:"-"`
+	Rich            bool   `json:"-"`
 }
 
 // TextCheck is a local formatting preview without a Telegram write.
@@ -195,12 +197,13 @@ type ForwardedMessage struct {
 }
 
 type ForwardResult struct {
-	Replayed bool               `json:"replayed,omitempty"`
-	ChatID   int64              `json:"chat_id"`
-	Messages []ForwardedMessage `json:"messages"`
-	DryRun   bool               `json:"dry_run,omitempty"`
-	Action   string             `json:"action,omitempty"`
-	Count    int                `json:"count,omitempty"`
+	ReplayAvailable *bool              `json:"replay_available,omitempty"`
+	Replayed        bool               `json:"replayed,omitempty"`
+	ChatID          int64              `json:"chat_id"`
+	Messages        []ForwardedMessage `json:"messages"`
+	DryRun          bool               `json:"dry_run,omitempty"`
+	Action          string             `json:"action,omitempty"`
+	Count           int                `json:"count,omitempty"`
 }
 
 // ErrWriteDisabled tells the caller how the owner can enable this chat.
