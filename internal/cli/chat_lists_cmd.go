@@ -25,7 +25,7 @@ func (a *app) chatMembersCommand() *cobra.Command {
 	cmd.Flags().String("search", "", "find members by name or username")
 	cmd.Flags().Int("offset", 0, "number of members to skip, 0 or greater")
 	cmd.Flags().Int("limit", 50, "members per page, 1 to 200")
-	cmd.Flags().String("filter", "", "select recent members, admins or bots")
+	cmd.Flags().String("filter", "", "member filter: recent, admins or bots")
 	return cmd
 }
 

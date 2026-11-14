@@ -22,6 +22,7 @@
     just check                  Format check, vet and tests in a row, as before a commit
 
   Maintenance
+    just docs                   Rebuild generated CLI documentation tables
     just tidy                   Tidy go.mod and go.sum
     just clean                  Remove build output from dist/
 
