@@ -56,6 +56,24 @@ func (f *fakeTelegram) Delete(context.Context, chatref.Ref, rpc.DeleteParams) (r
 func (f *fakeTelegram) Forward(context.Context, chatref.Ref, chatref.Ref, rpc.ForwardParams) (rpc.ForwardResult, error) {
 	return rpc.ForwardResult{}, errors.New("not implemented")
 }
+func (f *fakeTelegram) SearchMessages(context.Context, chatref.Ref, rpc.SearchMessagesParams) (rpc.MessagesResult, error) {
+	return rpc.MessagesResult{}, errors.New("not implemented")
+}
+func (f *fakeTelegram) SearchPublic(context.Context, rpc.PublicSearchParams) (rpc.PublicSearchResult, error) {
+	return rpc.PublicSearchResult{}, errors.New("not implemented")
+}
+func (f *fakeTelegram) MessageContext(context.Context, chatref.Ref, rpc.ContextParams) (rpc.MessagesResult, error) {
+	return rpc.MessagesResult{}, errors.New("not implemented")
+}
+func (f *fakeTelegram) Comments(context.Context, chatref.Ref, rpc.CommentsParams) (rpc.MessagesResult, error) {
+	return rpc.MessagesResult{}, errors.New("not implemented")
+}
+func (f *fakeTelegram) MessageLink(context.Context, chatref.Ref, rpc.LinkParams) (rpc.LinkResult, error) {
+	return rpc.LinkResult{}, errors.New("not implemented")
+}
+func (f *fakeTelegram) MarkRead(context.Context, chatref.Ref) (rpc.MarkReadResult, error) {
+	return rpc.MarkReadResult{}, errors.New("not implemented")
+}
 
 func (f *fakeTelegram) Self(context.Context) (*rpc.User, error) {
 	f.mu.Lock()

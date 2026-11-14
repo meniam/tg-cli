@@ -55,6 +55,14 @@ type Telegram interface {
 	Edit(ctx context.Context, ref chatref.Ref, p rpc.EditParams) (rpc.SendResult, error)
 	Delete(ctx context.Context, ref chatref.Ref, p rpc.DeleteParams) (rpc.DeleteResult, error)
 	Forward(ctx context.Context, from, to chatref.Ref, p rpc.ForwardParams) (rpc.ForwardResult, error)
+	// Discovery methods read Telegram without changing account state.
+	SearchMessages(ctx context.Context, ref chatref.Ref, p rpc.SearchMessagesParams) (rpc.MessagesResult, error)
+	SearchPublic(ctx context.Context, p rpc.PublicSearchParams) (rpc.PublicSearchResult, error)
+	MessageContext(ctx context.Context, ref chatref.Ref, p rpc.ContextParams) (rpc.MessagesResult, error)
+	Comments(ctx context.Context, ref chatref.Ref, p rpc.CommentsParams) (rpc.MessagesResult, error)
+	MessageLink(ctx context.Context, ref chatref.Ref, p rpc.LinkParams) (rpc.LinkResult, error)
+	// MarkRead changes the read state and requires write access in the Daemon.
+	MarkRead(ctx context.Context, ref chatref.Ref) (rpc.MarkReadResult, error)
 }
 
 // TelegramConfig is what a Telegram client needs to be created.
