@@ -8,6 +8,9 @@ import (
 func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 	want := map[string][]string{
 		"chat list":        {"chats.title", "chats.username"},
+		"chat members":     {"members.name", "members.username"},
+		"chat topics":      {"topics.title"},
+		"chat common":      {"chats.title", "chats.username"},
 		"chat resolve":     {"title", "username"},
 		"chat info":        {"title", "username", "about"},
 		"chat invite-info": {"title", "about"},

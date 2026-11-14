@@ -163,15 +163,15 @@ func (f *fakeTelegram) Chats(_ context.Context, limit int, chatType string) ([]r
 }
 
 func (f *fakeTelegram) Members(context.Context, chatref.Ref, rpc.MembersParams) (rpc.MembersResult, error) {
-	return rpc.MembersResult{}, nil
+	return rpc.MembersResult{Members: []rpc.Member{{ID: 5, Name: "Ann", Username: "ann", Role: "admin"}}, NextOffset: 1}, nil
 }
 
 func (f *fakeTelegram) Topics(context.Context, chatref.Ref, rpc.TopicsParams) (rpc.TopicsResult, error) {
-	return rpc.TopicsResult{}, nil
+	return rpc.TopicsResult{Topics: []rpc.Topic{{ID: 7, Title: "Foreign topic", TopMessage: 30, Created: "2026-11-14T10:00:00Z"}}, NextCursor: "TOPIC-NEXT"}, nil
 }
 
 func (f *fakeTelegram) CommonChats(context.Context, chatref.Ref, rpc.CommonChatsParams) (rpc.CommonChatsResult, error) {
-	return rpc.CommonChatsResult{}, nil
+	return rpc.CommonChatsResult{Chats: []rpc.CommonChat{{ID: -77, Type: "group", Title: "Shared"}}, NextCursor: "COMMON-NEXT"}, nil
 }
 
 func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, error) {
@@ -180,6 +180,9 @@ func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, er
 	f.mu.Unlock()
 	if f.missing {
 		return rpc.Chat{}, rpc.NewError(rpc.CodeNotFound, "not found: no such chat")
+	}
+	if ref.Kind == chatref.Username && ref.Username == "aliceuser" {
+		return rpc.Chat{ID: 5, Type: "user", Title: "Ann", Username: "aliceuser"}, nil
 	}
 	return rpc.Chat{ID: 77, Type: "supergroup", Title: "Team", Username: "team"}, nil
 }

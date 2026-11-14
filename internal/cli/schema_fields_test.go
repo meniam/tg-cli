@@ -44,6 +44,9 @@ var realResponseCases = map[string][]string{
 	"chat info":        {"chat", "info", "@teamchat"},
 	"chat invite-info": {"chat", "invite-info", "https://t.me/+AbCdEfGh1234"},
 	"chat list":        {"chat", "list"},
+	"chat members":     {"chat", "members", "@teamchat"},
+	"chat topics":      {"chat", "topics", "@teamchat"},
+	"chat common":      {"chat", "common", "@aliceuser"},
 	"chat resolve":     {"chat", "resolve", "@teamchat"},
 	"daemon status":    {"daemon", "status"},
 	"daemon logs":      {"daemon", "logs"},
@@ -201,6 +204,9 @@ func TestSchemaListItemsMatchJSONL(t *testing.T) {
 	commands := schemaCommands(t)
 	for path, args := range map[string][]string{
 		"chat list":       {"chat", "list", "--format", "jsonl"},
+		"chat members":    {"chat", "members", "@teamchat", "--format", "jsonl"},
+		"chat topics":     {"chat", "topics", "@teamchat", "--format", "jsonl"},
+		"chat common":     {"chat", "common", "@aliceuser", "--format", "jsonl"},
 		"message history": {"message", "history", "@teamchat", "--format", "jsonl"},
 		"note list":       {"note", "list", "--format", "jsonl"},
 		"search":          {"search", "line", "--format", "jsonl"},
@@ -216,7 +222,7 @@ func TestSchemaListItemsMatchJSONL(t *testing.T) {
 		}
 		items := 0
 		for _, line := range strings.Split(strings.TrimSpace(r.stdout), "\n") {
-			if strings.Contains(line, "next_cursor") {
+			if strings.Contains(line, "next_cursor") || strings.Contains(line, "next_offset") {
 				continue // the last line of a page is not an item
 			}
 			paths, err := schema.Paths([]byte(line))
