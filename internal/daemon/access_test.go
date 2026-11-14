@@ -70,6 +70,7 @@ func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 		rpc.MethodChatList: "chat-list", rpc.MethodChatResolve: "chat-ref", rpc.MethodChatInfo: "chat-ref", rpc.MethodChatInviteInfo: "chat-ref",
 		rpc.MethodChatDraftGet: "chat-ref", rpc.MethodChatDraftList: "chat-search", rpc.MethodChatDraftSet: "chat-write", rpc.MethodChatDraftClear: "chat-write",
 		rpc.MethodChatMembers: "chat-ref", rpc.MethodChatTopics: "chat-ref", rpc.MethodChatCommon: "chat-search",
+		rpc.MethodChatJoin: "chat-write", rpc.MethodChatLeave: "chat-write", rpc.MethodChatCreate: "chat-create", rpc.MethodChatEdit: "chat-admin", rpc.MethodChatKick: "chat-admin", rpc.MethodChatBan: "chat-admin", rpc.MethodChatUnban: "chat-admin", rpc.MethodChatRestrict: "chat-admin", rpc.MethodChatPermissions: "chat-admin", rpc.MethodChatSlowMode: "chat-admin",
 		rpc.MethodMessageHistory: "chat-ref", rpc.MethodMessageGet: "chat-ref", rpc.MethodMessagePinned: "chat-ref",
 		rpc.MethodMessageScheduledList: "chat-ref", rpc.MethodMessageScheduledDelete: "chat-write", rpc.MethodMessageScheduledSendNow: "chat-write",
 		rpc.MethodMessageSend: "chat-write", rpc.MethodMessageSendMedia: "chat-write", rpc.MethodMessageEdit: "chat-write", rpc.MethodMessageDelete: "chat-write", rpc.MethodMessageForward: "chat-write",
