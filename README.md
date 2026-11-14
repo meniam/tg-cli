@@ -186,8 +186,8 @@ Global flags work in any position:
 | `message comments <chat> <id> \| <message-link> [--limit N] [--cursor C]` | Read the comments under a channel post |
 | `message link <chat> <id> [--topic N]` | Print the link to a message of a channel or supergroup |
 | `message watch [--chat <chat>]... [--topic N] [--types a,b] [--after <cursor>] [--max-events N]` | Watch live events, one JSON line per event, see [Live events](#live-events) |
-| `message send <chat> [--text TEXT] [--reply-to ID] [--topic ID] [--silent] [--dry-run]` | Send a plain text message; without `--text` the text is read from stdin. Needs the chat in `write`, see [Writing messages](#writing-messages) |
-| `message edit <chat> <id> [--text TEXT] [--yes] [--dry-run]` | Edit a message; needs `--yes` unless `--dry-run` |
+| `message send <chat> [--text TEXT] [--parse MODE \| --entities FILE] [--reply-to ID] [--topic ID] [--silent] [--dry-run]` | Send a text message, plain or formatted (see [Formatting text](#formatting-text)); without `--text` the text is read from stdin. Needs the chat in `write`, see [Writing messages](#writing-messages) |
+| `message edit <chat> <id> [--text TEXT] [--parse MODE \| --entities FILE] [--yes] [--dry-run]` | Edit a message, with the same formatting as `send`; needs `--yes` unless `--dry-run` |
 | `message delete <chat> <id>... (--revoke \| --for-me) [--yes] [--dry-run]` | Delete messages for everyone or only for this account; needs `--yes` unless `--dry-run` |
 | `message forward <from> <to> <id>... [--silent] [--dry-run]` | Forward messages to another chat |
 | `chat mark-read <chat> [--dry-run]` | Mark a chat as read; needs the chat in `write`, the other side can see it (not checked on a live account) |
@@ -341,7 +341,7 @@ Writing is off by default. Add the IDs of the chats you allow to the list `write
 
 - **Rule.** A chat accepts writes only when it is in `write`, is visible by the read rules above and is not in `block`. No file or no `write` list means writing is off everywhere. `write` alone does not turn the read filter on. The format is that of `allow` and `block`: nonzero integer chat IDs in the Bot API form without duplicates.
 - **No permission.** The command exits with code 9 `write_disabled` and a hint to add the chat to `write`. A chat closed for reading gives the same `not_found` as an unknown chat.
-- **Commands.** `message send` takes the text from `--text` or, when it is absent, from stdin; with `--text` the standard input is never read. Without `--text`, a terminal or an empty stdin, an empty text, and a text longer than 4096 characters are exit code 2, before the daemon is called. `message edit` takes its text the same way. The text goes as it is, without Markdown or HTML formatting. `--reply-to` replies to a message, `--topic` sends into a forum topic, `--silent` sends without a notification. `message delete` needs exactly one of `--revoke` (for everyone) and `--for-me`; in a channel `--for-me` is rejected, because a channel deletion is always for everyone. `message forward` needs the source chat to be readable and the target chat to be writable. A negative chat ID goes after `--`, and the flags go before `--`.
+- **Commands.** `message send` takes the text from `--text` or, when it is absent, from stdin; with `--text` the standard input is never read. Without `--text`, a terminal or an empty stdin, an empty text, and a text longer than 4096 characters are exit code 2, before the daemon is called. `message edit` takes its text the same way. Without `--parse` and `--entities` the text goes as it is, see [Formatting text](#formatting-text). `--reply-to` replies to a message, `--topic` sends into a forum topic, `--silent` sends without a notification. `message delete` needs exactly one of `--revoke` (for everyone) and `--for-me`; in a channel `--for-me` is rejected, because a channel deletion is always for everyone. `message forward` needs the source chat to be readable and the target chat to be writable. A negative chat ID goes after `--`, and the flags go before `--`.
 - **Confirmation and dry run.** `message edit` and `message delete` without `--yes` and without `--dry-run` are exit code 2 and do not call the daemon. `--dry-run` runs every check of the daemon, the write permission included, and returns `dry_run: true`, the action, the number of messages and the text length without the text. It calls no Telegram write method, writes nothing to the database and creates no journal.
 - **Result.** `send` and `edit` return `{chat_id, id, date}`, `delete` returns the IDs, `forward` returns a list of `{id, date}`. Sent and edited messages are saved to the local database (`out: true`, an edit keeps the previous version), deleted ones get `deleted_at`, a forward is not saved.
 - **Delete guard.** For private chats and basic groups Telegram deletes by message ID without naming the chat, and IDs are unique per account. So the daemon checks in the local database that every ID belongs to the chosen chat before it deletes. An ID that is unknown locally or belongs to another chat is `not_found`: read the message first. Channels need no check.
@@ -356,7 +356,94 @@ echo "Fixed text" | tg message edit @release_team 4103 --yes
 tg message delete @release_team 4103 --revoke --yes
 ```
 
-Not done: Markdown and HTML formatting, media, reactions, pinning, polls, scheduled messages, drafts and the typing indicator. An agent running as the same user can edit `write` in `access.json`: the list protects against accidental writes and against writes induced through a chat, not against an agent that deliberately bypasses it. Writing is checked by tests and on a live account in one test chat (2026-11-14): send, reply, edit, silent send, forward, both kinds of deletion, `--dry-run`, and the refusals for a missing `access.json`, a chat outside `write` and a closed chat. Not checked live: `FLOOD_WAIT` on a write, a reply inside a forum topic, deletion in a channel, editing someone else's message (Telegram forbids it).
+Not done: media, reactions, pinning, polls, scheduled messages, drafts and the typing indicator. An agent running as the same user can edit `write` in `access.json`: the list protects against accidental writes and against writes induced through a chat, not against an agent that deliberately bypasses it. Writing is checked by tests and on a live account in one test chat (2026-11-14): send, reply, edit, silent send, forward, both kinds of deletion, `--dry-run`, and the refusals for a missing `access.json`, a chat outside `write` and a closed chat. Not checked live: `FLOOD_WAIT` on a write, a reply inside a forum topic, deletion in a channel, editing someone else's message (Telegram forbids it).
+
+### Formatting text
+
+`message send` and `message edit` format the text with `--parse` or `--entities`. They exclude each other (both together is exit code 2). Without either one the text goes as plain text, exactly as before. A formatted write follows every rule of [Writing messages](#writing-messages): the chat must be in `write`, `edit` needs `--yes`, and nothing is retried.
+
+| Option | The text is | What Telegram gets |
+| --- | --- | --- |
+| `--parse html` | HTML with Telegram tags | an ordinary message with entities |
+| `--parse markdown` | Markdown | an ordinary message with entities |
+| `--parse rich-html` | HTML | a rich message, parsed by Telegram |
+| `--parse rich-markdown` | Rich Markdown | a rich message, parsed by Telegram |
+| `--entities FILE` (or `-`) | plain text, entities in a JSON array | an ordinary message with entities |
+
+Use `html`, `markdown` or `--entities` for bold, italic, links, quotes, code and spoilers in an ordinary message. Use `rich-html` or `rich-markdown` when the message needs headings, lists, tables or formulas. A rich message is a newer kind of Telegram message, and how clients show it, old ones included, has not been checked: appearance in clients is not yet confirmed.
+
+```sh
+# html
+tg message send --parse html --text '<b>Deploy</b> <i>green</i>, <a href="https://example.com/run/42">run 42</a>' -- -1001234567890
+
+# markdown
+tg message send --parse markdown --text '**Deploy** _green_, [run 42](https://example.com/run/42)' -- -1001234567890
+
+# rich-markdown, text from stdin
+tg message send --parse rich-markdown -- -1001234567890 <<'EOF'
+# Release 42
+
+**Green.** Details: ||secret||
+
+- build ok
+- tests ok
+
+| Step  | Result |
+|:------|-------:|
+| build | ok     |
+EOF
+
+# rich-html
+tg message send --parse rich-html --text '<h1>Release 42</h1><p><b>Green.</b></p><ul><li>build ok</li><li>tests ok</li></ul>' -- -1001234567890
+
+# entities: bold "Hello" (offset 0, length 5) and the link "link" (offset 6, length 4)
+echo '[{"type":"bold","offset":0,"length":5},{"type":"text_url","offset":6,"length":4,"url":"https://example.com"}]' > entities.json
+tg message send --text 'Hello link' --entities entities.json -- -1001234567890
+
+# edit with formatting
+tg message edit --yes --parse markdown --text '**Fixed** text' -- -1001234567890 4103
+```
+
+The syntax of the rich modes is Telegram's own and is parsed by the server; the Go library keeps a copy of its description in `telegram/message/rich/spec.md` of `gotd/td`. The rich examples above follow that description; they were not all sent verbatim.
+
+- **HTML.** Tags: `b` or `strong`, `i` or `em`, `u` or `ins`, `s`, `strike` or `del`, `a href`, `code`, `pre` (the language comes from `<code class="language-go">`), `tg-spoiler` and `blockquote` (`<blockquote expandable>` makes it collapsible). The parser of `gotd/td` also reads `<span class="tg-spoiler">`, `tg-emoji` and `tg-time`; the tests of this tool do not cover those three. Other tags, such as headings, lists, `p` and `div`, are dropped without an error and their text stays. An unclosed or unpaired `span`, `tg-emoji`, `tg-time` or listed tag and a link without a valid `href` are exit code 2 with the byte position.
+- **Markdown.** `**bold**` or `__bold__`, `*italic*` or `_italic_`, `~~strikethrough~~`, `||spoiler||`, `` `code` ``, fenced code with a language, `> quote` and `[text](url)`. There is no underline, and headings, lists and `<u>` stay as plain characters. Use `html` or a rich mode for those.
+- **Entities.** One JSON array, at most 256 KiB. Each item has `type`, `offset` and `length`, and these fields where the type needs them:
+
+  | `type` | Extra fields |
+  | --- | --- |
+  | `bold`, `italic`, `underline`, `strikethrough`, `spoiler`, `code` | none |
+  | `pre` | `language` (optional) |
+  | `blockquote` | `collapsed` (optional, `true` makes it collapsible) |
+  | `text_url` | `url` (required) |
+  | `url`, `email`, `phone`, `mention`, `hashtag`, `cashtag`, `bot_command` | none: the entity marks text that already looks like one |
+  | `mention_name` | `user_id` |
+  | `custom_emoji` | `custom_emoji_id` |
+  | `date_time` | `date_unix` and `format` (`r` alone, or letters from `t`, `T`, `d`, `D`, `w`, `W`) |
+
+  With `--entities -` the standard input holds the JSON, so the text must come from `--text`. With a file path the text comes from `--text` or stdin as usual.
+- **UTF-16 offsets.** `offset` and `length` count UTF-16 units, as Telegram does: a character outside the Basic Multilingual Plane, an emoji for example, takes 2. In `😀 bold` the word `bold` starts at offset 3. A boundary inside such a pair, a zero length and a range outside the text are exit code 2.
+- **Mention by id.** `<a href="tg://user?id=N">name</a>`, `[name](tg://user?id=N)` and the `mention_name` entity need a user that the session knows: the daemon resolves the id through the session's peer cache, as it does for a numeric chat reference, and on a miss loads the dialog list once. The local database stores no access hashes and takes no part. Any other id is exit code 2 `unknown user id for this session`. Both this resolution through the peer cache and the saving of the final plain text (see below) are implemented but still wait for the owner's confirmation. A `--dry-run` with such a mention may read the user from Telegram; it still writes nothing.
+- **Length.** A plain text, an `--entities` text and the source of a rich mode are at most 4096 characters. For `html` and `markdown` the limit applies to the text left after parsing, and a text read from stdin is at most 64 KiB. The limit of a rich message has not been measured, so 4096 characters of its source is a guard of this tool, not a known limit.
+- **Errors.** Bad flags and input, HTML, Markdown and entity errors and an unknown mention id are exit code 2, raised before any Telegram write method is called (a mention lookup may read from Telegram, see above). A refusal of a rich message by Telegram is exit code 5 `Telegram rejected rich message`. `FLOOD_WAIT` is exit code 6 and the write is not repeated.
+- **Dry run.** `--dry-run` parses the text without writing and adds the mode, the length of the text without markup, the number of entities and whether the message is rich:
+
+  ```sh
+  tg message send --dry-run --parse markdown --text '**Deploy** green' -- -1001234567890
+  ```
+
+  ```json
+  {"ok":true,"data":{"chat_id":-1001234567890,"dry_run":true,"action":"send","count":1,"text_length":16,"mode":"markdown","plain_length":12,"entities":1,"rich":false}}
+  ```
+
+  `mode` is `html`, `markdown`, `rich-html`, `rich-markdown` or `entities`. A rich mode reports `plain_length` and `entities` as 0, because Telegram parses the text.
+- **What is saved locally.** The database gets the final plain text without markup: after `--parse markdown` of `**hi**` it holds `hi`. For a rich message it is the text of the blocks in Telegram's answer; if the answer does not carry it, nothing is saved at send time (an edit leaves the saved row unchanged), and the next read of the message saves it.
+- **Reading a rich message.** A message sent as a rich message comes back through `message get`, history, pinned messages, context, search and the live stream with its `text` built from the blocks: headings, paragraphs, list items, quotes, code blocks, formulas and captions on separate lines, table cells separated by a tab. The markup and the entities are not returned, media blocks give only their captions, and the text stays marked `untrusted` like any other text of other people. Only `message get` was read back on a live account; the other paths share the same conversion code and are covered by tests.
+- **Editing.** `message edit` can change the kind of a message: plain to rich, rich to plain, and between the formatting modes.
+
+Checked by tests on a fake Telegram, a daemon without sockets and the CLI: the request of every mode (also as a reply and inside a forum topic), emoji and characters outside the Basic Multilingual Plane, nested styles, a quote and a code block with a language, links, a mention by id, all entity types, the errors above without any Telegram write call (the mention lookup may read from Telegram), the length limits, `--dry-run`, the unchanged plain requests, the refusal of a rich message and the reading of rich blocks as text. Checked on a live account (one test chat, 2026-11-14): Telegram accepted a rich message from a user account in both rich modes, every mode was accepted, `message get` returned the expected text of each, edits worked between the modes in every direction, `--dry-run` returned the fields above, and the refusals before Telegram were exit code 2. The mention of a known user and of the own id was accepted, and an unknown id was exit code 2.
+
+Not checked on a live account: the length limit of a rich message, the `date_time` and `custom_emoji` entities, `--reply-to` and `--topic` together with formatting, old Telegram clients, and `FLOOD_WAIT` on a formatted write. Appearance in clients is not yet confirmed by the owner. Not done: formatting of media captions, entities on read, `message forward` with formatting, link previews, a rich message with attached files and the MarkdownV2 dialect of the Bot API.
 
 ### Untrusted text
 
@@ -391,9 +478,9 @@ Known limits: the event sink does not return an error to the updates manager, so
 
 ## Status
 
-Implemented and checked by tests: the daemon, JSON-RPC layer, profiles, login flows, chat and message reading, message send, edit, delete and forward with the `write` list, `--dry-run`, `--yes` and the deletion journal, the local database, notes and search, `schema`, the output formats and `--fields`, the live event stream (`message watch`, the `subscribe` method and the event journal; fake updates, an in-memory connection and a temporary database), and `message search`, `message context`, `message comments`, `message link` and `chat mark-read`, and the deep history load (`chat sync start|status|cancel`; fake Telegram, a fake clock and a fake invoker), and the export of saved messages (`message export --local`; a temporary database and a fake Telegram that counts its calls). Reading and the local database, the live event stream (main events, a resumed cursor, the chat filter), message send, edit, delete and forward in one test chat, Telegram-side search, message context, message links, `chat mark-read` (exit codes only) and the main path of the deep history load and of the export of saved messages were also checked on a live account (plan checks of 2026-11-13 and 2026-11-14), and so was the background daemon (start in 0.75 s, stop in 0.15 s, idle stop of a 6 s timeout after about 7 s, no secrets in `ps`, socket and journal at `0600`). The request journal was checked by tests only. `daemon logs` was also run as a built binary on a temporary profile; neither was run against a live account. Telegram is never contacted by the test suite.
+Implemented and checked by tests: the daemon, JSON-RPC layer, profiles, login flows, chat and message reading, message send, edit, delete and forward with the `write` list, `--dry-run`, `--yes` and the deletion journal, text formatting (`--parse`, `--entities`, rich messages and their reading as text), the local database, notes and search, `schema`, the output formats and `--fields`, the live event stream (`message watch`, the `subscribe` method and the event journal; fake updates, an in-memory connection and a temporary database), and `message search`, `message context`, `message comments`, `message link` and `chat mark-read`, and the deep history load (`chat sync start|status|cancel`; fake Telegram, a fake clock and a fake invoker), and the export of saved messages (`message export --local`; a temporary database and a fake Telegram that counts its calls). Reading and the local database, the live event stream (main events, a resumed cursor, the chat filter), message send, edit, delete and forward in one test chat, text formatting in the same chat (the server accepted every mode; appearance in clients is not yet confirmed), Telegram-side search, message context, message links, `chat mark-read` (exit codes only) and the main path of the deep history load and of the export of saved messages were also checked on a live account (plan checks of 2026-11-13 and 2026-11-14), and so was the background daemon (start in 0.75 s, stop in 0.15 s, idle stop of a 6 s timeout after about 7 s, no secrets in `ps`, socket and journal at `0600`). The request journal was checked by tests only. `daemon logs` was also run as a built binary on a temporary profile; neither was run against a live account. Telegram is never contacted by the test suite.
 
-Not confirmed on a live account yet: `message export --local` beyond its main path (a chat of tens of thousands of messages, a message larger than a page, closing a chat between pages, the `human` format, a stop of the daemon during an export, a stream writing into the same chat; see [Exporting saved messages](#exporting-saved-messages)), the deep history load beyond its main path (`chat sync`: `FLOOD_WAIT` during a load and the exit code 6 of other commands in that pause, a closed chat or a daemon stop during a load, a channel or a forum, a chat of tens of thousands of messages, a load while the live event stream writes the same chat), `FLOOD_WAIT` on a write, a reply inside a forum topic, deletion in a channel and editing someone else's message, what the other side sees after `chat mark-read`, post comments on a post with a discussion, the contents of global search and closed chats in it, a context window with deleted messages, continuing a search by cursor, the live event stream beyond its main path (reactions, reads and typing events, recovery after a real connection break, `cursor_expired`, `lagged`), phone login end to end (the code did not arrive during the check), QR login, `auth resend`, `auth cancel`, `--device`, `chat invite-info` on a real group, and resolving a contact by phone number. The chat access lists and the `human` frame were also checked on a live account (read-only, one chat for message reads); `note add|list|delete` and `message pinned` under the filter and `@username`, phone and `t.me` references under it were not. The `people` search scope is covered by tests only. The background start was not run on Linux. The exact status of every requirement is in [`FEATURES.md`](FEATURES.md).
+Not confirmed on a live account yet: `message export --local` beyond its main path (a chat of tens of thousands of messages, a message larger than a page, closing a chat between pages, the `human` format, a stop of the daemon during an export, a stream writing into the same chat; see [Exporting saved messages](#exporting-saved-messages)), the deep history load beyond its main path (`chat sync`: `FLOOD_WAIT` during a load and the exit code 6 of other commands in that pause, a closed chat or a daemon stop during a load, a channel or a forum, a chat of tens of thousands of messages, a load while the live event stream writes the same chat), `FLOOD_WAIT` on a write, a reply inside a forum topic, deletion in a channel and editing someone else's message, text formatting beyond its main path (the length limit of a rich message, `date_time` and `custom_emoji` entities, `--reply-to` and `--topic` with formatting, old clients, `FLOOD_WAIT`; see [Formatting text](#formatting-text)), what the other side sees after `chat mark-read`, post comments on a post with a discussion, the contents of global search and closed chats in it, a context window with deleted messages, continuing a search by cursor, the live event stream beyond its main path (reactions, reads and typing events, recovery after a real connection break, `cursor_expired`, `lagged`), phone login end to end (the code did not arrive during the check), QR login, `auth resend`, `auth cancel`, `--device`, `chat invite-info` on a real group, and resolving a contact by phone number. The chat access lists and the `human` frame were also checked on a live account (read-only, one chat for message reads); `note add|list|delete` and `message pinned` under the filter and `@username`, phone and `t.me` references under it were not. The `people` search scope is covered by tests only. The background start was not run on Linux. The exact status of every requirement is in [`FEATURES.md`](FEATURES.md).
 
 **Account risk, plainly.** `tg` is an unofficial client for your personal account. With `--client` it presents itself with the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited this way are an open question in [`INTENT.md`](INTENT.md). This project has not assessed it. Do not point this at an account you cannot afford to lose.
 
@@ -401,7 +488,7 @@ Not confirmed on a live account yet: `message export --local` beyond its main pa
 
 Planned, not implemented. [`FEATURES.md`](FEATURES.md) is the source of truth.
 
-- **Writing, the rest.** Formatting (Markdown and HTML), media, reactions, pinning, polls, scheduled messages and drafts. Plain text send, edit, delete and forward already exist, see [Writing messages](#writing-messages).
+- **Writing, the rest.** Media, reactions, pinning, polls, scheduled messages and drafts. Text send, edit (plain and formatted), delete and forward already exist, see [Writing messages](#writing-messages) and [Formatting text](#formatting-text).
 - **Media, reactions, polls, forum topic management**, members and contacts. Reading a topic already works (`message history --topic`).
 - **Sessions and access.** Export and import of a session string, login without a terminal, an expected-account check, SOCKS and MTProxy, WSS transport.
 - **Local history.** Loading many chats with one command or on a schedule, deletion tracking, folders. Today the database holds what you read and what `chat sync` loaded on request, one chat at a time.
