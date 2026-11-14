@@ -87,7 +87,7 @@ func (db *DB) Search(ctx context.Context, options SearchOptions) ([]SearchHit, e
 		case "chats":
 			found, err = db.searchChats(ctx, match, limit, terms, options.Prefix, options.ChatFilter)
 		case "people":
-			found, err = db.searchPeople(ctx, match, limit, terms, options.Prefix)
+			found, err = db.searchPeople(ctx, match, limit, terms, options.Prefix, options.ChatFilter)
 		case "messages":
 			found, err = db.searchMessages(ctx, match, limit, terms, options)
 		case "notes":
@@ -124,8 +124,11 @@ func (db *DB) searchChats(ctx context.Context, match string, limit int, terms []
 	return hits, rows.Err()
 }
 
-func (db *DB) searchPeople(ctx context.Context, match string, limit int, terms []string, prefix bool) ([]SearchHit, error) {
-	rows, err := db.read.QueryContext(ctx, `SELECT p.id,p.first_name,p.last_name,p.username,p.bio,bm25(people_fts) FROM people_fts JOIN people p ON p.rowid=people_fts.rowid WHERE people_fts MATCH ? ORDER BY bm25(people_fts),p.id LIMIT ?`, match, limit)
+func (db *DB) searchPeople(ctx context.Context, match string, limit int, terms []string, prefix bool, filter ChatFilter) ([]SearchHit, error) {
+	condition, filterArgs := filter.condition("p.id", false)
+	args := append([]any{match}, filterArgs...)
+	args = append(args, limit)
+	rows, err := db.read.QueryContext(ctx, `SELECT p.id,p.first_name,p.last_name,p.username,p.bio,bm25(people_fts) FROM people_fts JOIN people p ON p.rowid=people_fts.rowid WHERE people_fts MATCH ?`+condition+` ORDER BY bm25(people_fts),p.id LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}

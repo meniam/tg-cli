@@ -1,0 +1,12 @@
+ALTER TABLE folders ADD COLUMN kind TEXT NOT NULL DEFAULT 'filter' CHECK (kind IN ('filter','chatlist','all'));
+ALTER TABLE folders ADD COLUMN position INTEGER;
+ALTER TABLE folders ADD COLUMN emoticon TEXT;
+ALTER TABLE folders ADD COLUMN color INTEGER;
+ALTER TABLE folders ADD COLUMN rules TEXT CHECK (rules IS NULL OR json_valid(rules));
+ALTER TABLE folders ADD COLUMN synced_at INTEGER;
+ALTER TABLE folder_chats ADD COLUMN kind TEXT NOT NULL DEFAULT 'include' CHECK (kind IN ('pinned','include','exclude'));
+CREATE TABLE dialog_state (chat_id INTEGER PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data)), synced_at INTEGER NOT NULL) STRICT;
+CREATE TABLE account_sessions (hash INTEGER PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data)), authorization_ttl_days INTEGER NOT NULL, synced_at INTEGER NOT NULL) STRICT;
+CREATE TABLE blocked_peers (peer_id INTEGER PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data)), synced_at INTEGER NOT NULL) STRICT;
+CREATE TABLE notify_defaults (scope TEXT PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data)), synced_at INTEGER NOT NULL) STRICT;
+CREATE TABLE owner_snapshots (kind TEXT PRIMARY KEY, synced_at INTEGER NOT NULL, authorization_ttl_days INTEGER) STRICT;
