@@ -64,6 +64,35 @@ func (d *daemon) saveChats(ctx context.Context, op string, chats []rpc.Chat, inc
 	})
 }
 
+func (d *daemon) savePerson(ctx context.Context, op string, person store.Person) {
+	d.save(ctx, op, func(ctx context.Context) error {
+		return d.store.UpsertPeople(ctx, []store.Person{person})
+	})
+}
+
+func (d *daemon) saveMembers(ctx context.Context, members []rpc.Member) {
+	if len(members) == 0 {
+		return
+	}
+	people := make([]store.Person, 0, len(members))
+	for _, member := range members {
+		if member.ID <= 0 {
+			continue
+		}
+		isBot := member.IsBot
+		people = append(people, store.Person{
+			ID: member.ID, Username: optionalText(member.Username),
+			FirstName: optionalText(member.Name), IsBot: &isBot,
+		})
+	}
+	if len(people) == 0 {
+		return
+	}
+	d.save(ctx, rpc.MethodChatMembers, func(ctx context.Context) error {
+		return d.store.UpsertPeople(ctx, people)
+	})
+}
+
 func (d *daemon) saveChatInfo(ctx context.Context, info rpc.ChatInfo) {
 	item := store.Chat{
 		ID: info.ID, Type: info.Type, Title: info.Title, Username: optionalText(info.Username),

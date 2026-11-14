@@ -68,6 +68,7 @@ func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 		rpc.MethodPing: "none", rpc.MethodStatus: "none", rpc.MethodShutdown: "none",
 		rpc.MethodAuthStart: "none", rpc.MethodAuthCode: "none", rpc.MethodAuthPassword: "none", rpc.MethodAuthResend: "none", rpc.MethodAuthStartQR: "none", rpc.MethodAuthWait: "none", rpc.MethodAuthCancel: "none",
 		rpc.MethodChatList: "chat-list", rpc.MethodChatResolve: "chat-ref", rpc.MethodChatInfo: "chat-ref", rpc.MethodChatInviteInfo: "chat-ref",
+		rpc.MethodChatMembers: "chat-ref", rpc.MethodChatTopics: "chat-ref", rpc.MethodChatCommon: "chat-search",
 		rpc.MethodMessageHistory: "chat-ref", rpc.MethodMessageGet: "chat-ref", rpc.MethodMessagePinned: "chat-ref",
 		rpc.MethodMessageSend: "chat-write", rpc.MethodMessageEdit: "chat-write", rpc.MethodMessageDelete: "chat-write", rpc.MethodMessageForward: "chat-write",
 		rpc.MethodMessageSearch: "chat-ref", rpc.MethodMessageContext: "chat-ref", rpc.MethodMessageExportLocal: "chat-ref", rpc.MethodMessageComments: "chat-ref", rpc.MethodMessageLink: "chat-ref", rpc.MethodMessageSearchPublic: "chat-search", rpc.MethodChatMarkRead: "chat-write",
