@@ -55,7 +55,7 @@ func (a *app) outputSettingsFor(cmd *cobra.Command) (outputSettings, error) {
 		return settings, err
 	}
 	settings.format = format
-	if a.specs[cmd].SubscriptionMethod != "" {
+	if a.specs[cmd].SubscriptionMethod != "" || a.specs[cmd].DefaultJSONL {
 		if !root.PersistentFlags().Changed("format") && format != output.FormatHuman {
 			settings.format = output.FormatJSONL
 		}

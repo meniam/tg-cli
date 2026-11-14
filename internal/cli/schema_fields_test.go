@@ -153,6 +153,7 @@ var uncoveredCommands = map[string]string{
 	"auth resend":      "needs a login that waits for the code, started by another command",
 	"daemon start":     "runs until the daemon stops, the other cases need the daemon it starts",
 	"message watch":    "requires a live event stream; its net.Pipe contract is checked separately",
+	"message export":   "local export is a JSONL stream covered by net.Pipe CLI tests",
 	"message send":     "account write is covered through net.Pipe tests without a real account",
 	"message edit":     "account write is covered through net.Pipe tests without a real account",
 	"message delete":   "account write is covered through net.Pipe tests without a real account",

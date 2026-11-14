@@ -108,6 +108,8 @@ type commandSpec struct {
 	PublicItemPath string
 	// Formats overrides the ordinary command formats for a streaming command.
 	Formats []output.Format
+	// DefaultJSONL makes a finite stream use JSONL unless a format was selected.
+	DefaultJSONL bool
 	// SubscriptionMethod links a stream command to the raw RPC contract.
 	SubscriptionMethod string
 }

@@ -101,7 +101,7 @@ func (a *app) messageWatch(cmd *cobra.Command, _ []string) error {
 				return err
 			}
 		case output.FormatHuman:
-			if err := writeWatchHuman(a.deps.Stdout, selected, watchUntrustedPaths(event.Type), &frameWarned); err != nil {
+			if err := writeStreamHuman(a.deps.Stdout, selected, watchUntrustedPaths(event.Type), &frameWarned); err != nil {
 				return err
 			}
 		case output.FormatJSON:
@@ -142,9 +142,9 @@ func (a *app) messageWatch(cmd *cobra.Command, _ []string) error {
 	return translate(err)
 }
 
-// writeWatchHuman keeps one trusted summary line per event and lets the
+// writeStreamHuman keeps one trusted summary line per item and lets the
 // existing human formatter frame every schema-marked text field.
-func writeWatchHuman(w io.Writer, selected any, untrusted []string, warned *bool) error {
+func writeStreamHuman(w io.Writer, selected any, untrusted []string, warned *bool) error {
 	var rendered bytes.Buffer
 	if err := output.SelectWithUntrusted(&rendered, output.FormatHuman, output.SuccessData(selected), nil, untrusted); err != nil {
 		return err
