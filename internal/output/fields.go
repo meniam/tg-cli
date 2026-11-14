@@ -21,9 +21,18 @@ import (
 // Nothing new appears in the answer: a path that the data does not have adds
 // nothing, and a value is copied as it is.
 func Select(w io.Writer, f Format, envelope any, paths []string) error {
+	return SelectWithUntrusted(w, f, envelope, paths, nil)
+}
+
+// SelectWithUntrusted gives the human renderer the marked paths after field
+// selection. Machine formats ignore these paths and keep their wire output.
+func SelectWithUntrusted(w io.Writer, f Format, envelope any, paths, untrusted []string) error {
 	filtered, err := Filter(envelope, paths)
 	if err != nil {
 		return err
+	}
+	if f == FormatHuman {
+		return HumanWithUntrusted(w, filtered, untrusted)
 	}
 	return Write(w, f, filtered)
 }

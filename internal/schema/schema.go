@@ -50,6 +50,8 @@ type Field struct {
 	// field is a pointer or its tag carries omitempty, or one of its parents
 	// can be absent.
 	Optional bool `json:"optional,omitempty"`
+	// Untrusted marks text supplied by Telegram or search results from it.
+	Untrusted bool `json:"untrusted,omitempty"`
 }
 
 var (
@@ -199,13 +201,13 @@ func (w *walker) structFields(t reflect.Type, prefix string, optional bool, dept
 		if name == "" {
 			name = f.Name // an untagged field keeps its Go name in the JSON
 		}
-		w.value(f.Type, join(prefix, name), optional || omit, decl, depth)
+		w.value(f.Type, join(prefix, name), optional || omit, decl, depth, f.Tag.Get("untrusted") == "true")
 	}
 }
 
 // value appends the field at path for a value of type t. depth is the depth of
 // the struct that declares it, which decides a duplicate path.
-func (w *walker) value(t reflect.Type, path string, optional bool, decl declaration, depth int) {
+func (w *walker) value(t reflect.Type, path string, optional bool, decl declaration, depth int, untrusted bool) {
 	for t.Kind() == reflect.Pointer {
 		optional = true
 		t = t.Elem()
@@ -215,7 +217,7 @@ func (w *walker) value(t reflect.Type, path string, optional bool, decl declarat
 		return
 	}
 	if name := kindName(t.Kind()); name != "" {
-		w.add(Field{Path: path, Type: name, Optional: optional}, decl, depth)
+		w.add(Field{Path: path, Type: name, Optional: optional, Untrusted: untrusted && name == TypeString}, decl, depth)
 		return
 	}
 	switch t.Kind() {

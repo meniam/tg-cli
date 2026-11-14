@@ -253,6 +253,9 @@ func (d *daemon) status(ctx context.Context, _ json.RawMessage) (any, error) {
 		// The status request itself is active while it runs, do not count it.
 		ActiveRequests: max(d.srv.Active()-1, 0),
 	}
+	if policy := d.policy(); policy.Enabled() {
+		st.Access = &rpc.AccessStatus{Enabled: true, Allow: policy.AllowCount(), Block: policy.BlockCount(), Closed: policy.Closed()}
+	}
 	select {
 	case <-d.opts.Telegram.Ready():
 		st.Connected = true

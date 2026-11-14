@@ -40,6 +40,9 @@ func (p Policy) InviteAllowed() bool { return !p.denied && len(p.allow) == 0 }
 // Enabled reports whether either list restricts chats or loading failed.
 func (p Policy) Enabled() bool { return p.denied || len(p.allow) > 0 || len(p.block) > 0 }
 
+// Closed reports that a policy error denied access to every chat.
+func (p Policy) Closed() bool { return p.denied }
+
 // AllowCount and BlockCount expose list sizes without exposing identifiers.
 func (p Policy) AllowCount() int { return len(p.allow) }
 func (p Policy) BlockCount() int { return len(p.block) }

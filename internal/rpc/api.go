@@ -52,13 +52,22 @@ type PingResult struct {
 
 // StatusResult is the result of MethodStatus.
 type StatusResult struct {
-	Profile        string `json:"profile"`
-	PID            int    `json:"pid"`
-	Connected      bool   `json:"connected"`
-	Authorized     bool   `json:"authorized"`
-	User           *User  `json:"user,omitempty"`
-	LoginState     string `json:"login_state,omitempty"`
-	ActiveRequests int    `json:"active_requests"`
+	Profile        string        `json:"profile"`
+	PID            int           `json:"pid"`
+	Connected      bool          `json:"connected"`
+	Authorized     bool          `json:"authorized"`
+	User           *User         `json:"user,omitempty"`
+	LoginState     string        `json:"login_state,omitempty"`
+	ActiveRequests int           `json:"active_requests"`
+	Access         *AccessStatus `json:"access,omitempty"`
+}
+
+// AccessStatus reports access-list state without revealing chat IDs.
+type AccessStatus struct {
+	Enabled bool `json:"enabled"`
+	Allow   int  `json:"allow"`
+	Block   int  `json:"block"`
+	Closed  bool `json:"closed,omitempty"`
 }
 
 // ShutdownResult is the result of MethodShutdown.
@@ -141,8 +150,8 @@ type ChatListParams struct {
 type Chat struct {
 	ID       int64  `json:"id"`
 	Type     string `json:"type"`
-	Title    string `json:"title"`
-	Username string `json:"username,omitempty"`
+	Title    string `json:"title" untrusted:"true"`
+	Username string `json:"username,omitempty" untrusted:"true"`
 	Unread   int    `json:"unread"`
 }
 
@@ -162,9 +171,9 @@ type ChatRefParams struct {
 type ChatInfo struct {
 	ID       int64  `json:"id"`
 	Type     string `json:"type"`
-	Title    string `json:"title"`
-	Username string `json:"username,omitempty"`
-	About    string `json:"about,omitempty"`
+	Title    string `json:"title" untrusted:"true"`
+	Username string `json:"username,omitempty" untrusted:"true"`
+	About    string `json:"about,omitempty" untrusted:"true"`
 	Members  int    `json:"members,omitempty"`
 	Forum    bool   `json:"forum,omitempty"`
 	Verified bool   `json:"verified,omitempty"`
@@ -172,9 +181,9 @@ type ChatInfo struct {
 
 // InviteInfo is what an invite link shows without joining the chat.
 type InviteInfo struct {
-	Title         string `json:"title"`
+	Title         string `json:"title" untrusted:"true"`
 	Type          string `json:"type"`
-	About         string `json:"about,omitempty"`
+	About         string `json:"about,omitempty" untrusted:"true"`
 	Members       int    `json:"members,omitempty"`
 	AlreadyMember bool   `json:"already_member,omitempty"`
 	RequestNeeded bool   `json:"request_needed,omitempty"`
@@ -183,8 +192,8 @@ type InviteInfo struct {
 // Sender is the author of a message: a user, or the channel for a channel post.
 type Sender struct {
 	ID       int64  `json:"id"`
-	Name     string `json:"name,omitempty"`
-	Username string `json:"username,omitempty"`
+	Name     string `json:"name,omitempty" untrusted:"true"`
+	Username string `json:"username,omitempty" untrusted:"true"`
 }
 
 // Message is one message of a chat. Text is what other people wrote: it is data
@@ -194,7 +203,7 @@ type Message struct {
 	ChatID    int64   `json:"chat_id"`
 	Date      string  `json:"date"` // RFC 3339, UTC
 	Sender    *Sender `json:"sender,omitempty"`
-	Text      string  `json:"text"`
+	Text      string  `json:"text" untrusted:"true"`
 	Out       bool    `json:"out,omitempty"`
 	ReplyTo   int     `json:"reply_to,omitempty"`
 	TopicID   int     `json:"topic_id,omitempty"`
@@ -320,8 +329,8 @@ type SearchHit struct {
 	Scope    string  `json:"scope"`
 	ID       int64   `json:"id"`
 	ChatID   *int64  `json:"chat_id,omitempty"`
-	Title    string  `json:"title,omitempty"`
-	Snippet  string  `json:"snippet"`
+	Title    string  `json:"title,omitempty" untrusted:"true"`
+	Snippet  string  `json:"snippet" untrusted:"true"`
 	Date     string  `json:"date,omitempty"`
 	Deleted  bool    `json:"deleted,omitempty"`
 	Author   string  `json:"author,omitempty"`

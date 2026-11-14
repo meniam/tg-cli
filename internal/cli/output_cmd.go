@@ -8,6 +8,7 @@ import (
 
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/output"
+	"tg-cli/internal/schema"
 )
 
 // The output pipeline lives here: the global flags that choose a format and a
@@ -17,7 +18,8 @@ import (
 // outputSettings are the choices of one run: the format, and how much the
 // commands say on stderr.
 type outputSettings struct {
-	format output.Format
+	format    output.Format
+	untrusted []string
 	// fields are the paths --fields asked for, empty when it was not given.
 	fields []string
 	// quiet removes hints and progress lines; errors are never removed.
@@ -53,6 +55,13 @@ func (a *app) outputSettingsFor(cmd *cobra.Command) (outputSettings, error) {
 		return settings, err
 	}
 	settings.format = format
+	if format == output.FormatHuman {
+		for _, field := range schema.Fields(a.specs[cmd].Result) {
+			if field.Untrusted {
+				settings.untrusted = append(settings.untrusted, field.Path)
+			}
+		}
+	}
 	fields, _ := root.PersistentFlags().GetString("fields")
 	if settings.fields, err = output.ParseFields(fields); err != nil {
 		return settings, fail(exitcode.Usage, "%v", err)
@@ -90,7 +99,7 @@ func (a *app) emit(settings outputSettings, data any, lines func(io.Writer) erro
 	if settings.format == output.FormatJSONL {
 		return lines(a.deps.Stdout)
 	}
-	return output.Select(a.deps.Stdout, settings.format, output.SuccessDataWithThrottle(data, a.throttledMS), settings.fields)
+	return output.SelectWithUntrusted(a.deps.Stdout, settings.format, output.SuccessDataWithThrottle(data, a.throttledMS), settings.fields, settings.untrusted)
 }
 
 // success prints a result that has no items, so it can never be JSONL.
