@@ -338,6 +338,123 @@ With `--dry-run` the answer adds `"dry_run":true`.
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 4.7.
 
+## Managing drafts
+
+### tg chat draft get
+
+Reads the current draft of one visible chat.
+
+```text
+tg chat draft get <chat> [flags]
+```
+
+<!-- schema:flags tg chat draft get -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. **Output formats:** `json`, `toon`, `human`.
+
+The answer has `chat_id`, `text`, `date`, `reply_to`, and `empty`. With no draft, `empty` is true. Draft text is untrusted data. A closed chat is reported as unknown.
+
+```sh
+tg chat draft get @release_team
+```
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"text":"Reply after deploy","date":"2026-11-15T06:00:00Z","reply_to":41,"empty":false}}
+```
+
+**Exit codes.** 0; 3 no Daemon; 4 no login; 5 Telegram rejected the read; 6 `FLOOD_WAIT`; 7 unknown or closed chat.
+
+### tg chat draft list
+
+Lists drafts of chats visible under the access policy.
+
+```text
+tg chat draft list [flags]
+```
+
+<!-- schema:flags tg chat draft list -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. **Output formats:** `json`, `jsonl`, `toon`, `human`.
+
+The command asks Telegram for account drafts and drops drafts in closed chats before it responds. It lists ordinary chat drafts; drafts for forum and saved-message topics are not included. Text is untrusted data.
+
+```sh
+tg chat draft list
+```
+
+```json
+{"ok":true,"data":{"drafts":[{"chat_id":-1001234567890,"text":"Reply after deploy","date":"2026-11-15T06:00:00Z","reply_to":41,"empty":false}]}}
+```
+
+**Exit codes.** 0; 3 no Daemon; 4 no login; 5 Telegram rejected the read; 6 `FLOOD_WAIT`.
+
+### tg chat draft set
+
+Replaces the text draft of one chat.
+
+```text
+tg chat draft set <chat> [flags]
+```
+
+<!-- schema:flags tg chat draft set -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--reply-to` | int | `0` | reply to this message id |
+| `--text` | string | `none` | draft text; reads stdin when absent |
+<!-- /schema:flags -->
+
+**Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+Text comes from `--text` or stdin as for `message send`. It is plain text: formatting flags are unavailable. Text must be non-empty and no more than 4096 characters; `--reply-to` selects a positive message id when present. The chat must be visible and in `write`.
+
+`--dry-run` performs the write checks without saving a draft. Its answer includes `replaces: true` when Telegram reports a non-empty current draft; resolving a non-numeric chat reference or reading that current draft may read Telegram.
+
+```sh
+tg chat draft set @release_team --text 'Reply after deploy' --reply-to 41
+tg chat draft set @release_team --dry-run --text 'Reply after deploy'
+```
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"text_length":18}}
+```
+
+**Exit codes.** 0; 2 invalid text or reply id; 3 no Daemon; 4 no login; 5 Telegram rejected the write; 6 `FLOOD_WAIT` (not repeated); 7 unknown or closed chat; 9 chat is not in `write`.
+
+### tg chat draft clear
+
+Clears the current draft of one chat.
+
+```text
+tg chat draft clear <chat> [flags]
+```
+
+<!-- schema:flags tg chat draft clear -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+**Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+The chat must be visible and in `write`. `--dry-run` performs checks but leaves the draft unchanged. A real call saves an empty draft in Telegram.
+
+```sh
+tg chat draft clear @release_team
+```
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"cleared":true}}
+```
+
+**Exit codes.** 0; 3 no Daemon; 4 no login; 5 Telegram rejected the write; 6 `FLOOD_WAIT` (not repeated); 7 unknown or closed chat; 9 chat is not in `write`.
+
+Live-account verification is tracked only in [FEATURES.md](../../FEATURES.md), item 5.7.
+
 ## Showing a typing indicator
 
 ### tg chat typing
