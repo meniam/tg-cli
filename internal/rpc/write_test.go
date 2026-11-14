@@ -33,9 +33,9 @@ func TestWriteContractsAndDisabledError(t *testing.T) {
 	if marshalErr != nil || string(editRaw) != `{"chat":"42","id":7,"text":"edited","dry_run":true}` {
 		t.Fatalf("old edit JSON changed: %s %v", editRaw, marshalErr)
 	}
-	resultRaw, marshalErr := json.Marshal(SendResult{ChatID: 42, ID: 7, PlainText: "secret", Rich: true})
+	resultRaw, marshalErr := json.Marshal(SendResult{ChatID: 42, ID: 7})
 	if marshalErr != nil || string(resultRaw) != `{"chat_id":42,"id":7}` {
-		t.Fatalf("internal fields leaked: %s %v", resultRaw, marshalErr)
+		t.Fatalf("send result JSON changed: %s %v", resultRaw, marshalErr)
 	}
 }
 
