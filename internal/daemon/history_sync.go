@@ -421,7 +421,10 @@ func (d *daemon) historySyncStatus(ctx context.Context, params json.RawMessage) 
 	if err != nil {
 		return nil, err
 	}
-	return d.sync.snapshot(chatID), nil
+	if job := d.sync.snapshot(chatID); job != nil {
+		return job, nil
+	}
+	return d.idleHistorySyncJob(ctx, p.Chat)
 }
 
 func (d *daemon) historySyncCancel(ctx context.Context, params json.RawMessage) (any, error) {
@@ -433,5 +436,23 @@ func (d *daemon) historySyncCancel(ctx context.Context, params json.RawMessage) 
 	if err != nil {
 		return nil, err
 	}
-	return d.sync.cancelJob(chatID), nil
+	if job := d.sync.cancelJob(chatID); job != nil {
+		return job, nil
+	}
+	return d.idleHistorySyncJob(ctx, p.Chat)
+}
+
+func (d *daemon) idleHistorySyncJob(ctx context.Context, chat string) (rpc.HistorySyncJob, error) {
+	_, chatID, err := d.resolveHistorySyncChat(ctx, chat)
+	if err != nil {
+		return rpc.HistorySyncJob{}, err
+	}
+	progress, _, err := d.store.SyncState(ctx, chatID)
+	if err != nil {
+		return rpc.HistorySyncJob{}, err
+	}
+	return rpc.HistorySyncJob{
+		ChatID: chatID, State: rpc.HistorySyncIdle,
+		OldestID: progress.OldestID, NewestID: progress.NewestID, Complete: progress.Complete,
+	}, nil
 }

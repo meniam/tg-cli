@@ -86,9 +86,101 @@ type syncTelegram struct {
 
 func (s *syncTelegram) Resolve(ctx context.Context, ref chatref.Ref) (rpc.Chat, error) {
 	if ref.Kind == chatref.ID {
+		s.mu.Lock()
+		missing := s.missing
+		s.mu.Unlock()
+		if missing {
+			return rpc.Chat{}, rpc.ErrUnknownChatID()
+		}
 		return rpc.Chat{ID: ref.ID, Type: "user"}, nil
 	}
 	return s.fakeTelegram.Resolve(ctx, ref)
+}
+
+func TestHistorySyncIdleStatusAndCancel(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		stored   bool
+		complete bool
+	}{
+		{name: "no saved progress"},
+		{name: "saved progress", stored: true},
+		{name: "completed progress", stored: true, complete: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, _, db, _, _ := syncFixture(t)
+			if tc.stored {
+				message := store.Message{ChatID: 42, ID: 7, Date: 7, Raw: []byte(`{}`)}
+				if _, err := db.SaveHistoryPage(context.Background(), 42, []store.Message{message}, nil, tc.complete); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, handler := range []struct {
+				name string
+				call func() (any, error)
+			}{
+				{"status", func() (any, error) {
+					return d.historySyncStatus(context.Background(), params(t, rpc.HistorySyncStatusParams{Chat: "42"}))
+				}},
+				{"cancel", func() (any, error) {
+					return d.historySyncCancel(context.Background(), params(t, rpc.HistorySyncParams{Chat: "42"}))
+				}},
+			} {
+				t.Run(handler.name, func(t *testing.T) {
+					result, err := handler.call()
+					if err != nil {
+						t.Fatal(err)
+					}
+					job := result.(rpc.HistorySyncJob)
+					if job.ChatID != 42 || job.State != rpc.HistorySyncIdle || job.Pages != 0 || job.Loaded != 0 || job.Complete != tc.complete || job.StartedAt != "" || job.UpdatedAt != "" || job.Error != "" || job.ErrorCode != 0 {
+						t.Fatalf("idle job: %+v", job)
+					}
+					if tc.stored {
+						if job.OldestID == nil || *job.OldestID != 7 || job.NewestID == nil || *job.NewestID != 7 {
+							t.Fatalf("saved IDs: %+v", job)
+						}
+					} else if job.OldestID != nil || job.NewestID != nil {
+						t.Fatalf("unsaved IDs: %+v", job)
+					}
+				})
+			}
+			result, err := d.historySyncStatus(context.Background(), nil)
+			if err != nil || len(result.(rpc.HistorySyncJobs).Jobs) != 0 {
+				t.Fatalf("idle job leaked into list: %+v err=%v", result, err)
+			}
+		})
+	}
+}
+
+func TestHistorySyncIdleRejectsUnknownAndClosedChat(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(*testing.T, *syncTelegram, string)
+	}{
+		{"unknown", func(_ *testing.T, tg *syncTelegram, _ string) {
+			tg.mu.Lock()
+			tg.missing = true
+			tg.mu.Unlock()
+		}},
+		{"closed", func(t *testing.T, _ *syncTelegram, path string) { writeAccess(t, path, `{"allow":[99]}`) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, tg, _, _, path := syncFixture(t)
+			tc.setup(t, tg, path)
+			for _, call := range []func() (any, error){
+				func() (any, error) {
+					return d.historySyncStatus(context.Background(), params(t, rpc.HistorySyncStatusParams{Chat: "42"}))
+				},
+				func() (any, error) {
+					return d.historySyncCancel(context.Background(), params(t, rpc.HistorySyncParams{Chat: "42"}))
+				},
+			} {
+				if _, err := call(); rpcCode(t, err) != rpc.CodeNotFound {
+					t.Fatalf("%s chat: %v", tc.name, err)
+				}
+			}
+		})
+	}
 }
 
 func (s *syncTelegram) HistoryPage(ctx context.Context, ref chatref.Ref, offset int) (rpc.HistoryPage, error) {
@@ -588,8 +680,12 @@ func TestHistorySyncStatusAndCancelUseKnownReferenceLocally(t *testing.T) {
 
 func TestHistorySyncCancelUnknownDoesNotCreateJob(t *testing.T) {
 	d, _, db, _, _ := syncFixture(t)
-	if job := cancelSync(t, d, 42); job != nil {
-		t.Fatalf("unknown cancel created job: %+v", job)
+	result, err := d.historySyncCancel(context.Background(), params(t, rpc.HistorySyncParams{Chat: "42"}))
+	if err != nil || result.(rpc.HistorySyncJob).State != rpc.HistorySyncIdle {
+		t.Fatalf("idle cancel: %+v err=%v", result, err)
+	}
+	if len(d.sync.snapshots()) != 0 {
+		t.Fatal("idle cancel created a job")
 	}
 	if _, found, err := db.SyncState(context.Background(), 42); err != nil || found {
 		t.Fatalf("unknown cancel changed progress: found=%v err=%v", found, err)

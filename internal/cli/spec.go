@@ -95,6 +95,8 @@ type commandSpec struct {
 	Risk risk
 	// Result is the Go type of data in the success envelope.
 	Result reflect.Type
+	// ChatResult describes the object returned when an optional chat selects one item.
+	ChatResult reflect.Type
 	// Args are the positional arguments, in the order they are given.
 	Args []argSpec
 	// Choices are the allowed values of the flags whose check is a list.

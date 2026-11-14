@@ -76,11 +76,14 @@ type commandDoc struct {
 	Dangerous bool `json:"dangerous"`
 	// Result is the Go type of data in the success envelope.
 	Result string `json:"result"`
+	// ChatResult and ChatFields describe the object returned with a chat argument.
+	ChatResult string `json:"chat_result,omitempty"`
 	// Formats are the --format values this command accepts: JSONL is left out
 	// for a command that returns no list.
 	Formats []string `json:"formats"`
 	// Fields are the paths of the result, for a command that returns an object.
-	Fields []schema.Field `json:"fields,omitempty"`
+	Fields     []schema.Field `json:"fields,omitempty"`
+	ChatFields []schema.Field `json:"chat_fields,omitempty"`
 	// Item is the list a JSONL line is taken from, for a command that prints
 	// JSONL; its Fields are the paths inside one line.
 	Item               *itemDoc  `json:"item,omitempty"`
@@ -156,8 +159,10 @@ func commandDocFor(cmd *cobra.Command, path string, spec commandSpec) commandDoc
 		Safety:             string(spec.Safety),
 		Dangerous:          spec.Risk == dangerous,
 		Result:             resultName(spec.Result),
+		ChatResult:         resultName(spec.ChatResult),
 		Formats:            commandFormats(spec),
 		Fields:             schema.Fields(spec.Result),
+		ChatFields:         schema.Fields(spec.ChatResult),
 		Item:               itemDocFor(spec),
 		PublicItem:         itemDocFor(commandSpec{Result: spec.Result, ItemPath: spec.PublicItemPath}),
 		Flags:              flagDocs(cmd.LocalFlags(), spec.Choices),

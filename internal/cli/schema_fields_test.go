@@ -162,6 +162,9 @@ var uncoveredCommands = map[string]string{
 	"message comments": "channel comments routing is covered by net.Pipe CLI tests",
 	"message link":     "message link routing is covered by net.Pipe CLI tests",
 	"chat mark-read":   "account read-state write is covered by net.Pipe CLI tests",
+	"chat sync start":  "background history command is covered by net.Pipe CLI tests",
+	"chat sync status": "job status is covered by net.Pipe CLI tests",
+	"chat sync cancel": "background cancellation is covered by net.Pipe CLI tests",
 }
 
 // TestEveryCommandResponseIsCompared makes sure the comparison covers the whole

@@ -280,6 +280,7 @@ type HistorySyncStatusParams struct {
 }
 
 const (
+	HistorySyncIdle         = "idle"
 	HistorySyncQueued       = "queued"
 	HistorySyncRunning      = "running"
 	HistorySyncWaitingFlood = "waiting_flood"

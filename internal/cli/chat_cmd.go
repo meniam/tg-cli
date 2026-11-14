@@ -7,7 +7,7 @@ import (
 )
 
 func (a *app) chatCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "chat", Short: "Read the chats of the account"}
+	cmd := &cobra.Command{Use: "chat", Short: "Read chats and load local history"}
 
 	list := a.annotate(&cobra.Command{
 		Use:   "list",
@@ -37,7 +37,7 @@ func (a *app) chatCommand() *cobra.Command {
 		RunE:  a.chatInviteInfo,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.InviteInfo](), Args: []argSpec{{Name: "link", Required: true}}})
 
-	cmd.AddCommand(list, resolve, info, invite, a.chatMarkReadCommand())
+	cmd.AddCommand(list, resolve, info, invite, a.chatMarkReadCommand(), a.chatSyncCommand())
 	return cmd
 }
 
