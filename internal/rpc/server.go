@@ -182,10 +182,14 @@ func (s *Server) readLoop(ctx context.Context, sc *serverConn, fr *frameReader, 
 }
 
 func (s *Server) call(ctx context.Context, req Request) Response {
+	started := time.Now()
+	method := req.Method
 	s.mu.Lock()
 	h := s.handlers[req.Method]
 	s.mu.Unlock()
 	if h == nil {
+		// An unknown method is untrusted input and may contain a secret.
+		s.log.Info("request", "method", "unknown", "duration_ms", time.Since(started).Milliseconds(), "code", CodeMethodNotFound)
 		return errorResponse(req.ID, CodeMethodNotFound, "method not found: "+req.Method)
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.RequestTimeout)
@@ -193,16 +197,23 @@ func (s *Server) call(ctx context.Context, req Request) Response {
 	waited := new(throttle.Wait)
 	ctx = throttle.WithWait(ctx, waited)
 	response := Response{JSONRPC: Version, ID: req.ID}
+	defer func() {
+		code := any("ok")
+		if response.Error != nil {
+			code = response.Error.Code
+		}
+		s.log.Info("request", "method", method, "duration_ms", time.Since(started).Milliseconds(), "code", code)
+	}()
 
 	result, err := s.safeCall(ctx, h, req)
 	if err != nil {
-		response.Error = s.toError(req.Method, err)
+		response.Error = s.toError(err)
 		response.ThrottledMS = waitedMilliseconds(waited)
 		return response
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		response.Error = s.toError(req.Method, err)
+		response.Error = s.toError(err)
 		response.ThrottledMS = waitedMilliseconds(waited)
 		return response
 	}
@@ -229,7 +240,7 @@ func (s *Server) safeCall(ctx context.Context, h Handler, req Request) (result a
 	return h(ctx, bytes.Clone(req.Params))
 }
 
-func (s *Server) toError(method string, err error) *Error {
+func (s *Server) toError(err error) *Error {
 	var rpcErr *Error
 	switch {
 	case errors.As(err, &rpcErr):
@@ -239,7 +250,6 @@ func (s *Server) toError(method string, err error) *Error {
 	case errors.Is(err, context.Canceled):
 		return NewError(CodeInternal, "request canceled")
 	}
-	s.log.Error("handler failed", "method", method, "err", err)
 	return NewError(CodeInternal, "internal error")
 }
 

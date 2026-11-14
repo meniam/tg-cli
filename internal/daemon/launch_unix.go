@@ -10,7 +10,7 @@ import (
 )
 
 // Launch starts the program as a detached process: in a session of its own with
-// no controlling terminal, its journal in logPath instead of the terminal, and
+// no controlling terminal, its startup output in logPath instead of the terminal, and
 // nothing the caller writes to stdout or stderr.
 //
 // It returns the process id and a function that reports how the process ended.
@@ -31,10 +31,16 @@ func Launch(args []string, logPath string) (int, func() error, error) {
 		return 0, nil, fmt.Errorf("open the journal: %w", err)
 	}
 	defer log.Close()
+	if err := log.Chmod(0o600); err != nil {
+		return 0, nil, fmt.Errorf("set journal permissions: %w", err)
+	}
 
 	cmd := exec.Command(exe, args...)
 	cmd.Stdout = log
 	cmd.Stderr = log
+	// After the child rotates the journal, this inherited descriptor still
+	// points to the renamed copy. It is only for startup output and panics;
+	// ordinary daemon logs use the child's rotating writer.
 	cmd.Stdin = nil
 	cmd.Env = os.Environ()
 	// Setsid puts the process in a new session: no controlling terminal, so a

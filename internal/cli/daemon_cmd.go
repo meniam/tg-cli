@@ -46,8 +46,17 @@ func (a *app) daemonCommand() *cobra.Command {
 	start.Flags().String("client", "", "official client preset to use instead of your own application, for example desktop")
 	start.Flags().String("device", "", "device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN)")
 	start.Flags().Bool("foreground", false, "run the daemon in this terminal instead of the background")
+	start.Flags().String("journal", "", "internal journal path for a detached daemon")
+	_ = start.Flags().MarkHidden("journal")
 	start.Flags().Duration("idle-timeout", 0, "stop the daemon after this long without a request, like 30m; 0 means never")
-	cmd.AddCommand(start, a.annotate(&cobra.Command{
+	logs := a.annotate(&cobra.Command{
+		Use: "logs", Short: "Read the profile journal without a running daemon",
+		Long: "Read up to 10000 lines of the current journal. --tail selects the last N lines; --follow prints new lines as they arrive, including after rotation. In follow mode each update is a separate result in the selected format.",
+		Args: cobra.NoArgs, RunE: a.daemonLogs,
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[daemonLogsResult](), ItemPath: "lines"})
+	logs.Flags().Int("tail", 0, "last N lines (1 to 10000); default: all lines, up to 10000")
+	logs.Flags().Bool("follow", false, "print new lines until interrupted, including after rotation")
+	cmd.AddCommand(start, logs, a.annotate(&cobra.Command{
 		Use:   "status",
 		Short: "Show the state of the daemon and of the account",
 		Args:  cobra.NoArgs,
@@ -174,6 +183,10 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	foreground, _ := cmd.Flags().GetBool("foreground")
+	journalPath, _ := cmd.Flags().GetString("journal")
+	if journalPath != "" && (!foreground || journalPath != paths.Log) {
+		return fail(exitcode.Usage, "--journal requires --foreground and the current profile journal")
+	}
 	idle, _ := cmd.Flags().GetDuration("idle-timeout")
 	if idle < 0 {
 		return fail(exitcode.Usage, "--idle-timeout must not be negative")
@@ -197,11 +210,24 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fail(exitcode.Failure, "create the Telegram client: %v", err)
 	}
+	logger := a.daemonLog(cmd)
+	if journalPath != "" {
+		journal, err := daemon.OpenJournal(journalPath)
+		if err != nil {
+			return fail(exitcode.Failure, "%v", err)
+		}
+		defer journal.Close()
+		level := slog.LevelInfo
+		if a.settings(cmd).quiet {
+			level = slog.LevelWarn
+		}
+		logger = slog.New(slog.NewTextHandler(journal, &slog.HandlerOptions{Level: level}))
+	}
 	err = daemon.Run(cmd.Context(), daemon.Options{
 		Profile:     profile,
 		Paths:       paths,
 		Telegram:    tg,
-		Log:         a.daemonLog(cmd),
+		Log:         logger,
 		IdleTimeout: idle,
 	})
 	if err != nil {
@@ -233,6 +259,7 @@ func (a *app) startBackground(cmd *cobra.Command, profile string, paths daemon.P
 		return err
 	}
 	args := []string{"daemon", "start", "--foreground", "--profile", profile}
+	args = append(args, "--journal", paths.Log)
 	if idle > 0 {
 		args = append(args, "--idle-timeout", idle.String())
 	}

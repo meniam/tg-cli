@@ -2,10 +2,12 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
 
+	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/schema"
@@ -44,6 +46,7 @@ var realResponseCases = map[string][]string{
 	"chat list":        {"chat", "list"},
 	"chat resolve":     {"chat", "resolve", "@teamchat"},
 	"daemon status":    {"daemon", "status"},
+	"daemon logs":      {"daemon", "logs"},
 	"message get":      {"message", "get", "@teamchat", "30"},
 	"message history":  {"message", "history", "@teamchat"},
 	"message pinned":   {"message", "pinned", "@teamchat"},
@@ -60,6 +63,13 @@ var realResponseCases = map[string][]string{
 func realResponses(t *testing.T) map[string][]byte {
 	t.Helper()
 	e := loggedInEnv(t)
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Log, []byte("test line\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if r := e.run("note", "add", "--chat", "77", "--author", "ai", "--model", "model-x", "--tag", "t", "A note"); r.code != exitcode.OK {
 		t.Fatalf("note add: %q", r.stdout)
 	}

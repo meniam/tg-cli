@@ -90,9 +90,6 @@ func Start(ctx context.Context, opts StartOptions) (Background, error) {
 		return bg, err
 	}
 
-	if err := trimLog(opts.Paths.Log, maxLogBytes); err != nil {
-		return bg, err
-	}
 	launch := opts.Launcher
 	if launch == nil {
 		launch = Launch
@@ -260,48 +257,6 @@ func logTail(path string, limit int64) string {
 		}
 	}
 	return text
-}
-
-// trimLog keeps the last limit bytes of the journal, so a background daemon
-// never starts with an unbounded file. A missing journal is created empty.
-func trimLog(path string, limit int64) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o600)
-	if err != nil {
-		return fmt.Errorf("open the daemon journal: %w", err)
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return fmt.Errorf("read the daemon journal: %w", err)
-	}
-	if info.Size() <= limit {
-		return nil
-	}
-	data, err := readLastBytes(f, info.Size()-limit)
-	if err != nil {
-		return fmt.Errorf("trim the daemon journal: %w", err)
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("write the trimmed journal: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("replace the daemon journal: %w", err)
-	}
-	return nil
-}
-
-// readLastBytes reads the last n bytes of an open file.
-func readLastBytes(f *os.File, n int64) ([]byte, error) {
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := f.Seek(info.Size()-n, io.SeekStart); err != nil {
-		return nil, err
-	}
-	return io.ReadAll(io.LimitReader(f, n))
 }
 
 // processAlive reports whether the process exists. On a Unix system signal 0

@@ -66,7 +66,7 @@ func TestDaemonStartInBackground(t *testing.T) {
 	if !res.Running || res.PID <= 0 || res.Socket != paths.Socket || res.Log != paths.Log {
 		t.Errorf("the answer must name the running daemon: %+v", res)
 	}
-	want := "daemon start --foreground --profile default"
+	want := "daemon start --foreground --profile default --journal " + paths.Log
 	if got := strings.Join(f.args, " "); got != want {
 		t.Errorf("child arguments = %q, want %q", got, want)
 	}

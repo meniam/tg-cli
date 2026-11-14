@@ -1,0 +1,46 @@
+package rpc
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"log/slog"
+	"strings"
+	"testing"
+)
+
+func TestRequestJournalRecordsOutcomeWithoutParameters(t *testing.T) {
+	var journal bytes.Buffer
+	s := NewServer(slog.New(slog.NewTextHandler(&journal, nil)))
+	s.Handle("ok", func(context.Context, json.RawMessage) (any, error) { return "message body", nil })
+	s.Handle("failed", func(context.Context, json.RawMessage) (any, error) {
+		return nil, NewError(CodeInvalidParams, "secret error text")
+	})
+	s.Handle("panic", func(context.Context, json.RawMessage) (any, error) { panic("secret panic text") })
+	for _, tc := range []struct {
+		method string
+		code   int
+	}{{"ok", 0}, {"failed", CodeInvalidParams}, {"panic", CodeInternal}, {"secret unknown method", CodeMethodNotFound}} {
+		response := s.call(context.Background(), Request{Method: tc.method, Params: json.RawMessage(`{"password":"secret parameter"}`)})
+		if tc.code == 0 && response.Error != nil {
+			t.Errorf("%s: unexpected error %+v", tc.method, response.Error)
+		}
+		if tc.code != 0 && (response.Error == nil || response.Error.Code != tc.code) {
+			t.Errorf("%s: response = %+v, want code %d", tc.method, response, tc.code)
+		}
+	}
+	lines := strings.Split(strings.TrimSpace(journal.String()), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("journal entries = %d: %q", len(lines), journal.String())
+	}
+	for _, want := range []string{"method=ok", "method=failed", "method=panic", "code=ok", "code=-32602", "code=-32603", "code=-32601", "duration_ms="} {
+		if !strings.Contains(journal.String(), want) {
+			t.Errorf("missing %q: %q", want, journal.String())
+		}
+	}
+	for _, secret := range []string{"secret parameter", "message body", "secret error text", "secret panic text", "secret unknown method"} {
+		if strings.Contains(journal.String(), secret) {
+			t.Errorf("journal leaked %q", secret)
+		}
+	}
+}

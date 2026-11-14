@@ -36,14 +36,11 @@ type Paths struct {
 	// Database is the local SQLite database, mode 0600.
 	Database string
 	// Log is the journal of a daemon started in the background, mode 0600.
-	// It never holds a message text, a secret or a credential.
+	// Request entries contain only a registered method, duration and code.
 	Log string
 }
 
-// maxLogBytes is the size the journal is trimmed to when a background daemon
-// starts. The journal only explains why a start failed, so an old one is of no
-// use and must not grow without a bound.
-const maxLogBytes = 1 << 20 // 1 MiB
+const maxLogBytes = 10 << 20 // 10 MiB
 
 // ResolvePaths returns the paths of a profile. home is the base directory
 // (the TG_CLI_HOME value); when empty, the user config directory is used.

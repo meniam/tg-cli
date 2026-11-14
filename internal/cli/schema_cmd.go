@@ -197,7 +197,7 @@ func flagDocs(flags *pflag.FlagSet, choices []flagChoices) []flagDoc {
 	flags.VisitAll(func(f *pflag.Flag) {
 		// cobra adds -h/--help to every command when it runs; it is the same
 		// for all of them and not part of a command's own contract.
-		if f.Name == "help" && f.Shorthand == "h" {
+		if f.Hidden || (f.Name == "help" && f.Shorthand == "h") {
 			return
 		}
 		repeated := false

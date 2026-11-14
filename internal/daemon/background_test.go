@@ -187,7 +187,7 @@ func startBackgroundDaemon(t *testing.T, paths Paths) func() {
 
 // TestJournalIsTrimmedOnStart keeps the journal bounded, which the decision
 // requires: an old journal only explains an old failure.
-func TestJournalIsTrimmedOnStart(t *testing.T) {
+func TestJournalRotatesAndKeepsPrivatePermissions(t *testing.T) {
 	paths, err := ResolvePaths(shortTempDir(t), "test")
 	if err != nil {
 		t.Fatal(err)
@@ -195,30 +195,33 @@ func TestJournalIsTrimmedOnStart(t *testing.T) {
 	if err := os.MkdirAll(paths.Dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// Larger than the limit, with a marker at the start that must be gone.
-	line := strings.Repeat("x", 1023) + "\n"
-	content := "OLDEST-MARKER\n" + strings.Repeat(line, maxLogBytes/len(line)+2)
-	if err := os.WriteFile(paths.Log, []byte(content), 0o600); err != nil {
+	j, err := openJournal(paths.Log, 20)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := trimLog(paths.Log, maxLogBytes); err != nil {
-		t.Fatal(err)
+	defer j.Close()
+	for _, line := range []string{"first line\n", "second line\n", "third line\n", "fourth line\n", "fifth line\n"} {
+		if _, err := j.Write([]byte(line)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	info, err := os.Stat(paths.Log)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Size() > maxLogBytes {
-		t.Errorf("the journal is %d bytes, the limit is %d", info.Size(), maxLogBytes)
-	}
-	data, err := os.ReadFile(paths.Log)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(data), "OLDEST-MARKER") {
-		t.Error("the journal must keep its end, not its start")
+	if info.Size() > 20 {
+		t.Errorf("the journal is %d bytes, the limit is 20", info.Size())
 	}
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Errorf("journal mode = %o, want 600", perm)
+	}
+	for _, suffix := range []string{".1", ".2", ".3"} {
+		info, err := os.Stat(paths.Log + suffix)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Errorf("copy %s mode = %o", suffix, info.Mode().Perm())
+		}
 	}
 }
