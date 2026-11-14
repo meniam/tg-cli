@@ -23,6 +23,7 @@ const (
 	MethodMessageGet          = "message.get"
 	MethodMessagePinned       = "message.pinned"
 	MethodMessageSend         = "message.send"
+	MethodMessageSendMedia    = "message.send_media"
 	MethodMessageEdit         = "message.edit"
 	MethodMessageDelete       = "message.delete"
 	MethodMessageForward      = "message.forward"
