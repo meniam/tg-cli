@@ -62,3 +62,15 @@ func mapActionError(err error) error {
 	}
 	return mapError(err)
 }
+
+func mapScheduleError(err error) error {
+	if e, ok := tgerr.As(err); ok {
+		switch e.Type {
+		case "SCHEDULE_DATE_TOO_LATE", "SCHEDULE_DATE_INVALID":
+			return rpc.NewError(rpc.CodeInvalidParams, "schedule date rejected by Telegram: "+e.Type)
+		case "SCHEDULE_TOO_MUCH":
+			return rpc.NewError(rpc.CodeTelegram, "too many scheduled messages")
+		}
+	}
+	return mapActionError(err)
+}

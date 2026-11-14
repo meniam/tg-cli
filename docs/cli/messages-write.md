@@ -15,20 +15,134 @@ Writing is off by default. The owner adds chat ids (Bot API form, nonzero intege
 - **Rule.** A chat accepts writes only when it is in `write`, is visible by the read rules and is not in `block`. No file or no `write` list means writing is off everywhere. `write` alone does not turn the read filter on. Only a human edits the file, and the agent never does. See [access.md](access.md).
 - **No permission.** The command exits with code 9 `write_disabled` (JSON-RPC `-32008`) and a hint to add the chat to `write`. A chat closed for reading gives the same exit code 7 `not_found` as an unknown chat.
 - **Confirmation.** `message edit` and `message delete` need `--yes`; without `--yes` and without `--dry-run` they exit with code 2 and never call the Daemon. All other write commands need no `--yes`.
-- **Dry run.** `--dry-run` runs every check of the Daemon, the write permission included, and returns `dry_run: true`, the action, the number of messages and the text length without the text. It calls no Telegram write method, writes nothing to the database and creates no journal. Run it first, then run the real call.
+- **Dry run.** `--dry-run` runs every applicable Daemon check, the write permission included, and returns `dry_run: true` with the fields of that command's result. It calls no Telegram write method, writes nothing to the database and creates no journal. Run it first, then run the real call.
 - **Negative chat ids.** The id goes after `--` and the flags before it: `tg message send --text hi -- -1001234567890`.
-- **No retries.** A write is never repeated automatically, neither after `FLOOD_WAIT` (exit code 6) nor after a network error. The agent decides: after a network error read the history first, the message may have gone out. Reads keep their usual retry. The owner has not confirmed the rule "no retry for writes" yet. The write rate is limited by the request throttle only (the send buckets), see [overview.md](overview.md#request-throttle-and-flood_wait).
-- **Saved locally.** Sent and edited messages are saved to the local database (`out: true`, an edit keeps the previous version), deleted ones get `deleted_at`, a forward is not saved.
+- **No retries.** Without an idempotency key, a write is never repeated automatically, neither after `FLOOD_WAIT` (exit code 6) nor after a network error. The agent decides: after a network error read the history first, the message may have gone out. Reads keep their usual retry. An idempotency-keyed write has its documented one transient retry. The write rate is limited by the request throttle only (the send buckets), see [overview.md](overview.md#request-throttle-and-flood_wait).
+- **Saved locally.** Ordinary sent and edited messages are saved to the local database (`out: true`, an edit keeps the previous version), deleted ones get `deleted_at`, a forward is not saved. A scheduled send is not saved until it is delivered.
 - **Who can bypass it.** An agent running as the same user can edit `write` in `access.json`: the list protects against accidental writes and against writes induced through a chat, not against an agent that deliberately bypasses it.
-- **Not done.** Scheduled messages, drafts and the typing indicator.
+- **Not done.** None of the commands on this page.
 
 Verification and remaining work for account writes are tracked in [FEATURES.md](../../FEATURES.md), items 5.1, 5.2 and 9.1.
 
 Common errors of this page: 2 for bad arguments (checked before the Daemon where possible), 3 no Daemon, 4 no login, 5 Telegram rejected the write, 6 `FLOOD_WAIT`, 7 an unknown or closed chat (or a message that is not found), 9 the chat is not in `write`.
 
+## Scheduling messages
+
+### Scheduling a text message
+
+`message send` schedules a text message with exactly one of `--at` and `--in`. Other write commands do not support scheduled delivery.
+
+```text
+tg message send <chat> [flags]
+```
+
+**Time.** `--at` is an RFC 3339 time with an explicit offset, such as `2026-11-15T09:00:00+03:00`. `--in` is a Go duration, such as `90m` or `2h`. The flags exclude each other and the selected time must be at least 10 seconds ahead. Without an idempotency key, a bad time is exit code 2 before the Daemon call. With a key, the Daemon first checks for a completed replay; without one, the same bad time is exit code 2.
+
+**How it works.** Telegram receives `messages.sendMessage` with `schedule_date`. The answer contains `chat_id`, a scheduled-message `id`, `date`, and `scheduled: true`. A scheduled id is not an ordinary message id, so it is not written to the local `messages` table. The ordinary delivered message follows the normal update path.
+
+`--dry-run` checks input and access but makes no Telegram write or database change. The chat must be visible and in `write`; a non-numeric reference may be resolved through Telegram during that check. The request is not automatically retried after `FLOOD_WAIT`.
+
+```sh
+tg message send @release_team --at 2026-11-15T09:00:00+03:00 --text 'Deploy begins'
+tg message send @release_team --in 90m --text 'Deploy begins'
+```
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"id":17,"date":"2026-11-15T06:00:00Z","scheduled":true}}
+```
+
+**Exit codes.** 0; 2 invalid schedule time or send input; 3 no Daemon; 4 no login; 5 Telegram rejected the schedule; 6 `FLOOD_WAIT` (not repeated); 7 unknown or closed chat; 9 chat is not in `write`.
+
+### tg message scheduled list
+
+Lists scheduled messages for a visible chat, ordered by scheduled date.
+
+```text
+tg message scheduled list <chat> [flags]
+```
+
+<!-- schema:flags tg message scheduled list -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. **Output formats:** `json`, `jsonl`, `toon`, `human`.
+
+The command reads Telegram each time and creates no local scheduled-message storage. Returned text has the same untrusted-data treatment as other message text.
+
+```sh
+tg message scheduled list @release_team
+```
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"messages":[{"id":17,"chat_id":-1001234567890,"date":"2026-11-15T06:00:00Z","text":"Deploy begins"}]}}
+```
+
+**Exit codes.** 0; 3 no Daemon; 4 no login; 5 Telegram rejected the read; 6 `FLOOD_WAIT`; 7 unknown or closed chat.
+
+### tg message scheduled delete
+
+Cancels scheduled messages that have not been delivered.
+
+```text
+tg message scheduled delete <chat> <id>... [flags]
+```
+
+<!-- schema:flags tg message scheduled delete -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+**Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+The chat must be visible and in `write`; every id is positive. `--dry-run` performs these checks without a Telegram write. No deletion record is added locally because the messages were not delivered.
+
+```sh
+tg message scheduled delete @release_team 17 18 --dry-run
+tg message scheduled delete @release_team 17 18
+```
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"messages":null,"deleted":[17,18]}}
+```
+
+**Exit codes.** 0; 2 invalid id; 3 no Daemon; 4 no login; 5 Telegram rejected the deletion; 6 `FLOOD_WAIT` (not repeated); 7 unknown or closed chat; 9 chat is not in `write`.
+
+### tg message scheduled send-now
+
+Sends scheduled messages now.
+
+```text
+tg message scheduled send-now <chat> <id>... [flags]
+```
+
+<!-- schema:flags tg message scheduled send-now -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+**Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+The chat must be visible and in `write`; every id is positive. `--dry-run` makes no Telegram write and returns `messages: null`. A real call returns a `messages` array. If Telegram returns complete delivered message objects, the Daemon marks them `out: true` and saves them through the normal message store. If it returns only delivered ids, the items contain `chat_id`, `id`, `date: ""`, `text: ""`, and `out: true`; they are not saved locally.
+
+```sh
+tg message scheduled send-now @release_team 17
+```
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"messages":[{"id":41,"chat_id":-1001234567890,"date":"2026-11-15T06:00:03Z","text":"Deploy begins","out":true}]}}
+```
+
+**Exit codes.** 0; 2 invalid id; 3 no Daemon; 4 no login; 5 Telegram rejected the request; 6 `FLOOD_WAIT` (not repeated); 7 unknown or closed chat; 9 chat is not in `write`.
+
+Live-account verification is tracked only in [FEATURES.md](../../FEATURES.md), item 5.6.
+
 ## Idempotent writes
 
 `--idempotency-key <key>` is available on `message send`, `message send-media`, `message poll` and `message forward`. The key contains 1 to 64 characters from `A-Z`, `a-z`, `0-9`, `.`, `_`, `:` and `-`; another value is exit code 2. Use it when a caller may repeat one of these writes after a timeout or a transient network error. Do not invent a key for deliberately separate, identical messages.
+
+For `message send --at` or `--in`, the key covers the scheduled send as well. `--at` must be repeated with the same value. For `--in`, the first reservation fixes the delivery time; a later retry that is already fewer than 10 seconds from that time fails before another Telegram request. A completed repeat returns the saved scheduled result and never turns the scheduled id into a locally saved ordinary message.
 
 The key belongs to the destination chat (`<chat>` for send, media and poll, `<to>` for forward). A repeated call with the same method and parameters returns the saved result with `replayed: true`; the same key with different parameters is exit code 2. `--dry-run` does not reserve a key or write to Telegram; its `replay_available: true` means a completed saved result exists. For media, the comparison includes the content of each selected file.
 
@@ -36,7 +150,7 @@ Without a key the tool keeps its ordinary random Telegram identifier and has no 
 
 ## Formatting text
 
-`message send` and `message edit` format the text with `--parse` or `--entities`. They exclude each other (both together is exit code 2: `--parse and --entities cannot be used together`). Without either one the text goes as plain text. A formatted write follows every rule above: the chat must be in `write`, `edit` needs `--yes`, and nothing is retried.
+`message send` and `message edit` format the text with `--parse` or `--entities`. They exclude each other (both together is exit code 2: `--parse and --entities cannot be used together`). Without either one the text goes as plain text. A formatted write follows every rule above: the chat must be in `write`, `edit` needs `--yes`, and a send retries only under the idempotency-key rule.
 
 | Option | The text is | What Telegram gets |
 | --- | --- | --- |
@@ -132,9 +246,11 @@ tg message send <chat> [flags]
 <!-- schema:flags tg message send -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
+| `--at` | string | `none` | schedule delivery at an RFC 3339 time |
 | `--dry-run` | bool | `false` | describe the action without sending |
 | `--entities` | string | `none` | JSON entity array file, or - for stdin |
 | `--idempotency-key` | string | `none` | idempotency key: 1 to 64 characters A-Za-z0-9._:- |
+| `--in` | string | `none` | schedule delivery after a Go duration |
 | `--parse` | string | `none` | format: html, markdown, rich-html or rich-markdown |
 | `--reply-to` | int | `0` | reply to this message id |
 | `--silent` | bool | `false` | send without a notification |
