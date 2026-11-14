@@ -19,17 +19,43 @@ import (
 
 type writeTelegram struct {
 	*fakeTelegram
-	calls    []string
-	callErr  error
-	onDelete func()
+	calls      []string
+	callErr    error
+	onDelete   func()
+	checkCalls int
+	checkErr   error
+	check      rpc.TextCheck
+	sendResult rpc.SendResult
+	editResult rpc.SendResult
+	lastSend   rpc.SendParams
+	lastEdit   rpc.EditParams
 }
 
-func (f *writeTelegram) Send(_ context.Context, _ chatref.Ref, _ rpc.SendParams) (rpc.SendResult, error) {
+func (f *writeTelegram) CheckText(_ context.Context, p rpc.SendParams) (rpc.TextCheck, error) {
+	f.checkCalls++
+	if f.checkErr != nil {
+		return rpc.TextCheck{}, f.checkErr
+	}
+	if f.check.Mode != "" {
+		return f.check, nil
+	}
+	return rpc.TextCheck{Mode: "plain", PlainLength: len([]rune(p.Text))}, nil
+}
+
+func (f *writeTelegram) Send(_ context.Context, _ chatref.Ref, p rpc.SendParams) (rpc.SendResult, error) {
 	f.calls = append(f.calls, "send")
+	f.lastSend = p
+	if f.sendResult.ID != 0 {
+		return f.sendResult, f.callErr
+	}
 	return rpc.SendResult{ID: 11, Date: "2026-11-14T10:00:00Z"}, f.callErr
 }
-func (f *writeTelegram) Edit(_ context.Context, _ chatref.Ref, _ rpc.EditParams) (rpc.SendResult, error) {
+func (f *writeTelegram) Edit(_ context.Context, _ chatref.Ref, p rpc.EditParams) (rpc.SendResult, error) {
 	f.calls = append(f.calls, "edit")
+	f.lastEdit = p
+	if f.editResult.ID != 0 {
+		return f.editResult, f.callErr
+	}
 	return rpc.SendResult{ID: 11, Date: "2026-11-14T10:00:00Z"}, f.callErr
 }
 func (f *writeTelegram) Delete(_ context.Context, _ chatref.Ref, p rpc.DeleteParams) (rpc.DeleteResult, error) {

@@ -382,3 +382,28 @@ func TestInvalidFormatDoesNotSend(t *testing.T) {
 		t.Fatalf("invalid input made %d Telegram calls", calls)
 	}
 }
+
+func TestCheckTextDoesNotWrite(t *testing.T) {
+	c := &Client{}
+	for _, tc := range []struct {
+		parse, source, mode string
+		entities            []rpc.Entity
+		length, count       int
+		rich                bool
+	}{
+		{"", "plain", "plain", nil, 5, 0, false},
+		{"html", "<b>hi</b>", "html", nil, 2, 1, false},
+		{"markdown", "**hi**", "markdown", nil, 2, 1, false},
+		{"rich-html", "<h1>hi</h1>", "rich-html", nil, 0, 0, true},
+		{"rich-markdown", "# hi", "rich-markdown", nil, 0, 0, true},
+		{"", "hi", "entities", []rpc.Entity{{Type: "bold", Length: 2}}, 2, 1, false},
+	} {
+		got, err := c.CheckText(context.Background(), rpc.SendParams{Text: tc.source, Parse: tc.parse, Entities: tc.entities})
+		if err != nil || got.Mode != tc.mode || got.PlainLength != tc.length || got.Entities != tc.count || got.Rich != tc.rich {
+			t.Fatalf("check=%+v err=%v", got, err)
+		}
+	}
+	if _, err := c.CheckText(context.Background(), rpc.SendParams{Text: "<b>bad", Parse: "html"}); err == nil {
+		t.Fatal("invalid HTML accepted")
+	}
+}

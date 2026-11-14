@@ -55,6 +55,7 @@ type Telegram interface {
 	// Pinned returns up to limit pinned messages of a chat.
 	Pinned(ctx context.Context, ref chatref.Ref, limit int) (rpc.MessagesResult, error)
 	// Writes are called only after the Daemon has checked the access policy.
+	CheckText(ctx context.Context, p rpc.SendParams) (rpc.TextCheck, error)
 	Send(ctx context.Context, ref chatref.Ref, p rpc.SendParams) (rpc.SendResult, error)
 	Edit(ctx context.Context, ref chatref.Ref, p rpc.EditParams) (rpc.SendResult, error)
 	Delete(ctx context.Context, ref chatref.Ref, p rpc.DeleteParams) (rpc.DeleteResult, error)

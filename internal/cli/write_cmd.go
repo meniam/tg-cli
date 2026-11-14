@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"strconv"
@@ -14,17 +17,28 @@ import (
 )
 
 const maxTextInputBytes = 64 << 10
+const maxEntitiesInputBytes = 256 << 10
+
+var writeParseModes = []string{"html", "markdown", "rich-html", "rich-markdown"}
+
+const writeFormatHelp = "Format text with --parse html|markdown|rich-html|rich-markdown, or pass a JSON array with --entities FILE (use - for stdin).\n" +
+	"Example: --text 'Hello link' --entities entities.json, where entities.json contains [{\"type\":\"bold\",\"offset\":0,\"length\":5},{\"type\":\"text_url\",\"offset\":6,\"length\":4,\"url\":\"https://example.com\"}].\n" +
+	"Entity types: bold, italic, underline, strikethrough, spoiler, code, pre, blockquote, text_url, url, email, phone, mention, mention_name, hashtag, cashtag, bot_command, custom_emoji, date_time. Offsets and lengths use UTF-16 units."
 
 func (a *app) messageWriteCommands() []*cobra.Command {
-	send := a.annotate(&cobra.Command{Use: "send <chat>", Short: "Send a plain text message", Args: cobra.ExactArgs(1), RunE: a.messageSend}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendResult](), Args: []argSpec{{Name: "chat", Required: true}}})
+	send := a.annotate(&cobra.Command{Use: "send <chat>", Short: "Send a text message", Long: writeFormatHelp, Args: cobra.ExactArgs(1), RunE: a.messageSend}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: []flagChoices{{Flag: "parse", Values: writeParseModes}}})
 	send.Flags().String("text", "", "message text; reads stdin when absent (stdin is ignored when --text is given)")
+	send.Flags().String("parse", "", "format: html, markdown, rich-html, rich-markdown")
+	send.Flags().String("entities", "", "JSON entity array file, or - for stdin")
 	send.Flags().Int("reply-to", 0, "reply to this message id")
 	send.Flags().Int("topic", 0, "send in this forum topic")
 	send.Flags().Bool("silent", false, "send without a notification")
 	send.Flags().Bool("dry-run", false, "describe the action without sending")
 
-	edit := a.annotate(&cobra.Command{Use: "edit <chat> <id>", Short: "Edit a message", Args: cobra.ExactArgs(2), RunE: a.messageEdit}, dangerous, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendResult](), Args: []argSpec{{Name: "chat", Required: true}, {Name: "id", Required: true}}})
+	edit := a.annotate(&cobra.Command{Use: "edit <chat> <id>", Short: "Edit a message", Long: writeFormatHelp, Args: cobra.ExactArgs(2), RunE: a.messageEdit}, dangerous, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendResult](), Args: []argSpec{{Name: "chat", Required: true}, {Name: "id", Required: true}}, Choices: []flagChoices{{Flag: "parse", Values: writeParseModes}}})
 	edit.Flags().String("text", "", "replacement text; reads stdin when absent")
+	edit.Flags().String("parse", "", "format: html, markdown, rich-html, rich-markdown")
+	edit.Flags().String("entities", "", "JSON entity array file, or - for stdin")
 	edit.Flags().Bool("yes", false, "confirm the edit")
 	edit.Flags().Bool("dry-run", false, "describe the edit without changing Telegram")
 
@@ -61,10 +75,84 @@ func (a *app) writeText(cmd *cobra.Command) (string, error) {
 	if strings.TrimSpace(value) == "" {
 		return "", fail(exitcode.Usage, "message text must not be empty")
 	}
-	if utf8.RuneCountInString(value) > 4096 {
+	parse, _ := cmd.Flags().GetString("parse")
+	if parse != "html" && parse != "markdown" && utf8.RuneCountInString(value) > 4096 {
 		return "", fail(exitcode.Usage, "message text must be at most 4096 characters")
 	}
 	return value, nil
+}
+
+func (a *app) writeFormatting(cmd *cobra.Command) (string, []rpc.Entity, error) {
+	parse, _ := cmd.Flags().GetString("parse")
+	path, _ := cmd.Flags().GetString("entities")
+	if cmd.Flags().Changed("parse") && cmd.Flags().Changed("entities") {
+		return "", nil, fail(exitcode.Usage, "--parse and --entities cannot be used together")
+	}
+	if cmd.Flags().Changed("parse") {
+		valid := false
+		for _, mode := range writeParseModes {
+			if parse == mode {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return "", nil, fail(exitcode.Usage, "invalid --parse value")
+		}
+	}
+	if !cmd.Flags().Changed("entities") {
+		return parse, nil, nil
+	}
+	if path == "" {
+		return "", nil, fail(exitcode.Usage, "--entities needs a file path or -")
+	}
+	if path == "-" && !cmd.Flags().Changed("text") {
+		return "", nil, fail(exitcode.Usage, "stdin is used for entities; provide message text with --text")
+	}
+	var reader io.Reader
+	if path == "-" {
+		reader = a.deps.Stdin
+	} else {
+		file, err := os.Open(path)
+		if err != nil {
+			return "", nil, fail(exitcode.Usage, "open entities file: %v", err)
+		}
+		defer file.Close()
+		reader = file
+	}
+	if reader == nil {
+		return "", nil, fail(exitcode.Usage, "entities input is unavailable")
+	}
+	raw, err := io.ReadAll(io.LimitReader(reader, maxEntitiesInputBytes+1))
+	if err != nil {
+		return "", nil, fail(exitcode.Usage, "read entities: %v", err)
+	}
+	if len(raw) > maxEntitiesInputBytes {
+		return "", nil, fail(exitcode.Usage, "entities JSON exceeds 256 KiB")
+	}
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return "", nil, fail(exitcode.Usage, "entities JSON is empty at byte 1")
+	}
+	if trimmed[0] != '[' {
+		return "", nil, fail(exitcode.Usage, "entities must be a JSON array at byte 1")
+	}
+	var entities []rpc.Entity
+	if err := json.Unmarshal(trimmed, &entities); err != nil {
+		position := int64(1)
+		var syntax *json.SyntaxError
+		var shape *json.UnmarshalTypeError
+		if errors.As(err, &syntax) {
+			position = syntax.Offset
+		} else if errors.As(err, &shape) {
+			position = shape.Offset
+		}
+		return "", nil, fail(exitcode.Usage, "invalid entities JSON at byte %d", position)
+	}
+	if len(entities) == 0 {
+		return "", nil, fail(exitcode.Usage, "entities array is empty")
+	}
+	return "", entities, nil
 }
 func terminalInput(input io.Reader) bool {
 	file, ok := input.(*os.File)
@@ -102,6 +190,10 @@ func (a *app) writeCall(cmd *cobra.Command, method string, p, result any) error 
 	return a.success(cmd, result)
 }
 func (a *app) messageSend(cmd *cobra.Command, args []string) error {
+	parse, entities, err := a.writeFormatting(cmd)
+	if err != nil {
+		return err
+	}
 	text, err := a.writeText(cmd)
 	if err != nil {
 		return err
@@ -114,9 +206,13 @@ func (a *app) messageSend(cmd *cobra.Command, args []string) error {
 	silent, _ := cmd.Flags().GetBool("silent")
 	dry, _ := cmd.Flags().GetBool("dry-run")
 	var result rpc.SendResult
-	return a.writeCall(cmd, rpc.MethodMessageSend, rpc.SendParams{Chat: args[0], Text: text, ReplyTo: reply, Topic: topic, Silent: silent, DryRun: dry}, &result)
+	return a.writeCall(cmd, rpc.MethodMessageSend, rpc.SendParams{Chat: args[0], Text: text, ReplyTo: reply, Topic: topic, Silent: silent, DryRun: dry, Parse: parse, Entities: entities}, &result)
 }
 func (a *app) messageEdit(cmd *cobra.Command, args []string) error {
+	parse, entities, err := a.writeFormatting(cmd)
+	if err != nil {
+		return err
+	}
 	id, err := positiveMessageID(args[1])
 	if err != nil {
 		return err
@@ -131,7 +227,7 @@ func (a *app) messageEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	var result rpc.SendResult
-	return a.writeCall(cmd, rpc.MethodMessageEdit, rpc.EditParams{Chat: args[0], ID: id, Text: text, DryRun: dry}, &result)
+	return a.writeCall(cmd, rpc.MethodMessageEdit, rpc.EditParams{Chat: args[0], ID: id, Text: text, DryRun: dry, Parse: parse, Entities: entities}, &result)
 }
 func (a *app) messageDelete(cmd *cobra.Command, args []string) error {
 	ids, err := messageIDs(args[1:])

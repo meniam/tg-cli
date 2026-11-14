@@ -52,15 +52,27 @@ type ForwardParams struct {
 }
 
 type SendResult struct {
-	ChatID     int64  `json:"chat_id"`
-	ID         int    `json:"id,omitempty"`
-	Date       string `json:"date,omitempty"`
-	DryRun     bool   `json:"dry_run,omitempty"`
-	Action     string `json:"action,omitempty"`
-	Count      int    `json:"count,omitempty"`
-	TextLength int    `json:"text_length,omitempty"`
-	PlainText  string `json:"-"`
-	Rich       bool   `json:"-"`
+	ChatID      int64  `json:"chat_id"`
+	ID          int    `json:"id,omitempty"`
+	Date        string `json:"date,omitempty"`
+	DryRun      bool   `json:"dry_run,omitempty"`
+	Action      string `json:"action,omitempty"`
+	Count       int    `json:"count,omitempty"`
+	TextLength  int    `json:"text_length,omitempty"`
+	Mode        string `json:"mode,omitempty"`
+	PlainLength *int   `json:"plain_length,omitempty"`
+	EntityCount *int   `json:"entities,omitempty"`
+	RichMode    *bool  `json:"rich,omitempty"`
+	PlainText   string `json:"-"`
+	Rich        bool   `json:"-"`
+}
+
+// TextCheck is a local formatting preview without a Telegram write.
+type TextCheck struct {
+	Mode        string
+	PlainLength int
+	Entities    int
+	Rich        bool
 }
 
 type DeleteResult struct {

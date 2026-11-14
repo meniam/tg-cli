@@ -1,6 +1,7 @@
 package tgclient
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +19,22 @@ import (
 
 	"tg-cli/internal/rpc"
 )
+
+// CheckText validates formatting without sending a message to Telegram.
+func (c *Client) CheckText(ctx context.Context, p rpc.SendParams) (rpc.TextCheck, error) {
+	prepared, err := prepareWriteText(p.Text, p.Parse, p.Entities, c.mentionResolver(ctx))
+	if err != nil {
+		return rpc.TextCheck{}, err
+	}
+	mode := p.Parse
+	if p.Entities != nil {
+		mode = "entities"
+	}
+	if mode == "" {
+		mode = "plain"
+	}
+	return rpc.TextCheck{Mode: mode, PlainLength: utf8.RuneCountInString(prepared.text), Entities: len(prepared.entities), Rich: prepared.rich != nil}, nil
+}
 
 type userResolver func(int64) (tg.InputUserClass, error)
 

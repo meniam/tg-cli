@@ -44,6 +44,9 @@ func (f *fakeTelegram) Run(ctx context.Context) error {
 func (f *fakeTelegram) Ready() <-chan struct{}            { return f.ready }
 func (f *fakeTelegram) SetEventSink(func(rpc.Event))      {}
 func (f *fakeTelegram) FloodWaitRemaining() time.Duration { return 0 }
+func (f *fakeTelegram) CheckText(_ context.Context, p rpc.SendParams) (rpc.TextCheck, error) {
+	return rpc.TextCheck{Mode: "plain", PlainLength: len([]rune(p.Text))}, nil
+}
 
 func (f *fakeTelegram) Send(context.Context, chatref.Ref, rpc.SendParams) (rpc.SendResult, error) {
 	return rpc.SendResult{}, errors.New("not implemented")

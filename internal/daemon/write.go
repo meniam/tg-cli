@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -24,6 +25,36 @@ func validWriteText(text string) error {
 		return rpc.NewError(rpc.CodeInvalidParams, "message text must be at most 4096 characters")
 	}
 	return nil
+}
+
+func validWriteSource(p rpc.SendParams) error {
+	if p.Parse == "rich-html" || p.Parse == "rich-markdown" {
+		if strings.TrimSpace(p.Text) == "" {
+			return rpc.NewError(rpc.CodeInvalidParams, "message text must not be empty")
+		}
+		// Telegram's actual RichMessage limit is unknown until a live check.
+		if utf8.RuneCountInString(p.Text) > maxWriteTextLength {
+			return rpc.NewError(rpc.CodeInvalidParams, "rich message source must be at most 4096 characters")
+		}
+		return nil
+	}
+	if p.Parse != "" {
+		if strings.TrimSpace(p.Text) == "" {
+			return rpc.NewError(rpc.CodeInvalidParams, "message text must not be empty")
+		}
+		return nil // CheckText validates the rendered length.
+	}
+	return validWriteText(p.Text)
+}
+
+func formatRequested(p rpc.SendParams) bool { return p.Parse != "" || p.Entities != nil }
+func richRequested(parse string) bool       { return parse == "rich-html" || parse == "rich-markdown" }
+
+func applyTextCheck(result *rpc.SendResult, check rpc.TextCheck) {
+	result.Mode = check.Mode
+	result.PlainLength = &check.PlainLength
+	result.EntityCount = &check.Entities
+	result.RichMode = &check.Rich
 }
 func validWriteIDs(ids []int) error {
 	if len(ids) == 0 {
@@ -78,7 +109,7 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	if err := decodeParams(raw, &p); err != nil {
 		return nil, err
 	}
-	if err := validWriteText(p.Text); err != nil {
+	if err := validWriteSource(p); err != nil {
 		return nil, err
 	}
 	if p.ReplyTo < 0 || p.Topic < 0 {
@@ -88,15 +119,32 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, err
 	}
+	var check rpc.TextCheck
+	if p.DryRun || formatRequested(p) {
+		check, err = d.opts.Telegram.CheckText(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if p.DryRun {
-		return rpc.SendResult{ChatID: id, DryRun: true, Action: "send", Count: 1, TextLength: utf8.RuneCountInString(p.Text)}, nil
+		result := rpc.SendResult{ChatID: id, DryRun: true, Action: "send", Count: 1, TextLength: utf8.RuneCountInString(p.Text)}
+		if formatRequested(p) {
+			applyTextCheck(&result, check)
+		}
+		return result, nil
 	}
 	res, err := d.opts.Telegram.Send(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
 	res.ChatID = id
-	d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+	text := p.Text
+	if formatRequested(p) {
+		text = res.PlainText
+	}
+	if !richRequested(p.Parse) || text != "" {
+		d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+	}
 	return res, nil
 }
 
@@ -105,7 +153,8 @@ func (d *daemon) messageEdit(ctx context.Context, raw json.RawMessage) (any, err
 	if err := decodeParams(raw, &p); err != nil {
 		return nil, err
 	}
-	if err := validWriteText(p.Text); err != nil {
+	checkParams := rpc.SendParams{Text: p.Text, Parse: p.Parse, Entities: p.Entities}
+	if err := validWriteSource(checkParams); err != nil {
 		return nil, err
 	}
 	if p.ID <= 0 {
@@ -115,15 +164,32 @@ func (d *daemon) messageEdit(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, err
 	}
+	var check rpc.TextCheck
+	if p.DryRun || formatRequested(checkParams) {
+		check, err = d.opts.Telegram.CheckText(ctx, checkParams)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if p.DryRun {
-		return rpc.SendResult{ChatID: id, DryRun: true, Action: "edit", Count: 1, TextLength: utf8.RuneCountInString(p.Text)}, nil
+		result := rpc.SendResult{ChatID: id, DryRun: true, Action: "edit", Count: 1, TextLength: utf8.RuneCountInString(p.Text)}
+		if formatRequested(checkParams) {
+			applyTextCheck(&result, check)
+		}
+		return result, nil
 	}
 	res, err := d.opts.Telegram.Edit(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
 	res.ChatID = id
-	d.saveMessages(ctx, rpc.MethodMessageEdit, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Text, Out: true}})
+	text := p.Text
+	if formatRequested(checkParams) {
+		text = res.PlainText
+	}
+	if !richRequested(p.Parse) || text != "" {
+		d.saveMessages(ctx, rpc.MethodMessageEdit, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: text, Out: true}})
+	}
 	return res, nil
 }
 
