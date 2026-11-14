@@ -17,11 +17,17 @@ import (
 func toMessage(chatID int64, msg tg.NotEmptyMessage, ent peer.Entities, fallback *rpc.Sender) (rpc.Message, bool) {
 	switch m := msg.(type) {
 	case *tg.Message:
+		text := m.Message
+		if strings.TrimSpace(text) == "" {
+			if rich, ok := m.GetRichMessage(); ok {
+				text = richMessageText(rich)
+			}
+		}
 		out := rpc.Message{
 			ID:        m.ID,
 			ChatID:    chatID,
 			Date:      formatDate(m.Date),
-			Text:      m.Message,
+			Text:      text,
 			Out:       m.Out,
 			Edited:    hasEditDate(m),
 			Pinned:    m.Pinned,
