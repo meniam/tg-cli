@@ -43,7 +43,7 @@ func (a *app) noteCommand() *cobra.Command {
 	list.Flags().Int64("message", 0, "filter one message id, requires --chat")
 	list.Flags().String("author", "", "filter by owner or ai")
 	list.Flags().String("tag", "", "filter by tag")
-	list.Flags().Int("limit", 0, "notes per page, default 50, maximum 500")
+	list.Flags().Int("limit", 0, "notes per page, 1 to 500; 0 means 50")
 	list.Flags().Int64("before-id", 0, "return notes with a smaller id")
 
 	deleteCmd := a.annotate(&cobra.Command{

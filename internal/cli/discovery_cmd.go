@@ -38,7 +38,7 @@ func (a *app) messageDiscoveryCommands() []*cobra.Command {
 		}, RunE: a.messageSearch,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[searchCommandResult](), Args: []argSpec{{Name: "chat", Required: false}, {Name: "query", Required: true}}, ItemPath: "messages", PublicItemPath: "hits", Choices: discoveryMediaChoices()})
 	search.Flags().Bool("public", false, "search globally rather than inside one chat")
-	search.Flags().String("media", "", "filter by media type in one chat")
+	search.Flags().String("media", "", "media filter in one chat: photo, video, document, voice, audio, link, gif or pinned")
 	search.Flags().Int("limit", 20, "results per page, 1 to 100")
 	search.Flags().String("cursor", "", "continue after a previous page")
 
