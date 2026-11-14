@@ -50,6 +50,7 @@ func (f *loginFlow) emit(ev loginEvent) {
 // the code and the password through callbacks; the manager turns them into
 // the RPC steps auth.start, auth.code and auth.password.
 type loginManager struct {
+	onUser  func(*rpc.User)
 	tg      Telegram
 	baseCtx context.Context
 
@@ -347,6 +348,9 @@ func (m *loginManager) finish(f *loginFlow, err error) {
 		ev = loginEvent{err: err}
 	default:
 		ev.user, ev.err = m.tg.Self(f.ctx)
+		if ev.err == nil && m.onUser != nil {
+			m.onUser(ev.user)
+		}
 	}
 
 	m.mu.Lock()

@@ -40,10 +40,11 @@ const (
 // Request is a JSON-RPC request. A request without ID is a notification and
 // gets no response.
 type Request struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
+	ExpectUser string          `json:"expect_user,omitempty"`
+	JSONRPC    string          `json:"jsonrpc"`
+	ID         json.RawMessage `json:"id,omitempty"`
+	Method     string          `json:"method"`
+	Params     json.RawMessage `json:"params,omitempty"`
 }
 
 // IsNotification reports whether the request expects no response.

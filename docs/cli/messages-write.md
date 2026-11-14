@@ -26,6 +26,14 @@ Verification and remaining work for account writes are tracked in [FEATURES.md](
 
 Common errors of this page: 2 for bad arguments (checked before the Daemon where possible), 3 no Daemon, 4 no login, 5 Telegram rejected the write, 6 `FLOOD_WAIT`, 7 an unknown or closed chat (or a message that is not found), 9 the chat is not in `write`.
 
+## Idempotent writes
+
+`--idempotency-key <key>` is available on `message send`, `message send-media`, `message poll` and `message forward`. The key contains 1 to 64 characters from `A-Z`, `a-z`, `0-9`, `.`, `_`, `:` and `-`; another value is exit code 2. Use it when a caller may repeat one of these writes after a timeout or a transient network error. Do not invent a key for deliberately separate, identical messages.
+
+The key belongs to the destination chat (`<chat>` for send, media and poll, `<to>` for forward). A repeated call with the same method and parameters returns the saved result with `replayed: true`; the same key with different parameters is exit code 2. `--dry-run` does not reserve a key or write to Telegram; its `replay_available: true` means a completed saved result exists. For media, the comparison includes the content of each selected file.
+
+Without a key the tool keeps its ordinary random Telegram identifier and has no application-level retry. With a key it derives the identifiers from the account, destination chat, key and item position, then retries one transient network failure or timeout. Telegram transport retries are outside this rule. If a response is lost before the Daemon saves it, Telegram can return `RANDOM_ID_DUPLICATE` instead of the original result; the tool cannot recover that result automatically.
+
 ## Formatting text
 
 `message send` and `message edit` format the text with `--parse` or `--entities`. They exclude each other (both together is exit code 2: `--parse and --entities cannot be used together`). Without either one the text goes as plain text. A formatted write follows every rule above: the chat must be in `write`, `edit` needs `--yes`, and nothing is retried.
@@ -126,6 +134,7 @@ tg message send <chat> [flags]
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | describe the action without sending |
 | `--entities` | string | `none` | JSON entity array file, or - for stdin |
+| `--idempotency-key` | string | `none` | idempotency key: 1 to 64 characters A-Za-z0-9._:- |
 | `--parse` | string | `none` | format: html, markdown, rich-html or rich-markdown |
 | `--reply-to` | int | `0` | reply to this message id |
 | `--silent` | bool | `false` | send without a notification |
@@ -155,6 +164,8 @@ echo "Fixed text" | tg message send @release_team
 ```
 
 **Answer fields** (`data`): `chat_id` integer, `id` integer (optional), `date` string (optional), `dry_run` boolean (optional), `action` string (optional), `count` integer (optional), `text_length` integer (optional), `mode` string (optional), `plain_length` integer (optional), `entities` integer (optional), `rich` boolean (optional).
+
+With `--idempotency-key`, `replayed` is an optional boolean. With `--dry-run`, `replay_available` is an optional boolean.
 
 With `--dry-run`: `{"chat_id":-1001234567890,"dry_run":true,"action":"send","count":1,"text_length":15}` (plus `mode`, `plain_length`, `entities` and `rich` when the text is formatted).
 
@@ -261,6 +272,7 @@ tg message forward <from> <to> <id>... [flags]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry-run` | bool | `false` | describe the action without forwarding |
+| `--idempotency-key` | string | `none` | idempotency key: 1 to 64 characters A-Za-z0-9._:- |
 | `--silent` | bool | `false` | forward without a notification |
 <!-- /schema:flags -->
 
@@ -283,6 +295,8 @@ tg message forward --silent @release_team @archive_team 4102
 ```
 
 **Answer fields** (`data`): `chat_id` integer, `messages` array, `messages.id` integer, `messages.date` string, `dry_run` boolean (optional), `action` string (optional), `count` integer (optional).
+
+With `--idempotency-key`, `replayed` is an optional boolean. With `--dry-run`, `replay_available` is an optional boolean.
 
 **Exit codes.** 0; 2 fewer than three arguments; 3, 4; 5; 6; 7 an unknown or closed source or target; 9 the target is not in `write`.
 
@@ -307,6 +321,7 @@ tg message send-media <chat> [flags]
 | `--duration` | int | `0` | media duration in seconds; overrides detected duration |
 | `--file` | stringArray | `[]` | file path; repeat for an album (1 to 10 files) |
 | `--height` | int | `0` | video height; overrides detected height |
+| `--idempotency-key` | string | `none` | idempotency key: 1 to 64 characters A-Za-z0-9._:- |
 | `--reply-to` | int | `0` | reply to this message id |
 | `--silent` | bool | `false` | send without a notification |
 | `--topic` | int | `0` | send in this forum topic |
@@ -337,6 +352,8 @@ tg message send-media <chat> [flags]
 | `document` | any regular file | 1 to 10 |
 
 A mismatch is exit code 2 with the hint `--as document`. WebP, GIF, MOV, WAV, FLAC, Ogg Vorbis and everything else goes as `document`.
+
+With `--idempotency-key`, the result can contain `replayed: true`; with `--dry-run`, it can contain `replay_available: true`.
 
 **Limits.** 100 MiB per file and 100 MiB for all files of one call, over that is exit code 2 before any upload. One file goes as one message; 2 to 10 files go as one album of one type, and the caption goes with the first file. `voice` takes one file, two or more is exit code 2. The caption is at most 1024 characters (an empty one is fine); this is the limit of the project, the limit of your account was not read.
 
@@ -503,6 +520,7 @@ tg message poll <chat> [flags]
 | `--correct` | int | `0` | correct option number, starting from 1; requires --quiz |
 | `--dry-run` | bool | `false` | check the action without changing Telegram |
 | `--explanation` | string | `none` | quiz explanation, up to 200 characters and two line feeds |
+| `--idempotency-key` | string | `none` | idempotency key: 1 to 64 characters A-Za-z0-9._:- |
 | `--multiple` | bool | `false` | allow multiple answers |
 | `--option` | stringArray | `[]` | answer option, 1 to 100 characters; repeat 2 to 10 times in display order |
 | `--public` | bool | `false` | show who voted |
@@ -536,6 +554,8 @@ tg message poll @release_team --question "2 + 2?" --option 3 --option 4 --quiz -
 ```
 
 **Answer fields** (`data`): `chat_id` integer, `id` integer (optional), `date` string (optional), `dry_run` boolean (optional), `action` string (optional), `count` integer (optional), `text_length` integer (optional), `mode` string (optional), `plain_length` integer (optional), `entities` integer (optional), `rich` boolean (optional).
+
+With `--idempotency-key`, `replayed` is an optional boolean. With `--dry-run`, `replay_available` is an optional boolean.
 
 **Exit codes.** 0; 2 limits, a quiz with `--multiple`, `--correct` or `--explanation` without `--quiz`, fewer than 2 options; 3, 4; 5; 6; 7; 9.
 

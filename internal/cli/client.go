@@ -45,6 +45,11 @@ func (a *app) connect(ctx context.Context, cmd *cobra.Command) (*rpc.Client, err
 		}
 		return nil, fail(exitcode.Failure, "connect to the daemon: %v", err)
 	}
+	expect, _ := cmd.Flags().GetString("expect-user")
+	if !cmd.Flags().Changed("expect-user") && a.deps.Getenv != nil {
+		expect = a.deps.Getenv("TG_CLI_EXPECT_USER")
+	}
+	c.SetExpectUser(expect)
 	return c, nil
 }
 
