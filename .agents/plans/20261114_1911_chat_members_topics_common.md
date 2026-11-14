@@ -10,9 +10,9 @@ PR: —
 
 ## Status
 
-- Current status: approved
+- Current status: in_progress
 - Last update: 2026-11-14
-- Next safe step: шаг 0 (создать ветку после слияния ветки `feature/20261114_1904_stream_delete_without_chat_id`), затем шаг 1 (аудит). Этот план независим от плана отправки медиа `20261114_1907_send_media`; порядок их выполнения выбирает владелец.
+- Next safe step: шаг 1 (аудит), исполнитель Codex в Herdr, рабочее дерево этого worktree.
 
 ## Context and sources
 
@@ -84,7 +84,7 @@ PR: —
 
 - [x] Фильтры, база и имена команд подтверждены владельцем (2026-11-14).
 - [ ] Исполнитель Go-кода загрузил скилл `expert-golang` и подтвердил это в начале работы.
-- [ ] Ветка `feature/20261114_1911_chat_members_topics_common` создана от `main`, в заголовок записан `Branch`, статус `in_progress`.
+- [x] Ветка `feature/20261114_1911_chat_members_topics_common` создана от `main` (отдельный worktree `../tg-cli-members`), в заголовок записан `Branch`, статус `in_progress`.
 
 ## Step 1. Audit and baseline
 
