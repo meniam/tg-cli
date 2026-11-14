@@ -2,6 +2,7 @@ package throttle
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"sync"
 	"testing"
@@ -257,4 +258,100 @@ func TestConcurrencyBound(t *testing.T) {
 	}
 	b.Release()
 	d.Release()
+}
+
+func awaitBackgroundQueue(t *testing.T, l *Limiter, n int) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		l.mu.Lock()
+		got := len(l.backgroundQueue)
+		l.mu.Unlock()
+		if got == n {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("background queue length = %d, want %d", got, n)
+		default:
+			runtime.Gosched()
+		}
+	}
+}
+
+func TestBackgroundQueueYieldsToNormalAndRunsAlone(t *testing.T) {
+	l := limiterForTest(t, newFakeClock(), func(c *Config) { c.Concurrency = 1; c.GeneralBurst = 5 })
+	hold, err := l.Acquire(context.Background(), General, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	background := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
+	awaitBackgroundQueue(t, l, 1)
+	normal := acquireAsync(l, context.Background(), General, "", nil)
+	awaitQueue(t, l, 1)
+	hold.Release()
+	normalPermit := receive(t, normal)
+	select {
+	case result := <-background:
+		result.permit.Release()
+		t.Fatal("background request overtook normal request")
+	default:
+	}
+	normalPermit.Release()
+	receive(t, background).Release()
+
+	hold, err = l.Acquire(context.Background(), General, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alone := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
+	awaitBackgroundQueue(t, l, 1)
+	hold.Release()
+	receive(t, alone).Release()
+}
+
+func TestBackgroundFloodGateFastRejectsNormal(t *testing.T) {
+	clock := newFakeClock()
+	l := limiterForTest(t, clock, nil)
+	l.PauseBackground(120 * time.Second)
+	_, err := l.Acquire(context.Background(), General, "", nil)
+	var flood *FloodWaitError
+	if !errors.As(err, &flood) || flood.RetryAfterSeconds != 120 {
+		t.Fatalf("fast flood error = %v", err)
+	}
+	background := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
+	awaitBackgroundQueue(t, l, 1)
+	clock.Advance(120 * time.Second)
+	receive(t, background).Release()
+}
+
+func TestBackgroundFloodGateRejectsAlreadyQueuedNormal(t *testing.T) {
+	l := limiterForTest(t, newFakeClock(), func(c *Config) { c.Concurrency = 1 })
+	hold, err := l.Acquire(context.Background(), General, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	normal := acquireAsync(l, context.Background(), General, "", nil)
+	awaitQueue(t, l, 1)
+	l.PauseBackground(120 * time.Second)
+	select {
+	case result := <-normal:
+		var flood *FloodWaitError
+		if !errors.As(result.err, &flood) || flood.RetryAfterSeconds != 120 {
+			t.Fatalf("queued flood error = %v", result.err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("queued normal request was not rejected")
+	}
+	hold.Release()
+}
+
+func TestDisabledAutoWaitKeepsNormalQueueing(t *testing.T) {
+	clock := newFakeClock()
+	l := limiterForTest(t, clock, func(c *Config) { c.FloodAutoWait = 0 })
+	l.PauseBackground(120 * time.Second)
+	normal := acquireAsync(l, context.Background(), General, "", nil)
+	awaitQueue(t, l, 1)
+	clock.Advance(120 * time.Second)
+	receive(t, normal).Release()
 }

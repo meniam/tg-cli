@@ -257,6 +257,15 @@ type MessagesResult struct {
 	NextCursor string    `json:"next_cursor,omitempty"`
 }
 
+// HistoryPage is one raw Telegram history response for background sync.
+// RawNextOffsetID also includes empty message placeholders.
+type HistoryPage struct {
+	Messages        []Message `json:"messages"`
+	OldestID        int       `json:"oldest_id"`
+	RawNextOffsetID int       `json:"raw_next_offset_id"`
+	Empty           bool      `json:"empty"`
+}
+
 // MessageGetParams are the parameters of MethodMessageGet.
 type MessageGetParams struct {
 	Chat string `json:"chat"`

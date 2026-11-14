@@ -2,6 +2,7 @@ package tgclient
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"sync"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 
+	"tg-cli/internal/rpc"
 	"tg-cli/internal/throttle"
 )
 
@@ -344,5 +346,108 @@ func TestThrottleFloodPauseBlocksParallelRequest(t *testing.T) {
 	clock.Advance(11 * time.Second)
 	if err := invokeResult(t, third); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func backgroundHistoryContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, historyPageContextKey{}, true)
+}
+
+func TestBackgroundHistoryRetriesEveryFloodWait(t *testing.T) {
+	clock := newThrottleClock()
+	l := limiterWithClock(t, clock, nil)
+	floods := []error{tgerr.New(420, "FLOOD_WAIT_5"), tgerr.New(420, "FLOOD_WAIT_120")}
+	calls := 0
+	invoke := throttleMiddleware(l).Handle(telegram.InvokeFunc(func(context.Context, bin.Encoder, bin.Decoder) error {
+		if calls < len(floods) {
+			err := floods[calls]
+			calls++
+			return err
+		}
+		calls++
+		return nil
+	}))
+	result := invokeAsync(invoke, backgroundHistoryContext(context.Background()), &tg.MessagesGetHistoryRequest{})
+	clock.awaitTimer(t, clock.Now().Add(5*time.Second))
+	clock.Advance(5 * time.Second)
+	clock.awaitTimer(t, clock.Now().Add(120*time.Second))
+	clock.Advance(120 * time.Second)
+	if err := invokeResult(t, result); err != nil || calls != 3 {
+		t.Fatalf("background retries: err=%v calls=%d", err, calls)
+	}
+}
+
+func TestBackgroundHistoryCancellationDuringFloodWait(t *testing.T) {
+	clock := newThrottleClock()
+	l := limiterWithClock(t, clock, nil)
+	calls := 0
+	invoke := throttleMiddleware(l).Handle(telegram.InvokeFunc(func(context.Context, bin.Encoder, bin.Decoder) error {
+		calls++
+		return tgerr.New(420, "FLOOD_WAIT_120")
+	}))
+	ctx, cancel := context.WithCancel(backgroundHistoryContext(context.Background()))
+	result := invokeAsync(invoke, ctx, &tg.MessagesGetHistoryRequest{})
+	clock.awaitTimer(t, clock.Now().Add(120*time.Second))
+	cancel()
+	if err := invokeResult(t, result); !errors.Is(err, context.Canceled) || calls != 1 {
+		t.Fatalf("cancelled background request: err=%v calls=%d", err, calls)
+	}
+}
+
+func TestBackgroundFloodFastRejectMapsToRPCCode(t *testing.T) {
+	clock := newThrottleClock()
+	l := limiterWithClock(t, clock, nil)
+	calls := 0
+	invoke := throttleMiddleware(l).Handle(telegram.InvokeFunc(func(context.Context, bin.Encoder, bin.Decoder) error {
+		calls++
+		return tgerr.New(420, "FLOOD_WAIT_120")
+	}))
+	ctx, cancel := context.WithCancel(backgroundHistoryContext(context.Background()))
+	background := invokeAsync(invoke, ctx, &tg.MessagesGetHistoryRequest{})
+	clock.awaitTimer(t, clock.Now().Add(120*time.Second))
+	err := mapError(invoke(context.Background(), &tg.MessagesGetHistoryRequest{}, nil))
+	var rpcErr *rpc.Error
+	if !errors.As(err, &rpcErr) || rpcErr.Code != rpc.CodeFloodWait || rpcErr.Data.(map[string]any)["retry_after_seconds"] != 120 || calls != 1 {
+		t.Fatalf("ordinary request: err=%v calls=%d", err, calls)
+	}
+	cancel()
+	if err := invokeResult(t, background); !errors.Is(err, context.Canceled) {
+		t.Fatalf("background cancellation: %v", err)
+	}
+}
+
+func TestOrdinaryFloodPauseStillQueues(t *testing.T) {
+	clock := newThrottleClock()
+	l := limiterWithClock(t, clock, nil)
+	calls := 0
+	invoke := throttleMiddleware(l).Handle(telegram.InvokeFunc(func(context.Context, bin.Encoder, bin.Decoder) error {
+		calls++
+		if calls == 1 {
+			return tgerr.New(420, "FLOOD_WAIT_120")
+		}
+		return nil
+	}))
+	if err := invoke(context.Background(), &tg.MessagesGetHistoryRequest{}, nil); err == nil {
+		t.Fatal("ordinary long flood wait was retried")
+	}
+	second := invokeAsync(invoke, context.Background(), &tg.MessagesGetHistoryRequest{})
+	clock.awaitTimer(t, clock.Now().Add(120*time.Second))
+	clock.Advance(120 * time.Second)
+	if err := invokeResult(t, second); err != nil || calls != 2 {
+		t.Fatalf("ordinary queued request: err=%v calls=%d", err, calls)
+	}
+}
+
+func TestBackgroundPolicyOnlyAppliesToHistory(t *testing.T) {
+	clock := newThrottleClock()
+	l := limiterWithClock(t, clock, nil)
+	calls := 0
+	invoke := throttleMiddleware(l).Handle(telegram.InvokeFunc(func(context.Context, bin.Encoder, bin.Decoder) error {
+		calls++
+		return tgerr.New(420, "FLOOD_WAIT_120")
+	}))
+	err := invoke(backgroundHistoryContext(context.Background()), &tg.MessagesSendMessageRequest{Peer: &tg.InputPeerUser{UserID: 1}}, nil)
+	if _, flood := tgerr.AsFloodWait(err); !flood || calls != 1 {
+		t.Fatalf("non-history request: err=%v calls=%d", err, calls)
 	}
 }

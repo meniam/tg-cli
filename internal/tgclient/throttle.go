@@ -2,6 +2,7 @@ package tgclient
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"github.com/gotd/td/bin"
@@ -82,17 +83,42 @@ func throttleMiddleware(limiter *throttle.Limiter) telegram.Middleware {
 	return telegram.MiddlewareFunc(func(next tg.Invoker) telegram.InvokeFunc {
 		return func(ctx context.Context, input bin.Encoder, output bin.Decoder) error {
 			class, peer := classifyRequest(input)
+			_, isHistory := input.(*tg.MessagesGetHistoryRequest)
+			background := isHistory && historyPageFromContext(ctx)
+			admissionCtx := ctx
+			if background {
+				admissionCtx = throttle.WithBackground(ctx)
+			}
 			invoke := func() error {
-				permit, err := limiter.Acquire(ctx, class, peer, throttle.WaitFromContext(ctx))
+				permit, err := limiter.Acquire(admissionCtx, class, peer, throttle.WaitFromContext(ctx))
 				if err != nil {
+					var flood *throttle.FloodWaitError
+					if errors.As(err, &flood) {
+						return tgerr.New(420, "FLOOD_WAIT_"+strconv.FormatInt(flood.RetryAfterSeconds, 10))
+					}
 					return err
 				}
 				defer permit.Release()
 				err = next.Invoke(ctx, input, output)
 				if delay, ok := tgerr.AsFloodWait(err); ok {
-					limiter.Pause(delay)
+					if background {
+						limiter.PauseBackground(delay)
+					} else {
+						limiter.Pause(delay)
+					}
 				}
 				return err
+			}
+			if background {
+				for {
+					err := invoke()
+					if _, flood := tgerr.AsFloodWait(err); !flood {
+						return err
+					}
+					if err := ctx.Err(); err != nil {
+						return err
+					}
+				}
 			}
 			err := invoke()
 			delay, flood := tgerr.AsFloodWait(err)

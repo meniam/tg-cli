@@ -4,6 +4,7 @@ package throttle
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -108,21 +109,31 @@ type waiter struct {
 	peer    string
 	ready   chan struct{}
 	granted bool
+	err     error
 }
 
-// Limiter owns the FIFO queue, token buckets, flood gate and concurrency limit.
+// FloodWaitError reports an account pause caused by background history sync.
+type FloodWaitError struct{ RetryAfterSeconds int64 }
+
+func (e *FloodWaitError) Error() string {
+	return fmt.Sprintf("background flood wait: retry after %d seconds", e.RetryAfterSeconds)
+}
+
+// Limiter owns the priority queues, token buckets, flood gate and concurrency limit.
 type Limiter struct {
-	mu          sync.Mutex
-	clock       Clock
-	cfg         Config
-	general     bucket
-	private     map[string]*bucket
-	group       map[string]*bucket
-	queue       []*waiter
-	active      int
-	pausedUntil time.Time
-	wake        chan struct{}
-	running     bool
+	mu                 sync.Mutex
+	clock              Clock
+	cfg                Config
+	general            bucket
+	private            map[string]*bucket
+	group              map[string]*bucket
+	queue              []*waiter
+	backgroundQueue    []*waiter
+	active             int
+	pausedUntil        time.Time
+	pausedByBackground bool
+	wake               chan struct{}
+	running            bool
 }
 
 // New constructs a limiter. A nil clock uses the system clock.
@@ -169,8 +180,9 @@ func (p *Permit) Release() {
 	})
 }
 
-// Acquire waits for the account gate, tokens and a concurrency slot in FIFO order.
-// peer is required for send classes. A canceled queued request spends no token.
+// Acquire waits for the account gate, tokens and a concurrency slot. Normal
+// requests precede background requests; each queue remains FIFO. A canceled
+// queued request spends no token.
 func (l *Limiter) Acquire(ctx context.Context, class Class, peer string, waited *Wait) (*Permit, error) {
 	if ctx == nil {
 		return nil, errors.New("nil context")
@@ -183,14 +195,25 @@ func (l *Limiter) Acquire(ctx context.Context, class Class, peer string, waited 
 	}
 	l.mu.Lock()
 	now := l.clock.Now()
-	if len(l.queue) == 0 && l.active < l.cfg.Concurrency && !now.Before(l.pausedUntil) && l.delay(now, class, peer) == 0 {
+	background := BackgroundFromContext(ctx)
+	if !background {
+		if err := l.backgroundFloodError(now); err != nil {
+			l.mu.Unlock()
+			return nil, err
+		}
+	}
+	if len(l.queue) == 0 && (!background || len(l.backgroundQueue) == 0) && l.active < l.cfg.Concurrency && !now.Before(l.pausedUntil) && l.delay(now, class, peer) == 0 {
 		l.consume(now, class, peer)
 		l.active++
 		l.mu.Unlock()
 		return &Permit{limiter: l}, nil
 	}
 	w := &waiter{ctx: ctx, class: class, peer: peer, ready: make(chan struct{})}
-	l.queue = append(l.queue, w)
+	if background {
+		l.backgroundQueue = append(l.backgroundQueue, w)
+	} else {
+		l.queue = append(l.queue, w)
+	}
 	if !l.running {
 		l.running = true
 		go l.run()
@@ -201,12 +224,17 @@ func (l *Limiter) Acquire(ctx context.Context, class Class, peer string, waited 
 	case <-w.ready:
 		waited.add(l.clock.Now().Sub(now))
 		if err := ctx.Err(); err != nil {
-			l.mu.Lock()
-			l.active--
-			l.refund(l.clock.Now(), class, peer)
-			l.signal()
-			l.mu.Unlock()
+			if w.granted {
+				l.mu.Lock()
+				l.active--
+				l.refund(l.clock.Now(), class, peer)
+				l.signal()
+				l.mu.Unlock()
+			}
 			return nil, err
+		}
+		if w.err != nil {
+			return nil, w.err
 		}
 		return &Permit{limiter: l}, nil
 	case <-ctx.Done():
@@ -215,9 +243,13 @@ func (l *Limiter) Acquire(ctx context.Context, class Class, peer string, waited 
 			l.active--
 			l.refund(l.clock.Now(), class, peer)
 		} else {
-			for i, queued := range l.queue {
+			queue := &l.queue
+			if background {
+				queue = &l.backgroundQueue
+			}
+			for i, queued := range *queue {
 				if queued == w {
-					l.queue = append(l.queue[:i], l.queue[i+1:]...)
+					*queue = append((*queue)[:i], (*queue)[i+1:]...)
 					break
 				}
 			}
@@ -229,9 +261,33 @@ func (l *Limiter) Acquire(ctx context.Context, class Class, peer string, waited 
 	}
 }
 
+func (l *Limiter) backgroundFloodError(now time.Time) error {
+	if l.cfg.FloodAutoWait == 0 || !l.pausedByBackground || !now.Before(l.pausedUntil) {
+		return nil
+	}
+	remaining := l.pausedUntil.Sub(now)
+	if remaining <= l.cfg.FloodAutoWait {
+		return nil
+	}
+	seconds := int64(remaining / time.Second)
+	if remaining%time.Second != 0 {
+		seconds++
+	}
+	return &FloodWaitError{RetryAfterSeconds: seconds}
+}
+
 // Pause extends the account-wide gate by d from now; a shorter pause never
 // moves an existing deadline backwards. In-flight attempts are not stopped.
 func (l *Limiter) Pause(d time.Duration) {
+	l.pause(d, false)
+}
+
+// PauseBackground marks a flood gate created by low-priority history sync.
+func (l *Limiter) PauseBackground(d time.Duration) {
+	l.pause(d, true)
+}
+
+func (l *Limiter) pause(d time.Duration, background bool) {
 	if d <= 0 {
 		return
 	}
@@ -239,6 +295,7 @@ func (l *Limiter) Pause(d time.Duration) {
 	until := l.clock.Now().Add(d)
 	if until.After(l.pausedUntil) {
 		l.pausedUntil = until
+		l.pausedByBackground = background
 	}
 	l.signal()
 	l.mu.Unlock()
@@ -255,18 +312,32 @@ func (l *Limiter) signal() {
 func (l *Limiter) run() {
 	for {
 		l.mu.Lock()
-		if len(l.queue) == 0 {
+		if len(l.queue) == 0 && len(l.backgroundQueue) == 0 {
 			l.running = false
 			l.mu.Unlock()
 			return
 		}
-		w := l.queue[0]
+		background := len(l.queue) == 0
+		queue := &l.queue
+		if background {
+			queue = &l.backgroundQueue
+		}
+		w := (*queue)[0]
 		if w.ctx.Err() != nil {
-			l.queue = l.queue[1:]
+			*queue = (*queue)[1:]
 			l.mu.Unlock()
 			continue
 		}
 		now := l.clock.Now()
+		if !background {
+			if err := l.backgroundFloodError(now); err != nil {
+				*queue = (*queue)[1:]
+				w.err = err
+				close(w.ready)
+				l.mu.Unlock()
+				continue
+			}
+		}
 		var delay time.Duration
 		if now.Before(l.pausedUntil) {
 			delay = l.pausedUntil.Sub(now)
@@ -277,7 +348,7 @@ func (l *Limiter) run() {
 		if delay == 0 && l.active < l.cfg.Concurrency {
 			l.consume(now, w.class, w.peer)
 			l.active++
-			l.queue = l.queue[1:]
+			*queue = (*queue)[1:]
 			w.granted = true
 			close(w.ready)
 			l.mu.Unlock()

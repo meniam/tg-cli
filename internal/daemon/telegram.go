@@ -46,6 +46,8 @@ type Telegram interface {
 	InviteInfo(ctx context.Context, ref chatref.Ref) (rpc.InviteInfo, error)
 	// History reads a chat from the newest message to the oldest.
 	History(ctx context.Context, ref chatref.Ref, q rpc.HistoryQuery) (rpc.MessagesResult, error)
+	// HistoryPage fetches one raw page for background history sync.
+	HistoryPage(ctx context.Context, ref chatref.Ref, offsetID int) (rpc.HistoryPage, error)
 	// Message returns one message of a chat.
 	Message(ctx context.Context, ref chatref.Ref, id int) (rpc.Message, error)
 	// Pinned returns up to limit pinned messages of a chat.

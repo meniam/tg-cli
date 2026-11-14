@@ -194,6 +194,10 @@ func (f *fakeTelegram) History(_ context.Context, ref chatref.Ref, q rpc.History
 	return res, nil
 }
 
+func (f *fakeTelegram) HistoryPage(_ context.Context, _ chatref.Ref, _ int) (rpc.HistoryPage, error) {
+	return rpc.HistoryPage{}, nil
+}
+
 func (f *fakeTelegram) Message(_ context.Context, ref chatref.Ref, id int) (rpc.Message, error) {
 	for _, m := range f.messages {
 		if m.ID == id {
