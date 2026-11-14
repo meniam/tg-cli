@@ -46,6 +46,12 @@ func validateMessageIDs(ids []int) error {
 }
 
 func (c *Client) Send(ctx context.Context, ref chatref.Ref, p rpc.SendParams) (rpc.SendResult, error) {
+	accountID, accountErr := c.idempotencyAccount(ctx, p.IdempotencyKey)
+	if accountErr != nil {
+		return rpc.SendResult{}, accountErr
+	}
+	p.AccountID = accountID
+
 	if p.DryRun {
 		return rpc.SendResult{}, rpc.NewError(rpc.CodeInvalidParams, "dry-run must be handled by the daemon")
 	}
@@ -134,6 +140,12 @@ func (c *Client) Delete(ctx context.Context, ref chatref.Ref, p rpc.DeleteParams
 }
 
 func (c *Client) Forward(ctx context.Context, from, to chatref.Ref, p rpc.ForwardParams) (rpc.ForwardResult, error) {
+	accountID, accountErr := c.idempotencyAccount(ctx, p.IdempotencyKey)
+	if accountErr != nil {
+		return rpc.ForwardResult{}, accountErr
+	}
+	p.AccountID = accountID
+
 	if p.DryRun {
 		return rpc.ForwardResult{}, rpc.NewError(rpc.CodeInvalidParams, "dry-run must be handled by the daemon")
 	}
@@ -160,6 +172,12 @@ func sendText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass
 }
 
 func sendPreparedText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.SendParams, prepared preparedText) (rpc.SendResult, error) {
+	wrappedAPI, wrapErr := idempotentAPI(api, p.AccountID, chatID, p.IdempotencyKey)
+	if wrapErr != nil {
+		return rpc.SendResult{}, wrapErr
+	}
+	api = wrappedAPI
+
 	sender := message.NewSender(api)
 	builder := sender.To(destination)
 	if p.Silent {
@@ -311,6 +329,12 @@ func deleteMessages(ctx context.Context, api *tg.Client, destination tg.InputPee
 }
 
 func forwardMessages(ctx context.Context, api *tg.Client, source, destination tg.InputPeerClass, chatID int64, p rpc.ForwardParams) (rpc.ForwardResult, error) {
+	wrappedAPI, wrapErr := idempotentAPI(api, p.AccountID, chatID, p.IdempotencyKey)
+	if wrapErr != nil {
+		return rpc.ForwardResult{}, wrapErr
+	}
+	api = wrappedAPI
+
 	if err := validateMessageIDs(p.IDs); err != nil {
 		return rpc.ForwardResult{}, err
 	}

@@ -19,6 +19,12 @@ import (
 const maxMediaCaptionRunes = 1024
 
 func (c *Client) SendMedia(ctx context.Context, ref chatref.Ref, p rpc.SendMediaParams, files []rpc.MediaFile) (rpc.SendMediaResult, error) {
+	accountID, accountErr := c.idempotencyAccount(ctx, p.IdempotencyKey)
+	if accountErr != nil {
+		return rpc.SendMediaResult{}, accountErr
+	}
+	p.AccountID = accountID
+
 	if err := validateMedia(p, files); err != nil {
 		return rpc.SendMediaResult{}, err
 	}
@@ -81,6 +87,12 @@ type mediaSpec struct {
 }
 
 func sendMedia(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.SendMediaParams, files []rpc.MediaFile) (rpc.SendMediaResult, error) {
+	wrappedAPI, wrapErr := idempotentAPI(api, p.AccountID, chatID, p.IdempotencyKey)
+	if wrapErr != nil {
+		return rpc.SendMediaResult{}, wrapErr
+	}
+	api = wrappedAPI
+
 	if err := validateMedia(p, files); err != nil {
 		return rpc.SendMediaResult{}, err
 	}

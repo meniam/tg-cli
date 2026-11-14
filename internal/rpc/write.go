@@ -4,29 +4,33 @@ import "os"
 
 // SendParams sends text to a chat. The caller validates authorization.
 type SendParams struct {
-	Chat     string   `json:"chat"`
-	Text     string   `json:"text"`
-	ReplyTo  int      `json:"reply_to,omitempty"`
-	Topic    int      `json:"topic,omitempty"`
-	Silent   bool     `json:"silent,omitempty"`
-	DryRun   bool     `json:"dry_run,omitempty"`
-	Parse    string   `json:"parse,omitempty"`
-	Entities []Entity `json:"entities,omitempty"`
+	IdempotencyKey string   `json:"idempotency_key,omitempty"`
+	AccountID      int64    `json:"-"`
+	Chat           string   `json:"chat"`
+	Text           string   `json:"text"`
+	ReplyTo        int      `json:"reply_to,omitempty"`
+	Topic          int      `json:"topic,omitempty"`
+	Silent         bool     `json:"silent,omitempty"`
+	DryRun         bool     `json:"dry_run,omitempty"`
+	Parse          string   `json:"parse,omitempty"`
+	Entities       []Entity `json:"entities,omitempty"`
 }
 
 // SendMediaParams carries only the request description, never file contents.
 type SendMediaParams struct {
-	Chat     string   `json:"chat"`
-	As       string   `json:"as"`
-	Files    []string `json:"files"`
-	Caption  string   `json:"caption,omitempty"`
-	ReplyTo  int      `json:"reply_to,omitempty"`
-	Topic    int      `json:"topic,omitempty"`
-	Silent   bool     `json:"silent,omitempty"`
-	DryRun   bool     `json:"dry_run,omitempty"`
-	Duration int      `json:"duration,omitempty"`
-	Width    int      `json:"width,omitempty"`
-	Height   int      `json:"height,omitempty"`
+	IdempotencyKey string   `json:"idempotency_key,omitempty"`
+	AccountID      int64    `json:"-"`
+	Chat           string   `json:"chat"`
+	As             string   `json:"as"`
+	Files          []string `json:"files"`
+	Caption        string   `json:"caption,omitempty"`
+	ReplyTo        int      `json:"reply_to,omitempty"`
+	Topic          int      `json:"topic,omitempty"`
+	Silent         bool     `json:"silent,omitempty"`
+	DryRun         bool     `json:"dry_run,omitempty"`
+	Duration       int      `json:"duration,omitempty"`
+	Width          int      `json:"width,omitempty"`
+	Height         int      `json:"height,omitempty"`
 }
 
 // MediaFile is a checked, already-open file owned by the caller.
@@ -43,6 +47,7 @@ type MediaFile struct {
 type MessageRef = ForwardedMessage
 
 type SendMediaResult struct {
+	Replayed      bool         `json:"replayed,omitempty"`
 	ChatID        int64        `json:"chat_id"`
 	Messages      []MessageRef `json:"messages"`
 	DryRun        bool         `json:"dry_run,omitempty"`
@@ -85,11 +90,13 @@ type DeleteParams struct {
 }
 
 type ForwardParams struct {
-	From   string `json:"from"`
-	To     string `json:"to"`
-	IDs    []int  `json:"ids"`
-	Silent bool   `json:"silent,omitempty"`
-	DryRun bool   `json:"dry_run,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	AccountID      int64  `json:"-"`
+	From           string `json:"from"`
+	To             string `json:"to"`
+	IDs            []int  `json:"ids"`
+	Silent         bool   `json:"silent,omitempty"`
+	DryRun         bool   `json:"dry_run,omitempty"`
 }
 
 type ReactParams struct {
@@ -114,21 +121,24 @@ type UnpinParams struct {
 }
 
 type PollParams struct {
-	Chat        string   `json:"chat"`
-	Question    string   `json:"question"`
-	Options     []string `json:"options"`
-	Multiple    bool     `json:"multiple,omitempty"`
-	Public      bool     `json:"public,omitempty"`
-	Quiz        bool     `json:"quiz,omitempty"`
-	Correct     int      `json:"correct,omitempty"`
-	Explanation string   `json:"explanation,omitempty"`
-	ReplyTo     int      `json:"reply_to,omitempty"`
-	Topic       int      `json:"topic,omitempty"`
-	Silent      bool     `json:"silent,omitempty"`
-	DryRun      bool     `json:"dry_run,omitempty"`
+	IdempotencyKey string   `json:"idempotency_key,omitempty"`
+	AccountID      int64    `json:"-"`
+	Chat           string   `json:"chat"`
+	Question       string   `json:"question"`
+	Options        []string `json:"options"`
+	Multiple       bool     `json:"multiple,omitempty"`
+	Public         bool     `json:"public,omitempty"`
+	Quiz           bool     `json:"quiz,omitempty"`
+	Correct        int      `json:"correct,omitempty"`
+	Explanation    string   `json:"explanation,omitempty"`
+	ReplyTo        int      `json:"reply_to,omitempty"`
+	Topic          int      `json:"topic,omitempty"`
+	Silent         bool     `json:"silent,omitempty"`
+	DryRun         bool     `json:"dry_run,omitempty"`
 }
 
 type SendResult struct {
+	Replayed    bool   `json:"replayed,omitempty"`
 	ChatID      int64  `json:"chat_id"`
 	ID          int    `json:"id,omitempty"`
 	Date        string `json:"date,omitempty"`
@@ -185,6 +195,7 @@ type ForwardedMessage struct {
 }
 
 type ForwardResult struct {
+	Replayed bool               `json:"replayed,omitempty"`
 	ChatID   int64              `json:"chat_id"`
 	Messages []ForwardedMessage `json:"messages"`
 	DryRun   bool               `json:"dry_run,omitempty"`
