@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/throttle, internal/tgclient/throttle.go, internal/cli/throttle_config.go]
+---
 # Дроссель аккаунта один, на 60% от ориентиров ботов, три уровня, автоожидание FLOOD_WAIT до 10 секунд
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

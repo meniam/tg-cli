@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/daemon/chat_lists.go, internal/tgclient/members.go, internal/tgclient/topics_common.go, internal/cli/chat_lists_cmd.go]
+---
 # Участники, топики и общие чаты читаются тремя командами под chat: текст поиска вместе с фильтром роли применяется к загруженной странице, закрытые чаты убираются из общих с добором страниц, канал без прав админа даёт ошибку, люди сохраняются в people
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

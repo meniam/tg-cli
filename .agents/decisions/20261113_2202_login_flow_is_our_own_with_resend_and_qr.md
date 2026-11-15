@@ -1,7 +1,10 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+paths: [internal/tgclient/login.go, internal/cli/auth_cmd.go, internal/cli/qr.go, internal/rpc/api.go]
+---
 # Поток входа свой: повторная отправка кода и вход по QR
-
-Decided: 2026-11-13
-Revised: —
 
 ## Context
 

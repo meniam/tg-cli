@@ -90,7 +90,7 @@
 - Разворот живёт в адресе по `expandKey` карточки (`?orders.expanded=true`),
   поэтому ключ латиницей и уникален на странице.
 
-## Чек-лист
+## Checklist
 
 1. Грид лежит в `Card` с `CardMenubar`, `CardHeader` над гридом нет, имя —
    `ariaLabel`.

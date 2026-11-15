@@ -18,7 +18,7 @@
 await copyToClipboard(apiKey, { message: 'Ключ скопирован', preview: false })
 ```
 
-## Чек-лист
+## Checklist
 
 1. Копирование идёт через `copyToClipboard`, своего `navigator.clipboard` нет.
 2. Секрет копируется с `preview: false`.

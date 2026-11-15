@@ -19,6 +19,14 @@ import (
 const mediaOutsideRoots = "file is outside the allowed roots"
 
 func validSendMediaParams(p rpc.SendMediaParams) error {
+	if p.SelfDestruct != "" {
+		if _, err := rpc.ParseSelfDestruct(p.SelfDestruct); err != nil {
+			return err
+		}
+		if (p.As != "photo" && p.As != "video") || len(p.Files) != 1 {
+			return rpc.NewError(rpc.CodeInvalidParams, "self-destruct requires one photo or video")
+		}
+	}
 	switch p.As {
 	case "photo", "video", "audio", "voice", "document":
 	default:
@@ -72,6 +80,15 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 	ref, chatID, err := d.writeReference(ctx, p.Chat, true)
 	if err != nil {
 		return nil, err
+	}
+	if p.SelfDestruct != "" {
+		chat, err := d.opts.Telegram.Resolve(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		if chat.Type != "user" {
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "self-destruct requires a private user chat")
+		}
 	}
 	policy := d.policy()
 	if !policy.Allowed(chatID) {
@@ -146,7 +163,7 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 		for i, file := range files {
 			types[i], sizes[i] = p.As, file.Size
 		}
-		result := rpc.SendMediaResult{ChatID: chatID, Messages: []rpc.MessageRef{}, DryRun: true, Action: "send_media", Count: len(files), Types: types, Sizes: sizes, CaptionLength: utf8.RuneCountInString(p.Caption)}
+		result := rpc.SendMediaResult{ChatID: chatID, Messages: []rpc.MessageRef{}, DryRun: true, Action: "send_media", Count: len(files), Types: types, Sizes: sizes, CaptionLength: utf8.RuneCountInString(p.Caption), SelfDestruct: p.SelfDestruct}
 		if p.IdempotencyKey != "" {
 			result.ReplayAvailable = &available
 		}
@@ -164,6 +181,7 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 		return nil, rpc.NewError(rpc.CodeTelegram, "Telegram did not return all sent message ids")
 	}
 	res.ChatID = chatID
+	res.SelfDestruct = p.SelfDestruct
 	stored := make([]rpc.Message, 0, len(res.Messages))
 	for i, item := range res.Messages {
 		if item.ID <= 0 || item.Date == "" {

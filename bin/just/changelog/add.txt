@@ -1,0 +1,13 @@
+    Creates a record file in .agents/changelog/: the recipe sets the time and the
+    zone (Europe/Moscow), the file name is built from the text. The type is
+    checked, the text is at most 200 characters. Do not create the files by hand.
+
+  What runs
+    1. uv run bin/changelog.py add <type> "<text>" [--breaking] [--decision NAME] [--slug NAME]
+      --breaking     incompatible change; the text says what the operator must do
+      --decision     decision file name from .agents/decisions/ without .md
+      --slug         latin file name when the automatic one does not fit
+
+  Examples
+    just changelog add Добавлено "Команда `tg schedule list` показывает отложенные сообщения чата."
+    just changelog add Изменено "Ключ `write` в `access.json` стал списком чатов, перепишите файл." --breaking

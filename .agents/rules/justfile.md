@@ -4,16 +4,16 @@ Apply across all projects when creating or updating justfiles and their modules.
 Root and module help must share the same presentation. Apply this template to
 new modules immediately, without waiting for a separate reminder.
 
-**Defaults, not law.** A project rule — its `AGENTS.md`, its docs, or a decision
-in `.agents/decisions/` — wins over this file; see `AGENTS.md`, "Precedence".
-A lasting deviation is recorded there, not left to the code.
+**Defaults, not law.** A project's `AGENTS.md` and docs win over this file; a
+project file with the same name replaces it entirely. See `AGENTS.md`,
+"Precedence".
 
 ## Command interface
 
 - Use the justfile as a clear, single entry point for working with a project.
-- Write user-facing help in Russian. Keep it concise and concrete: explain
-  purpose and outcomes, without internal implementation details or long
-  technical explanations.
+- Write user-facing help in Russian unless the project sets another language.
+  Keep it concise and concrete: explain purpose and outcomes, without internal
+  implementation details or long technical explanations.
 - Show complete, copyable commands, such as `just catalog deploy`, rather than
   a bare `deploy` or an ambiguous `catalog ...`.
 - Running `just` or `just <module>` must display formatted help.
@@ -81,3 +81,22 @@ Example output follows. Russian text is intentional; commands are illustrative:
 - Check root and module help output, both with and without colors.
 - Run `shellcheck` when changing a shell-based renderer.
 - Checking help alone does not require deployment or starting services.
+
+## Checklist
+
+1. `just` and `just <module>` show formatted help through a `[default]` `help`
+   recipe; `just --list` stays a technical listing.
+2. Help is in Russian unless the project sets another language; concise, with
+   complete copyable commands.
+3. Each help screen has the parts of its structure in order: banner, purpose,
+   "Возможности", grouped commands; order of operations and the full-listing
+   command where needed.
+4. Indents are 2, 4 and 6 spaces; descriptions are aligned in a column; the
+   banner has 2 spaces inside each side border.
+5. ANSI codes are off when output is redirected or `NO_COLOR` is nonempty.
+6. Root and module help share one formatting mechanism, with no per-module style.
+7. Order of operations and warnings come from this project's rules.
+8. Help is updated with the commands; command names and behavior are unchanged
+   by presentation changes.
+9. Root and module help are checked with and without colors; `shellcheck` runs
+   for a shell-based renderer.

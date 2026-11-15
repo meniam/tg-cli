@@ -16,6 +16,7 @@ import (
 // Methods return *rpc.Error for failures the caller should see with a
 // specific code (not authorized, flood wait, Telegram errors).
 type Telegram interface {
+	messageExtrasTelegram
 	usersTelegram
 	CacheJoinRequestUsers(context.Context, []rpc.JoinRequest) error
 	AccountPrivacyGet(context.Context, string) (rpc.PrivacyRules, error)
@@ -27,6 +28,7 @@ type Telegram interface {
 	AccountEmojiStatuses(context.Context, bool) (rpc.EmojiStatusesResult, error)
 	AccountProfile(context.Context) (rpc.AccountProfile, error)
 	MessageReaders(context.Context, chatref.Ref, int) (rpc.MessageReadersResult, error)
+	downloadTelegram
 	ChatAdmin
 	// Run connects and keeps the connection until ctx ends. It returns
 	// ctx.Err() on a clean stop.

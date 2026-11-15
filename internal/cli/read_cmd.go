@@ -103,11 +103,12 @@ func (a *app) messageCommand() *cobra.Command {
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, ItemPath: "messages"})
 	pinned.Flags().Int("limit", 0, "pinned messages per page, 1 to 100; 0 means 20")
 
-	cmd.AddCommand(history, get, pinned, a.watchCommand(), a.messageExportCommand(), a.messageUnreadCommand())
+	cmd.AddCommand(history, get, pinned, a.messageDownloadCommand(), a.watchCommand(), a.messageExportCommand(), a.messageUnreadCommand())
 	cmd.AddCommand(a.messageDiscoveryCommands()...)
 	cmd.AddCommand(a.messageScheduledCommand())
 	cmd.AddCommand(a.messageReadersCommand())
 	cmd.AddCommand(a.messageWriteCommands()...)
+	cmd.AddCommand(a.messageExtrasCommands()...)
 	return cmd
 }
 

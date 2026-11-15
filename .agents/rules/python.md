@@ -3,9 +3,9 @@
 Python projects on uv. Applies to `pyproject.toml`, project layout, tooling.
 
 **A recommended starting point, not a mandate.** This is what a new project
-gets on day one; a project adjusts it as it learns what it needs, and records
-a lasting deviation in the project decision journal, following `decisions.md`
-(normally a separate file in `.agents/decisions/`).
+gets on day one; a project adjusts it as it learns what it needs. A project
+file with the same name replaces this one entirely; see `AGENTS.md`,
+"Precedence".
 
 ## Scope
 

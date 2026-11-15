@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/daemon/write.go, internal/tgclient/actions.go, internal/rpc/write_validation.go, internal/cli/write_cmd.go, internal/tgclient/throttle.go]
+---
 # Реакции, закрепление и опросы это записи под write без --yes: закрепление с уведомлением, пределы опроса проверяются до Telegram, признак pinned в базе обновляется сразу
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

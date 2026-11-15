@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/schema/schema.go, internal/cli/schema_cmd.go, internal/output/fields.go]
+---
 # Команда schema описывает команды, классы безопасности и поля ответов
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

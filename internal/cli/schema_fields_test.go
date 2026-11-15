@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -81,6 +82,16 @@ var realResponseCases = map[string][]string{
 	"schema":                 {"schema"},
 	"search":                 {"search", "third"},
 	"version":                {"version"},
+	"sticker search":         {"sticker", "search", "cats"},
+	"sticker installed":      {"sticker", "installed"},
+	"sticker set":            {"sticker", "set", "fixture"},
+	"message send-sticker":   {"message", "send-sticker", "5", "--set", "fixture", "--index", "0", "--dry-run"},
+	"message edit-media":     {"message", "edit-media", "5", "30", "--as", "document", "--file", "@media", "--dry-run"},
+	"message inline-query":   {"message", "inline-query", "5", "--bot", "@fixturebot", "--query", "test"},
+	"message send-inline":    {"message", "send-inline", "5", "--query-id", "123", "--result", "result", "--dry-run"},
+	"message buttons":        {"message", "buttons", "@teamchat", "30"},
+	"message press":          {"message", "press", "5", "30", "--button", "0", "--dry-run"},
+	"chat auto-delete":       {"chat", "auto-delete", "5", "--period", "1d", "--dry-run"},
 }
 
 // realResponses runs the commands of realResponseCases against the fake daemon
@@ -94,9 +105,22 @@ func realResponses(t *testing.T) map[string][]byte {
 	}
 	e.tg.mu.Lock()
 	e.tg.peopleFixture = true
+	for i := range e.tg.messages {
+		if e.tg.messages[i].ID == 30 {
+			e.tg.messages[i].MediaType = "document"
+		}
+	}
 	e.tg.mu.Unlock()
-	if err := os.WriteFile(paths.Access, []byte(`{"write":[5],"admin":[77],"profile":true}`), 0o600); err != nil {
+	mediaPath := filepath.Join(e.home, "fixture.dat")
+	if err := os.WriteFile(mediaPath, []byte("fixture"), 0600); err != nil {
 		t.Fatal(err)
+	}
+	accessData, _ := json.Marshal(map[string]any{"write": []int{5}, "admin": []int{77}, "profile": true, "files": []string{e.home}, "downloads": []string{e.home}})
+	if err := os.WriteFile(paths.Access, accessData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r := e.run("message", "inline-query", "5", "--bot", "@fixturebot", "--query", "test"); r.code != exitcode.OK {
+		t.Fatalf("inline query setup: %q", r.stdout)
 	}
 	if err := os.WriteFile(paths.Log, []byte("test line\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -125,6 +149,9 @@ func realResponses(t *testing.T) map[string][]byte {
 	for path, args := range realResponseCases {
 		run := make([]string, len(args))
 		for i, arg := range args {
+			if arg == "@media" {
+				arg = mediaPath
+			}
 			if arg == noteIDToken {
 				arg = own()
 			}
@@ -225,11 +252,18 @@ var uncoveredCommands = map[string]string{
 	"chat sync cancel":           "background cancellation is covered by net.Pipe CLI tests",
 }
 
+// fixtureResponseCases cover commands whose daemon side effects are isolated by net.Pipe.
+var fixtureResponseCases = map[string]bool{"message download": true}
+
 // TestEveryCommandResponseIsCompared makes sure the comparison covers the whole
 // command tree: a command that is neither exercised nor explained fails here.
 func TestEveryCommandResponseIsCompared(t *testing.T) {
+	t.Run("message download", TestDownloadResponseFixture)
 	cases := map[string]bool{}
 	for path := range realResponseCases {
+		cases[path] = true
+	}
+	for path := range fixtureResponseCases {
 		cases[path] = true
 	}
 	for path := range uncoveredCommands {

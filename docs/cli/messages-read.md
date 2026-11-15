@@ -494,3 +494,14 @@ tg message readers <chat> <id>
 <!-- schema:flags tg message readers -->
 No command flags.
 <!-- /schema:flags -->
+
+### tg message download
+
+Download media to a directory explicitly allowed by the owner in `access.json` under `downloads`. `--output` must be an existing absolute directory. At most 20 messages, 100 MiB per file and 500 MiB per call are allowed. Protected content is refused. Existing files are not overwritten. `--dry-run` checks metadata without writing.
+
+<!-- schema:flags tg message download -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check media without writing files |
+| `--output` | string | `none` | required absolute output directory |
+<!-- /schema:flags -->

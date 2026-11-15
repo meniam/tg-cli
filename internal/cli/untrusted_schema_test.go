@@ -7,6 +7,13 @@ import (
 
 func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 	want := map[string][]string{
+		"sticker search":             {"sets.short_name", "sets.title"},
+		"sticker installed":          {"sets.short_name", "sets.title"},
+		"sticker set":                {"set.short_name", "set.title", "stickers.emoji"},
+		"message send-sticker":       {"sticker.emoji"},
+		"message inline-query":       {"next_offset", "results.id", "results.type", "results.title", "results.description", "results.url"},
+		"message buttons":            {"buttons.text", "buttons.url", "buttons.copy_text"},
+		"message press":              {"button.text", "message", "url"},
 		"folder list":                {"folders.title", "folders.pinned.title", "folders.include.title", "folders.exclude.title"},
 		"account blocked":            {"peers.title", "peers.username"},
 		"account profile":            {"first_name", "last_name", "username", "bio"},
@@ -33,6 +40,7 @@ func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 		"message scheduled send-now": {"messages.sender.name", "messages.sender.username", "messages.text"},
 		"message history":            {"messages.sender.name", "messages.sender.username", "messages.text"},
 		"message unread":             {"messages.sender.name", "messages.sender.username", "messages.text"},
+		"message download":           {"files.mime", "files.file_name"},
 		"message get":                {"sender.name", "sender.username", "text"},
 		"message readers":            {"readers.name", "readers.username"},
 		"message pinned":             {"messages.sender.name", "messages.sender.username", "messages.text"},

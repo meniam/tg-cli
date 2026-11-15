@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/daemon/export_local.go, internal/cli/export_cmd.go]
+---
 # Выгрузка из базы это команда message export --local: Daemon отдаёт страницы до 500 сообщений и 768 КиБ, CLI печатает JSONL по строке на сообщение, версии правок не входят
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

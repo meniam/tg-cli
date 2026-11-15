@@ -1,0 +1,82 @@
+# Модуль Atlas для проекта, куда скопирована сборка: mod atlas 'bin/apps/atlas/justfile'.
+# Рецепты идут из корня проекта, как у bin/atlas, а пусковой файл берётся из папки модуля.
+
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+atlas := quote(source_directory() / "atlas") + " "
+root := "cd " + quote(justfile_directory()) + " && "
+
+# Show module help
+[default]
+[arg("help", long="help", short="h", value="1")]
+help help="":
+    @bash {{ quote(source_directory() / "just/help.sh") }} {{ quote(source_directory() / "just/help.txt") }}
+
+# How X works in one call: symbols, call chain, source
+[group('search')]
+[positional-arguments]
+explore *args:
+    @{{ root }}{{ atlas }}explore -o pretty "$@"
+
+# Search code and docs by words
+[group('search')]
+[positional-arguments]
+query *args:
+    @{{ root }}{{ atlas }}query -o pretty "$@"
+
+# Card of a symbol or file: where it is, what it contains, its calls
+[group('search')]
+[positional-arguments]
+node *args:
+    @{{ root }}{{ atlas }}node -o pretty "$@"
+
+# Who calls a symbol, walking several levels up
+[group('search')]
+[positional-arguments]
+incoming *args:
+    @{{ root }}{{ atlas }}incoming -o pretty "$@"
+
+# What a symbol calls, walking several levels down
+[group('search')]
+[positional-arguments]
+outgoing *args:
+    @{{ root }}{{ atlas }}outgoing -o pretty "$@"
+
+# Tests affected by changed files
+[group('search')]
+[positional-arguments]
+affected *args:
+    @{{ root }}{{ atlas }}affected -o pretty "$@"
+
+# References that could not be resolved unambiguously
+[group('search')]
+[positional-arguments]
+unresolved *args:
+    @{{ root }}{{ atlas }}unresolved -o pretty "$@"
+
+# Index state
+[group('index')]
+[positional-arguments]
+status *args:
+    @{{ root }}{{ atlas }}status -o pretty "$@"
+
+# Catch the index up with disk
+[group('index')]
+[positional-arguments]
+sync *args:
+    @{{ root }}{{ atlas }}sync -o pretty "$@"
+
+# Rebuild the index from scratch
+[group('index')]
+[arg("help", long="help", short="h", value="1")]
+index help="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ -z "{{ help }}" ]] || exec bash {{ quote(source_directory() / "just/help.sh") }} {{ quote(source_directory() / "just/index.txt") }}
+    {{ root }}{{ atlas }}sync --full -o pretty
+
+# JSON Schema for .atlas.json
+[group('project')]
+[positional-arguments]
+schema *args:
+    @{{ root }}{{ atlas }}schema -o pretty "$@"

@@ -22,6 +22,7 @@ func (a *app) chatMembersCommand() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		RunE: a.chatMembers,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MembersResult](), Args: []argSpec{{Name: "chat", Required: true}}, Choices: []flagChoices{{Flag: "filter", Values: []string{"recent", "admins", "bots"}}}, ItemPath: "members"})
+	cmd.Flags().Bool("all", false, "stream all pages as JSONL")
 	cmd.Flags().String("search", "", "find members by name or username")
 	cmd.Flags().Int("offset", 0, "number of members to skip, 0 or greater")
 	cmd.Flags().Int("limit", 50, "members per page, 1 to 200")
@@ -70,6 +71,10 @@ func (a *app) chatMembers(cmd *cobra.Command, args []string) error {
 	settings, err := a.outputSettingsFor(cmd)
 	if err != nil {
 		return err
+	}
+	all, _ := cmd.Flags().GetBool("all")
+	if all {
+		return a.chatMembersAll(cmd, args, settings)
 	}
 	limit, err := chatListLimit(cmd, 200)
 	if err != nil {

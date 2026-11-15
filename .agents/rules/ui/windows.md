@@ -20,7 +20,7 @@
   onConfirm={remove} />
 ```
 
-## Чек-лист
+## Checklist
 
 1. Крестик окна — `Close`.
 2. `ButtonCancel` только при несохранённых правках, иначе `ButtonClose`.

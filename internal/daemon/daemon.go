@@ -64,6 +64,8 @@ type daemon struct {
 	eventMu             sync.Mutex
 	deletionsMu         sync.Mutex
 	contactsMu          sync.Mutex
+	inlineMu            sync.Mutex
+	inlineQueries       map[string]inlineQueryEntry
 	addEvent            func(context.Context, store.Event) (int64, bool, error)
 	findMessageChats    func(context.Context, []int) ([]int64, error)
 	markMessagesDeleted func(context.Context, int64, []int) (int, error)
@@ -331,6 +333,8 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodChatApprove, d.approveJoinRequest)
 	d.handle(rpc.MethodChatDecline, d.declineJoinRequest)
 	d.handle(rpc.MethodAccountEmojiStatuses, d.accountEmojiStatuses)
+	d.handle(rpc.MethodMessageDownload, d.messageDownload)
+	d.srv.SetMethodTimeout(rpc.MethodMessageDownload, 600*time.Second)
 	d.handle(rpc.MethodMessagePinned, d.messagePinned)
 	d.handle(rpc.MethodMessageScheduledList, d.scheduledList)
 	d.handle(rpc.MethodMessageScheduledDelete, d.scheduledDelete)
@@ -369,6 +373,7 @@ func (d *daemon) register() {
 	d.registerUsers()
 	d.registerChatAdmin()
 	d.registerUnread()
+	d.registerMessageExtras()
 }
 
 func (d *daemon) ping(context.Context, json.RawMessage) (any, error) {

@@ -23,6 +23,8 @@ func printPartialSummary(w io.Writer, cmd *cobra.Command, data any) error {
 		failed, total = len(v.Errors), len(v.Errors)+len(v.Changes)
 	case *rpc.DeleteResult:
 		failed, total = len(v.Errors), len(v.Errors)+len(v.Deleted)
+	case *rpc.DownloadResult:
+		failed, total = len(v.Errors), len(v.Errors)+len(v.Files)
 	case *rpc.ForwardResult:
 		failed, total = len(v.Errors), len(v.Errors)+len(v.Messages)
 	case *rpc.ScheduledResult:

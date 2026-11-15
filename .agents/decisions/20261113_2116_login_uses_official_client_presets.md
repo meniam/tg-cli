@@ -1,7 +1,10 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/clientpreset]
+---
 # Вход идёт по пресету официального клиента, своё приложение необязательно
-
-Decided: 2026-11-13
-Revised: revised by [Имя устройства по умолчанию MacBook Pro M1 BRN, --device переопределяет](20261113_2218_device_name_is_macbook_pro_m1_brn_by_default.md) 2026-11-13
 
 ## Context
 

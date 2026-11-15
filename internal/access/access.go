@@ -14,14 +14,15 @@ import (
 
 // Policy is an immutable snapshot of one access file.
 type Policy struct {
-	allow   map[int64]struct{}
-	block   map[int64]struct{}
-	write   map[int64]struct{}
-	admin   map[int64]struct{}
-	create  bool
-	profile bool
-	files   []string
-	denied  bool
+	allow     map[int64]struct{}
+	block     map[int64]struct{}
+	write     map[int64]struct{}
+	admin     map[int64]struct{}
+	create    bool
+	profile   bool
+	files     []string
+	downloads []string
+	denied    bool
 }
 
 // Allowed reports whether chatID is visible under this snapshot.
@@ -85,6 +86,17 @@ func (p Policy) FileRoots() []string {
 
 // FilesAllowed reports whether file sending has at least one allowed root.
 func (p Policy) FilesAllowed() bool { return !p.denied && len(p.files) > 0 }
+
+// DownloadRoots returns a detached copy of directories allowed for downloads.
+func (p Policy) DownloadRoots() []string {
+	if p.denied {
+		return nil
+	}
+	return append([]string(nil), p.downloads...)
+}
+
+// DownloadsAllowed reports whether downloads have an allowed root.
+func (p Policy) DownloadsAllowed() bool { return !p.denied && len(p.downloads) > 0 }
 
 // Filter returns a detached snapshot for database queries. A failed policy
 // hides all chats; callers may still show records without a chat ID.
@@ -236,6 +248,15 @@ func parse(data []byte) (Policy, error) {
 				return Policy{}, fmt.Errorf("files: %w", err)
 			}
 			policy.files = roots
+		case "downloads":
+			if len(value) == 0 || value[0] != '[' {
+				return Policy{}, errors.New("downloads must be an array of absolute directory paths")
+			}
+			roots, err := parseFileRoots(value)
+			if err != nil {
+				return Policy{}, fmt.Errorf("downloads: %w", err)
+			}
+			policy.downloads = roots
 		default:
 			return Policy{}, errors.New("unknown field")
 		}

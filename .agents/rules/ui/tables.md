@@ -133,7 +133,7 @@
 - Предупреждение AG Grid в dev-режиме (оверлей, deprecation, error #…) —
   баг: страница с ним не готова.
 
-## Чек-лист
+## Checklist
 
 1. Список и журнал — полный `AgGrid`; `simple` только для «ключ → значение».
 2. `sortable: false` и `suppressHeaderMenuButton` только с причиной.

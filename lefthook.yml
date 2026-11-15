@@ -1,0 +1,12 @@
+# Atlas (bin/atlas): after a branch switch or a pull, catch the index up in the background so the
+# first query does not wait. Skipped without uv or without bin/atlas (a worktree on a branch that
+# does not have it yet); a failure does not disturb git, the next command catches the index up.
+post-checkout:
+    jobs:
+        # {3} = 1 is a branch switch, 0 is a checkout of single files.
+        - name: atlas-sync
+          run: '[ "{3}" = "1" ] && [ -x bin/atlas ] && command -v uv >/dev/null && (nohup bin/atlas sync >/dev/null 2>&1 &) ; true'
+post-merge:
+    jobs:
+        - name: atlas-sync
+          run: '[ -x bin/atlas ] && command -v uv >/dev/null && (nohup bin/atlas sync >/dev/null 2>&1 &) ; true'

@@ -1,0 +1,39 @@
+╭─────────╮
+│  Atlas  │
+╰─────────╯
+
+    Atlas: a project map for AI agents. A code graph for TS, JS, PHP,
+    Python and Go plus a docs index from .atlas.json. An agent asks via the
+    launcher bin/atlas and gets one JSON object back.
+
+  Capabilities
+    Every bin/atlas command with readable JSON and a full index rebuild.
+
+  Search
+    just atlas explore "<question>"   How X works in one call
+    just atlas query "<words>"        Search code and docs by words
+    just atlas node <symbol>          Card of a symbol or file
+    just atlas incoming <symbol>      Who calls a symbol, walking up
+    just atlas outgoing <symbol>      What a symbol calls, walking down
+    just atlas affected <file>...     Tests affected by changed files
+    just atlas unresolved             Unresolved and ambiguous references
+
+  Index
+    just atlas status                 Index state
+    just atlas sync                   Catch the index up with disk
+    just atlas index                  Rebuild the index from scratch
+
+  Project
+    just atlas schema                 JSON Schema for .atlas.json
+
+  Examples
+    just atlas explore "how PlaceOrderHandler charges money"
+    just atlas query "supplier list" --scope documentation
+    just atlas node ListSuppliersHandler::handle --code
+    just atlas incoming StripeGateway::charge --depth 3
+    just atlas affected src/Order/PlaceOrderHandler.php
+    just atlas status scope kind
+
+  Commands run from the project root and pass their arguments to bin/atlas
+  as is, with -o pretty by default.
+  More on a command: add help, -h or --help, for example just atlas query -h

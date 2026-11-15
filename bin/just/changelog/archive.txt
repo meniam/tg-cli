@@ -1,0 +1,14 @@
+    Moves records of past months from the root of .agents/changelog/ into
+    YYYY-MM/ subfolders. The current month stays in the root. File contents do
+    not change.
+
+  What runs
+    1. uv run bin/changelog.py archive [--dry-run]
+      --dry-run   only show how many files go to which months
+
+  When to run
+    At the start of a new month, in a separate commit.
+
+  Examples
+    just changelog archive --dry-run
+    just changelog archive
