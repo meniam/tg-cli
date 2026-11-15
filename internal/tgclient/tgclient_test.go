@@ -110,7 +110,7 @@ func TestMapError(t *testing.T) {
 	if err := mapError(tgerr.New(400, "PHONE_CODE_INVALID")); !errors.As(err, &rpcErr) || rpcErr.Code != rpc.CodeTelegram || rpcErr.Message != "PHONE_CODE_INVALID" {
 		t.Errorf("telegram error: %v", err)
 	}
-	if err := mapError(errors.New("boom")); !errors.As(err, &rpcErr) || rpcErr.Code != rpc.CodeTelegram {
+	if err := mapError(errors.New("password=hunter2")); !errors.As(err, &rpcErr) || rpcErr.Code != rpc.CodeTelegram || rpcErr.Message != "telegram request failed: unexpected response" {
 		t.Errorf("unknown error: %v", err)
 	}
 }

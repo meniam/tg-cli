@@ -200,6 +200,9 @@ func positiveMessageID(text string) (int, error) {
 	return id, nil
 }
 func messageIDs(args []string) ([]int, error) {
+	if len(args) > 1000 {
+		return nil, fail(exitcode.Usage, "at most 1000 message ids are allowed")
+	}
 	ids := make([]int, 0, len(args))
 	for _, arg := range args {
 		id, err := positiveMessageID(arg)

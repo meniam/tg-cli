@@ -42,7 +42,7 @@ func (a *app) daemonCommand() *cobra.Command {
 			"is 0, no idle stop.",
 		Args: cobra.NoArgs,
 		RunE: a.daemonStart,
-	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[backgroundStartedResult]()})
+	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[backgroundStartedResult](), ResultVariants: []resultVariant{{Flag: "foreground", Result: typeOf[daemonStartedResult]()}}, Choices: []flagChoices{{Flag: "client", Values: []string{"desktop", "android", "ios", "macos", "web-z", "web-k"}}}})
 	start.Flags().String("transport", "", "Telegram transport: tcp or wss (remembered for the profile)")
 	start.Flags().String("proxy", "", "SOCKS5 or Telegram proxy URL, or none (remembered for the profile)")
 	start.Flags().String("client", "", "official client preset to use instead of your own application, for example desktop")

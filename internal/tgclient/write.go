@@ -292,31 +292,7 @@ func deleteMessages(ctx context.Context, api *tg.Client, destination tg.InputPee
 }
 
 func forwardMessages(ctx context.Context, api *tg.Client, source, destination tg.InputPeerClass, chatID int64, p rpc.ForwardParams) (rpc.ForwardResult, error) {
-	wrappedAPI, wrapErr := idempotentAPI(api, p.AccountID, chatID, p.IdempotencyKey)
-	if wrapErr != nil {
-		return rpc.ForwardResult{}, wrapErr
-	}
-	api = wrappedAPI
-
-	if err := validateMessageIDs(p.IDs); err != nil {
-		return rpc.ForwardResult{}, err
-	}
-	builder := message.NewSender(api).To(destination)
-	if p.Silent {
-		builder.Silent()
-	}
-	updates, err := builder.ForwardIDs(source, p.IDs[0], p.IDs[1:]...).Send(ctx)
-	if err != nil {
-		return rpc.ForwardResult{}, mapError(err)
-	}
-	messages, err := writtenMessages(updates)
-	if err != nil {
-		return rpc.ForwardResult{}, err
-	}
-	if len(messages) != len(p.IDs) {
-		return rpc.ForwardResult{}, rpc.NewError(rpc.CodeTelegram, "Telegram did not return all forwarded message ids")
-	}
-	return rpc.ForwardResult{ChatID: chatID, Messages: messages}, nil
+	return forwardBatches(ctx, api, source, destination, chatID, p)
 }
 
 func newRandomID() (int64, error) {

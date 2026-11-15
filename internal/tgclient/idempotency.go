@@ -29,6 +29,7 @@ type idempotentInvoker struct {
 	next              tg.Invoker
 	accountID, chatID int64
 	key               string
+	offset            uint64
 }
 
 func deterministicID(accountID, chatID int64, key string, index uint64) int64 {
@@ -63,7 +64,7 @@ func (i *idempotentInvoker) Invoke(ctx context.Context, input bin.Encoder, outpu
 	case *tg.MessagesForwardMessagesRequest:
 		req.RandomID = make([]int64, len(req.ID))
 		for n := range req.ID {
-			req.RandomID[n] = deterministicID(i.accountID, i.chatID, i.key, uint64(n))
+			req.RandomID[n] = deterministicID(i.accountID, i.chatID, i.key, i.offset+uint64(n))
 		}
 	default:
 		return i.next.Invoke(ctx, input, output)

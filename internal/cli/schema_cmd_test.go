@@ -135,6 +135,9 @@ func TestSchemaDaemonStartDescribesDefaultResult(t *testing.T) {
 	if cmd.Result != "cli.backgroundStartedResult" {
 		t.Errorf("default result type = %q", cmd.Result)
 	}
+	if len(cmd.ResultVariants) != 1 || cmd.ResultVariants[0].Flag != "foreground" || cmd.ResultVariants[0].Result != "cli.daemonStartedResult" {
+		t.Errorf("foreground result = %+v", cmd.ResultVariants)
+	}
 	var paths []string
 	for _, field := range cmd.Fields {
 		paths = append(paths, field.Path)

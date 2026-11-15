@@ -40,6 +40,11 @@ type flagChoices struct {
 	Values []string
 }
 
+type resultVariant struct {
+	Flag   string
+	Result reflect.Type
+}
+
 // formatNames turns a list of formats into the strings an agent types.
 func formatNames(formats []output.Format) []string {
 	names := make([]string, len(formats))
@@ -94,7 +99,8 @@ type commandSpec struct {
 	// derived from Safety: a local_write command can still lose data.
 	Risk risk
 	// Result is the Go type of data in the success envelope.
-	Result reflect.Type
+	Result         reflect.Type
+	ResultVariants []resultVariant
 	// ChatResult describes the object returned when an optional chat selects one item.
 	ChatResult reflect.Type
 	// Args are the positional arguments, in the order they are given.

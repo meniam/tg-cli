@@ -8,6 +8,7 @@ import (
 
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/output"
+	"tg-cli/internal/redact"
 	"tg-cli/internal/schema"
 )
 
@@ -115,10 +116,28 @@ func (a *app) success(cmd *cobra.Command, data any) error {
 	if err != nil {
 		return err
 	}
-	if settings.format == output.FormatJSONL && a.specs[cmd].ObjectJSONL {
-		return output.SelectWithUntrusted(a.deps.Stdout, output.FormatJSON, output.SuccessDataWithThrottle(data, a.throttledMS), settings.fields, settings.untrusted)
+	partial := isPartial(data)
+	if partial && len(settings.fields) > 0 {
+		settings.fields = append(settings.fields, "partial", "errors")
 	}
-	return a.emit(settings, data, nil)
+	var printErr error
+	if settings.format == output.FormatJSONL && a.specs[cmd].ObjectJSONL {
+		printErr = output.SelectWithUntrusted(a.deps.Stdout, output.FormatJSON, output.SuccessDataWithThrottle(data, a.throttledMS), settings.fields, settings.untrusted)
+	} else {
+		printErr = a.emit(settings, data, nil)
+	}
+	if printErr != nil {
+		return printErr
+	}
+	if partial && settings.format == output.FormatHuman {
+		if err := printPartialSummary(a.deps.Stdout, cmd, data); err != nil {
+			return err
+		}
+	}
+	if partial {
+		return &cmdError{exit: exitcode.Failure, printed: true}
+	}
+	return nil
 }
 
 // warn writes a hint or a progress line to stderr, unless --quiet asked for
@@ -128,7 +147,7 @@ func (a *app) warn(cmd *cobra.Command, format string, args ...any) {
 	if a.settings(cmd).quiet {
 		return
 	}
-	fmt.Fprintf(a.deps.Stderr, format+"\n", args...)
+	fmt.Fprintln(a.deps.Stderr, redact.Text(fmt.Sprintf(format, args...)))
 }
 
 // settings returns the output settings of a command for a path that prints no
@@ -163,5 +182,5 @@ func (a *app) failure(cmd *cobra.Command, exit int, message string) {
 	// A write error on stdout cannot be reported anywhere else, and it must not
 	// replace the command's own failure: the exit code already tells the agent
 	// that something went wrong.
-	_ = output.FailureWithThrottle(a.deps.Stdout, format, exitcode.Name(exit), message, a.throttledMS)
+	_ = output.FailureWithThrottle(a.deps.Stdout, format, exitcode.Name(exit), redact.Text(message), a.throttledMS)
 }
