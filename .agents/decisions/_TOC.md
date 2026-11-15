@@ -34,3 +34,4 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-14 — [Реакции, закрепление и опросы это записи под write без --yes: закрепление с уведомлением, пределы опроса проверяются до Telegram, признак pinned в базе обновляется сразу](20261114_2010_reactions_pins_and_polls_are_writes_under_write_without_yes.md)
 - 2026-11-14 — [Форматирование идёт флагами --parse и --entities у send и edit, RichMessage разбирает сервер, упоминание по id берётся из кэша пиров, в базу пишется итоговый простой текст](20261114_2040_text_formatting_through_parse_and_entities_flags_with_server_parsed_rich_messages.md)
 - 2026-11-15 — [Поиск по коду и документам идёт через Atlas и агента pathfinder](20261115_1213_search_goes_through_atlas_and_the_pathfinder_agent.md)
+- 2026-11-15 — [Docker не делаем: образ не решает задачи владельца, сессия аккаунта в контейнере рискованнее](20261115_1743_docker_is_not_built.md)
