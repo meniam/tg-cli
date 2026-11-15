@@ -18,6 +18,10 @@ const DefaultProfile = "default"
 
 var profileName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 
+// ReservedProfile is never a profile: its directory next to the configuration
+// file holds the databases of all profiles.
+const ReservedProfile = "db"
+
 // FileNames contains configurable profile file names.
 type FileNames struct {
 	Database, Session, Log, Deletions, Access string
@@ -65,6 +69,9 @@ const maxLogBytes = 10 << 20 // 10 MiB
 func ResolvePaths(home, dbRoot, profile string, files FileNames) (Paths, error) {
 	if !profileName.MatchString(profile) {
 		return Paths{}, fmt.Errorf("invalid profile name %q: use 1-32 chars of a-z, 0-9, _ and -, starting with a letter or digit", profile)
+	}
+	if profile == ReservedProfile {
+		return Paths{}, fmt.Errorf("profile name %q is reserved: the %s directory next to the configuration file holds the profile databases", profile, ReservedProfile)
 	}
 	if dbRoot == "" {
 		return Paths{}, fmt.Errorf("the database directory is empty: it is the db directory next to the configuration file")

@@ -27,7 +27,7 @@ func UpdateProfileWith(path, name string, changes map[string]string, onlyMissing
 }
 
 func updateProfile(path, name string, changes map[string]string, onlyMissing bool, action func() error) (Config, error) {
-	if !profileName.MatchString(name) {
+	if !validProfileName(name) {
 		return Config{}, invalid("invalid profile name")
 	}
 	var cfg Config

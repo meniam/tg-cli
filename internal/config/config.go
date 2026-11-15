@@ -83,6 +83,25 @@ var fileName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 var profileName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 var clientName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
+// reservedProfile is never a profile: its directory next to the configuration
+// file holds the databases of all profiles.
+const reservedProfile = "db"
+
+// validProfileName reports whether name may be a profile. The reserved name is
+// reported separately, so that the caller can explain it.
+func validProfileName(name string) bool {
+	return profileName.MatchString(name) && name != reservedProfile
+}
+
+// invalidProfileName names the reason a profile name is rejected: the reserved
+// word means something else than a broken name.
+func invalidProfileName(name, key string) error {
+	if name == reservedProfile {
+		return invalid("%s: the name %s is reserved for the directory of profile databases next to the config", key, reservedProfile)
+	}
+	return invalid("invalid %s", key)
+}
+
 // Load reads path; a missing file yields the defaults. It does not create files.
 func Load(path string) (Config, error) {
 	dir, err := os.UserConfigDir()
@@ -123,8 +142,8 @@ func Load(path string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	if !profileName.MatchString(c.DefaultProfile) {
-		return Config{}, invalid("invalid default_profile")
+	if !validProfileName(c.DefaultProfile) {
+		return Config{}, invalidProfileName(c.DefaultProfile, "default_profile")
 	}
 	if err := c.Files.validate(); err != nil {
 		return Config{}, err
@@ -173,8 +192,8 @@ func validateHome(path string) (string, error) {
 }
 
 func validateProfile(name string, p Profile) (*netconf.Proxy, error) {
-	if !profileName.MatchString(name) {
-		return nil, invalid("invalid profile name")
+	if !validProfileName(name) {
+		return nil, invalidProfileName(name, "profile name")
 	}
 	if p.Client != "" && !clientName.MatchString(p.Client) {
 		return nil, invalid("invalid profiles client")

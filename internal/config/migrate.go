@@ -39,7 +39,7 @@ func migrateProfiles(path, home string, remove func(string) error) (MigrationRes
 	}
 	found := false
 	for _, entry := range entries {
-		if !entry.IsDir() || !profileName.MatchString(entry.Name()) {
+		if !entry.IsDir() || entry.Name() == reservedProfile || !profileName.MatchString(entry.Name()) {
 			continue
 		}
 		for _, key := range []string{"client", "device", "transport", "proxy"} {
@@ -71,7 +71,7 @@ func migrateProfiles(path, home string, remove func(string) error) (MigrationRes
 		}
 		var files []legacyFile
 		for _, dir := range dirs {
-			if !dir.IsDir() || !profileName.MatchString(dir.Name()) {
+			if !dir.IsDir() || dir.Name() == reservedProfile || !profileName.MatchString(dir.Name()) {
 				continue
 			}
 			for _, key := range []string{"client", "device", "transport", "proxy"} {

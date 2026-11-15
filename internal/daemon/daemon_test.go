@@ -451,6 +451,9 @@ func TestResolvePaths(t *testing.T) {
 			t.Errorf("profile %q must be rejected", bad)
 		}
 	}
+	if _, err := ResolvePaths("/h", "/c/db", ReservedProfile, DefaultFileNames()); err == nil || !strings.Contains(err.Error(), "is reserved") {
+		t.Errorf("the reserved profile name must be rejected with its own message: %v", err)
+	}
 	if _, err := ResolvePaths("/h", "", "work", DefaultFileNames()); err == nil || !strings.Contains(err.Error(), "database directory is empty") {
 		t.Errorf("an empty database root must be rejected: %v", err)
 	}

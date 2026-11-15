@@ -202,3 +202,32 @@ func TestMigrateInlineConflict(t *testing.T) {
 		t.Fatal("config changed")
 	}
 }
+
+// TestMigrateSkipsTheDatabaseDirectory keeps the db directory next to the config
+// out of the profile walk: it holds databases, not profile settings.
+func TestMigrateSkipsTheDatabaseDirectory(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	db := filepath.Join(home, reservedProfile)
+	if err := os.MkdirAll(db, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(db, "client")
+	if err := os.WriteFile(legacy, []byte("desktop\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "config.toml")
+	result, err := MigrateProfiles(path, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Backup != "" || len(result.Warnings) != 0 {
+		t.Fatalf("the db directory was treated as a profile: %+v", result)
+	}
+	if _, err := os.Stat(legacy); err != nil {
+		t.Fatalf("legacy file in the db directory was removed: %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("config created: %v", err)
+	}
+}
