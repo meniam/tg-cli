@@ -51,7 +51,7 @@ const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
 	account             accountCache
-	idempotencyMu       sync.Mutex
+	idempotencyLocks    keyLocks
 	opts                Options
 	log                 *slog.Logger
 	srv                 *rpc.Server

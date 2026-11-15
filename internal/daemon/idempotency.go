@@ -20,6 +20,7 @@ type idempotencySession struct {
 	chatID      int64
 	key, method string
 	hash        []byte
+	release     func()
 }
 
 func (d *daemon) beginIdempotency(ctx context.Context, chatID int64, key, method string, params any, dry bool) (*idempotencySession, json.RawMessage, bool, error) {
@@ -34,8 +35,11 @@ func (d *daemon) beginIdempotency(ctx context.Context, chatID int64, key, method
 		return nil, nil, false, err
 	}
 	sum := sha256.Sum256(body)
-	d.idempotencyMu.Lock()
-	session := &idempotencySession{d: d, chatID: chatID, key: key, method: method, hash: sum[:]}
+	release, err := d.idempotencyLocks.lock(ctx, chatID, key)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	session := &idempotencySession{d: d, chatID: chatID, key: key, method: method, hash: sum[:], release: release}
 	var record store.IdempotencyRecord
 	var found bool
 	if dry {
@@ -45,26 +49,26 @@ func (d *daemon) beginIdempotency(ctx context.Context, chatID int64, key, method
 		found = err == nil
 	}
 	if err != nil {
-		d.idempotencyMu.Unlock()
+		release()
 		return nil, nil, false, err
 	}
 	if found && (record.Method != method || !bytes.Equal(record.ParamsHash, sum[:])) {
-		d.idempotencyMu.Unlock()
+		release()
 		return nil, nil, false, rpc.NewError(rpc.CodeInvalidParams, "key was used with different parameters")
 	}
 	if dry {
-		d.idempotencyMu.Unlock()
+		release()
 		return nil, nil, found && record.Result != nil, nil
 	}
 	if record.Result != nil {
-		d.idempotencyMu.Unlock()
+		release()
 		return nil, record.Result, true, nil
 	}
 	return session, nil, false, nil
 }
 func (s *idempotencySession) unlock() {
 	if s != nil {
-		s.d.idempotencyMu.Unlock()
+		s.release()
 	}
 }
 func (s *idempotencySession) complete(ctx context.Context, result any) error {
