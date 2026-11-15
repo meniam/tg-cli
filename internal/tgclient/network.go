@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 
 	"github.com/coder/websocket"
 	"github.com/gotd/td/telegram/dcs"
@@ -49,6 +50,8 @@ func resolverForDial(s netconf.Settings, forward proxy.Dialer) (dcs.Resolver, er
 				return nil, errors.New("SOCKS5 proxy does not support cancellation")
 			}
 			dial = cd.DialContext
+		case netconf.HTTP:
+			// The WSS transport below uses HTTP CONNECT for this proxy.
 		default:
 			return nil, errors.New("invalid proxy type")
 		}
@@ -62,6 +65,13 @@ func resolverForDial(s netconf.Settings, forward proxy.Dialer) (dcs.Resolver, er
 			dial = d.DialContext
 		}
 		tr := &http.Transport{Proxy: nil, DialContext: dial, ForceAttemptHTTP2: false}
+		if s.Proxy != nil && s.Proxy.Kind == netconf.HTTP {
+			u := &url.URL{Scheme: "http", Host: s.Proxy.Address()}
+			if s.Proxy.User != "" {
+				u.User = url.UserPassword(s.Proxy.User, s.Proxy.Password)
+			}
+			tr.Proxy = http.ProxyURL(u)
+		}
 		return dcs.Websocket(dcs.WebsocketOptions{DialOptions: &websocket.DialOptions{Subprotocols: []string{"binary"}, HTTPClient: &http.Client{Transport: tr, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("WebSocket redirects are not allowed") }}}}), nil
 	}
 	if dial != nil {

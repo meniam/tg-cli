@@ -24,6 +24,7 @@ type ProxyKind string
 const (
 	SOCKS5  ProxyKind = "socks5"
 	MTProxy ProxyKind = "mtproxy"
+	HTTP    ProxyKind = "http"
 )
 
 type Proxy struct {
@@ -58,11 +59,11 @@ func ParseProxy(s string) (*Proxy, error) {
 	}
 	p := &Proxy{raw: s}
 	switch {
-	case u.Scheme == "socks5":
+	case u.Scheme == "socks5" || u.Scheme == "http":
 		if u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 			return invalid()
 		}
-		p.Kind = SOCKS5
+		p.Kind = ProxyKind(u.Scheme)
 		p.Host = u.Hostname()
 		if u.User != nil {
 			p.User = u.User.Username()
@@ -118,6 +119,9 @@ func (s Settings) Validate() error {
 	}
 	if s.Proxy != nil && s.Proxy.Kind == MTProxy && s.Transport == WSS {
 		return errors.New("MTProxy cannot be combined with wss")
+	}
+	if s.Proxy != nil && s.Proxy.Kind == HTTP && s.Transport != WSS {
+		return errors.New("an HTTP proxy works only with wss or auto")
 	}
 	return nil
 }
