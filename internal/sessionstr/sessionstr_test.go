@@ -69,3 +69,18 @@ func encodedKey(id [20]byte) string {
 	}
 	return string(out)
 }
+
+func TestRejectAmbiguousForeignFormat(t *testing.T) {
+	for _, n := range []int{2, 14} {
+		b := make([]byte, 1+2+n+2+256)
+		b[0] = 2
+		binary.BigEndian.PutUint16(b[1:3], uint16(n))
+		copy(b[3:], strings.Repeat("a", n))
+		binary.BigEndian.PutUint16(b[3+n:], 443)
+		input := "1" + base64.URLEncoding.EncodeToString(b)
+		_, err := Decode(input)
+		if err == nil || !strings.Contains(err.Error(), "ambiguous") || strings.Contains(err.Error(), input) {
+			t.Fatal("ambiguous session was accepted or leaked")
+		}
+	}
+}

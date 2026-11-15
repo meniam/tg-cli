@@ -42,4 +42,4 @@ The primary connection state is reported in `daemon status`. On a disconnect, st
 
 ## Session transfer
 
-A session string is a credential. Export requires confirmation and an exclusive owner-only file unless stdout is explicitly selected. Import runs offline under the profile lock and refuses replacement unless both account IDs are known and match. The daemon checks for a running profile with the same key in its base directory; copies on other machines cannot be detected.
+A session string is a credential. Export requires confirmation and an exclusive owner-only file; the session string is not returned in JSON. Import runs offline under the profile lock and refuses replacement unless both account IDs are known and match. The daemon checks for a running profile with the same key in its base directory; copies on other machines cannot be detected.

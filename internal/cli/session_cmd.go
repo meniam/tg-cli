@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -16,7 +17,6 @@ import (
 type sessionResult struct {
 	Profile    string   `json:"profile"`
 	Path       string   `json:"path,omitempty"`
-	Session    string   `json:"session,omitempty"`
 	Format     string   `json:"format"`
 	UserID     int64    `json:"user_id,omitempty"`
 	DC         int      `json:"dc"`
@@ -29,7 +29,7 @@ type sessionResult struct {
 func (a *app) sessionCommand() *cobra.Command {
 	group := &cobra.Command{Use: "session", Short: "Transfer a session"}
 	exp := a.annotate(&cobra.Command{Use: "export", Short: "Export a session", Args: cobra.NoArgs, RunE: a.sessionExport}, dangerous, commandSpec{Safety: safetyRead, Result: typeOf[sessionResult]()})
-	exp.Flags().String("out", "", "output file, or - for stdout")
+	exp.Flags().String("out", "", "new owner-only output file")
 	exp.Flags().Bool("yes", false, "confirm the export")
 	imp := a.annotate(&cobra.Command{Use: "import", Short: "Import a session", Args: cobra.NoArgs, RunE: a.sessionImport}, dangerous, commandSpec{Safety: safetyLocalWrite, Result: typeOf[sessionResult]()})
 	imp.Flags().String("from", "", "input file, or - for stdin")
@@ -41,18 +41,22 @@ func (a *app) sessionCommand() *cobra.Command {
 func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 	yes, _ := cmd.Flags().GetBool("yes")
 	out, _ := cmd.Flags().GetString("out")
-	if !yes || out == "" {
+	if !yes || out == "" || out == "-" {
 		return fail(exitcode.Usage, "--yes and --out are required")
 	}
 	profile, p, err := a.profile(cmd)
 	if err != nil {
 		return err
 	}
+	absoluteOut, err := filepath.Abs(out)
+	if err != nil {
+		return fail(exitcode.Usage, "invalid output path")
+	}
 	var export rpc.SessionExportResult
 	c, err := a.connect(cmd.Context(), cmd)
 	if err == nil {
 		defer c.Close()
-		if err = a.call(cmd.Context(), cmd, c, rpc.MethodSessionExport, nil, &export); err != nil {
+		if err = a.call(cmd.Context(), cmd, c, rpc.MethodSessionExport, rpc.SessionExportParams{Path: absoluteOut, Yes: true}, &export); err != nil {
 			return err
 		}
 	} else {
@@ -74,7 +78,10 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 			if e != nil {
 				return fail(exitcode.NotAuthorized, "session is unavailable")
 			}
-			export = rpc.SessionExportResult{Session: value, Format: d.Format, DC: d.DC, UserID: d.UserID, KeyID: d.KeyID, Client: d.Client}
+			if e = daemon.ExportSessionFile(absoluteOut, value); e != nil {
+				return fail(exitcode.Usage, "cannot create export file")
+			}
+			export = rpc.SessionExportResult{Format: d.Format, DC: d.DC, UserID: d.UserID, KeyID: d.KeyID, Client: d.Client}
 			return nil
 		})
 		if err != nil {
@@ -86,27 +93,7 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 	}
 	result := sessionResult{Profile: profile, Format: export.Format, DC: export.DC, UserID: export.UserID, KeyID: export.KeyID, Client: export.Client}
 	a.warn(cmd, "A session string grants full account access. Never run two copies of a key at once, including on different machines.")
-	if out == "-" {
-		result.Session = export.Session
-	} else {
-		f, e := os.OpenFile(out, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-		if e != nil {
-			return fail(exitcode.Usage, "cannot create export file")
-		}
-		_, e = io.WriteString(f, export.Session+"\n")
-		if e == nil {
-			e = f.Sync()
-		}
-		closeErr := f.Close()
-		if e == nil {
-			e = closeErr
-		}
-		if e != nil {
-			_ = os.Remove(out)
-			return fail(exitcode.Failure, "cannot write export file")
-		}
-		result.Path = out
-	}
+	result.Path = out
 	return a.success(cmd, result)
 }
 func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
@@ -134,6 +121,9 @@ func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	data, err := sessionstr.Decode(text)
+	if errors.Is(err, sessionstr.ErrAmbiguous) {
+		return fail(exitcode.Usage, "ambiguous foreign session format")
+	}
 	if err != nil || (data.Client != "" && !presetName.MatchString(data.Client)) {
 		return fail(exitcode.Usage, "invalid session string")
 	}

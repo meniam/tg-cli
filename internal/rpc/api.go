@@ -468,12 +468,17 @@ type SearchResult struct {
 	Hits []SearchHit `json:"hits"`
 }
 
-// SessionExportResult contains a secret session string and public metadata.
+// SessionExportParams requests export to a new local file.
+type SessionExportParams struct {
+	Path string `json:"path"`
+	Yes  bool   `json:"yes"`
+}
+
+// SessionExportResult contains only public metadata.
 type SessionExportResult struct {
-	Session string `json:"session"`
-	Format  string `json:"format"`
-	DC      int    `json:"dc"`
-	UserID  int64  `json:"user_id,omitempty"`
-	KeyID   string `json:"key_id"`
-	Client  string `json:"client,omitempty"`
+	Format string `json:"format"`
+	DC     int    `json:"dc"`
+	UserID int64  `json:"user_id,omitempty"`
+	KeyID  string `json:"key_id"`
+	Client string `json:"client,omitempty"`
 }

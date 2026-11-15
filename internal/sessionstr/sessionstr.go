@@ -16,6 +16,9 @@ const MaxSize = 64 << 10
 
 var errInvalid = errors.New("invalid session string")
 
+// ErrAmbiguous means both supported foreign formats match the input.
+var ErrAmbiguous = errors.New("ambiguous foreign session format")
+
 type Data struct {
 	Session   json.RawMessage `json:"session"`
 	UserID    int64           `json:"user_id,omitempty"`
@@ -105,6 +108,11 @@ func Decode(input string) (Data, error) {
 	var key []byte
 	switch len(b) {
 	case 263, 275:
+		// These lengths can also encode a gramjs address of 2 or 14 bytes.
+		// The formats share the version byte; never guess when both match.
+		if int(binary.BigEndian.Uint16(b[1:3])) == len(b)-261 {
+			return Data{}, ErrAmbiguous
+		}
 		key = b[len(b)-256:]
 		d.Format = "telethon"
 	default:

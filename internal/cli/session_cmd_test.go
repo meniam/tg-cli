@@ -118,3 +118,11 @@ func TestImportPresetFailureDoesNotReplaceSession(t *testing.T) {
 		t.Fatal("failed import changed session")
 	}
 }
+
+func TestSessionExportRejectsStdout(t *testing.T) {
+	e := newEnv(t)
+	r := e.run("session", "export", "--out", "-", "--yes")
+	if r.code != exitcode.Usage {
+		t.Fatalf("expected usage error, got %d", r.code)
+	}
+}
