@@ -86,16 +86,26 @@ type PingResult struct {
 	Pong bool `json:"pong"`
 }
 
+// ConnectionInfo describes the primary Telegram connection.
+type ConnectionInfo struct {
+	Transport  string `json:"transport"`
+	Proxy      string `json:"proxy,omitempty"`
+	Connection string `json:"connection"`
+	DC         int    `json:"dc,omitempty"`
+	Reconnects int    `json:"reconnects"`
+}
+
 // StatusResult is the result of MethodStatus.
 type StatusResult struct {
-	Profile        string        `json:"profile"`
-	PID            int           `json:"pid"`
-	Connected      bool          `json:"connected"`
-	Authorized     bool          `json:"authorized"`
-	User           *User         `json:"user,omitempty"`
-	LoginState     string        `json:"login_state,omitempty"`
-	ActiveRequests int           `json:"active_requests"`
-	Access         *AccessStatus `json:"access,omitempty"`
+	*ConnectionInfo `json:",omitempty"`
+	Profile         string        `json:"profile"`
+	PID             int           `json:"pid"`
+	Connected       bool          `json:"connected"`
+	Authorized      bool          `json:"authorized"`
+	User            *User         `json:"user,omitempty"`
+	LoginState      string        `json:"login_state,omitempty"`
+	ActiveRequests  int           `json:"active_requests"`
+	Access          *AccessStatus `json:"access,omitempty"`
 }
 
 // AccessStatus reports access-list state without revealing chat IDs.

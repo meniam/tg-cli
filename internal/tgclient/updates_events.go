@@ -202,7 +202,7 @@ func (c *Client) updateDispatcher() tg.UpdateDispatcher {
 func statusOnline(status tg.UserStatusClass) bool { _, ok := status.(*tg.UserStatusOnline); return ok }
 
 func (c *Client) updateConfig() updates.Config {
-	cfg := updates.Config{Handler: c.updateDispatcher(), AccessHasher: c.mgr, StopOnApplyError: true, MaxChannelDifferenceConcurrency: 2,
+	cfg := updates.Config{Handler: catchupHandler{client: c, next: c.updateDispatcher()}, AccessHasher: c.mgr, StopOnApplyError: true, MaxChannelDifferenceConcurrency: 2,
 		BeforeRun:             updates.BeforeRunBuffer,
 		OnChannelTooLong:      func(id int64) { c.gapEvent(id, "channel_too_long") },
 		OnChannelGap:          func(gap updates.ChannelGap) { c.gapEvent(gap.ChannelID, "channel_gap") },

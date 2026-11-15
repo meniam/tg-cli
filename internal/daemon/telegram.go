@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"tg-cli/internal/chatref"
+	"tg-cli/internal/netconf"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/throttle"
 )
@@ -91,6 +92,7 @@ type Telegram interface {
 
 // TelegramConfig is what a Telegram client needs to be created.
 type TelegramConfig struct {
+	Network     netconf.Settings
 	AppID       int
 	AppHash     string
 	SessionPath string

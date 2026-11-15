@@ -25,9 +25,11 @@ const (
 	CursorExpired = 8
 	// WriteDisabled means the owner did not allow writes to this chat.
 	WriteDisabled = 9
+	Offline       = 10
 )
 
 var names = map[int]string{
+	Offline:          "offline",
 	OK:               "ok",
 	Failure:          "failure",
 	Usage:            "usage",
@@ -41,6 +43,7 @@ var names = map[int]string{
 }
 
 var notes = map[int]string{
+	Offline:          "Telegram is offline",
 	OK:               "the command succeeded",
 	Failure:          "a generic error with no more specific code",
 	Usage:            "wrong arguments, flags or environment",
@@ -69,7 +72,7 @@ func Name(code int) string {
 // All returns every defined code.
 func All() []int {
 	codes := make([]int, 0, len(names))
-	for c := OK; c <= WriteDisabled; c++ {
+	for c := OK; c <= Offline; c++ {
 		if _, ok := names[c]; ok {
 			codes = append(codes, c)
 		}

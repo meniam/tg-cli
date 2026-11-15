@@ -217,6 +217,7 @@ The table is the one `tg schema` prints; the codes are defined in `internal/exit
 | 7 | `not_found` | the chat, user, message or note does not exist or is not visible |
 | 8 | `cursor_expired` | the event cursor is older than the retained journal |
 | 9 | `write_disabled` | the owner did not allow writes to the chat in access.json |
+| 10 | `offline` | Telegram is offline |
 <!-- /schema:exit-codes -->
 
 Which codes a command can return is listed on its page. A few rules hold for all commands:

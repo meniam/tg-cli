@@ -35,6 +35,7 @@ const (
 	CodeCursorExpired = -32007
 	// CodeWriteDisabled means the owner has not allowed writes to the chat.
 	CodeWriteDisabled = -32008
+	CodeOffline       = -32009
 )
 
 // Request is a JSON-RPC request. A request without ID is a notification and
