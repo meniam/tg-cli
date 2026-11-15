@@ -266,7 +266,7 @@ var uncoveredCommands = map[string]string{
 	"chat permissions":           "account write is covered by net.Pipe CLI tests",
 	"chat slow-mode":             "account write is covered by net.Pipe CLI tests",
 	"daemon stop":                "runs last, after the cases that need the daemon it stops, so it is checked separately",
-	"session export":             "exports a secret to a separate owner-only file or explicitly to stdout",
+	"session export":             "exports a secret to a separate owner-only file",
 	"session import":             "imports a secret into a separate stopped profile",
 	"auth login":                 "asks for a phone number, a code and a password on stdin",
 	"auth resend":                "needs a login that waits for the code, started by another command",

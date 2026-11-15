@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -148,15 +147,7 @@ func Run(ctx context.Context, opts Options) error {
 	if source, ok := opts.Telegram.(interface{ SetAuthLostSink(func(string)) }); ok {
 		source.SetAuthLostSink(d.setAuthLost)
 	}
-	d.srv.SetRequestGuard(func(req rpc.Request) error {
-		if kind := d.getAuthLost(); kind != "" && (accountMethod(req.Method) || strings.HasPrefix(req.Method, "user.") || strings.HasPrefix(req.Method, "contact.") || strings.HasPrefix(req.Method, "account.") || strings.HasPrefix(req.Method, "folder.")) {
-			return rpc.NewError(rpc.CodeNotAuthorized, "authorization lost: "+kind+"; log in again")
-		}
-		if strings.HasPrefix(req.Method, "user.") || strings.HasPrefix(req.Method, "contact.") {
-			req.Method = "chat." + req.Method
-		}
-		return d.account.check(req)
-	})
+	d.srv.SetRequestGuard(d.guardRequest)
 	contactsDone := make(chan struct{})
 	accountDone := make(chan struct{})
 	go func() {
@@ -228,20 +219,7 @@ func Run(ctx context.Context, opts Options) error {
 		opts.OnListening()
 	}
 
-	var runErr error
-	tgFinished := false
-	select {
-	case <-runCtx.Done():
-	case err := <-tgDone:
-		tgFinished = true
-		if err != nil && !errors.Is(err, context.Canceled) {
-			runErr = fmt.Errorf("telegram client stopped: %w", err)
-		}
-	case err := <-serveDone:
-		if err != nil && !errors.Is(err, rpc.ErrServerClosed) {
-			runErr = fmt.Errorf("serve: %w", err)
-		}
-	}
+	runErr, tgFinished := d.waitForShutdown(runCtx, tgDone, serveDone)
 
 	log.Info("daemon stopping")
 	cancel()
@@ -578,4 +556,39 @@ func (d *daemon) getAuthLost() string {
 	d.authLostMu.RLock()
 	defer d.authLostMu.RUnlock()
 	return d.authLost
+}
+
+// guardRequest rejects account operations after authorization loss.
+func (d *daemon) guardRequest(req rpc.Request) error {
+	if kind := d.getAuthLost(); kind != "" && accountMethod(req.Method) {
+		return rpc.NewError(rpc.CodeNotAuthorized, "authorization lost: "+kind+"; stop the daemon and log in again")
+	}
+	return d.account.check(req)
+}
+
+// A permanently stopped Telegram client must not take the RPC server down
+// after authorization loss: status and shutdown remain available.
+func (d *daemon) waitForShutdown(ctx context.Context, tgDone, serveDone <-chan error) (error, bool) {
+	tgFinished := false
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, tgFinished
+		case err := <-tgDone:
+			tgFinished = true
+			if d.getAuthLost() != "" {
+				tgDone = nil
+				continue
+			}
+			if err != nil && !errors.Is(err, context.Canceled) {
+				return fmt.Errorf("telegram client stopped: %w", err), true
+			}
+			return nil, true
+		case err := <-serveDone:
+			if err != nil && !errors.Is(err, rpc.ErrServerClosed) {
+				return fmt.Errorf("serve: %w", err), tgFinished
+			}
+			return nil, tgFinished
+		}
+	}
 }
