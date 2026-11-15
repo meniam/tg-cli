@@ -238,13 +238,13 @@ PR: нет
 
 ### Step 1. Audit and baseline
 
-- [ ] **1.1** (кодер, песочница) Перепроверить таблицу «Где строится и открывается путь базы» по коду ветки, расхождения в отчёт. Проверка: `rg -n 'Paths\.Database|store\.db|ResolvePaths\(' cmd internal` совпадает со списком аудита.
-- [ ] **1.2** (кодер, песочница) Подтвердить, что `tgclient.NewWithNetwork` и всё до `tg.Run` не вызывают `StateKV.Get`/`Set`. Проверка: ссылки `path:line` в отчёте, менеджер переносит итог в Known facts.
-- [ ] **1.3** (менеджер) `just check` на чистой ветке, итог и время в Known facts. Ожидается зелёный.
+- [x] **1.1** (кодер, песочница) Перепроверить таблицу «Где строится и открывается путь базы» по коду ветки, расхождения в отчёт. Проверка: `rg -n 'Paths\.Database|store\.db|ResolvePaths\(' cmd internal` совпадает со списком аудита.
+- [x] **1.2** (кодер, песочница) Подтвердить, что `tgclient.NewWithNetwork` и всё до `tg.Run` не вызывают `StateKV.Get`/`Set`. Проверка: ссылки `path:line` в отчёте, менеджер переносит итог в Known facts.
+- [x] **1.3** (менеджер) `just check` на чистой ветке, итог и время в Known facts. Ожидается зелёный.
 
 ### Implementation steps
 
-- [ ] **1.4** (кодер, песочница) `ResolvePaths(home, dbRoot, profile, files)`, поля `Paths.DatabaseDir`, `Paths.LegacyDatabase`; `Database` указывает в `<dbRoot>/<профиль>/`; пустой `dbRoot`: ошибка. Все вызовы в коде и тестах исправлены механически: в тестах корень внутри своего временного каталога, не `<home>/db`; в `internal/cli` временно `filepath.Join(filepath.Dir(a.deps.ConfigPath), "db")` прямо в `profile` и `configShow`. `TestResolvePaths` дополнен случаями: нестандартный `files.database`, пустой корень. Проверка: `go build ./... && go vet ./...` код 0; `go test ./internal/daemon -run TestResolvePaths` зелёный.
+- [x] **1.4** (кодер, песочница) `ResolvePaths(home, dbRoot, profile, files)`, поля `Paths.DatabaseDir`, `Paths.LegacyDatabase`; `Database` указывает в `<dbRoot>/<профиль>/`; пустой `dbRoot`: ошибка. Все вызовы в коде и тестах исправлены механически: в тестах корень внутри своего временного каталога, не `<home>/db`; в `internal/cli` временно `filepath.Join(filepath.Dir(a.deps.ConfigPath), "db")` прямо в `profile` и `configShow`. `TestResolvePaths` дополнен случаями: нестандартный `files.database`, пустой корень. Проверка: `go build ./... && go vet ./...` код 0; `go test ./internal/daemon -run TestResolvePaths` зелёный.
 - [ ] **1.5** (кодер, песочница) Запрет имени профиля `db`: regexp-проверка в `ResolvePaths` и в `internal/config` (`config.go:83`) отказывает с понятным текстом. Проверка: `go test ./internal/config/... ./internal/daemon -run 'TestResolvePaths|TestLoad'`; тест на `db` даёт ошибку.
 - [ ] **1.6** (кодер, песочница) `DuplicateProfiles` (`session_file.go:61-63`) и обход профилей в `internal/config/migrate.go` пропускают каталог `db`. Проверка: `go test ./internal/config/...`; тест: в `home` есть `db/` с файлом `client`, миграция его не трогает; юнит-тест `DuplicateProfiles` без сокета: `db/daemon.lock` не создан.
 - [ ] **1.7** (кодер, песочница) `CheckFileNames` по разделу «Состояния при старте» и «Проверка смены имени смотрит две папки»; ожидающий перенос не ошибка. Проверка: `go test ./internal/daemon -run TestCheckFileNames`; табличный тест по пяти строкам таблицы состояний и двум случаям смены имени; ни в одном отказе `tg.db` не создан.
