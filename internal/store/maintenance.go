@@ -65,6 +65,21 @@ func IntegrityCheck(path string) (ok bool, detail string, err error) {
 	}
 }
 
+// UserVersion returns the schema version recorded in the database at path. It
+// does not migrate the schema, so a copy and its source can be compared.
+func UserVersion(path string) (int, error) {
+	db, err := openInspect(path)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	var version int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return 0, fmt.Errorf("read database version: %w", err)
+	}
+	return version, nil
+}
+
 // openInspect opens an existing database file read-write without migrations and
 // without creating it.
 func openInspect(path string) (*sql.DB, error) {

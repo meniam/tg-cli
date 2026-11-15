@@ -110,3 +110,31 @@ func TestIntegrityCheckReportsOk(t *testing.T) {
 		t.Errorf("the detail must not depend on the temporary path: %q", detail)
 	}
 }
+
+// TestUserVersionReportsTheSchemaVersion keeps the version comparison of the
+// database move from being a guess.
+func TestUserVersionReportsTheSchemaVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := db.Version()
+	if err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := UserVersion(path)
+	if err != nil {
+		t.Fatalf("user version: %v", err)
+	}
+	if got != want || got == 0 {
+		t.Fatalf("UserVersion = %d, want %d", got, want)
+	}
+	if _, err := UserVersion(filepath.Join(t.TempDir(), "missing.db")); err == nil {
+		t.Fatal("a missing database must be an error")
+	}
+}
