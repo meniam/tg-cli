@@ -2,7 +2,7 @@
 decided: 2026-11-13
 decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
 confirmed: yes
-paths: [go.mod, internal/tgclient]
+paths: [go.mod, internal/tgclient/client.go]
 ---
 # Утилита пишется на Go поверх gotd/td, с нуля
 

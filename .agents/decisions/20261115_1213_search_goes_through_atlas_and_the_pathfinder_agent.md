@@ -2,7 +2,7 @@
 decided: 2026-11-15
 decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
 confirmed: yes
-paths: [.atlas.json, lefthook.yml, bin/atlas, bin/apps/atlas, .agents/agents/pathfinder.md, .agents/skills/pathfinder, .claude/settings.json]
+paths: [.atlas.json, lefthook.yml, bin/atlas, bin/apps/atlas/justfile, bin/apps/atlas/pyproject.toml, .agents/agents/pathfinder.md, .agents/skills/pathfinder, .claude/settings.json]
 ---
 # Поиск по коду и документам идёт через Atlas и агента pathfinder
 
