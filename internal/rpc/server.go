@@ -20,6 +20,8 @@ import (
 const (
 	// MaxConcurrent is the number of requests the server runs in parallel.
 	MaxConcurrent = 16
+	// MaxConcurrentPerConn reserves capacity for other connections.
+	MaxConcurrentPerConn = 8
 	// DefaultRequestTimeout is the deadline of one request.
 	DefaultRequestTimeout = 120 * time.Second
 )
@@ -221,6 +223,12 @@ func (s *Server) readLoop(ctx context.Context, sc *serverConn, fr *frameReader, 
 			continue
 		}
 		if req.IsNotification() && (req.Method == MethodSubscribe || req.Method == MethodUnsubscribe) {
+			continue
+		}
+		if sc.active.Load() >= MaxConcurrentPerConn {
+			if !req.IsNotification() {
+				_ = w.write(errorResponse(req.ID, CodeBusy, "too many parallel requests on this connection"))
+			}
 			continue
 		}
 		select {

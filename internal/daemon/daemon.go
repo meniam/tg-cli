@@ -51,7 +51,7 @@ const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
 	account             accountCache
-	idempotencyMu       sync.Mutex
+	idempotencyLocks    keyLocks
 	opts                Options
 	log                 *slog.Logger
 	srv                 *rpc.Server
@@ -358,6 +358,7 @@ func (d *daemon) register() {
 	d.registerOwnerState()
 	d.registerUsers()
 	d.registerChatAdmin()
+	d.registerUnread()
 }
 
 func (d *daemon) ping(context.Context, json.RawMessage) (any, error) {

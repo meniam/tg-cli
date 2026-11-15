@@ -470,3 +470,15 @@ tg message watch --after 812.40117.0.1763111560   # resume from a cursor (illust
 **Exit codes.** 0 Ctrl-C, SIGTERM or `--max-events` reached; 1 `lagged` (with the hint `--after <cursor>`); 2 `--format json` without `--max-events`, `--format toon`, an unknown type in `--types`; 3 the Daemon stopped or the connection closed; 4 no login; 7 a closed or unknown chat in `--chat`; 8 `cursor_expired`.
 
 **Verification.** A persistent journal write failure can advance the updates manager and produce a `gap`; `ChannelDifferenceTooLong` also produces a `gap`. See [FEATURES.md](../../FEATURES.md), item 8.2 and 8.4.
+
+### tg message unread
+
+Read unread incoming messages without marking them read. Use `--topic` for a forum topic, `--limit` for the page size and `--cursor` to continue. Pages are newest first; outgoing messages are omitted, so a page may contain fewer items than the limit even when `next_cursor` is present. The read marker is refreshed on every page.
+
+<!-- schema:flags tg message unread -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--cursor` | string | `none` | continue from next_cursor |
+| `--limit` | int | `20` | messages per page, 1 to 100 |
+| `--topic` | int | `0` | forum topic id |
+<!-- /schema:flags -->

@@ -157,11 +157,10 @@ What is not checked on a live account is listed only in [`FEATURES.md`](FEATURES
 
 Planned, not implemented. [`FEATURES.md`](FEATURES.md) is the source of truth.
 
-- **Writing, the rest.** Scheduled messages, drafts and the typing indicator.
-- **Media and people.** Downloading media, joining and leaving chats, contacts, group administration.
-- **Sessions and access.** Export and import of a session string, login without a terminal, an expected-account check, SOCKS and MTProxy, WSS transport.
-- **Reliability.** Safe retries of failed requests and a send without duplicates, partial success of batch commands, recovery from a connection break and a DC migration.
-- **Local history.** Loading many chats with one command or on a schedule, folders, export from Telegram, earlier versions of edits, writing an export to a file. Today the database holds what you read and what `chat sync` loaded on request, one chat at a time, and `message export --local` prints it.
+- **Media.** Downloading media.
+- **Sessions and access.** Export and import of a session string, login without a terminal, SOCKS and MTProxy, WSS transport.
+- **Reliability.** Partial success of batch commands, recovery from a connection break and a DC migration.
+- **Local history.** Loading many chats with one command or on a schedule, export from Telegram, earlier versions of edits, writing an export to a file. Today the database holds what you read and what `chat sync` loaded on request, one chat at a time, and `message export --local` prints it.
 - And more: see the full list in `FEATURES.md`.
 
 Not goals: the Bot API and bots, a TUI client for humans, replacing the official apps, an MCP interface in the first stage (a decision for now, not forever), a generic `execute` method that runs any command as argv (the daemon serves typed methods, and `tg schema` lists the commands).
@@ -211,3 +210,5 @@ Tests run without Telegram. Do not run automated tests against a live account.
 ## License
 
 No license file has been added yet, so no license is granted for now.
+
+Unread dialogs can be listed with `tg chat unread` (or `--archived`); `tg message unread <chat>` reads incoming messages after the current read marker without marking them read. For forums, select a topic with `--topic`. `tg chat changes <chat>` shows chat changes saved locally.
