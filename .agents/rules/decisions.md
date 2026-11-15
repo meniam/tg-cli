@@ -221,9 +221,12 @@ One rename migration and a changed foreign key name.
 - The link is stored once, in the new record's `revises` or `supersedes`; the
   old record is not edited. Before saving, check that every name exists:
   `ls .agents/decisions/<name>.md`.
-- After creation only three things change: `confirmed` (`no` to `yes`),
+- After creation only four things change: `confirmed` (`no` to `yes`),
   `decided_by` (together with `confirmed`, when someone else confirms, in one
-  commit) and `paths` (to follow a move of the files).
+  commit), `paths` (to follow a move of the files) and, once, section names:
+  a record with non-English names (`Контекст`, `Решение`) gets the English ones
+  from "Structure". Only heading lines change; no text is added or removed, and
+  a record that has no `Why` stays without it.
 
 ## Who Decided
 
