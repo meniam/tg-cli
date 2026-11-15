@@ -76,3 +76,30 @@ func TestNetworkBadProxyDoesNotExposeSecret(t *testing.T) {
 		t.Fatal("invalid settings were saved")
 	}
 }
+
+func TestNetworkAutoSettings(t *testing.T) {
+	paths := daemon.Paths{Dir: filepath.Join(t.TempDir(), "default")}
+	t.Setenv("HOME", t.TempDir())
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &app{config: cfg, deps: Deps{ConfigPath: path, Getenv: func(string) string { return "" }}}
+	cmd := &cobra.Command{}
+	cmd.Flags().String("transport", "", "")
+	cmd.Flags().String("proxy", "", "")
+	_ = cmd.Flags().Set("transport", "auto")
+	_ = cmd.Flags().Set("proxy", "http://user:password@proxy.test:8080")
+	s, err := a.networkSettings(cmd, paths, true)
+	if err != nil || s.Transport != "auto" || s.Proxy.Redacted() != "http://proxy.test:8080" {
+		t.Fatalf("settings: %v %v", s, err)
+	}
+	cmd2 := &cobra.Command{}
+	cmd2.Flags().String("transport", "", "")
+	cmd2.Flags().String("proxy", "", "")
+	got, err := a.networkSettings(cmd2, paths, false)
+	if err != nil || got.Transport != "auto" || got.Proxy.Redacted() != "http://proxy.test:8080" {
+		t.Fatalf("restored: %v %v", got, err)
+	}
+}

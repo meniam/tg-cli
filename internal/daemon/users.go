@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
@@ -20,6 +21,9 @@ type usersTelegram interface {
 	DeleteContact(context.Context, chatref.Ref) (rpc.ContactDeleteResult, error)
 	Block(context.Context, chatref.Ref) (rpc.BlockResult, error)
 	Unblock(context.Context, chatref.Ref) (rpc.BlockResult, error)
+}
+type phoneResolver interface {
+	ResolvePhone(context.Context, string) (rpc.Chat, error)
 }
 
 func (d *daemon) registerUsers() {
@@ -138,7 +142,7 @@ func (d *daemon) userProfile(ctx context.Context, raw json.RawMessage) (any, err
 	if err := decodeParams(raw, &p); err != nil {
 		return nil, err
 	}
-	ref, chat, err := d.resolvePerson(ctx, p.User, true, false)
+	ref, chat, err := d.resolveProfilePerson(ctx, p.User)
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +169,44 @@ func (d *daemon) userProfile(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, err
 	}
 	return v, nil
+}
+
+func (d *daemon) resolveProfilePerson(ctx context.Context, value string) (chatref.Ref, rpc.Chat, error) {
+	ref, err := chatref.Parse(value)
+	if err != nil || ref.Kind != chatref.Phone {
+		return d.resolvePerson(ctx, value, true, false)
+	}
+	if err := rpc.ValidateUserRef(value, true); err != nil {
+		return ref, rpc.Chat{}, err
+	}
+	if err := d.requireAccount(ctx); err != nil {
+		return ref, rpc.Chat{}, err
+	}
+	chat, err := d.opts.Telegram.Resolve(ctx, ref)
+	var re *rpc.Error
+	if errors.As(err, &re) && re.Code == rpc.CodeNotFound {
+		client, ok := d.opts.Telegram.(phoneResolver)
+		if !ok {
+			return ref, chat, err
+		}
+		d.phoneResolveMu.Lock()
+		defer d.phoneResolveMu.Unlock()
+		if err = ctx.Err(); err != nil {
+			return ref, chat, err
+		}
+		if err = d.phoneLimit.take(time.Now()); err != nil {
+			return ref, chat, err
+		}
+		chat, err = client.ResolvePhone(ctx, ref.Phone)
+		d.phoneLimit.completed(time.Now())
+	}
+	if err != nil {
+		return ref, chat, err
+	}
+	if !d.policy().Allowed(chat.ID) || chat.ID <= 0 || (chat.Type != "user" && chat.Type != "bot") {
+		return ref, rpc.Chat{}, rpc.ErrChatNotFound()
+	}
+	return chatref.Ref{Kind: chatref.ID, ID: chat.ID}, chat, nil
 }
 func (d *daemon) userBlock(ctx context.Context, raw json.RawMessage) (any, error) {
 	return d.changeBlock(ctx, raw, true)

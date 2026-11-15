@@ -45,8 +45,18 @@ func (f *fakeTelegram) Run(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (f *fakeTelegram) Ready() <-chan struct{}            { return f.ready }
-func (f *fakeTelegram) SetEventSink(func(rpc.Event))      {}
+func (f *fakeTelegram) Ready() <-chan struct{}                       { return f.ready }
+func (f *fakeTelegram) SetEventSink(func(rpc.Event))                 {}
+func (f *fakeTelegram) SetTranscriptionSink(func(rpc.Transcription)) {}
+func (f *fakeTelegram) ChatStats(_ context.Context, _ chatref.Ref, _ string) (rpc.ChatStats, error) {
+	return rpc.ChatStats{ChatID: 77, Kind: "megagroup"}, nil
+}
+func (f *fakeTelegram) ChatBoosts(_ context.Context, _ chatref.Ref) (rpc.ChatBoosts, error) {
+	return rpc.ChatBoosts{ChatID: 77}, nil
+}
+func (f *fakeTelegram) Transcribe(_ context.Context, _ chatref.Ref, id int) (rpc.Transcription, error) {
+	return rpc.Transcription{ChatID: 77, ID: id, TranscriptionID: 1, Text: "fixture"}, nil
+}
 func (f *fakeTelegram) FloodWaitRemaining() time.Duration { return 0 }
 func (f *fakeTelegram) CheckText(_ context.Context, p rpc.SendParams) (rpc.TextCheck, error) {
 	return rpc.TextCheck{Mode: "plain", PlainLength: len([]rune(p.Text))}, nil

@@ -91,7 +91,9 @@ func translate(err error) error {
 	var rpcErr *rpc.Error
 	switch {
 	case errors.As(err, &rpcErr):
-		return fail(exitForRPC(rpcErr), "%s", describe(rpcErr))
+		e := fail(exitForRPC(rpcErr), "%s", describe(rpcErr))
+		e.data, _ = rpcErr.Data.(map[string]any)
+		return e
 	case errors.Is(err, context.DeadlineExceeded):
 		return fail(exitcode.Failure, "the daemon did not answer in time")
 	case errors.Is(err, context.Canceled):

@@ -15,8 +15,9 @@ import (
 type Transport string
 
 const (
-	TCP Transport = "tcp"
-	WSS Transport = "wss"
+	TCP  Transport = "tcp"
+	WSS  Transport = "wss"
+	Auto Transport = "auto"
 )
 
 type ProxyKind string
@@ -24,6 +25,7 @@ type ProxyKind string
 const (
 	SOCKS5  ProxyKind = "socks5"
 	MTProxy ProxyKind = "mtproxy"
+	HTTP    ProxyKind = "http"
 )
 
 type Proxy struct {
@@ -42,10 +44,10 @@ type Settings struct {
 
 func ParseTransport(s string) (Transport, error) {
 	switch Transport(s) {
-	case TCP, WSS:
+	case TCP, WSS, Auto:
 		return Transport(s), nil
 	}
-	return "", errors.New("transport must be tcp or wss")
+	return "", errors.New("transport must be tcp, wss or auto")
 }
 func ParseProxy(s string) (*Proxy, error) {
 	if s == "" || s == "none" {
@@ -58,11 +60,11 @@ func ParseProxy(s string) (*Proxy, error) {
 	}
 	p := &Proxy{raw: s}
 	switch {
-	case u.Scheme == "socks5":
+	case u.Scheme == "socks5" || u.Scheme == "http":
 		if u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 			return invalid()
 		}
-		p.Kind = SOCKS5
+		p.Kind = ProxyKind(u.Scheme)
 		p.Host = u.Hostname()
 		if u.User != nil {
 			p.User = u.User.Username()
@@ -113,11 +115,14 @@ func validSecret(s []byte) bool {
 	return false
 }
 func (s Settings) Validate() error {
-	if s.Transport != "" && s.Transport != TCP && s.Transport != WSS {
-		return errors.New("transport must be tcp or wss")
+	if s.Transport != "" && s.Transport != TCP && s.Transport != WSS && s.Transport != Auto {
+		return errors.New("transport must be tcp, wss or auto")
 	}
-	if s.Proxy != nil && s.Proxy.Kind == MTProxy && s.Transport == WSS {
-		return errors.New("MTProxy cannot be combined with wss")
+	if s.Proxy != nil && s.Proxy.Kind == MTProxy && (s.Transport == WSS || s.Transport == Auto) {
+		return errors.New("MTProxy cannot be combined with wss or auto")
+	}
+	if s.Proxy != nil && s.Proxy.Kind == HTTP && s.Transport != WSS && s.Transport != Auto {
+		return errors.New("an HTTP proxy works only with wss or auto")
 	}
 	return nil
 }

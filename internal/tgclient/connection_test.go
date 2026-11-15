@@ -11,6 +11,9 @@ import (
 func TestConnectionTransitions(t *testing.T) {
 	s := newConnection(netconf.Settings{})
 	s.update(telegram.ConnectionStateEvent{State: telegram.ConnectionStateReady, DC: 2})
+	if s.info.ActiveTransport != "tcp" {
+		t.Fatalf("active transport: %+v", s.info)
+	}
 	select {
 	case <-s.catchup:
 		t.Fatal("first connection triggered catch-up")

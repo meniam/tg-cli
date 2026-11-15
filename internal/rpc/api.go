@@ -90,11 +90,13 @@ type PingResult struct {
 
 // ConnectionInfo describes the primary Telegram connection.
 type ConnectionInfo struct {
-	Transport  string `json:"transport"`
-	Proxy      string `json:"proxy,omitempty"`
-	Connection string `json:"connection"`
-	DC         int    `json:"dc,omitempty"`
-	Reconnects int    `json:"reconnects"`
+	Transport         string `json:"transport"`
+	ActiveTransport   string `json:"active_transport,omitempty"`
+	TransportSwitches int    `json:"transport_switches"`
+	Proxy             string `json:"proxy,omitempty"`
+	Connection        string `json:"connection"`
+	DC                int    `json:"dc,omitempty"`
+	Reconnects        int    `json:"reconnects"`
 }
 
 // StatusResult is the result of MethodStatus.

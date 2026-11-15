@@ -50,21 +50,22 @@ func deviceConfig(model string) telegram.DeviceConfig {
 
 // Client is a Telegram client for one account.
 type Client struct {
-	connection     *connectionState
-	appID          int
-	appHash        string
-	sessionStorage *telegram.FileSessionStorage
-	tg             *telegram.Client
-	ready          chan struct{}
-	readyOnce      sync.Once
-	authReady      chan struct{}
-	updates        *updates.Manager
-	stateKV        StateKV
-	throttle       *throttle.Limiter
-	sinkMu         sync.RWMutex
-	sink           func(rpc.Event)
-	authLostMu     sync.RWMutex
-	authLostSink   func(string)
+	connection        *connectionState
+	appID             int
+	appHash           string
+	sessionStorage    *telegram.FileSessionStorage
+	tg                *telegram.Client
+	ready             chan struct{}
+	readyOnce         sync.Once
+	authReady         chan struct{}
+	updates           *updates.Manager
+	stateKV           StateKV
+	throttle          *throttle.Limiter
+	sinkMu            sync.RWMutex
+	sink              func(rpc.Event)
+	transcriptionSink func(rpc.Transcription)
+	authLostMu        sync.RWMutex
+	authLostSink      func(string)
 
 	mgr         *peers.Manager // resolves chat references to Telegram peers
 	mgrMu       sync.Mutex
@@ -81,11 +82,12 @@ func New(cfg Config) *Client {
 }
 
 func NewWithNetwork(cfg Config) (*Client, error) {
-	resolver, err := resolverFor(cfg.Network)
+	connection := newConnection(cfg.Network)
+	resolver, err := resolverForState(cfg.Network, connection)
 	if err != nil {
 		return nil, err
 	}
-	c := &Client{connection: newConnection(cfg.Network), appID: cfg.AppID, appHash: cfg.AppHash, ready: make(chan struct{}), authReady: make(chan struct{}, 1), stateKV: cfg.StateKV, throttle: cfg.Throttle}
+	c := &Client{connection: connection, appID: cfg.AppID, appHash: cfg.AppHash, ready: make(chan struct{}), authReady: make(chan struct{}, 1), stateKV: cfg.StateKV, throttle: cfg.Throttle}
 	c.sessionStorage = &telegram.FileSessionStorage{Path: cfg.SessionPath}
 	options := telegram.Options{
 		Resolver:               resolver,
