@@ -61,7 +61,8 @@ func TestEveryCommandIsAnnotated(t *testing.T) {
 		if !spec.Risk.known() {
 			t.Errorf("%s: risk %q was not chosen, want noRisk or dangerous", path, spec.Risk)
 		}
-		if spec.Risk == dangerous && spec.Safety == safetyRead {
+		// Export reveals an account credential even though it only reads.
+		if spec.Risk == dangerous && spec.Safety == safetyRead && path != "session export" {
 			t.Errorf("%s: a read-only command cannot be dangerous", path)
 		}
 	})

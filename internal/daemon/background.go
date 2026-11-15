@@ -222,6 +222,12 @@ func earlyExit(waitErr error, logPath string) error {
 	if waitErr != nil {
 		reason = fmt.Sprintf("%s: %v", reason, waitErr)
 	}
+	if waitErr != nil {
+		if tail == "" {
+			return fmt.Errorf("the daemon exited before it answered: %w; its journal is empty", waitErr)
+		}
+		return fmt.Errorf("the daemon exited before it answered: %w; last lines of %s:\n%s", waitErr, logPath, tail)
+	}
 	if tail == "" {
 		return errors.New(reason + "; its journal is empty")
 	}
