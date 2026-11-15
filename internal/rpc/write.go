@@ -216,5 +216,5 @@ type ForwardResult struct {
 
 // ErrWriteDisabled tells the caller how the owner can enable this chat.
 func ErrWriteDisabled() *Error {
-	return NewError(CodeWriteDisabled, "writing to this chat is disabled: add the chat to the write list in access.json")
+	return NewError(CodeWriteDisabled, "writing to this chat is disabled: add the chat to the write list in the access file")
 }

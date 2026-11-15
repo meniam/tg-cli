@@ -431,7 +431,7 @@ func (e *testEnv) startDaemon(extraArgs ...string) *daemonRun {
 		}
 	})
 
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -673,7 +673,7 @@ func TestStartWithClientPresetAndRemembersIt(t *testing.T) {
 	}
 
 	// The choice is remembered: the next start needs no flag.
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	info, err := os.Stat(paths.Client)
 	if err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("the saved preset name: %v, %v", info, err)
@@ -700,7 +700,7 @@ func TestClientFlagOverridesTheSavedPreset(t *testing.T) {
 		t.Errorf("--client must win over the saved preset: %+v", cfg)
 	}
 	e.stopDaemon(d)
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if data, _ := os.ReadFile(paths.Client); strings.TrimSpace(string(data)) != "ios" {
 		t.Errorf("the saved preset must follow the flag, got %q", data)
 	}
@@ -729,7 +729,7 @@ func TestUnknownPresetIsRejectedAndNotSaved(t *testing.T) {
 	if strings.Contains(r.stdout+r.stderr, fixtureDesktopHash) {
 		t.Error("an error must not contain hashes")
 	}
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if _, err := os.Stat(paths.Client); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("an unknown preset must not be saved, stat error: %v", err)
 	}
@@ -753,7 +753,7 @@ func TestPresetDownloadFailure(t *testing.T) {
 	if !strings.Contains(r.stdout, "network is down") {
 		t.Errorf("the reason must be reported: %q", r.stdout)
 	}
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if _, err := os.Stat(paths.Client); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("a failed start must not save the preset, stat error: %v", err)
 	}
@@ -819,7 +819,7 @@ func TestInterruptEndsLoginWaitingForInput(t *testing.T) {
 func TestAuthCancel(t *testing.T) {
 	e := newEnv(t)
 	e.startDaemon()
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -905,7 +905,7 @@ func TestAuthResendFromAnotherTerminal(t *testing.T) {
 	// No login is waiting yet.
 	wantFailure(t, e.run("auth", "resend"), exitcode.Failure)
 
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -988,7 +988,7 @@ func TestDeviceNameIsPassedAndRemembered(t *testing.T) {
 		t.Errorf("the device name from --device: %q", cfg().DeviceModel)
 	}
 	e.stopDaemon(d)
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	info, err := os.Stat(paths.Device)
 	if err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("the saved device name: %v, %v", info, err)
@@ -1007,7 +1007,7 @@ func TestInvalidDeviceNames(t *testing.T) {
 	for _, name := range []string{"   ", strings.Repeat("x", 65), "a\nb", "a\x1b[0m"} {
 		wantFailure(t, e.run("daemon", "start", "--foreground", "--device", name), exitcode.Usage)
 	}
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if _, err := os.Stat(paths.Device); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("an invalid name must not be saved, stat error: %v", err)
 	}

@@ -25,7 +25,8 @@ func (a *app) profile(cmd *cobra.Command) (string, daemon.Paths, error) {
 	if home == "" {
 		home = a.config.Home
 	}
-	paths, err := daemon.ResolvePaths(home, profile)
+	files := a.config.Files
+	paths, err := daemon.ResolvePaths(home, profile, daemon.FileNames{Database: files.Database, Session: files.Session, Log: files.Log, Deletions: files.Deletions, Access: files.Access})
 	if err != nil {
 		return "", daemon.Paths{}, fail(exitcode.Usage, "%v", err)
 	}

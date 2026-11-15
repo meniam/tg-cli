@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"regexp"
@@ -26,7 +27,7 @@ func (a *app) daemonCommand() *cobra.Command {
 		Short: "Start the daemon in the background and wait until it answers",
 		Long: "Start the daemon in the background and wait until it answers on its socket.\n" +
 			"The background process has no terminal, writes its journal to\n" +
-			"<profile>/daemon.log and keeps running after this command returns; stop it with\n" +
+			"the profile journal and keeps running after this command returns; stop it with\n" +
 			"`tg daemon stop`. With --foreground the daemon runs in this terminal instead,\n" +
 			"and returns {\"stopped\":true} after it stops.\n\n" +
 			"Starting a profile that already has a running daemon is not an error: the\n" +
@@ -185,6 +186,17 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	warnings, err := daemon.CheckFileNames(paths)
+	if err != nil {
+		var conflict *daemon.FileConflictError
+		if errors.As(err, &conflict) {
+			return fail(exitcode.Usage, "%v", err)
+		}
+		return fail(exitcode.Failure, "%v", err)
+	}
+	for _, warning := range warnings {
+		fmt.Fprintln(a.deps.Stderr, "warning: "+warning)
+	}
 	foreground, _ := cmd.Flags().GetBool("foreground")
 	journalPath, _ := cmd.Flags().GetString("journal")
 	if journalPath != "" && (!foreground || journalPath != paths.Log) {
@@ -237,14 +249,16 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		logger = slog.New(slog.NewTextHandler(journal, &slog.HandlerOptions{Level: level}))
 	}
 	err = daemon.Run(cmd.Context(), daemon.Options{
-		Profile:     profile,
-		Paths:       paths,
-		Telegram:    tg,
-		Log:         logger,
-		IdleTimeout: idle,
+		FileWarningsReported: true,
+		Profile:              profile,
+		Paths:                paths,
+		Telegram:             tg,
+		Log:                  logger,
+		IdleTimeout:          idle,
 	})
 	if err != nil {
-		if errors.Is(err, daemon.ErrSessionInUse) {
+		var conflict *daemon.FileConflictError
+		if errors.Is(err, daemon.ErrSessionInUse) || errors.As(err, &conflict) {
 			return fail(exitcode.Usage, "%v", err)
 		}
 		return fail(exitcode.Failure, "%v", err)

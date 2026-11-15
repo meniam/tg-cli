@@ -264,7 +264,7 @@ func TestNoteRPCValidationSearchAndSecrets(t *testing.T) {
 }
 
 func TestRunDatabaseFailureBeforeSocket(t *testing.T) {
-	paths, err := ResolvePaths(shortTempDir(t), "test")
+	paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +290,7 @@ func TestRunStoreOwnershipBeforeListening(t *testing.T) {
 			name = "injected"
 		}
 		t.Run(name, func(t *testing.T) {
-			paths, err := ResolvePaths(shortTempDir(t), "test")
+			paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
 			if err != nil {
 				t.Fatal(err)
 			}
