@@ -10,13 +10,15 @@ The file lives in the profile directory, next to the session and the database (s
 
 ## The file
 
-A JSON object with optional fields. Chat lists and file roots are arrays; `create` and `profile` are booleans.
+A JSON object with optional fields. Chat lists and file roots are arrays; `create`, `profile`, `dialogs` and `sessions` are booleans.
 
 | Field | Content | Effect |
 | --- | --- | --- |
 | `allow` | nonzero integer chat ids, no duplicates | when not empty, only these chats are visible to the agent |
 | `block` | nonzero integer chat ids, no duplicates | these chats are never visible; `block` wins over `allow` |
 | `write` | nonzero integer chat ids, no duplicates | the chats where the agent may write (message writes, scheduled messages, drafts, typing, join and leave, user blocking and contact changes) |
+| `dialogs` | boolean | permits dialog and folder management |
+| `sessions` | boolean | permits terminating another session |
 | `files` | absolute directory paths, no duplicates | the directories from which `message send-media` may read files |
 | `admin` | nonzero integer chat ids, no duplicates | the visible chats where administration is allowed |
 | `create` | boolean | allows creating chats when true |
@@ -67,7 +69,7 @@ The Daemon rereads the file when its modification time, size or mode changes. No
 
 ## What the Daemon shows: `daemon status`
 
-`tg daemon status` shows the field `access` when the read filter is on, a write or admin list is nonempty, or `create` or `profile` is enabled:
+`tg daemon status` shows the field `access` when the read filter is on, a write or admin list is nonempty, or `create`, `profile`, `dialogs` or `sessions` is enabled:
 
 ```json
 {"ok":true,"data":{"profile":"default","pid":48213,"connected":true,"authorized":true,"active_requests":0,"access":{"enabled":true,"allow":1,"block":0,"write":1}}}
@@ -81,6 +83,7 @@ The Daemon rereads the file when its modification time, size or mode changes. No
 | `admin` | the count of admin chat ids, shown when nonempty |
 | `create` | `true` when chat creation is enabled |
 | `profile` | `true` when the owner has enabled own-profile changes |
+| `dialogs`, `sessions` | `true` when the corresponding permission is enabled |
 | `closed` | `true` when the file does not parse, cannot be read or has a mode that is too wide |
 
 It never shows chat ids. With `{"write": [-1001234567890]}` only, `enabled` is `false` and `write` is `1`.

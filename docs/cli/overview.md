@@ -282,3 +282,5 @@ Per-method buckets remain an open item: `getDialogs` can hit `FLOOD_WAIT` before
 ## All commands
 
 List command paths with `tg schema --fields commands.path`. The pages above describe their usage.
+
+Saved Messages commands: [saved.md](saved.md).

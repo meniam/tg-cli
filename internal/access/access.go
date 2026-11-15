@@ -20,6 +20,8 @@ type Policy struct {
 	admin     map[int64]struct{}
 	create    bool
 	profile   bool
+	dialogs   bool
+	sessions  bool
 	files     []string
 	downloads []string
 	denied    bool
@@ -54,6 +56,9 @@ func (p Policy) AdminAllowed(chatID int64) bool {
 
 // CreateAllowed reports whether creating chats is enabled.
 func (p Policy) CreateAllowed() bool { return !p.denied && p.create }
+
+func (p Policy) DialogsAllowed() bool  { return !p.denied && p.dialogs }
+func (p Policy) SessionsAllowed() bool { return !p.denied && p.sessions }
 
 // ProfileAllowed reports whether own-profile changes are enabled.
 func (p Policy) ProfileAllowed() bool { return !p.denied && p.profile }
@@ -234,6 +239,15 @@ func parse(data []byte) (Policy, error) {
 				return Policy{}, errors.New("create must be a boolean")
 			}
 			policy.create = bytes.Equal(value, []byte("true"))
+		case "dialogs", "sessions":
+			if !bytes.Equal(value, []byte("true")) && !bytes.Equal(value, []byte("false")) {
+				return Policy{}, fmt.Errorf("%s must be a boolean", key)
+			}
+			if key == "dialogs" {
+				policy.dialogs = bytes.Equal(value, []byte("true"))
+			} else {
+				policy.sessions = bytes.Equal(value, []byte("true"))
+			}
 		case "profile":
 			if !bytes.Equal(value, []byte("true")) && !bytes.Equal(value, []byte("false")) {
 				return Policy{}, errors.New("profile must be a boolean")

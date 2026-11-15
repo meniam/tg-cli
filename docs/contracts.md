@@ -40,6 +40,12 @@ Topics: batch writes, daemon socket and clients, unread and chat changes, networ
 
 The primary connection state is reported in `daemon status`. On a disconnect, status returns the last cached account without querying Telegram. A request that needs Telegram waits up to 15 seconds for a connection and returns `offline` if it remains unavailable. Local paths do not wait for the network. The gotd client reconnects using the same resolver and handles DC migration. After a reconnect, the client submits an `UpdatesTooLong` signal to the updates manager when it has started. A local queue barrier tracks completion of its difference chain. Further reconnect signals are coalesced until the barrier is processed; the first connection and a connection before the updates manager starts do not trigger catch-up. The connection may fail after a write is sent but before its response arrives; transport retries can repeat the request.
 
+## Dialog and session management
+
+Dialog and folder writes require `dialogs: true`; session termination requires `sessions: true`. Closed chats remain hidden. Saved tag changes require the owner's chat ID in `write`. `--dry-run` does not perform Telegram writes or update local snapshots. Folder deletion and session termination require `--yes` unless previewed, and record intent and result in `account.jsonl`. Folder edits start from a fresh filter; concurrent edits can overwrite each other. The raw session hash remains private; the session ID is derived from its hash.
+
+Notification changes reject a request when the existing notification or story sounds differ between platforms, because the Telegram input schema exposes only one sound per category. This preserves existing sound settings until platform-specific behavior is established.
+
 ## Channel settings, join requests and own profile
 
 `chat approve` and `chat decline` require a visible chat in `admin`, reject blocked users, check administrator rights in dry-run and journal the intent before writing.

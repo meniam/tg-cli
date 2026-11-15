@@ -65,9 +65,18 @@ func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 	d.register()
 	d.srv.SetEventSource(d.hub, d.replayEvents)
 	classes := map[string]string{
+		rpc.MethodFolderCreate: "account-write", rpc.MethodFolderEdit: "account-write", rpc.MethodFolderDelete: "account-write",
+		rpc.MethodSavedList:    "chat-list",
+		rpc.MethodSavedHistory: "chat-ref", rpc.MethodSavedSearch: "chat-search",
+		rpc.MethodSavedTags: "chat-ref", rpc.MethodSavedTagRename: "chat-write",
+		rpc.MethodFolderOrder:      "account-write",
+		rpc.MethodFolderInviteInfo: "chat-search",
+		rpc.MethodChatMute:         "chat-write", rpc.MethodChatUnmute: "chat-write", rpc.MethodChatNotify: "chat-write",
+		rpc.MethodChatArchive: "chat-write", rpc.MethodChatUnarchive: "chat-write", rpc.MethodChatPinDialog: "chat-write", rpc.MethodChatUnpinDialog: "chat-write",
+		rpc.MethodAccountTerminate: "account-write",
+		rpc.MethodUserProfile:      "user-ref", rpc.MethodUserBlock: "user-ref", rpc.MethodUserUnblock: "user-ref", rpc.MethodContactAdd: "user-ref", rpc.MethodContactDelete: "user-ref", rpc.MethodContactList: "chat-search", rpc.MethodContactSearch: "chat-search",
 		rpc.MethodStickerSearch: "none", rpc.MethodStickerInstalled: "none",
 		rpc.MethodMessageButtons: "chat-ref", rpc.MethodMessagePress: "chat-write", rpc.MethodChatAutoDelete: "chat-write", rpc.MethodMessageInlineQuery: "chat-write", rpc.MethodMessageSendInline: "chat-write", rpc.MethodMessageEditMedia: "chat-write", rpc.MethodStickerSet: "none", rpc.MethodMessageSendSticker: "chat-write",
-		rpc.MethodUserProfile: "user-ref", rpc.MethodUserBlock: "user-ref", rpc.MethodUserUnblock: "user-ref", rpc.MethodContactAdd: "user-ref", rpc.MethodContactDelete: "user-ref", rpc.MethodContactList: "chat-search", rpc.MethodContactSearch: "chat-search",
 		rpc.MethodAccountEmojiStatuses: "none", rpc.MethodAccountPrivacyGet: "none", rpc.MethodAccountPrivacySet: "none", rpc.MethodAccountSet: "none", rpc.MethodAccountProfile: "none", rpc.MethodPing: "none", rpc.MethodStatus: "none", rpc.MethodShutdown: "none",
 		rpc.MethodAuthStart: "none", rpc.MethodAuthCode: "none", rpc.MethodAuthPassword: "none", rpc.MethodAuthResend: "none", rpc.MethodAuthStartQR: "none", rpc.MethodAuthWait: "none", rpc.MethodAuthCancel: "none",
 		rpc.MethodChatUnread: "chat-list", rpc.MethodChatChanges: "chat-ref", rpc.MethodMessageUnread: "chat-ref", rpc.MethodChatList: "chat-list", rpc.MethodChatResolve: "chat-ref", rpc.MethodChatInfo: "chat-ref", rpc.MethodChatInviteInfo: "chat-ref",

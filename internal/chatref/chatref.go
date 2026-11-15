@@ -102,6 +102,9 @@ func stripLinkPrefix(s string) (string, bool) {
 
 func parseLinkPath(path string) (Ref, error) {
 	path = strings.SplitN(path, "?", 2)[0]
+	if strings.HasPrefix(strings.ToLower(path), "addlist/") {
+		return Ref{}, fmt.Errorf("chat folder links require `folder invite-info`")
+	}
 	path = strings.TrimRight(path, "/")
 	switch {
 	case strings.HasPrefix(path, "+"):

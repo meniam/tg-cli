@@ -892,6 +892,80 @@ Show locally stored chat versions, newest first. The daemon is required, but a T
 
 Example response: `{"ok":true,"data":{"chat_id":123,"current":{"type":"user","title":"Alice","username":null,"about":null,"settings":null},"versions":[]}}`. The response contains `chat_id`, `current` and `versions`; snapshots contain `type`, `title`, `username`, `about` and `settings`, and versions also contain `version` and `observed_at`. Exit codes: 0 success; 2 invalid arguments; 3 no Daemon; 7 unknown or closed chat.
 
+## tg chat archive
+
+Moves up to 100 dialogs to the archive in one request. The owner must enable `dialogs` in `access.json`; `--dry-run` previews the operation. Closed chats remain inaccessible.
+
+<!-- schema:flags tg chat archive -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | preview without changing Telegram |
+<!-- /schema:flags -->
+
+## tg chat unarchive
+
+Moves up to 100 dialogs back to the main list in one request. The owner must enable `dialogs` in `access.json`; `--dry-run` previews the operation. Closed chats remain inaccessible.
+
+<!-- schema:flags tg chat unarchive -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | preview without changing Telegram |
+<!-- /schema:flags -->
+
+## tg chat pin
+
+Pins a dialog in its current folder. The owner must enable `dialogs` in `access.json`; `--dry-run` previews the operation. Closed chats remain inaccessible.
+
+<!-- schema:flags tg chat pin -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | preview without changing Telegram |
+<!-- /schema:flags -->
+
+## tg chat unpin
+
+Unpins a dialog in its current folder. The owner must enable `dialogs` in `access.json`; `--dry-run` previews the operation. Closed chats remain inaccessible.
+
+<!-- schema:flags tg chat unpin -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | preview without changing Telegram |
+<!-- /schema:flags -->
+
+## tg chat mute
+
+Changes chat notification settings. The owner must enable `dialogs` in `access.json`. `--dry-run` previews the change. When existing notification or story sounds differ across platforms, the command refuses to write because their preservation cannot be guaranteed.
+
+<!-- schema:flags tg chat mute -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | preview without changing Telegram |
+| `--for` | string | `none` | mute for a duration |
+| `--until` | string | `none` | mute until an RFC3339 time |
+<!-- /schema:flags -->
+
+## tg chat unmute
+
+Changes chat notification settings. The owner must enable `dialogs` in `access.json`. `--dry-run` previews the change. When existing notification or story sounds differ across platforms, the command refuses to write because their preservation cannot be guaranteed.
+
+<!-- schema:flags tg chat unmute -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | preview without changing Telegram |
+<!-- /schema:flags -->
+
+## tg chat notify
+
+Changes chat notification settings. The owner must enable `dialogs` in `access.json`. `--dry-run` previews the change. When existing notification or story sounds differ across platforms, the command refuses to write because their preservation cannot be guaranteed.
+
+<!-- schema:flags tg chat notify -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | preview without changing Telegram |
+| `--previews` | bool | `false` | show message previews |
+| `--silent` | bool | `false` | send notifications silently |
+<!-- /schema:flags -->
+
 ### tg chat approve
 
 Approve one user's join request. The chat must be visible and listed in `admin`. A dry run checks the current administrator rights without writing.

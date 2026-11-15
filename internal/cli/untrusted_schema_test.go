@@ -7,6 +7,12 @@ import (
 
 func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 	want := map[string][]string{
+		"saved list":                 {"dialogs.title"},
+		"saved history":              {"messages.sender.name", "messages.sender.username", "messages.text"},
+		"saved search":               {"messages.sender.name", "messages.sender.username", "messages.text"},
+		"saved tags":                 {"tags.title"},
+		"saved tag-rename":           {"title"},
+		"folder invite-info":         {"title", "chats.title"},
 		"sticker search":             {"sets.short_name", "sets.title"},
 		"sticker installed":          {"sets.short_name", "sets.title"},
 		"sticker set":                {"set.short_name", "set.title", "stickers.emoji"},
@@ -16,6 +22,7 @@ func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 		"message press":              {"button.text", "message", "url"},
 		"folder list":                {"folders.title", "folders.pinned.title", "folders.include.title", "folders.exclude.title"},
 		"account blocked":            {"peers.title", "peers.username"},
+		"account terminate":          {"device_model", "platform", "app_name"},
 		"account profile":            {"first_name", "last_name", "username", "bio"},
 		"account emoji-statuses":     {"statuses.title", "statuses.slug"},
 		"account sessions":           {"sessions.device_model", "sessions.platform", "sessions.system_version", "sessions.app_name", "sessions.app_version"},

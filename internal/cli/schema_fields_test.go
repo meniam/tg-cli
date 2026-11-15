@@ -92,6 +92,24 @@ var realResponseCases = map[string][]string{
 	"message buttons":        {"message", "buttons", "@teamchat", "30"},
 	"message press":          {"message", "press", "5", "30", "--button", "0", "--dry-run"},
 	"chat auto-delete":       {"chat", "auto-delete", "5", "--period", "1d", "--dry-run"},
+	"saved list":             {"saved", "list"},
+	"saved history":          {"saved", "history", "77"},
+	"saved search":           {"saved", "search", "test"},
+	"saved tags":             {"saved", "tags"},
+	"saved tag-rename":       {"saved", "tag-rename", "👍", "--title", "tag", "--dry-run"},
+	"folder create":          {"folder", "create", "test", "--include", "77", "--dry-run"},
+	"folder edit":            {"folder", "edit", "2", "--title", "test", "--dry-run"},
+	"folder delete":          {"folder", "delete", "2", "--dry-run"},
+	"folder order":           {"folder", "order", "2", "--dry-run"},
+	"folder invite-info":     {"folder", "invite-info", "t.me/addlist/AbCdEfGh"},
+	"chat mute":              {"chat", "mute", "77", "--dry-run"},
+	"chat unmute":            {"chat", "unmute", "77", "--dry-run"},
+	"chat notify":            {"chat", "notify", "77", "--silent=true", "--dry-run"},
+	"chat archive":           {"chat", "archive", "77", "--dry-run"},
+	"chat unarchive":         {"chat", "unarchive", "77", "--dry-run"},
+	"chat pin":               {"chat", "pin", "77", "--dry-run"},
+	"chat unpin":             {"chat", "unpin", "77", "--dry-run"},
+	"account terminate":      {"account", "terminate", "cd2662154e6d76b2", "--dry-run"},
 }
 
 // realResponses runs the commands of realResponseCases against the fake daemon
@@ -115,7 +133,7 @@ func realResponses(t *testing.T) map[string][]byte {
 	if err := os.WriteFile(mediaPath, []byte("fixture"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	accessData, _ := json.Marshal(map[string]any{"write": []int{5}, "admin": []int{77}, "profile": true, "files": []string{e.home}, "downloads": []string{e.home}})
+	accessData, _ := json.Marshal(map[string]any{"write": []int{1, 5, 42}, "admin": []int{77}, "profile": true, "dialogs": true, "sessions": true, "files": []string{e.home}, "downloads": []string{e.home}})
 	if err := os.WriteFile(paths.Access, accessData, 0o600); err != nil {
 		t.Fatal(err)
 	}

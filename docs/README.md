@@ -42,3 +42,5 @@ A page of `docs/cli/` must not disagree with the built tool. When you change a c
 ## Generated tables
 
 Command and global flag tables and the exit-code table in `docs/cli/` come from the Cobra command tree and `tg schema`. They are enclosed by `<!-- schema:flags ... -->`, `<!-- schema:global-flags -->` or `<!-- schema:exit-codes -->` markers. Run `just docs` to rebuild them. Do not edit the marked blocks by hand.
+
+Saved Messages commands: [saved.md](cli/saved.md).

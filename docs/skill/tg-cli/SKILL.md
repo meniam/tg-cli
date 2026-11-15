@@ -383,3 +383,7 @@ tg message watch --after <cursor>                       # продолжить �
 завершения через `chat sync status`, затем используй `message export --local`.
 Участников можно вывести через `chat members --all --format jsonl`.
 `message forward --copy` убирает автора; `--no-captions` требует `--copy`.
+
+## Диалоги, папки и сессии
+
+`chat archive|unarchive|pin|unpin|mute|unmute|notify` и запись папок требуют `dialogs: true` в `access.json`. Мьют может скрыть важное уведомление. `folder delete` и `account terminate` требуют `--yes` или `--dry-run`; завершение сессии также требует `sessions: true`. Переименование тега Saved Messages требует свой id в `write`. Файл доступа меняет только человек.

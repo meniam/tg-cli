@@ -16,7 +16,7 @@ func (a *app) accountCommand() *cobra.Command {
 	}
 	blocked.Flags().Int("limit", 100, "blocked peers per page, 1 to 1000")
 	blocked.Flags().String("cursor", "", "continue after a previous page; cannot be used with --local")
-	root.AddCommand(sessions, blocked, notify, a.accountProfileCommand(), a.accountEmojiStatusesCommand(), a.accountSetCommand(), a.accountPrivacyCommand())
+	root.AddCommand(sessions, blocked, notify, a.terminateCommand(), a.accountProfileCommand(), a.accountEmojiStatusesCommand(), a.accountSetCommand(), a.accountPrivacyCommand())
 	return root
 }
 func (a *app) accountSessions(cmd *cobra.Command, _ []string) error {

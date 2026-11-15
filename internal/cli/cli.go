@@ -151,6 +151,7 @@ func (a *app) rootCommand() *cobra.Command {
 		a.messageCommand(),
 		a.stickerCommand(),
 		a.folderCommand(),
+		a.savedCommand(),
 		a.accountCommand(),
 		a.noteCommand(),
 		a.searchCommand(),
