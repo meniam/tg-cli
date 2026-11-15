@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -329,6 +330,7 @@ func newEnv(t *testing.T) *testEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	t.Setenv("HOME", home)
 	return &testEnv{
 		t:    t,
 		home: home,
@@ -358,6 +360,7 @@ func (e *testEnv) deps(stdout, stderr *safeBuffer) Deps {
 		return v, nil
 	}
 	return Deps{
+		ConfigPath: filepath.Join(e.home, ".config", "tg-cli", "config.toml"),
 		Stdout:     stdout,
 		Stderr:     stderr,
 		Stdin:      e.stdin,

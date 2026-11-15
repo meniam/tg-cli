@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
@@ -33,6 +36,8 @@ type Deps struct {
 	Stdout io.Writer
 	Stderr io.Writer
 	Stdin  io.Reader
+	// ConfigPath overrides the default configuration path.
+	ConfigPath string
 	// Getenv reads environment variables.
 	Getenv func(string) string
 	// ReadLine prints prompt to stderr and reads a line of input.
@@ -67,6 +72,7 @@ func fail(exit int, format string, args ...any) *cmdError {
 
 type app struct {
 	deps        Deps
+	config      config.Config
 	throttledMS int64
 	// specs holds the annotation of every runnable command, filled while the
 	// command tree is built and read by `schema`.
@@ -136,8 +142,34 @@ func (a *app) rootCommand() *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	// Reject output usage errors before any command can read, write or delete data.
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
-		_, err := a.outputSettingsFor(cmd)
-		return err
+		if _, err := a.outputSettingsFor(cmd); err != nil {
+			return err
+		}
+		path := a.deps.ConfigPath
+		if path == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return fail(exitcode.Failure, "find home directory: %v", err)
+			}
+			path = filepath.Join(home, ".config", "tg-cli", "config.toml")
+		}
+		cfg, err := config.Load(path)
+		if err != nil {
+			var configErr *config.Error
+			if errors.As(err, &configErr) {
+				return fail(exitcode.Usage, "%v", err)
+			}
+			return fail(exitcode.Failure, "%v", err)
+		}
+		a.config = cfg
+		seen := make(map[string]bool)
+		for _, warning := range cfg.Warnings {
+			if !seen[warning] {
+				fmt.Fprintln(a.deps.Stderr, "warning: "+warning)
+				seen[warning] = true
+			}
+		}
+		return nil
 	}
 	root.PersistentFlags().String("expect-user", "", "require account id or @username (or TG_CLI_EXPECT_USER)")
 	root.PersistentFlags().String("profile", daemon.DefaultProfile, "account profile, each has its own session and daemon")

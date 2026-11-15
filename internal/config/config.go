@@ -17,36 +17,63 @@ import (
 	"tg-cli/internal/netconf"
 )
 
+// Config contains the loaded settings and any non-fatal diagnostics.
 type Config struct {
-	Home           string             `toml:"home"`
-	DefaultProfile string             `toml:"default_profile"`
-	Files          Files              `toml:"files"`
-	Behavior       Behavior           `toml:"behavior"`
-	Profiles       map[string]Profile `toml:"profiles"`
+	// Home is the base directory for profile data.
+	Home string `toml:"home"`
+	// DefaultProfile is used when no profile flag is supplied.
+	DefaultProfile string `toml:"default_profile"`
+	// Files holds profile file names.
+	Files Files `toml:"files"`
+	// Behavior holds operational settings.
+	Behavior Behavior `toml:"behavior"`
+	// Profiles holds settings for each named profile.
+	Profiles map[string]Profile `toml:"profiles"`
 	// Warnings contains diagnostics that do not reveal proxy credentials.
 	Warnings []string `toml:"-"`
 }
+
+// Files holds the file names within a profile directory.
 type Files struct {
-	Database  string `toml:"database"`
-	Session   string `toml:"session"`
-	Log       string `toml:"log"`
+	// Database is the SQLite database file name.
+	Database string `toml:"database"`
+	// Session is the session file name.
+	Session string `toml:"session"`
+	// Log is the daemon log file name.
+	Log string `toml:"log"`
+	// Deletions is the deletion journal file name.
 	Deletions string `toml:"deletions"`
-	Access    string `toml:"access"`
+	// Access is the access policy file name.
+	Access string `toml:"access"`
 }
+
+// Behavior holds settings shared by all profiles.
 type Behavior struct {
+	// ThrottlePercent controls request rate.
 	ThrottlePercent float64 `toml:"throttle_percent"`
-	FloodAutoWait   string  `toml:"flood_autowait"`
-	ExpectUser      string  `toml:"expect_user"`
+	// FloodAutoWait is the maximum automatic flood wait duration.
+	FloodAutoWait string `toml:"flood_autowait"`
+	// ExpectUser identifies the expected account.
+	ExpectUser string `toml:"expect_user"`
 }
+
+// Profile holds settings for one named profile.
 type Profile struct {
-	Client    string `toml:"client"`
-	Device    string `toml:"device"`
+	// Client is the official client preset name.
+	Client string `toml:"client"`
+	// Device is the device name shown to Telegram.
+	Device string `toml:"device"`
+	// Transport is the network transport.
 	Transport string `toml:"transport"`
-	Proxy     string `toml:"proxy"`
+	// Proxy is the proxy address, possibly containing credentials.
+	Proxy string `toml:"proxy"`
 }
 
 // Error identifies an invalid configuration as a usage error.
-type Error struct{ Message string }
+type Error struct {
+	// Message describes the invalid configuration.
+	Message string
+}
 
 func (e *Error) Error() string                 { return e.Message }
 func (e *Error) Code() int                     { return 2 }
@@ -62,7 +89,7 @@ func Load(path string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("find config directory: %w", err)
 	}
-	c := Config{Home: filepath.Join(dir, "tg-cli"), DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}}
+	c := defaults(dir)
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return c, nil
@@ -92,23 +119,9 @@ func Load(path string) (Config, error) {
 		}
 		return Config{}, invalid("invalid TOML configuration")
 	}
-	{
-		if c.Home == "~" || strings.HasPrefix(c.Home, "~/") {
-			home, e := os.UserHomeDir()
-			if e != nil {
-				return Config{}, fmt.Errorf("find home directory: %w", e)
-			}
-			c.Home = filepath.Join(home, strings.TrimPrefix(c.Home, "~/"))
-			if c.Home == filepath.Join(home, "~") {
-				c.Home = home
-			}
-		} else if strings.HasPrefix(c.Home, "~") {
-			return Config{}, invalid("home must not use ~user")
-		}
-		if !filepath.IsAbs(c.Home) {
-			return Config{}, invalid("home must be an absolute path")
-		}
-		c.Home = filepath.Clean(c.Home)
+	c.Home, err = validateHome(c.Home)
+	if err != nil {
+		return Config{}, err
 	}
 	if !profileName.MatchString(c.DefaultProfile) {
 		return Config{}, invalid("invalid default_profile")
@@ -124,39 +137,71 @@ func Load(path string) (Config, error) {
 		return Config{}, invalid("behavior.flood_autowait must be a non-negative duration")
 	}
 	for name, p := range c.Profiles {
-		if !profileName.MatchString(name) {
-			return Config{}, invalid("invalid profile name")
-		}
-		if p.Client != "" && !clientName.MatchString(p.Client) {
-			return Config{}, invalid("invalid profiles client")
-		}
-		if p.Device != "" {
-			if strings.TrimSpace(p.Device) == "" || utf8.RuneCountInString(p.Device) > 64 {
-				return Config{}, invalid("invalid profiles device")
-			}
-			for _, r := range p.Device {
-				if unicode.IsControl(r) {
-					return Config{}, invalid("invalid profiles device")
-				}
-			}
-		}
-		if p.Transport != "" {
-			if _, err := netconf.ParseTransport(p.Transport); err != nil {
-				return Config{}, invalid("invalid profiles transport")
-			}
-		}
-		proxy, err := netconf.ParseProxy(p.Proxy)
+		proxy, err := validateProfile(name, p)
 		if err != nil {
-			return Config{}, invalid("invalid profiles proxy")
-		}
-		if err := (netconf.Settings{Transport: netconf.Transport(p.Transport), Proxy: proxy}).Validate(); err != nil {
-			return Config{}, invalid("invalid profiles transport and proxy combination")
+			return Config{}, err
 		}
 		if info.Mode().Perm()&0o044 != 0 && proxy != nil && (proxy.Password != "" || len(proxy.Secret) > 0) {
 			c.Warnings = append(c.Warnings, "config file containing proxy credentials is readable by group or others")
 		}
 	}
 	return c, nil
+}
+
+func defaults(dir string) Config {
+	return Config{Home: filepath.Join(dir, "tg-cli"), DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}}
+}
+
+func validateHome(path string) (string, error) {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("find home directory: %w", err)
+		}
+		if path == "~" {
+			path = home
+		} else {
+			path = filepath.Join(home, path[2:])
+		}
+	} else if strings.HasPrefix(path, "~") {
+		return "", invalid("home must not use ~user")
+	}
+	if !filepath.IsAbs(path) {
+		return "", invalid("home must be an absolute path")
+	}
+	return filepath.Clean(path), nil
+}
+
+func validateProfile(name string, p Profile) (*netconf.Proxy, error) {
+	if !profileName.MatchString(name) {
+		return nil, invalid("invalid profile name")
+	}
+	if p.Client != "" && !clientName.MatchString(p.Client) {
+		return nil, invalid("invalid profiles client")
+	}
+	if p.Device != "" {
+		if strings.TrimSpace(p.Device) == "" || utf8.RuneCountInString(p.Device) > 64 {
+			return nil, invalid("invalid profiles device")
+		}
+		for _, r := range p.Device {
+			if unicode.IsControl(r) {
+				return nil, invalid("invalid profiles device")
+			}
+		}
+	}
+	if p.Transport != "" {
+		if _, err := netconf.ParseTransport(p.Transport); err != nil {
+			return nil, invalid("invalid profiles transport")
+		}
+	}
+	proxy, err := netconf.ParseProxy(p.Proxy)
+	if err != nil {
+		return nil, invalid("invalid profiles proxy")
+	}
+	if err := (netconf.Settings{Transport: netconf.Transport(p.Transport), Proxy: proxy}).Validate(); err != nil {
+		return nil, invalid("invalid profiles transport and proxy combination")
+	}
+	return proxy, nil
 }
 
 func (f Files) validate() error {

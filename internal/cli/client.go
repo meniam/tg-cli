@@ -18,7 +18,14 @@ func (a *app) profile(cmd *cobra.Command) (string, daemon.Paths, error) {
 	if err != nil {
 		return "", daemon.Paths{}, err
 	}
-	paths, err := daemon.ResolvePaths(a.deps.Getenv("TG_CLI_HOME"), profile)
+	if !cmd.Flags().Changed("profile") {
+		profile = a.config.DefaultProfile
+	}
+	home := a.deps.Getenv("TG_CLI_HOME")
+	if home == "" {
+		home = a.config.Home
+	}
+	paths, err := daemon.ResolvePaths(home, profile)
 	if err != nil {
 		return "", daemon.Paths{}, fail(exitcode.Usage, "%v", err)
 	}
@@ -45,12 +52,21 @@ func (a *app) connect(ctx context.Context, cmd *cobra.Command) (*rpc.Client, err
 		}
 		return nil, fail(exitcode.Failure, "connect to the daemon: %v", err)
 	}
-	expect, _ := cmd.Flags().GetString("expect-user")
-	if !cmd.Flags().Changed("expect-user") && a.deps.Getenv != nil {
-		expect = a.deps.Getenv("TG_CLI_EXPECT_USER")
-	}
-	c.SetExpectUser(expect)
+	c.SetExpectUser(a.expectedUser(cmd))
 	return c, nil
+}
+
+func (a *app) expectedUser(cmd *cobra.Command) string {
+	expect, _ := cmd.Flags().GetString("expect-user")
+	if cmd.Flags().Changed("expect-user") {
+		return expect
+	}
+	if a.deps.Getenv != nil {
+		if expect = a.deps.Getenv("TG_CLI_EXPECT_USER"); expect != "" {
+			return expect
+		}
+	}
+	return a.config.Behavior.ExpectUser
 }
 
 // call runs one RPC and turns failures into command errors with exit codes. It
