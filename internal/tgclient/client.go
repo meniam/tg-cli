@@ -12,12 +12,14 @@ import (
 	"github.com/gotd/td/telegram/updates"
 	"github.com/gotd/td/tg"
 
+	"tg-cli/internal/netconf"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/throttle"
 )
 
 // Config is what the client needs to connect.
 type Config struct {
+	Network netconf.Settings
 	// AppID and AppHash identify the application, see https://my.telegram.org.
 	AppID   int
 	AppHash string
@@ -48,17 +50,18 @@ func deviceConfig(model string) telegram.DeviceConfig {
 
 // Client is a Telegram client for one account.
 type Client struct {
-	appID     int
-	appHash   string
-	tg        *telegram.Client
-	ready     chan struct{}
-	readyOnce sync.Once
-	authReady chan struct{}
-	updates   *updates.Manager
-	stateKV   StateKV
-	throttle  *throttle.Limiter
-	sinkMu    sync.RWMutex
-	sink      func(rpc.Event)
+	connection *connectionState
+	appID      int
+	appHash    string
+	tg         *telegram.Client
+	ready      chan struct{}
+	readyOnce  sync.Once
+	authReady  chan struct{}
+	updates    *updates.Manager
+	stateKV    StateKV
+	throttle   *throttle.Limiter
+	sinkMu     sync.RWMutex
+	sink       func(rpc.Event)
 
 	mgr         *peers.Manager // resolves chat references to Telegram peers
 	mgrMu       sync.Mutex
@@ -70,19 +73,31 @@ type Client struct {
 
 // New creates a client. It does not connect until Run is called.
 func New(cfg Config) *Client {
-	c := &Client{appID: cfg.AppID, appHash: cfg.AppHash, ready: make(chan struct{}), authReady: make(chan struct{}, 1), stateKV: cfg.StateKV, throttle: cfg.Throttle}
-	options := telegram.Options{
-		SessionStorage: &telegram.FileSessionStorage{Path: cfg.SessionPath},
-		Device:         deviceConfig(cfg.DeviceModel),
-		UpdateHandler:  managerHandler{client: c},
+	c, _ := NewWithNetwork(cfg)
+	return c
+}
+
+func NewWithNetwork(cfg Config) (*Client, error) {
+	resolver, err := resolverFor(cfg.Network)
+	if err != nil {
+		return nil, err
 	}
+	c := &Client{connection: newConnection(cfg.Network), appID: cfg.AppID, appHash: cfg.AppHash, ready: make(chan struct{}), authReady: make(chan struct{}, 1), stateKV: cfg.StateKV, throttle: cfg.Throttle}
+	options := telegram.Options{
+		Resolver:               resolver,
+		OnConnectionStateEvent: c.connection.update,
+		SessionStorage:         &telegram.FileSessionStorage{Path: cfg.SessionPath},
+		Device:                 deviceConfig(cfg.DeviceModel),
+		UpdateHandler:          managerHandler{client: c},
+	}
+	options.Middlewares = []telegram.Middleware{c.connectionMiddleware()}
 	if cfg.Throttle != nil {
-		options.Middlewares = []telegram.Middleware{throttleMiddleware(cfg.Throttle)}
+		options.Middlewares = append(options.Middlewares, throttleMiddleware(cfg.Throttle))
 	}
 	c.tg = telegram.NewClient(cfg.AppID, cfg.AppHash, options)
 	c.mgr = peers.Options{Storage: &peers.InmemoryStorage{}}.Build(c.tg.API())
 	c.updates = updates.New(c.updateConfig())
-	return c
+	return c, nil
 }
 
 // FloodWaitRemaining reports the current account-wide flood gate delay.
@@ -95,6 +110,10 @@ func (c *Client) FloodWaitRemaining() time.Duration {
 
 // Run connects and keeps the connection until ctx ends. It is single-use.
 func (c *Client) Run(ctx context.Context) error {
+	catchupCtx, cancelCatchup := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); c.runCatchup(catchupCtx) }()
+	defer func() { cancelCatchup(); <-done }()
 	return c.tg.Run(ctx, func(ctx context.Context) error {
 		c.readyOnce.Do(func() { close(c.ready) })
 		for {
@@ -106,7 +125,7 @@ func (c *Client) Run(ctx context.Context) error {
 				if _, err := c.manager(ctx); err != nil {
 					return err
 				}
-				return c.updates.Run(ctx, c.tg.API(), user.ID, updates.AuthOptions{Forget: false})
+				return c.updates.Run(ctx, c.tg.API(), user.ID, updates.AuthOptions{Forget: false, OnStart: func(context.Context) { c.connection.mu.Lock(); c.connection.started = true; c.connection.mu.Unlock() }})
 			}
 			select {
 			case <-ctx.Done():

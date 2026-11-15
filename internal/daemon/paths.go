@@ -19,6 +19,8 @@ var profileName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 
 // Paths are the files of one profile.
 type Paths struct {
+	Transport string
+	Proxy     string
 	// Dir holds everything of the profile, mode 0700.
 	Dir string
 	// Socket is the JSON-RPC Unix socket, mode 0600.
@@ -62,6 +64,8 @@ func ResolvePaths(home, profile string) (Paths, error) {
 	dir := filepath.Join(home, profile)
 	p := Paths{
 		Dir:       dir,
+		Transport: filepath.Join(dir, "transport"),
+		Proxy:     filepath.Join(dir, "proxy"),
 		Socket:    filepath.Join(dir, "daemon.sock"),
 		Lock:      filepath.Join(dir, "daemon.lock"),
 		Session:   filepath.Join(dir, "session.json"),

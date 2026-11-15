@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 )
 
@@ -42,7 +43,11 @@ func Launch(args []string, logPath string) (int, func() error, error) {
 	// points to the renamed copy. It is only for startup output and panics;
 	// ordinary daemon logs use the child's rotating writer.
 	cmd.Stdin = nil
-	cmd.Env = os.Environ()
+	for _, env := range os.Environ() {
+		if !strings.HasPrefix(env, "TG_CLI_PROXY=") {
+			cmd.Env = append(cmd.Env, env)
+		}
+	}
 	// Setsid puts the process in a new session: no controlling terminal, so a
 	// closed terminal sends it no SIGHUP and Ctrl-C does not reach it.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
