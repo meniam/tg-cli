@@ -1,6 +1,6 @@
 # Writing messages
 
-Commands that change the Telegram account: send, edit, delete and forward messages, send files, set reactions, pin and unpin, and create polls. (`chat mark-read` also writes and follows the same rules, see [chats.md](chats.md#tg-chat-mark-read).) The shared rules (profiles, global flags, the envelope, exit codes) are in [overview.md](overview.md). All examples use fictional data, and the chat id `-1001234567890` is made up.
+Commands that change the Telegram account: send, edit, delete, forward, schedule and manage scheduled messages, send files, set reactions, pin and unpin, and create polls. (`chat mark-read` also writes and follows the same rules, see [chats.md](chats.md#tg-chat-mark-read).) The shared rules (profiles, global flags, the envelope, exit codes) are in [overview.md](overview.md). All examples use fictional data, and the chat id `-1001234567890` is made up.
 
 An agent runs these commands only when the user asks for exactly this write in the current task, in a chat the owner listed in `write`, and starts with `--dry-run`. Do not use writing for trial runs.
 
@@ -20,7 +20,6 @@ Writing is off by default. The owner adds chat ids (Bot API form, nonzero intege
 - **No retries.** Without an idempotency key, a write is never repeated automatically, neither after `FLOOD_WAIT` (exit code 6) nor after a network error. The agent decides: after a network error read the history first, the message may have gone out. Reads keep their usual retry. An idempotency-keyed write has its documented one transient retry. The write rate is limited by the request throttle only (the send buckets), see [overview.md](overview.md#request-throttle-and-flood_wait).
 - **Saved locally.** Ordinary sent and edited messages are saved to the local database (`out: true`, an edit keeps the previous version), deleted ones get `deleted_at`, a forward is not saved. A scheduled send is not saved until it is delivered.
 - **Who can bypass it.** An agent running as the same user can edit `write` in `access.json`: the list protects against accidental writes and against writes induced through a chat, not against an agent that deliberately bypasses it.
-- **Not done.** None of the commands on this page.
 
 Verification and remaining work for account writes are tracked in [FEATURES.md](../../FEATURES.md), items 5.1, 5.2 and 9.1.
 
@@ -36,7 +35,7 @@ Common errors of this page: 2 for bad arguments (checked before the Daemon where
 tg message send <chat> [flags]
 ```
 
-**Time.** `--at` is an RFC 3339 time with an explicit offset, such as `2026-11-15T09:00:00+03:00`. `--in` is a Go duration, such as `90m` or `2h`. The flags exclude each other and the selected time must be at least 10 seconds ahead. Without an idempotency key, a bad time is exit code 2 before the Daemon call. With a key, the Daemon first checks for a completed replay; without one, the same bad time is exit code 2.
+**Time.** `--at` is an RFC 3339 time with an explicit offset, such as `2026-11-15T09:00:00+03:00`. `--in` is a Go duration, such as `90m` or `2h`. The flags exclude each other and the selected time must be at least 10 seconds ahead. Without an idempotency key, a bad time is exit code 2 before the Daemon call. With a key, the Daemon first checks for a completed replay; if none exists, the same bad time is exit code 2.
 
 **How it works.** Telegram receives `messages.sendMessage` with `schedule_date`. The answer contains `chat_id`, a scheduled-message `id`, `date`, and `scheduled: true`. A scheduled id is not an ordinary message id, so it is not written to the local `messages` table. The ordinary delivered message follows the normal update path.
 
