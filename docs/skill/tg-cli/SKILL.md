@@ -367,3 +367,10 @@ tg message watch --after <cursor>                       # продолжить �
 `just build` собирает бинарь в `dist/tg`. Положи его в `PATH` под именем `tg`. Если рядом стоит старый npm `tg` (`@miolamio/tg-cli`, gramjs), это другая утилита с другим контрактом: проверь, какая из них отвечает на `tg version` (у этой есть поле `revision`).
 
 Непрочитанные чаты: `tg chat unread`, архив: `tg chat unread --archived`. Входящие после маркера: `tg message unread <чат>`, для форума укажи `--topic ID` после `chat topics`. Эти команды не помечают сообщения прочитанными; продолжение страницы передаётся через `--cursor`. Настройки возвращает `chat info`, локальные прежние версии чата показывает `chat changes <чат>`.
+
+Медиа: владелец задаёт каталоги `downloads` в `access.json`; затем
+`tg message download <чат> <id> --output /абсолютный/каталог`. Защищённое
+медиа не скачивается. Для выгрузки сообщений запусти `chat sync start`, дождись
+завершения через `chat sync status`, затем используй `message export --local`.
+Участников можно вывести через `chat members --all --format jsonl`.
+`message forward --copy` убирает автора; `--no-captions` требует `--copy`.

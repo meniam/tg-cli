@@ -39,3 +39,12 @@ Topics: request journal, exit codes (the table is in [cli/overview.md](cli/overv
 `daemon start` remembers `--transport tcp|wss` and `--proxy` in the profile. TCP is the default. `TG_CLI_PROXY` is used when `--proxy` is absent; `none` clears the proxy. SOCKS5 and Telegram MTProxy URLs are accepted, but WSS with MTProxy is rejected. The proxy file is secret. The detached process receives no proxy in its arguments or `TG_CLI_PROXY`. Telegram traffic uses the selected resolver without a direct fallback. WSS does not support media-only or CDN connections.
 
 The primary connection state is reported in `daemon status`. On a disconnect, status returns the last cached account without querying Telegram. A request that needs Telegram waits up to 15 seconds for a connection and returns `offline` if it remains unavailable. Local paths do not wait for the network. The gotd client reconnects using the same resolver and handles DC migration. After a reconnect, the client submits an `UpdatesTooLong` signal to the updates manager when it has started. A local queue barrier tracks completion of its difference chain. Further reconnect signals are coalesced until the barrier is processed; the first connection and a connection before the updates manager starts do not trigger catch-up. The connection may fail after a write is sent but before its response arrives; transport retries can repeat the request.
+
+### Media downloads
+
+`message download` checks the owner's `downloads` roots and the output directory
+before accessing Telegram. It reads fresh message metadata and refuses protected
+content. It accepts up to 20 IDs, 100 MiB per file and 500 MiB per call. Files
+are written through `os.Root` with mode 0600 to a temporary name and linked to a
+final generated name without replacement. A failed download removes its temporary
+file. The original file name and MIME type are untrusted. Dry runs do not write.

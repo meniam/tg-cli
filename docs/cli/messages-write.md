@@ -382,7 +382,7 @@ tg message delete @release_team 4103 4104 --revoke --yes
 
 ### tg message forward
 
-Forwards messages from one chat to another.
+Forwards messages from one chat to another. `--copy` omits the original author; `--no-captions` also omits media captions and requires `--copy`. Telegram rejects forwarding protected content.
 
 ```text
 tg message forward <from> <to> <id>... [flags]
@@ -391,8 +391,10 @@ tg message forward <from> <to> <id>... [flags]
 <!-- schema:flags tg message forward -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
+| `--copy` | bool | `false` | forward without the original author |
 | `--dry-run` | bool | `false` | describe the action without forwarding |
 | `--idempotency-key` | string | `none` | idempotency key: 1 to 64 characters A-Za-z0-9._:- |
+| `--no-captions` | bool | `false` | omit media captions (requires --copy) |
 | `--silent` | bool | `false` | forward without a notification |
 <!-- /schema:flags -->
 
