@@ -185,6 +185,7 @@ type PinResult struct {
 }
 
 type DeleteResult struct {
+	Batch
 	ChatID  int64  `json:"chat_id"`
 	Deleted []int  `json:"deleted"`
 	DryRun  bool   `json:"dry_run,omitempty"`
@@ -193,11 +194,13 @@ type DeleteResult struct {
 }
 
 type ForwardedMessage struct {
-	ID   int    `json:"id"`
-	Date string `json:"date"`
+	SourceID int    `json:"source_id,omitempty"`
+	ID       int    `json:"id"`
+	Date     string `json:"date"`
 }
 
 type ForwardResult struct {
+	Batch
 	ReplayAvailable *bool              `json:"replay_available,omitempty"`
 	Replayed        bool               `json:"replayed,omitempty"`
 	ChatID          int64              `json:"chat_id"`

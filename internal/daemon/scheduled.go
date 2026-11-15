@@ -40,16 +40,41 @@ func (d *daemon) scheduledWrite(ctx context.Context, raw json.RawMessage, send b
 	if p.DryRun {
 		return rpc.ScheduledResult{ChatID: id, DryRun: true}, nil
 	}
-	var res rpc.ScheduledResult
+	res := rpc.ScheduledResult{ChatID: id}
 	if send {
-		res, err = d.opts.Telegram.ScheduledSendNow(ctx, ref, p.IDs)
-	} else {
-		res, err = d.opts.Telegram.ScheduledDelete(ctx, ref, p.IDs)
+		res.Messages = []rpc.Message{}
 	}
-	if err != nil {
-		return nil, err
+	var first, stopped error
+	succeeded := 0
+	for _, ids := range rpc.Chunks(p.IDs, 100) {
+		if stopped != nil {
+			addBatchErrors(&res.Batch, ids, stopped)
+			continue
+		}
+		var part rpc.ScheduledResult
+		if send {
+			part, err = d.opts.Telegram.ScheduledSendNow(ctx, ref, ids)
+		} else {
+			part, err = d.opts.Telegram.ScheduledDelete(ctx, ref, ids)
+		}
+		if err != nil {
+			if first == nil {
+				first = err
+			}
+			addBatchErrors(&res.Batch, ids, err)
+			if stopBatch(err) {
+				stopped = err
+			}
+			continue
+		}
+		succeeded += len(ids)
+		res.Messages = append(res.Messages, part.Messages...)
+		res.Deleted = append(res.Deleted, part.Deleted...)
 	}
-	res.ChatID = id
+	if succeeded == 0 && first != nil {
+		return nil, first
+	}
+	res.Partial = len(res.Errors) != 0
 	if send {
 		complete := make([]rpc.Message, 0, len(res.Messages))
 		for _, message := range res.Messages {

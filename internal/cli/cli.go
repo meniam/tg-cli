@@ -54,8 +54,9 @@ type Deps struct {
 
 // cmdError carries the exit code of a failed command.
 type cmdError struct {
-	exit int
-	msg  string
+	exit    int
+	msg     string
+	printed bool
 }
 
 func (e *cmdError) Error() string { return e.msg }
@@ -85,7 +86,8 @@ func Execute(ctx context.Context, args []string, deps Deps) int {
 	root.SetOut(deps.Stdout)
 	root.SetErr(deps.Stderr)
 
-	err := root.ExecuteContext(ctx)
+	prepareGroupHint(root, args)
+	command, err := root.ExecuteContextC(ctx)
 	if err == nil {
 		return exitcode.OK
 	}
@@ -93,10 +95,17 @@ func Execute(ctx context.Context, args []string, deps Deps) int {
 	var ce *cmdError
 	if errors.As(err, &ce) {
 		exit = ce.exit
+		if ce.printed {
+			return exit
+		}
 	}
 	// The command that failed may be a subcommand, an unknown name or nothing at
 	// all: the format is read from wherever cobra stopped.
-	a.failure(root, exit, withIDHint(err.Error(), args))
+	message := withIDHint(err.Error(), args)
+	if exit == exitcode.Usage && command != nil && command.Runnable() && !strings.Contains(message, "choose a subcommand:") {
+		message += "\nusage: " + command.UseLine()
+	}
+	a.failure(root, exit, message)
 	return exit
 }
 
@@ -136,6 +145,7 @@ func (a *app) rootCommand() *cobra.Command {
 	root.AddCommand(
 		a.daemonCommand(),
 		a.authCommand(),
+		a.sessionCommand(),
 		a.chatCommand(),
 		a.userCommand(),
 		a.contactCommand(),

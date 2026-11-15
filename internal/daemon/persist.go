@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"tg-cli/internal/redact"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
 )
@@ -17,7 +18,7 @@ func (d *daemon) save(ctx context.Context, op string, fn func(context.Context) e
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveTimeout)
 	defer cancel()
 	if err := fn(ctx); err != nil {
-		d.log.Warn("local storage failed", "op", op, "err", err)
+		d.log.Warn("local storage failed", "op", op, "err", redact.Text(err.Error()))
 	}
 }
 
@@ -97,7 +98,7 @@ func (d *daemon) saveChatInfo(ctx context.Context, info rpc.ChatInfo) {
 	item := store.Chat{
 		ID: info.ID, Type: info.Type, Title: info.Title, Username: optionalText(info.Username),
 		About: optionalText(info.About), Members: positiveIntPointer(info.Members), // 0 means unknown
-		Forum: boolPointer(info.Forum), Verified: boolPointer(info.Verified),
+		Forum: boolPointer(info.Forum), Verified: boolPointer(info.Verified), Settings: info.Settings,
 	}
 	d.save(ctx, rpc.MethodChatInfo, func(ctx context.Context) error {
 		return d.store.UpsertChats(ctx, []store.Chat{item})

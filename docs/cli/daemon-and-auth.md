@@ -19,6 +19,8 @@ tg daemon start [flags]
 | `--device` | string | `none` | device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN) |
 | `--foreground` | bool | `false` | run the daemon in this terminal instead of the background |
 | `--idle-timeout` | duration | `0s` | stop the daemon after this long without a request, like 30m; 0 means never |
+| `--proxy` | string | `none` | SOCKS5 or Telegram proxy URL, or none (remembered for the profile) |
+| `--transport` | string | `none` | Telegram transport: tcp or wss (remembered for the profile) |
 <!-- /schema:flags -->
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
@@ -32,6 +34,8 @@ tg daemon start [flags]
 - `--client <preset>`: the credentials of an official client, downloaded from a pinned commit of the [opentele](https://github.com/thedemons/opentele) project and checked against a SHA-256 before use. The available presets are `android`, `android-x`, `desktop`, `ios`, `macos`, `web-k`, `web-z` and `webogram`. The chosen preset is remembered for the profile in `<profile>/client`, so later starts need no flag. Every start that uses a preset downloads it again, so the Daemon needs network access to `raw.githubusercontent.com` then. `TG_API_ID` and `TG_API_HASH` in the environment avoid the download.
 
 Both sources together are exit code 2 (`use either --client or TG_API_ID and TG_API_HASH, not both`). No source at all is exit code 2 too. When a preset is used the command prints a warning on stderr (`--quiet` hides it): according to the opentele documentation, Telegram puts accounts of unofficial clients under observation, and the risk for this tool is not assessed. The credentials never go into the arguments of the background process, where `ps` would show them: the process reads them from its environment or the preset from the profile. Never print or log keys or hashes.
+
+**Network.** `--transport tcp|wss` selects the transport, TCP by default. `--proxy` accepts `socks5://[user:password@]host:port`, `tg://proxy?server=...&port=...&secret=...`, `https://t.me/proxy?...`, or `none` to clear it. WSS cannot be combined with MTProxy. A SOCKS5 proxy can be combined with either transport. `TG_CLI_PROXY` supplies the proxy; the flag takes precedence. The profile remembers both settings in `transport` and `proxy` (mode `0600`). A proxy passed on the command line may be visible in shell history and process listings; use the environment variable to avoid that. The background process reads the profile file rather than receiving the proxy in its arguments. HTTP proxy environment variables are not used for Telegram connections. A different setting for a running Daemon is rejected; stop it first. WSS media-only and CDN connections are not supported by the resolver.
 
 **Device name.** Telegram lists the session in its device list. The default name is `MacBook Pro M1 BRN`. `--device <name>` changes it, and the name is remembered for the profile in `<profile>/device`. The name must be 1 to 64 characters without control characters, otherwise exit code 2 (`the device name must be 1 to 64 characters`, `the device name must not contain control characters`).
 
@@ -88,16 +92,18 @@ tg daemon status
 **Answer.** A logged-in profile with the read filter on and one chat in `write`:
 
 ```json
-{"ok":true,"data":{"profile":"default","pid":48213,"connected":true,"authorized":true,"user":{"id":123456789,"username":"me"},"active_requests":0,"access":{"enabled":true,"allow":1,"block":0,"write":1}}}
+{"ok":true,"data":{"transport":"tcp","connection":"ready","dc":2,"reconnects":0,"profile":"default","pid":48213,"connected":true,"authorized":true,"user":{"id":123456789,"username":"me"},"active_requests":0,"access":{"enabled":true,"allow":1,"block":0,"write":1}}}
 ```
 
 A fresh profile without a login and without `access.json`:
 
 ```json
-{"ok":true,"data":{"profile":"default","pid":48213,"connected":false,"authorized":false,"active_requests":0}}
+{"ok":true,"data":{"transport":"tcp","connection":"connecting","reconnects":0,"profile":"default","pid":48213,"connected":false,"authorized":false,"active_requests":0}}
 ```
 
-**Answer fields** (`data`): `profile` string, `pid` integer, `connected` boolean, `authorized` boolean, `user` object (optional), `user.id` integer (optional), `user.username` string (optional), `user.first_name` string (optional), `user.last_name` string (optional), `login_state` string (optional), `active_requests` integer, `access` object (optional), `access.enabled` boolean (optional), `access.allow` integer (optional), `access.block` integer (optional), `access.write` integer (optional), `access.closed` boolean (optional).
+**Answer fields** (`data`): `transport` string, `proxy` string (optional, without credentials), `connection` string, `dc` integer (optional), `reconnects` integer, `profile` string, `pid` integer, `connected` boolean, `authorized` boolean, `user` object (optional), `user.id` integer (optional), `user.username` string (optional), `user.first_name` string (optional), `user.last_name` string (optional), `login_state` string (optional), `active_requests` integer, `access` object (optional), `access.enabled` boolean (optional), `access.allow` integer (optional), `access.block` integer (optional), `access.write` integer (optional), `access.closed` boolean (optional).
+
+`connection` is `connecting`, `ready` or `disconnected`; `connected` is true when it is `ready`. While offline, the last cached account is shown without a Telegram request. A Telegram request waits up to 15 seconds for a connection and then returns exit code 10 (`offline`). Local operations remain available.
 
 `login_state` is present while a login is in progress: `qr_scan`, `code_required`, `password_required` or `authorized` (see [auth login](#tg-auth-login)). The `access` object is shown when the read filter is on or the `write` list is not empty. `enabled` tells whether the read filter is on, `allow`, `block` and `write` are counts (`write` is shown when it is not empty), and `closed: true` means that `access.json` could not be read, parsed or has a mode that is too wide, so everything is closed. It never shows chat IDs. See [access.md](access.md).
 

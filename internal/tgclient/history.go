@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/telegram/query"
 	"github.com/gotd/td/telegram/query/messages"
 	"github.com/gotd/td/tg"
@@ -25,6 +26,10 @@ func (c *Client) History(ctx context.Context, ref chatref.Ref, q rpc.HistoryQuer
 	if err != nil {
 		return rpc.MessagesResult{}, err
 	}
+	return historyResolved(ctx, c.tg.API(), p, q)
+}
+
+func historyResolved(ctx context.Context, api *tg.Client, p peers.Peer, q rpc.HistoryQuery) (rpc.MessagesResult, error) {
 	chat := toChatOf(p)
 	offsetID, err := decodeCursor(q.Cursor, chat.ID)
 	if err != nil {
@@ -33,12 +38,11 @@ func (c *Client) History(ctx context.Context, ref chatref.Ref, q rpc.HistoryQuer
 
 	// One more than asked: seeing it tells whether a next page exists.
 	batch := min(q.Limit+1, telegramPageSize)
-	api := c.tg.API()
 	var it *messages.Iterator
 	if q.Topic != 0 {
-		it = query.Messages(api).GetReplies(p.InputPeer()).MsgID(q.Topic).BatchSize(batch).Iter()
+		it = query.Messages(api).GetReplies(p.InputPeer()).MsgID(q.Topic).MinID(q.MinID).BatchSize(batch).Iter()
 	} else {
-		it = query.Messages(api).GetHistory(p.InputPeer()).BatchSize(batch).Iter()
+		it = query.Messages(api).GetHistory(p.InputPeer()).MinID(q.MinID).BatchSize(batch).Iter()
 	}
 	if offsetID != 0 {
 		it = it.OffsetID(offsetID)

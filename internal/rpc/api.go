@@ -1,23 +1,27 @@
 package rpc
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Method names of the daemon API.
 const (
-	MethodPing         = "ping"
-	MethodStatus       = "status"
-	MethodShutdown     = "shutdown"
-	MethodAuthStart    = "auth.start"
-	MethodAuthCode     = "auth.code"
-	MethodAuthPassword = "auth.password"
-	MethodAuthResend   = "auth.resend"
-	MethodAuthStartQR  = "auth.start_qr"
-	MethodAuthWait     = "auth.wait"
-	MethodAuthCancel   = "auth.cancel"
-	MethodChatList     = "chat.list"
-	MethodChatMembers  = "chat.members"
-	MethodChatTopics   = "chat.topics"
-	MethodChatCommon   = "chat.common"
+	MethodSessionExport = "session.export"
+	MethodPing          = "ping"
+	MethodStatus        = "status"
+	MethodShutdown      = "shutdown"
+	MethodAuthStart     = "auth.start"
+	MethodAuthCode      = "auth.code"
+	MethodAuthPassword  = "auth.password"
+	MethodAuthResend    = "auth.resend"
+	MethodAuthStartQR   = "auth.start_qr"
+	MethodAuthWait      = "auth.wait"
+	MethodAuthCancel    = "auth.cancel"
+	MethodChatList      = "chat.list"
+	MethodChatMembers   = "chat.members"
+	MethodChatTopics    = "chat.topics"
+	MethodChatCommon    = "chat.common"
 
 	MethodChatResolve         = "chat.resolve"
 	MethodChatInfo            = "chat.info"
@@ -83,16 +87,27 @@ type PingResult struct {
 	Pong bool `json:"pong"`
 }
 
+// ConnectionInfo describes the primary Telegram connection.
+type ConnectionInfo struct {
+	Transport  string `json:"transport"`
+	Proxy      string `json:"proxy,omitempty"`
+	Connection string `json:"connection"`
+	DC         int    `json:"dc,omitempty"`
+	Reconnects int    `json:"reconnects"`
+}
+
 // StatusResult is the result of MethodStatus.
 type StatusResult struct {
-	Profile        string        `json:"profile"`
-	PID            int           `json:"pid"`
-	Connected      bool          `json:"connected"`
-	Authorized     bool          `json:"authorized"`
-	User           *User         `json:"user,omitempty"`
-	LoginState     string        `json:"login_state,omitempty"`
-	ActiveRequests int           `json:"active_requests"`
-	Access         *AccessStatus `json:"access,omitempty"`
+	*ConnectionInfo `json:",omitempty"`
+	Profile         string        `json:"profile"`
+	PID             int           `json:"pid"`
+	Connected       bool          `json:"connected"`
+	Authorized      bool          `json:"authorized"`
+	User            *User         `json:"user,omitempty"`
+	LoginState      string        `json:"login_state,omitempty"`
+	AuthLost        string        `json:"auth_lost,omitempty"`
+	ActiveRequests  int           `json:"active_requests"`
+	Access          *AccessStatus `json:"access,omitempty"`
 }
 
 // AccessStatus reports access-list state without revealing chat IDs.
@@ -205,14 +220,15 @@ type ChatRefParams struct {
 // ChatInfo describes one chat in more detail than Chat. Optional fields are
 // left out when Telegram does not give them.
 type ChatInfo struct {
-	ID       int64  `json:"id"`
-	Type     string `json:"type"`
-	Title    string `json:"title" untrusted:"true"`
-	Username string `json:"username,omitempty" untrusted:"true"`
-	About    string `json:"about,omitempty" untrusted:"true"`
-	Members  int    `json:"members,omitempty"`
-	Forum    bool   `json:"forum,omitempty"`
-	Verified bool   `json:"verified,omitempty"`
+	Settings json.RawMessage `json:"settings,omitempty"`
+	ID       int64           `json:"id"`
+	Type     string          `json:"type"`
+	Title    string          `json:"title" untrusted:"true"`
+	Username string          `json:"username,omitempty" untrusted:"true"`
+	About    string          `json:"about,omitempty" untrusted:"true"`
+	Members  int             `json:"members,omitempty"`
+	Forum    bool            `json:"forum,omitempty"`
+	Verified bool            `json:"verified,omitempty"`
 }
 
 // InviteInfo is what an invite link shows without joining the chat.
@@ -283,6 +299,7 @@ type HistoryParams struct {
 
 // HistoryQuery is HistoryParams after validation, the form Telegram clients take.
 type HistoryQuery struct {
+	MinID  int
 	Limit  int
 	Since  time.Time
 	Until  time.Time
@@ -449,4 +466,14 @@ type SearchHit struct {
 // SearchResult contains hits grouped by scope.
 type SearchResult struct {
 	Hits []SearchHit `json:"hits"`
+}
+
+// SessionExportResult contains a secret session string and public metadata.
+type SessionExportResult struct {
+	Session string `json:"session"`
+	Format  string `json:"format"`
+	DC      int    `json:"dc"`
+	UserID  int64  `json:"user_id,omitempty"`
+	KeyID   string `json:"key_id"`
+	Client  string `json:"client,omitempty"`
 }

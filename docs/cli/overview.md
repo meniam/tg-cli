@@ -129,6 +129,8 @@ debug: call method=status took=0s failed=false
 
 ## The answer envelope
 
+A command group without a subcommand returns a `usage` error and lists its subcommands. Use `--help` for human-readable help. Usage errors include the command syntax when available.
+
 Every command, except the streams `message watch` and `message export`, prints one document on stdout, also on failure. Prompts, warnings, hints and logs go to stderr, so stdout stays parseable.
 
 ```json
@@ -143,6 +145,8 @@ Every command, except the streams `message watch` and `message export`, prints o
 - `data` holds the result of the command. Its fields are listed per command in `tg schema` and on the command pages.
 - `error.code` is the name of the exit code (`usage`, `not_found`, `flood_wait` and so on, see the table below), `error.message` is for people. The wait time of `flood_wait` arrives inside `message`: there is no separate field.
 - `throttled_ms` is an optional top-level number, next to `ok` and `data`. It appears when the request waited in the request throttle, in every format and as the closing line in `jsonl`. Without waiting the output is unchanged.
+
+For batch writes, a partial success has `ok: true`, `data.partial: true` and `data.errors` with an `id`, `code`, `message` and, for a flood wait, `retry_after_seconds`. It exits with code 1. If no item succeeds, the ordinary error envelope and the first error's exit code are returned. `--fields` always keeps `partial` and `errors` for a partial result. Check the exit code as well as `ok`.
 
 The commands that do not follow the envelope: `message watch` prints one event per line without an envelope, and `message export` prints one message per line. A failure before any output is the usual error envelope; an export that stops after some lines ends with the error envelope as the last line of stdout.
 
@@ -208,7 +212,7 @@ The table is the one `tg schema` prints; the codes are defined in `internal/exit
 | Code | Name | Meaning |
 | --- | --- | --- |
 | 0 | `ok` | the command succeeded |
-| 1 | `failure` | a generic error with no more specific code |
+| 1 | `failure` | a generic error, or a partial success of a batch command (data.partial) |
 | 2 | `usage` | wrong arguments, flags or environment |
 | 3 | `daemon_not_running` | the daemon socket does not answer |
 | 4 | `not_authorized` | the profile has no logged-in Telegram account |
@@ -217,6 +221,7 @@ The table is the one `tg schema` prints; the codes are defined in `internal/exit
 | 7 | `not_found` | the chat, user, message or note does not exist or is not visible |
 | 8 | `cursor_expired` | the event cursor is older than the retained journal |
 | 9 | `write_disabled` | the owner did not allow writes to the chat in access.json |
+| 10 | `offline` | Telegram is offline |
 <!-- /schema:exit-codes -->
 
 Which codes a command can return is listed on its page. A few rules hold for all commands:

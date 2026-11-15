@@ -9,6 +9,8 @@ import (
 	"tg-cli/internal/sessionstr"
 )
 
+var ErrSessionInUse = errors.New("session key is already in use")
+
 // WithProfileLock excludes the daemon and other offline operations.
 func WithProfileLock(p Paths, fn func() error) error {
 	if err := os.MkdirAll(p.Dir, 0700); err != nil {
@@ -121,7 +123,7 @@ func guardSessionStart(p Paths) (func(), error) {
 	}
 	if len(profiles) > 0 {
 		release()
-		return nil, fmt.Errorf("session key is in use by profile %s", profiles[0])
+		return nil, fmt.Errorf("%w by profile %s", ErrSessionInUse, profiles[0])
 	}
 	return release, nil
 }

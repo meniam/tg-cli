@@ -51,6 +51,8 @@ const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
 	account             accountCache
+	authLostMu          sync.RWMutex
+	authLost            string
 	idempotencyLocks    keyLocks
 	opts                Options
 	log                 *slog.Logger
@@ -135,12 +137,19 @@ func Run(ctx context.Context, opts Options) error {
 	authorized := make(chan struct{}, 1)
 	d.login.onUser = d.account.set
 	d.login.onAuthorized = func() {
+		d.setAuthLost("")
 		select {
 		case authorized <- struct{}{}:
 		default:
 		}
 	}
+	if source, ok := opts.Telegram.(interface{ SetAuthLostSink(func(string)) }); ok {
+		source.SetAuthLostSink(d.setAuthLost)
+	}
 	d.srv.SetRequestGuard(func(req rpc.Request) error {
+		if kind := d.getAuthLost(); kind != "" && (accountMethod(req.Method) || strings.HasPrefix(req.Method, "user.") || strings.HasPrefix(req.Method, "contact.") || strings.HasPrefix(req.Method, "account.") || strings.HasPrefix(req.Method, "folder.")) {
+			return rpc.NewError(rpc.CodeNotAuthorized, "authorization lost: "+kind+"; log in again")
+		}
 		if strings.HasPrefix(req.Method, "user.") || strings.HasPrefix(req.Method, "contact.") {
 			req.Method = "chat." + req.Method
 		}
@@ -194,6 +203,7 @@ func Run(ctx context.Context, opts Options) error {
 	pruneDone := make(chan struct{})
 	go func() { defer close(pruneDone); d.pruneEvents(runCtx, eventPruneEvery, eventRetention, eventKeep) }()
 
+	d.logConnection(runCtx)
 	tgDone := make(chan error, 1)
 	go func() { tgDone <- opts.Telegram.Run(runCtx) }()
 	serveDone := make(chan error, 1)
@@ -297,10 +307,16 @@ func (d *daemon) tracking(h rpc.Handler) rpc.Handler {
 
 // handle registers a handler that counts as activity for the idle stop.
 func (d *daemon) handle(method string, h rpc.Handler) {
-	d.srv.Handle(method, d.tracking(h))
+	d.srv.Handle(method, d.tracking(func(ctx context.Context, params json.RawMessage) (any, error) {
+		if method != rpc.MethodPing && method != rpc.MethodStatus && method != rpc.MethodShutdown {
+			ctx = rpc.WithConnectionWait(ctx)
+		}
+		return h(ctx, params)
+	}))
 }
 
 func (d *daemon) register() {
+	d.handle(rpc.MethodSessionExport, d.sessionExport)
 	d.handle(rpc.MethodPing, d.ping)
 	d.handle(rpc.MethodStatus, d.status)
 	d.handle(rpc.MethodShutdown, d.shutdown)
@@ -357,6 +373,7 @@ func (d *daemon) register() {
 	d.registerOwnerState()
 	d.registerUsers()
 	d.registerChatAdmin()
+	d.registerUnread()
 }
 
 func (d *daemon) ping(context.Context, json.RawMessage) (any, error) {
@@ -368,11 +385,18 @@ func (d *daemon) status(ctx context.Context, _ json.RawMessage) (any, error) {
 		Profile:    d.opts.Profile,
 		PID:        os.Getpid(),
 		LoginState: d.login.state(),
+		AuthLost:   d.getAuthLost(),
 		// The status request itself is active while it runs, do not count it.
 		ActiveRequests: max(d.srv.Active()-1, 0),
 	}
 	if policy := d.policy(); policy.Enabled() || policy.WriteCount() > 0 || policy.AdminCount() > 0 || policy.CreateAllowed() {
 		st.Access = &rpc.AccessStatus{Enabled: policy.Enabled(), Allow: policy.AllowCount(), Block: policy.BlockCount(), Write: policy.WriteCount(), Admin: policy.AdminCount(), Create: policy.CreateAllowed(), Closed: policy.Closed()}
+	}
+	if st.AuthLost != "" {
+		return st, nil
+	}
+	if d.fillConnection(&st) {
+		return st, nil
 	}
 	select {
 	case <-d.opts.Telegram.Ready():
@@ -439,6 +463,18 @@ func (d *daemon) authCancel(context.Context, json.RawMessage) (any, error) {
 // requireAccount waits for the connection and checks that an account is logged
 // in. A client may call right after the daemon started, so it waits.
 func (d *daemon) requireAccount(ctx context.Context) error {
+	if rpc.NeedsConnectionWait(ctx) {
+		if waiter, ok := d.opts.Telegram.(interface {
+			WaitConnected(context.Context, time.Duration) error
+		}); ok {
+			if err := waiter.WaitConnected(ctx, connectionWait); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return rpc.NewError(rpc.CodeOffline, "telegram is offline")
+			}
+		}
+	}
 	select {
 	case <-d.opts.Telegram.Ready():
 	case <-ctx.Done():
@@ -514,4 +550,15 @@ func decodeParams(params json.RawMessage, v any) error {
 		return rpc.NewError(rpc.CodeInvalidParams, "invalid params")
 	}
 	return nil
+}
+
+func (d *daemon) setAuthLost(kind string) {
+	d.authLostMu.Lock()
+	d.authLost = kind
+	d.authLostMu.Unlock()
+}
+func (d *daemon) getAuthLost() string {
+	d.authLostMu.RLock()
+	defer d.authLostMu.RUnlock()
+	return d.authLost
 }

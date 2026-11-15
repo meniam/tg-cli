@@ -93,7 +93,8 @@ func newTelegram(cfg daemon.TelegramConfig) (daemon.Telegram, error) {
 	if cfg.StatePath != "" {
 		state = &stateKV{path: cfg.StatePath}
 	}
-	client := tgclient.New(tgclient.Config{
+	client, err := tgclient.NewWithNetwork(tgclient.Config{
+		Network:     cfg.Network,
 		AppID:       cfg.AppID,
 		AppHash:     cfg.AppHash,
 		SessionPath: cfg.SessionPath,
@@ -101,5 +102,8 @@ func newTelegram(cfg daemon.TelegramConfig) (daemon.Telegram, error) {
 		Throttle:    cfg.Throttle,
 		StateKV:     state,
 	})
+	if err != nil {
+		return nil, err
+	}
 	return &managedTelegram{Client: client, state: state}, nil
 }

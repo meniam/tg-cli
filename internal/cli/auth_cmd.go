@@ -79,6 +79,7 @@ type authStatus struct {
 	Authorized bool      `json:"authorized"`
 	User       *rpc.User `json:"user,omitempty"`
 	LoginState string    `json:"login_state,omitempty"`
+	AuthLost   string    `json:"auth_lost,omitempty"`
 }
 
 func (a *app) authStatus(cmd *cobra.Command, _ []string) error {
@@ -97,6 +98,7 @@ func (a *app) authStatus(cmd *cobra.Command, _ []string) error {
 		Authorized: st.Authorized,
 		User:       st.User,
 		LoginState: st.LoginState,
+		AuthLost:   st.AuthLost,
 	})
 }
 

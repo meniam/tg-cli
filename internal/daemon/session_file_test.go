@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,5 +52,18 @@ func TestSessionFileAndDuplicate(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join(q.Dir, ".session-*"))
 	if err != nil || len(files) != 0 {
 		t.Fatal("temporary files left")
+	}
+}
+
+// A child exit keeps its exit status available to the CLI.
+type testExitStatus int
+
+func (e testExitStatus) Error() string { return "child failed" }
+func (e testExitStatus) ExitCode() int { return int(e) }
+func TestEarlyExitPreservesStatus(t *testing.T) {
+	err := earlyExit(testExitStatus(2), filepath.Join(t.TempDir(), "absent"))
+	var status interface{ ExitCode() int }
+	if !errors.As(err, &status) || status.ExitCode() != 2 {
+		t.Fatal("child exit status was lost")
 	}
 }

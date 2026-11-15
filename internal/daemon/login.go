@@ -346,9 +346,12 @@ func (m *loginManager) finish(f *loginFlow, err error) {
 	case err != nil && f.ctx.Err() != nil:
 		ev = loginEvent{err: loginEnded(f)}
 	case err != nil:
-		ev = loginEvent{err: err}
+		ev = loginEvent{err: safeLoginError(err)}
 	default:
 		ev.user, ev.err = m.tg.Self(f.ctx)
+		if ev.err != nil {
+			ev.err = safeLoginError(ev.err)
+		}
 		if ev.err == nil && m.onUser != nil {
 			m.onUser(ev.user)
 		}

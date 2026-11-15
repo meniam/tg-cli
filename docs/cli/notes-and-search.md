@@ -228,7 +228,7 @@ tg version --human
 Prints the machine description of every command, argument, flag and exit code. It is read only, needs no Daemon and no network, and prints the same document every time. It is the source of truth: do not copy the list of commands, take it from the schema.
 
 ```text
-tg schema [flags]
+tg schema [command...] [flags]
 ```
 
 <!-- schema:flags tg schema -->
@@ -239,6 +239,8 @@ No command flags.
 
 
 **Preconditions.** None.
+
+An optional command path restricts `commands` to that command or group. An unknown path returns a usage error. Without a path, the full schema is returned.
 
 **What the document holds.**
 
@@ -254,10 +256,13 @@ No command flags.
 
 Every entry of `commands` has `path` (for example `message send-media`), `summary`, an optional `description`, `safety` (`read`, `local_write`, `account_write`), `dangerous`, `result` (the Go type of the answer), `formats`, `fields` (the response fields with `path`, `type`, `optional`, `untrusted`), `args` (`name`, `required`, `variadic`) and `flags` (`name`, `type`, `default`, `values`, `usage`). List commands carry `item`, the item fields of the list. `message search` also has `public_item` for the `--public` hits, `chat sync status` has `chat_result` for the one-chat answer, and `message watch` has `subscription_method`. The response fields come from the Go types of the results, so they follow the code, and a test fails when a command lacks a safety class, a `dangerous` mark or a result type. A field with `untrusted: true` carries text written by other people.
 
+When a flag changes the result type, `result_variants` lists the flag, result type and fields. For example, `daemon start --foreground` returns `stopped` after the daemon stops.
+
 **Example.**
 
 ```sh
 tg schema
+tg schema chat
 tg schema --fields commands.path
 tg schema --fields exit_codes
 ```
