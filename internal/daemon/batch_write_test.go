@@ -123,3 +123,25 @@ func TestBatchDeleteStopsAfterIntentFailure(t *testing.T) {
 		t.Fatalf("result=%+v calls=%v", res, base.calls)
 	}
 }
+
+func TestForwardCopyChangesIdempotency(t *testing.T) {
+	d, base, _, path := writeDaemon(t)
+	writeAccess(t, path, `{"allow":[42],"write":[42]}`)
+	f := &batchTelegram{writeTelegram: base}
+	d.opts.Telegram = f
+	p := rpc.ForwardParams{From: "42", To: "42", IDs: []int{1, 2}, IdempotencyKey: "copy-key"}
+	if _, err := d.messageForward(context.Background(), params(t, p)); err != nil {
+		t.Fatal(err)
+	}
+	p.Copy = true
+	_, err := d.messageForward(context.Background(), params(t, p))
+	if writeCode(t, err) != rpc.CodeInvalidParams || f.forwards != 1 {
+		t.Fatalf("copy with same key: %v calls=%d", err, f.forwards)
+	}
+	p.NoCaptions = true
+	p.Copy = false
+	_, err = d.messageForward(context.Background(), params(t, p))
+	if writeCode(t, err) != rpc.CodeInvalidParams {
+		t.Fatalf("captions without copy: %v", err)
+	}
+}

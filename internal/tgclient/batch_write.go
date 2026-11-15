@@ -26,7 +26,7 @@ func forwardBatches(ctx context.Context, api *tg.Client, source, destination tg.
 			}
 			continue
 		}
-		req := &tg.MessagesForwardMessagesRequest{FromPeer: source, ToPeer: destination, ID: ids, Silent: p.Silent, RandomID: make([]int64, len(ids))}
+		req := &tg.MessagesForwardMessagesRequest{FromPeer: source, ToPeer: destination, ID: ids, Silent: p.Silent, DropAuthor: p.Copy, DropMediaCaptions: p.NoCaptions, RandomID: make([]int64, len(ids))}
 		var randomErr error
 		for i := range ids {
 			req.RandomID[i], randomErr = newRandomID()

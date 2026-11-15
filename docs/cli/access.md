@@ -103,3 +103,9 @@ The mark `untrusted` in `tg schema` and the `| ` frame of `--human` are hints fo
 ## Checks
 
 Verification of the access filter is tracked in [FEATURES.md](../../FEATURES.md), item 9.2.
+
+The optional `downloads` array contains absolute directory roots where the
+Daemon may save media. It is independent of `files`; an absent or empty list
+disables downloads. Only the owner edits the access file. Before rolling back to
+a version without `downloads`, the owner must remove that field: older versions
+reject unknown fields and close access to chats.

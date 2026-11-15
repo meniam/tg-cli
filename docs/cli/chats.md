@@ -168,6 +168,8 @@ A page can be continued in two ways. Members page by `--offset` and `next_offset
 
 ### tg chat members
 
+Use `--all --format jsonl` to stream all available pages. It cannot be combined with `--limit` or `--offset`. If a later page fails, stderr reports the last offset for resuming with `--offset`. Telegram may limit the available members.
+
 Lists the members of a group, supergroup or channel.
 
 ```text
@@ -177,6 +179,7 @@ tg chat members <chat> [flags]
 <!-- schema:flags tg chat members -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
+| `--all` | bool | `false` | stream all pages as JSONL |
 | `--filter` | string | `none` | member filter: recent, admins or bots |
 | `--limit` | int | `50` | members per page, 1 to 200 |
 | `--offset` | int | `0` | number of members to skip, 0 or greater |

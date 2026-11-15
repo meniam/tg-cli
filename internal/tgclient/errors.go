@@ -36,6 +36,9 @@ func mapError(err error) error {
 		return notFound()
 	}
 	if tgErr, ok := tgerr.As(err); ok {
+		if tgErr.Type == "CHAT_FORWARDS_RESTRICTED" {
+			return rpc.NewError(rpc.CodeTelegram, "forwarding from this chat is restricted (protected content)")
+		}
 		return rpc.NewError(rpc.CodeTelegram, tgErr.Type)
 	}
 	return safeClientError(err)

@@ -366,3 +366,10 @@ tg message watch --after <cursor>                       # продолжить �
 ## Сборка и установка
 
 `just build` собирает бинарь в `dist/tg`. Положи его в `PATH` под именем `tg`. Если рядом стоит старый npm `tg` (`@miolamio/tg-cli`, gramjs), это другая утилита с другим контрактом: проверь, какая из них отвечает на `tg version` (у этой есть поле `revision`).
+
+Медиа: владелец задаёт каталоги `downloads` в `access.json`; затем
+`tg message download <чат> <id> --output /абсолютный/каталог`. Защищённое
+медиа не скачивается. Для выгрузки сообщений запусти `chat sync start`, дождись
+завершения через `chat sync status`, затем используй `message export --local`.
+Участников можно вывести через `chat members --all --format jsonl`.
+`message forward --copy` убирает автора; `--no-captions` требует `--copy`.
