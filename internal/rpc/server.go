@@ -355,8 +355,13 @@ func (s *Server) toError(method string, err error) *Error {
 	var rpcErr *Error
 	switch {
 	case errors.As(err, &rpcErr):
+		if rpcErr.Cause != nil {
+			s.log.Error("handler failed", "method", method, "err", redact.Text(rpcErr.Cause.Error()))
+		}
 		copy := *rpcErr
+		copy.Cause = nil
 		copy.Message = redact.Text(copy.Message)
+		copy.Data = redact.Value(copy.Data)
 		return &copy
 	case errors.Is(err, context.DeadlineExceeded):
 		return NewError(CodeInternal, "request timed out")

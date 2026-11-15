@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"tg-cli/internal/exitcode"
+	"tg-cli/internal/redact"
 )
 
 // Batch describes failures in an otherwise successful batch.
@@ -46,7 +47,7 @@ func ItemErrorFrom(id int, err error) ItemError {
 	case CodeWriteDisabled:
 		code = exitcode.WriteDisabled
 	}
-	out.Code, out.Message = exitcode.Name(code), e.Message
+	out.Code, out.Message = exitcode.Name(code), redact.Text(e.Message)
 	if data, ok := e.Data.(map[string]any); ok {
 		switch n := data["retry_after_seconds"].(type) {
 		case int:

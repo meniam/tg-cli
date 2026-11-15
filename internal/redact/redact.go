@@ -1,7 +1,10 @@
 // Package redact removes recognizable secrets from diagnostics.
 package redact
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 var patterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(api_hash|password|secret|phone)\s*[=:]\s*[^\s,;]+`),
@@ -17,4 +20,31 @@ func Text(s string) string {
 		s = p.ReplaceAllString(s, "[redacted]")
 	}
 	return s
+}
+
+// Value redacts strings in common JSON-shaped diagnostic data.
+func Value(v any) any {
+	switch x := v.(type) {
+	case string:
+		return Text(x)
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, item := range x {
+			switch strings.ToLower(k) {
+			case "api_hash", "password", "secret", "phone":
+				out[k] = "[redacted]"
+			default:
+				out[Text(k)] = Value(item)
+			}
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, item := range x {
+			out[i] = Value(item)
+		}
+		return out
+	default:
+		return v
+	}
 }

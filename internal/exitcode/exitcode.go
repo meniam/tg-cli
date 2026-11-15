@@ -42,7 +42,7 @@ var names = map[int]string{
 
 var notes = map[int]string{
 	OK:               "the command succeeded",
-	Failure:          "a generic error with no more specific code",
+	Failure:          "a generic error, or a partial success of a batch command (data.partial)",
 	Usage:            "wrong arguments, flags or environment",
 	DaemonNotRunning: "the daemon socket does not answer",
 	NotAuthorized:    "the profile has no logged-in Telegram account",

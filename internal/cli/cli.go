@@ -54,8 +54,9 @@ type Deps struct {
 
 // cmdError carries the exit code of a failed command.
 type cmdError struct {
-	exit int
-	msg  string
+	exit    int
+	msg     string
+	printed bool
 }
 
 func (e *cmdError) Error() string { return e.msg }
@@ -94,6 +95,9 @@ func Execute(ctx context.Context, args []string, deps Deps) int {
 	var ce *cmdError
 	if errors.As(err, &ce) {
 		exit = ce.exit
+		if ce.printed {
+			return exit
+		}
 	}
 	// The command that failed may be a subcommand, an unknown name or nothing at
 	// all: the format is read from wherever cobra stopped.

@@ -65,6 +65,7 @@ type Error struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Data    any    `json:"data,omitempty"`
+	Cause   error  `json:"-"`
 }
 
 func (e *Error) Error() string {

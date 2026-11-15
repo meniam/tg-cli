@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -56,6 +55,9 @@ func applyTextCheck(result *rpc.SendResult, check rpc.TextCheck) {
 	result.RichMode = &check.Rich
 }
 func validWriteIDs(ids []int) error {
+	if len(ids) > 1000 {
+		return rpc.NewError(rpc.CodeInvalidParams, "at most 1000 message ids are allowed")
+	}
 	if len(ids) == 0 {
 		return rpc.NewError(rpc.CodeInvalidParams, "at least one message id is required")
 	}
@@ -278,22 +280,7 @@ func (d *daemon) messageDelete(ctx context.Context, raw json.RawMessage) (any, e
 	if user == nil {
 		return nil, rpc.NewError(rpc.CodeNotAuthorized, "not logged in: run `auth login` first")
 	}
-	if err := d.writeDeletion(deletionRecord{Time: time.Now().UTC().Format(time.RFC3339), Account: user.ID, Tool: "tg", Phase: "intent", ChatID: id, IDs: p.IDs, Revoke: p.Revoke, Outcome: "pending"}); err != nil {
-		return nil, fmt.Errorf("record deletion intent: %w", err)
-	}
-	result, callErr := d.opts.Telegram.Delete(ctx, ref, p)
-	outcome := writeOutcome(callErr)
-	if err := d.writeDeletion(deletionRecord{Time: time.Now().UTC().Format(time.RFC3339), Account: user.ID, Tool: "tg", Phase: "result", ChatID: id, IDs: p.IDs, Revoke: p.Revoke, Outcome: outcome}); err != nil {
-		d.log.Error("deletion result journal failed")
-	}
-	if callErr != nil {
-		return nil, callErr
-	}
-	result.ChatID = id
-	if _, err := d.store.MarkMessagesDeleted(ctx, id, p.IDs); err != nil {
-		d.log.Error("deleted message storage failed")
-	}
-	return result, nil
+	return d.deleteChunks(ctx, ref, id, user.ID, p)
 }
 
 func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, error) {

@@ -128,7 +128,7 @@ func TestWriteEditDeleteAndForwardRequests(t *testing.T) {
 			if !ok || len(req.ID) != 2 || req.ID[0] != 5 || req.ID[1] != 6 || len(req.RandomID) != 2 || req.RandomID[0] == 0 || !req.Silent {
 				t.Errorf("forward request: %+v", input)
 			}
-			return respond(output, &tg.Updates{Date: 1700000000, Updates: []tg.UpdateClass{&tg.UpdateMessageID{ID: 15}, &tg.UpdateMessageID{ID: 16}}})
+			return respond(output, &tg.Updates{Date: 1700000000, Updates: []tg.UpdateClass{&tg.UpdateMessageID{ID: 15, RandomID: req.RandomID[0]}, &tg.UpdateMessageID{ID: 16, RandomID: req.RandomID[1]}}})
 		}))
 		out, err := forwardMessages(context.Background(), api, user, channel, -1000000000010, rpc.ForwardParams{IDs: []int{5, 6}, Silent: true})
 		if err != nil || out.ChatID != -1000000000010 || len(out.Messages) != 2 || out.Messages[0].ID != 15 || out.Messages[1].ID != 16 {

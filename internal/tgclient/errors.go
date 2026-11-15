@@ -38,14 +38,20 @@ func mapError(err error) error {
 	if tgErr, ok := tgerr.As(err); ok {
 		return rpc.NewError(rpc.CodeTelegram, tgErr.Type)
 	}
+	return safeClientError(err)
+}
+
+func safeClientError(err error) error {
+	message := "telegram request failed: unexpected response"
 	var networkError net.Error
 	if errors.As(err, &networkError) {
 		if networkError.Timeout() {
-			return rpc.NewError(rpc.CodeTelegram, "telegram request failed: timeout")
+			message = "telegram request failed: timeout"
+		} else {
+			message = "telegram request failed: network error"
 		}
-		return rpc.NewError(rpc.CodeTelegram, "telegram request failed: network error")
 	}
-	return rpc.NewError(rpc.CodeTelegram, "telegram request failed: unexpected response")
+	return &rpc.Error{Code: rpc.CodeTelegram, Message: message, Cause: err}
 }
 
 // mapActionError keeps new write errors stable without changing older commands.

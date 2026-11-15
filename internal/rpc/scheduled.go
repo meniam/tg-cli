@@ -50,6 +50,7 @@ type ScheduledParams struct {
 	DryRun bool   `json:"dry_run,omitempty"`
 }
 type ScheduledResult struct {
+	Batch
 	ChatID   int64     `json:"chat_id"`
 	Messages []Message `json:"messages"`
 	Deleted  []int     `json:"deleted,omitempty"`

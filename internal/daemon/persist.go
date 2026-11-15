@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"tg-cli/internal/redact"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
 )
@@ -17,7 +18,7 @@ func (d *daemon) save(ctx context.Context, op string, fn func(context.Context) e
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveTimeout)
 	defer cancel()
 	if err := fn(ctx); err != nil {
-		d.log.Warn("local storage failed", "op", op, "err", err)
+		d.log.Warn("local storage failed", "op", op, "err", redact.Text(err.Error()))
 	}
 }
 

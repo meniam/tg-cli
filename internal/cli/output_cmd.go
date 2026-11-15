@@ -116,10 +116,28 @@ func (a *app) success(cmd *cobra.Command, data any) error {
 	if err != nil {
 		return err
 	}
-	if settings.format == output.FormatJSONL && a.specs[cmd].ObjectJSONL {
-		return output.SelectWithUntrusted(a.deps.Stdout, output.FormatJSON, output.SuccessDataWithThrottle(data, a.throttledMS), settings.fields, settings.untrusted)
+	partial := isPartial(data)
+	if partial && len(settings.fields) > 0 {
+		settings.fields = append(settings.fields, "partial", "errors")
 	}
-	return a.emit(settings, data, nil)
+	var printErr error
+	if settings.format == output.FormatJSONL && a.specs[cmd].ObjectJSONL {
+		printErr = output.SelectWithUntrusted(a.deps.Stdout, output.FormatJSON, output.SuccessDataWithThrottle(data, a.throttledMS), settings.fields, settings.untrusted)
+	} else {
+		printErr = a.emit(settings, data, nil)
+	}
+	if printErr != nil {
+		return printErr
+	}
+	if partial && settings.format == output.FormatHuman {
+		if err := printPartialSummary(a.deps.Stdout, cmd, data); err != nil {
+			return err
+		}
+	}
+	if partial {
+		return &cmdError{exit: exitcode.Failure, printed: true}
+	}
+	return nil
 }
 
 // warn writes a hint or a progress line to stderr, unless --quiet asked for

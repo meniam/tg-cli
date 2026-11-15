@@ -42,7 +42,7 @@ func (a *app) daemonCommand() *cobra.Command {
 			"is 0, no idle stop.",
 		Args: cobra.NoArgs,
 		RunE: a.daemonStart,
-	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[backgroundStartedResult](), ResultVariants: []resultVariant{{Flag: "foreground", Result: typeOf[daemonStartedResult]()}}})
+	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[backgroundStartedResult](), ResultVariants: []resultVariant{{Flag: "foreground", Result: typeOf[daemonStartedResult]()}}, Choices: []flagChoices{{Flag: "client", Values: []string{"desktop", "android", "ios", "macos", "web-z", "web-k"}}}})
 	start.Flags().String("client", "", "official client preset to use instead of your own application, for example desktop")
 	start.Flags().String("device", "", "device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN)")
 	start.Flags().Bool("foreground", false, "run the daemon in this terminal instead of the background")
