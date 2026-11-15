@@ -25,6 +25,8 @@ func (a *app) authCommand() *cobra.Command {
 		RunE: a.authLogin,
 	}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.AuthResult]()})
 	login.Flags().String("phone", "", "phone number in international format; asked when omitted")
+	login.Flags().Bool("no-input", false, "do not prompt for login credentials")
+	login.Flags().String("password-file", "", "read the two-factor password from an owner-only file")
 	login.Flags().Bool("qr", false, "log in by scanning a QR code in the Telegram app of a logged-in device, no code is needed")
 	cancel := a.annotate(&cobra.Command{
 		Use:   "cancel",
@@ -47,7 +49,12 @@ func (a *app) authCommand() *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: a.authResend,
 	}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.AuthResult]()})
-	cmd.AddCommand(login, status, resend, cancel)
+	code := a.annotate(&cobra.Command{Use: "code", Short: "Submit a login code from stdin", Args: cobra.NoArgs, RunE: a.authCode}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.AuthResult]()})
+	code.Flags().String("password-file", "", "read the two-factor password from an owner-only file")
+	password := a.annotate(&cobra.Command{Use: "password", Short: "Submit a two-factor password", Args: cobra.NoArgs, RunE: a.authPassword}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.AuthResult]()})
+	password.Flags().String("password-file", "", "read the password from an owner-only file")
+	password.Flags().Bool("password-stdin", false, "read the password from stdin")
+	cmd.AddCommand(login, status, resend, cancel, code, password)
 	return cmd
 }
 
@@ -181,6 +188,13 @@ func codePrompt(delivery string) string {
 
 func (a *app) authLogin(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
+	noInput, _ := cmd.Flags().GetBool("no-input")
+	byQR, _ := cmd.Flags().GetBool("qr")
+	phone, _ := cmd.Flags().GetString("phone")
+	passwordFile, _ := cmd.Flags().GetString("password-file")
+	if noInput && phone == "" && !byQR {
+		return fail(exitcode.Usage, "--no-input requires --phone or --qr")
+	}
 	c, err := a.connect(ctx, cmd)
 	if err != nil {
 		return err
@@ -191,8 +205,6 @@ func (a *app) authLogin(cmd *cobra.Command, _ []string) error {
 	progress := func(format string, args ...any) { a.warn(cmd, format, args...) }
 	quiet := a.settings(cmd).quiet
 
-	byQR, _ := cmd.Flags().GetBool("qr")
-	phone, _ := cmd.Flags().GetString("phone")
 	if phone == "" && !byQR {
 		if phone, err = a.ask(ctx, false, "Phone number (international format, e.g. +15551234567): "); err != nil {
 			return a.readFailed(ctx, c, "the phone number", err)
@@ -239,6 +251,9 @@ func (a *app) authLogin(cmd *cobra.Command, _ []string) error {
 				return err
 			}
 		case rpc.AuthCodeRequired:
+			if noInput {
+				return a.success(cmd, res)
+			}
 			progress("%s", codeHint(res))
 			code, err := a.ask(ctx, false, codePrompt(res.Delivery))
 			if err != nil {
@@ -257,7 +272,14 @@ func (a *app) authLogin(cmd *cobra.Command, _ []string) error {
 			}
 		case rpc.AuthPasswordRequired:
 			progress("The account has two-factor authentication.")
-			password, err := a.ask(ctx, true, "Two-factor password: ")
+			var password string
+			if passwordFile != "" {
+				password, err = secretFile(passwordFile, 1024)
+			} else if noInput {
+				return a.success(cmd, res)
+			} else {
+				password, err = a.ask(ctx, true, "Two-factor password: ")
+			}
 			if err != nil {
 				return a.readFailed(ctx, c, "the password", err)
 			}

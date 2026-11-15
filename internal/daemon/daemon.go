@@ -94,6 +94,11 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 	defer release()
+	releaseStart, err := guardSessionStart(opts.Paths)
+	if err != nil {
+		return err
+	}
+	releaseStart()
 	ownedStore := opts.Store
 	if ownedStore == nil {
 		ownedStore, err = store.Open(opts.Paths.Database)

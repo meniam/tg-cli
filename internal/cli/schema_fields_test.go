@@ -46,6 +46,8 @@ var realResponseCases = map[string][]string{
 	"contact add":      {"contact", "add", "@aliceuser"},
 	"contact delete":   {"contact", "delete", "@aliceuser", "--yes"},
 	"contact search":   {"contact", "search", "ann"},
+	"auth code":        {"auth", "code"},
+	"auth password":    {"auth", "password", "--password-stdin"},
 	"auth cancel":      {"auth", "cancel"},
 	"auth status":      {"auth", "status"},
 	"folder list":      {"folder", "list"},
@@ -111,8 +113,11 @@ func realResponses(t *testing.T) map[string][]byte {
 		return strconv.FormatInt(note.ID, 10)
 	}
 
-	out := map[string][]byte{}
+	out := authStepResponses(t)
 	for path, args := range realResponseCases {
+		if path == "auth code" || path == "auth password" {
+			continue
+		}
 		run := make([]string, len(args))
 		for i, arg := range args {
 			if arg == noteIDToken {
@@ -132,6 +137,29 @@ func realResponses(t *testing.T) map[string][]byte {
 		t.Errorf("daemon stop: exit %d, %q", r.code, r.stdout)
 	} else {
 		out["daemon stop"] = parse(t, r).Data
+	}
+	return out
+}
+
+// authStepResponses exercises both steps on one separate login flow. The other
+// response cases require an already authorized account.
+func authStepResponses(t *testing.T) map[string][]byte {
+	t.Helper()
+	e := newEnv(t)
+	e.tg.need2FA = true
+	e.startDaemon()
+	start := e.run("auth", "login", "--phone", "+15550001111", "--no-input")
+	if start.code != exitcode.OK {
+		t.Fatalf("start login: exit %d, %q", start.code, start.stdout)
+	}
+	out := map[string][]byte{}
+	for _, step := range []struct{ path, input string }{{"auth code", "CODE777\n"}, {"auth password", "PASS888\n"}} {
+		e.stdin = strings.NewReader(step.input)
+		r := e.run(realResponseCases[step.path]...)
+		if r.code != exitcode.OK {
+			t.Fatalf("%s: exit %d, %q", step.path, r.code, r.stdout)
+		}
+		out[step.path] = parse(t, r).Data
 	}
 	return out
 }

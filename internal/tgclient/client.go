@@ -48,17 +48,18 @@ func deviceConfig(model string) telegram.DeviceConfig {
 
 // Client is a Telegram client for one account.
 type Client struct {
-	appID     int
-	appHash   string
-	tg        *telegram.Client
-	ready     chan struct{}
-	readyOnce sync.Once
-	authReady chan struct{}
-	updates   *updates.Manager
-	stateKV   StateKV
-	throttle  *throttle.Limiter
-	sinkMu    sync.RWMutex
-	sink      func(rpc.Event)
+	appID          int
+	appHash        string
+	sessionStorage *telegram.FileSessionStorage
+	tg             *telegram.Client
+	ready          chan struct{}
+	readyOnce      sync.Once
+	authReady      chan struct{}
+	updates        *updates.Manager
+	stateKV        StateKV
+	throttle       *throttle.Limiter
+	sinkMu         sync.RWMutex
+	sink           func(rpc.Event)
 
 	mgr         *peers.Manager // resolves chat references to Telegram peers
 	mgrMu       sync.Mutex
@@ -71,8 +72,9 @@ type Client struct {
 // New creates a client. It does not connect until Run is called.
 func New(cfg Config) *Client {
 	c := &Client{appID: cfg.AppID, appHash: cfg.AppHash, ready: make(chan struct{}), authReady: make(chan struct{}, 1), stateKV: cfg.StateKV, throttle: cfg.Throttle}
+	c.sessionStorage = &telegram.FileSessionStorage{Path: cfg.SessionPath}
 	options := telegram.Options{
-		SessionStorage: &telegram.FileSessionStorage{Path: cfg.SessionPath},
+		SessionStorage: c.sessionStorage,
 		Device:         deviceConfig(cfg.DeviceModel),
 		UpdateHandler:  managerHandler{client: c},
 	}
