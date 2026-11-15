@@ -198,11 +198,7 @@ func TestProxySecretDoesNotReachBackgroundOutputs(t *testing.T) {
 			t.Fatalf("proxy secret or flag reached output or child arguments: %q", part)
 		}
 	}
-	data, err := os.ReadFile(paths.Proxy)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(data), secret) {
+	if !strings.Contains(e.savedProfile("default").Proxy, secret) {
 		t.Fatal("proxy was not persisted")
 	}
 }

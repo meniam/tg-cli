@@ -153,6 +153,7 @@ func (a *app) rootCommand() *cobra.Command {
 			}
 			path = filepath.Join(home, ".config", "tg-cli", "config.toml")
 		}
+		a.deps.ConfigPath = path
 		cfg, err := config.Load(path)
 		if err != nil {
 			var configErr *config.Error

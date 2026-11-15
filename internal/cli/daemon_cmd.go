@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -103,7 +103,7 @@ func (a *app) credentials(cmd *cobra.Command, paths daemon.Paths) (daemon.Telegr
 
 	name := flagClient
 	if name == "" {
-		name = savedClient(paths.Client)
+		name = a.config.Profiles[filepath.Base(paths.Dir)].Client
 	}
 	if name == "" {
 		return cfg, fail(exitcode.Usage, "no application credentials: set TG_API_ID and TG_API_HASH (an application from https://my.telegram.org) or start with --client <preset>, for example --client desktop")
@@ -120,32 +120,13 @@ func (a *app) credentials(cmd *cobra.Command, paths daemon.Paths) (daemon.Telegr
 		return cfg, fail(exitcode.Usage, "%v", err)
 	}
 	if flagClient != "" {
-		if err := saveClient(paths, name); err != nil {
-			return cfg, fail(exitcode.Failure, "remember the client preset: %v", err)
+		if err := a.saveProfile(paths, map[string]string{"client": name}, false); err != nil {
+			return cfg, err
 		}
 	}
 	a.warn(cmd, "note: using the %q official client preset. Telegram puts accounts of unofficial clients under observation (opentele documentation, quoting Telegram's API terms); the risk for this tool is not assessed.", name)
 	cfg.AppID, cfg.AppHash = creds.AppID, creds.AppHash
 	return cfg, nil
-}
-
-// savedClient returns the preset saved for the profile, or "".
-func savedClient(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	if name := strings.TrimSpace(string(data)); presetName.MatchString(name) {
-		return name
-	}
-	return ""
-}
-
-func saveClient(paths daemon.Paths, name string) error {
-	if err := os.MkdirAll(paths.Dir, 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(paths.Client, []byte(name+"\n"), 0o600)
 }
 
 // maxDeviceName bounds the device name: Telegram shows it in a narrow list.
@@ -157,11 +138,7 @@ const maxDeviceName = 64
 func (a *app) deviceModel(cmd *cobra.Command, paths daemon.Paths) (string, error) {
 	name, _ := cmd.Flags().GetString("device")
 	if name == "" {
-		data, err := os.ReadFile(paths.Device)
-		if err != nil {
-			return "", nil
-		}
-		return strings.TrimSpace(string(data)), nil
+		return a.config.Profiles[filepath.Base(paths.Dir)].Device, nil
 	}
 	name = strings.TrimSpace(name)
 	if name == "" || utf8.RuneCountInString(name) > maxDeviceName {
@@ -172,11 +149,8 @@ func (a *app) deviceModel(cmd *cobra.Command, paths daemon.Paths) (string, error
 			return "", fail(exitcode.Usage, "the device name must not contain control characters")
 		}
 	}
-	if err := os.MkdirAll(paths.Dir, 0o700); err != nil {
-		return "", fail(exitcode.Failure, "remember the device name: %v", err)
-	}
-	if err := os.WriteFile(paths.Device, []byte(name+"\n"), 0o600); err != nil {
-		return "", fail(exitcode.Failure, "remember the device name: %v", err)
+	if err := a.saveProfile(paths, map[string]string{"device": name}, false); err != nil {
+		return "", err
 	}
 	return name, nil
 }
@@ -250,6 +224,7 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	}
 	err = daemon.Run(cmd.Context(), daemon.Options{
 		FileWarningsReported: true,
+		ClientPreset:         a.config.Profiles[profile].Client,
 		Profile:              profile,
 		Paths:                paths,
 		Telegram:             tg,

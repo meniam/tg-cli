@@ -30,12 +30,14 @@ const (
 
 // Options configure Run.
 type Options struct {
-	Profile  string
-	Paths    Paths
-	Telegram Telegram
-	Store    *store.DB
-	Access   *access.Loader
-	Log      *slog.Logger
+	// ClientPreset is the profile preset included in session exports.
+	ClientPreset string
+	Profile      string
+	Paths        Paths
+	Telegram     Telegram
+	Store        *store.DB
+	Access       *access.Loader
+	Log          *slog.Logger
 	// FileWarningsReported suppresses warnings already shown by the caller.
 	FileWarningsReported bool
 	// IdleTimeout stops the daemon after this long without a request and with

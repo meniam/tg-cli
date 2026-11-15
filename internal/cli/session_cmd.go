@@ -5,9 +5,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
+	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
@@ -73,8 +73,7 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 			if e != nil || uid == 0 {
 				return fail(exitcode.NotAuthorized, "session is unavailable")
 			}
-			client, _ := os.ReadFile(p.Client)
-			value, d, e := sessionstr.Encode(raw, strings.TrimSpace(string(client)), 0)
+			value, d, e := sessionstr.Encode(raw, a.config.Profiles[profile].Client, 0)
 			if e != nil {
 				return fail(exitcode.NotAuthorized, "session is unavailable")
 			}
@@ -151,34 +150,30 @@ func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
 		if e != nil {
 			return fail(exitcode.Failure, "cannot inspect profiles")
 		}
-		createdClient := false
-		if data.Client != "" {
-			existing, readErr := os.ReadFile(p.Client)
-			if errors.Is(readErr, os.ErrNotExist) {
-				f, createErr := os.OpenFile(p.Client, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-				if createErr != nil {
-					return fail(exitcode.Failure, "cannot save client preset")
-				}
-				createdClient = true
-				_, createErr = io.WriteString(f, data.Client+"\n")
-				if closeErr := f.Close(); createErr == nil {
-					createErr = closeErr
-				}
-				if createErr != nil {
-					_ = os.Remove(p.Client)
-					return fail(exitcode.Failure, "cannot save client preset")
-				}
-			} else if readErr != nil {
-				return fail(exitcode.Failure, "cannot read client preset")
-			} else if strings.TrimSpace(string(existing)) != data.Client {
-				a.warn(cmd, "Imported client preset differs from this profile.")
+		writeSession := func() error {
+			if e := daemon.WriteSession(p, data.Session); e != nil {
+				return fail(exitcode.Failure, "cannot write session")
 			}
+			return nil
 		}
-		if e = daemon.WriteSession(p, data.Session); e != nil {
-			if createdClient {
-				_ = os.Remove(p.Client)
+		if data.Client == "" {
+			return writeSession()
+		}
+		updated, e := config.UpdateProfileWith(a.deps.ConfigPath, profile, map[string]string{"client": data.Client}, true, writeSession)
+		if e != nil {
+			var ce *cmdError
+			if errors.As(e, &ce) {
+				return e
 			}
-			return fail(exitcode.Failure, "cannot write session")
+			var configErr *config.Error
+			if errors.As(e, &configErr) {
+				return fail(exitcode.Usage, "%v", e)
+			}
+			return fail(exitcode.Failure, "cannot save client preset")
+		}
+		a.config = updated
+		if a.config.Profiles[profile].Client != data.Client {
+			a.warn(cmd, "Imported client preset differs from this profile.")
 		}
 		return nil
 	})

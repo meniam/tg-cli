@@ -6,14 +6,21 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
 )
 
 func TestNetworkSettingsPersistence(t *testing.T) {
 	dir := t.TempDir()
-	paths := daemon.Paths{Dir: dir, Transport: filepath.Join(dir, "transport"), Proxy: filepath.Join(dir, "proxy")}
+	paths := daemon.Paths{Dir: filepath.Join(dir, "default"), Transport: filepath.Join(dir, "transport"), Proxy: filepath.Join(dir, "proxy")}
 	var err error
-	a := &app{deps: Deps{Getenv: func(string) string { return "" }}}
+	t.Setenv("HOME", t.TempDir())
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &app{config: cfg, deps: Deps{ConfigPath: path, Getenv: func(string) string { return "" }}}
 	cmd := &cobra.Command{}
 	cmd.Flags().String("transport", "", "")
 	cmd.Flags().String("proxy", "", "")
@@ -26,7 +33,7 @@ func TestNetworkSettingsPersistence(t *testing.T) {
 	if s.Proxy.Redacted() != "socks5://localhost:1080" {
 		t.Fatal(s)
 	}
-	st, err := os.Stat(paths.Proxy)
+	st, err := os.Stat(path)
 	if err != nil || st.Mode().Perm() != 0600 {
 		t.Fatalf("wrong permissions: %v %v", st, err)
 	}
@@ -41,16 +48,22 @@ func TestNetworkSettingsPersistence(t *testing.T) {
 	if _, err = a.networkSettings(cmd2, paths, true); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(paths.Proxy)
-	if err != nil || strings.TrimSpace(string(data)) != "none" {
+	cfg, err = config.Load(path)
+	if err != nil || cfg.Profiles["default"].Proxy != "none" {
 		t.Fatalf("proxy was not cleared: %v", err)
 	}
 }
 func TestNetworkBadProxyDoesNotExposeSecret(t *testing.T) {
 	dir := t.TempDir()
-	paths := daemon.Paths{Dir: dir, Transport: filepath.Join(dir, "transport"), Proxy: filepath.Join(dir, "proxy")}
+	paths := daemon.Paths{Dir: filepath.Join(dir, "default"), Transport: filepath.Join(dir, "transport"), Proxy: filepath.Join(dir, "proxy")}
 	var err error
-	a := &app{deps: Deps{Getenv: func(string) string { return "" }}}
+	t.Setenv("HOME", t.TempDir())
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &app{config: cfg, deps: Deps{ConfigPath: path, Getenv: func(string) string { return "" }}}
 	cmd := &cobra.Command{}
 	cmd.Flags().String("transport", "", "")
 	cmd.Flags().String("proxy", "", "")
@@ -59,7 +72,7 @@ func TestNetworkBadProxyDoesNotExposeSecret(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), "secret-marker") {
 		t.Fatalf("unsafe error: %v", err)
 	}
-	if _, err := os.Stat(paths.Proxy); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("invalid settings were saved")
 	}
 }

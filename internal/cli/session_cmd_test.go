@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/sessionstr"
@@ -34,6 +35,9 @@ func TestSessionTransferOffline(t *testing.T) {
 	if err = daemon.WithProfileLock(p, func() error { return daemon.WriteSession(p, raw) }); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := config.UpdateProfile(filepath.Join(e.home, ".config", "tg-cli", "config.toml"), "default", map[string]string{"client": "desktop"}, false); err != nil {
+		t.Fatal(err)
+	}
 	out := filepath.Join(t.TempDir(), "export")
 	if r := e.run("session", "export", "--out", out); r.code != exitcode.Usage {
 		t.Fatalf("export confirmation: %d", r.code)
@@ -53,6 +57,9 @@ func TestSessionTransferOffline(t *testing.T) {
 	}
 	if r := e.run("session", "import", "--profile", "copy", "--from", out, "--yes"); r.code != exitcode.OK {
 		t.Fatalf("import: %d %s", r.code, r.stdout)
+	}
+	if got := e.savedProfile("copy").Client; got != "desktop" {
+		t.Fatalf("imported preset %q", got)
 	}
 	if r := e.run("session", "import", "--profile", "copy", "--from", out, "--yes"); r.code != exitcode.Usage {
 		t.Fatalf("replacement without force: %d", r.code)
@@ -98,7 +105,8 @@ func TestImportPresetFailureDoesNotReplaceSession(t *testing.T) {
 	if err = daemon.WithProfileLock(p, func() error { return daemon.WriteSession(p, raw) }); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.Mkdir(p.Client, 0700); err != nil {
+	lock := filepath.Join(e.home, ".config", "tg-cli", "config.lock")
+	if err = os.MkdirAll(lock, 0700); err != nil {
 		t.Fatal(err)
 	}
 	newKey := make([]byte, 256)

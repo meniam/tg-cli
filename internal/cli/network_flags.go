@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"errors"
-	"os"
-	"strings"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"tg-cli/internal/daemon"
@@ -12,29 +10,15 @@ import (
 	"tg-cli/internal/rpc"
 )
 
-func networkFile(path string) (string, error) {
-	b, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(b)), nil
-}
 func (a *app) networkSettings(cmd *cobra.Command, paths daemon.Paths, save bool) (netconf.Settings, error) {
 	var s netconf.Settings
-	transport, err := networkFile(paths.Transport)
-	if err != nil {
-		return s, fail(exitcode.Failure, "read network settings")
-	}
+	profile := a.config.Profiles[filepath.Base(paths.Dir)]
+	transport := profile.Transport
 	if transport == "" {
 		transport = "tcp"
 	}
-	proxyValue, err := networkFile(paths.Proxy)
-	if err != nil {
-		return s, fail(exitcode.Failure, "read network settings")
-	}
+	proxyValue := profile.Proxy
+	var err error
 	if cmd.Flags().Changed("transport") {
 		transport, _ = cmd.Flags().GetString("transport")
 	}
@@ -56,24 +40,16 @@ func (a *app) networkSettings(cmd *cobra.Command, paths daemon.Paths, save bool)
 		return s, fail(exitcode.Usage, "%v", err)
 	}
 	if save {
-		if err = os.MkdirAll(paths.Dir, 0700); err != nil {
-			return s, fail(exitcode.Failure, "save network settings")
+		changes := map[string]string{}
+		if cmd.Flags().Changed("transport") {
+			changes["transport"] = string(s.Transport)
 		}
-		for _, f := range []struct{ path, value string }{{paths.Transport, string(s.Transport)}, {paths.Proxy, s.Proxy.Encode()}} {
-			file, openErr := os.OpenFile(f.path, os.O_WRONLY|os.O_CREATE, 0600)
-			if openErr != nil {
-				return s, fail(exitcode.Failure, "save network settings")
-			}
-			writeErr := file.Chmod(0600)
-			if writeErr == nil {
-				writeErr = file.Truncate(0)
-			}
-			if writeErr == nil {
-				_, writeErr = file.WriteString(f.value + "\n")
-			}
-			closeErr := file.Close()
-			if writeErr != nil || closeErr != nil {
-				return s, fail(exitcode.Failure, "save network settings")
+		if cmd.Flags().Changed("proxy") || a.deps.Getenv("TG_CLI_PROXY") != "" {
+			changes["proxy"] = s.Proxy.Encode()
+		}
+		if len(changes) > 0 {
+			if err := a.saveProfile(paths, changes, false); err != nil {
+				return s, err
 			}
 		}
 	}
@@ -103,10 +79,7 @@ func (a *app) checkRunningNetwork(cmd *cobra.Command, paths daemon.Paths) error 
 	if requested.Proxy != nil && requested.Proxy.Kind == netconf.MTProxy {
 		transport = "mtproxy"
 	}
-	saved, err := networkFile(paths.Proxy)
-	if err != nil {
-		return fail(exitcode.Failure, "read network settings")
-	}
+	saved := a.config.Profiles[filepath.Base(paths.Dir)].Proxy
 	if saved == "" {
 		saved = "none"
 	}
