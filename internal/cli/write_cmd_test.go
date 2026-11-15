@@ -235,3 +235,15 @@ func TestWriteTextIgnoresStdinWhenTextIsGiven(t *testing.T) {
 		t.Fatalf("writeText = %q, %v", got, err)
 	}
 }
+
+func TestForwardCopyCLI(t *testing.T) {
+	invalid := runWriteCLI(t, []string{"message", "forward", "42", "77", "11", "--no-captions"}, "", nil, nil)
+	if invalid.code != 2 || invalid.method != "" {
+		t.Fatalf("invalid: %+v", invalid)
+	}
+	result := runWriteCLI(t, []string{"message", "forward", "42", "77", "11", "--copy", "--no-captions"}, "", nil, nil)
+	var p rpc.ForwardParams
+	if err := json.Unmarshal(result.params, &p); err != nil || result.code != 0 || !p.Copy || !p.NoCaptions {
+		t.Fatalf("result %+v params %+v error %v", result, p, err)
+	}
+}

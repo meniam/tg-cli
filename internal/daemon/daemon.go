@@ -321,6 +321,8 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodChatInviteInfo, d.chatInviteInfo)
 	d.handle(rpc.MethodMessageHistory, d.messageHistory)
 	d.handle(rpc.MethodMessageGet, d.messageGet)
+	d.handle(rpc.MethodMessageDownload, d.messageDownload)
+	d.srv.SetMethodTimeout(rpc.MethodMessageDownload, 600*time.Second)
 	d.handle(rpc.MethodMessagePinned, d.messagePinned)
 	d.handle(rpc.MethodMessageScheduledList, d.scheduledList)
 	d.handle(rpc.MethodMessageScheduledDelete, d.scheduledDelete)

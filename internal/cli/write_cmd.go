@@ -55,6 +55,8 @@ func (a *app) messageWriteCommands() []*cobra.Command {
 	forward := a.annotate(&cobra.Command{Use: "forward <from> <to> <id>...", Short: "Forward messages", Args: cobra.MinimumNArgs(3), RunE: a.messageForward}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.ForwardResult](), Args: []argSpec{{Name: "from", Required: true}, {Name: "to", Required: true}, {Name: "id", Required: true, Variadic: true}}})
 	forward.Flags().String("idempotency-key", "", "idempotency key: 1 to 64 characters A-Za-z0-9._:-")
 	forward.Flags().Bool("silent", false, "forward without a notification")
+	forward.Flags().Bool("copy", false, "forward without the original author")
+	forward.Flags().Bool("no-captions", false, "omit media captions (requires --copy)")
 	forward.Flags().Bool("dry-run", false, "describe the action without forwarding")
 
 	react := a.annotate(&cobra.Command{Use: "react <chat> <id> <emoji>", Short: "Set or remove an emoji reaction", Args: cobra.ExactArgs(3), RunE: a.messageReact}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.ReactResult](), ObjectJSONL: true, Args: []argSpec{{Name: "chat", Required: true}, {Name: "id", Required: true}, {Name: "emoji", Required: true}}})
@@ -296,9 +298,14 @@ func (a *app) messageForward(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	silent, _ := cmd.Flags().GetBool("silent")
+	copyMessage, _ := cmd.Flags().GetBool("copy")
+	noCaptions, _ := cmd.Flags().GetBool("no-captions")
+	if noCaptions && !copyMessage {
+		return fail(exitcode.Usage, "--no-captions requires --copy")
+	}
 	dry, _ := cmd.Flags().GetBool("dry-run")
 	var result rpc.ForwardResult
-	return a.writeCall(cmd, rpc.MethodMessageForward, rpc.ForwardParams{From: args[0], To: args[1], IDs: ids, Silent: silent, DryRun: dry}, &result)
+	return a.writeCall(cmd, rpc.MethodMessageForward, rpc.ForwardParams{From: args[0], To: args[1], IDs: ids, Silent: silent, Copy: copyMessage, NoCaptions: noCaptions, DryRun: dry}, &result)
 }
 
 func (a *app) messageReact(cmd *cobra.Command, args []string) error {

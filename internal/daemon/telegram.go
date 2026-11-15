@@ -17,6 +17,7 @@ import (
 // specific code (not authorized, flood wait, Telegram errors).
 type Telegram interface {
 	usersTelegram
+	downloadTelegram
 	ChatAdmin
 	// Run connects and keeps the connection until ctx ends. It returns
 	// ctx.Err() on a clean stop.
