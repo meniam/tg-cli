@@ -6,10 +6,11 @@ import (
 )
 
 func (a *app) folderCommand() *cobra.Command {
-	root := &cobra.Command{Use: "folder", Short: "Read chat folders"}
+	root := &cobra.Command{Use: "folder", Short: "Read and manage chat folders"}
 	list := a.annotate(&cobra.Command{Use: "list", Short: "List chat folders (read only)", Long: "List folder rules and explicit chat lists. Use --local to read the last saved snapshot without a Telegram connection.", Args: cobra.NoArgs, RunE: a.folderList}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.FoldersResult](), ItemPath: "folders"})
 	list.Flags().Bool("local", false, "read the saved snapshot without Telegram")
-	root.AddCommand(list)
+	root.AddCommand(list, a.folderInviteCommand(), a.folderOrderCommand())
+	root.AddCommand(a.folderMutationCommands()...)
 	return root
 }
 func (a *app) folderList(cmd *cobra.Command, _ []string) error {

@@ -44,6 +44,7 @@ func TestParseInvalid(t *testing.T) {
 		"", "   ", "@", "@a", "@abcd", "@1abcde", "@bad name", "@bad-name", "name with spaces",
 		"+", "+12", "+1234567890123456", "+12abc345678", "0", "-0", "-1000000000000", "12a",
 		"tg://join?invite=abc", "tg://resolve", "t.me/+short", "https://t.me/joinchat/", "javascript:alert(1)",
+		"t.me/addlist/AbCdEfGh", "https://t.me/ADDLIST/AbCdEfGh", "t.me/addlist/",
 	} {
 		t.Run(in, func(t *testing.T) {
 			if got, err := Parse(in); err == nil {

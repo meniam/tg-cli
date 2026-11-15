@@ -79,12 +79,20 @@ func classifyPeer(peer tg.InputPeerClass) (throttle.Class, string) {
 
 func writeRequest(input bin.Encoder) bool {
 	switch input.(type) {
+	case *tg.FoldersEditPeerFoldersRequest, *tg.MessagesToggleDialogPinRequest, *tg.AccountUpdateNotifySettingsRequest, *tg.MessagesUpdateDialogFilterRequest, *tg.MessagesUpdateDialogFiltersOrderRequest, *tg.MessagesUpdateSavedReactionTagRequest, *tg.AccountResetAuthorizationRequest:
+		return true
 	case *tg.ChannelsJoinChannelRequest, *tg.MessagesImportChatInviteRequest,
 		*tg.ChannelsLeaveChannelRequest, *tg.MessagesDeleteChatUserRequest,
 		*tg.ChannelsCreateChannelRequest, *tg.ChannelsEditTitleRequest,
 		*tg.MessagesEditChatTitleRequest, *tg.MessagesEditChatAboutRequest,
 		*tg.ChannelsEditBannedRequest, *tg.MessagesEditChatDefaultBannedRightsRequest,
 		*tg.ChannelsToggleSlowModeRequest,
+		*tg.ChannelsToggleSignaturesRequest, *tg.ChannelsToggleAntiSpamRequest,
+		*tg.ChannelsToggleForumRequest, *tg.ChannelsTogglePreHistoryHiddenRequest,
+		*tg.ChannelsToggleJoinRequestRequest, *tg.ChannelsToggleJoinToSendRequest,
+		*tg.MessagesHideChatJoinRequestRequest, *tg.AccountUpdateBirthdayRequest,
+		*tg.AccountUpdatePersonalChannelRequest, *tg.AccountUpdateEmojiStatusRequest,
+		*tg.AccountSetPrivacyRequest,
 		*tg.ContactsAddContactRequest, *tg.ContactsDeleteContactsRequest,
 		*tg.ContactsBlockRequest, *tg.ContactsUnblockRequest:
 		return true

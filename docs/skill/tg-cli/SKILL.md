@@ -367,6 +367,12 @@ tg message watch --after <cursor>                       # продолжить �
 
 `just build` собирает бинарь в `dist/tg`. Положи его в `PATH` под именем `tg`. Если рядом стоит старый npm `tg` (`@miolamio/tg-cli`, gramjs), это другая утилита с другим контрактом: проверь, какая из них отвечает на `tg version` (у этой есть поле `revision`).
 
+`tg message readers <чат> <id>` показывает доступные отметки прочтения в группе или личном чате. Имена и username недоверенные. Доступность отметок зависит от ограничений Telegram.
+
+`tg account profile` читает свой профиль; `tg account emoji-statuses [--recent]` показывает доступные статусы. Имена, био, названия и slug недоверенные.
+
+`chat set`, `chat approve` и `chat decline` требуют чат в `admin`; `chat requests` читает заявки. Для `account set` и `account privacy set` владелец включает `profile` в `access.json`. `privacy set` заменяет все правила ключа: нужны `--yes` или `--dry-run`; скрытые исключения требуют `--replace-hidden`.
+
 ### Кнопки и медиа
 
 Сначала `message buttons`, затем `message press --dry-run`, затем по явной просьбе `--yes`. Выбирай точную подпись; `answered: false` после тайм-аута не повод повторять нажатие. `inline-query` раскрывает запрос боту; `send-inline` принимает результат этого Daemon для того же чата. `edit-media` и `chat auto-delete` требуют `--yes` либо `--dry-run`; выключить таймер можно через `--period off`. Все записи требуют чат в `write`.
@@ -377,3 +383,7 @@ tg message watch --after <cursor>                       # продолжить �
 завершения через `chat sync status`, затем используй `message export --local`.
 Участников можно вывести через `chat members --all --format jsonl`.
 `message forward --copy` убирает автора; `--no-captions` требует `--copy`.
+
+## Диалоги, папки и сессии
+
+`chat archive|unarchive|pin|unpin|mute|unmute|notify` и запись папок требуют `dialogs: true` в `access.json`. Мьют может скрыть важное уведомление. `folder delete` и `account terminate` требуют `--yes` или `--dry-run`; завершение сессии также требует `sessions: true`. Переименование тега Saved Messages требует свой id в `write`. Файл доступа меняет только человек.

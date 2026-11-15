@@ -32,7 +32,7 @@ Topics: batch writes, daemon socket and clients, unread and chat changes, networ
 
 `chat unread` reads dialogs from Telegram and returns unread counts and markers without marking anything read. It scans at most 1000 dialogs and reports whether it reached the end; the archive is requested separately. `message unread` reads incoming messages after the current inbox marker, newest first. A forum requires a topic. Each page refreshes the marker, and filtering outgoing messages can leave a short page with a continuation cursor. The daemon saves visible chats, messages and dialog state as it does for other reads. Access restrictions apply before returning or saving data.
 
-`chat info` stores available chat settings. A SQLite trigger records the previous known chat fields when type, title, username, description or settings change; filling an unknown value alone creates no version. `chat changes` reads the current fields and prior versions from the local database without a Telegram login. Observation time is when the daemon saw the change.
+`chat info` stores available chat settings. A SQLite trigger records the previous known chat fields when type, title, username, description or settings change; filling an unknown value alone creates no version. `chat changes` reads the current fields and prior versions from the local database without a Telegram login. Observation time is when the daemon saw the change. Adding `antispam` and `signature_profiles` to previously stored settings can create one version when the chat is next observed.
 
 ## Network and reconnect
 
@@ -40,13 +40,31 @@ Topics: batch writes, daemon socket and clients, unread and chat changes, networ
 
 The primary connection state is reported in `daemon status`. On a disconnect, status returns the last cached account without querying Telegram. A request that needs Telegram waits up to 15 seconds for a connection and returns `offline` if it remains unavailable. Local paths do not wait for the network. The gotd client reconnects using the same resolver and handles DC migration. After a reconnect, the client submits an `UpdatesTooLong` signal to the updates manager when it has started. A local queue barrier tracks completion of its difference chain. Further reconnect signals are coalesced until the barrier is processed; the first connection and a connection before the updates manager starts do not trigger catch-up. The connection may fail after a write is sent but before its response arrives; transport retries can repeat the request.
 
-### Buttons and auto-delete
+## Dialog and session management
+
+Dialog and folder writes require `dialogs: true`; session termination requires `sessions: true`. Closed chats remain hidden. Saved tag changes require the owner's chat ID in `write`. `--dry-run` does not perform Telegram writes or update local snapshots. Folder deletion and session termination require `--yes` unless previewed, and record intent and result in `account.jsonl`. Folder edits start from a fresh filter; concurrent edits can overwrite each other. The raw session hash remains private; the session ID is derived from its hash.
+
+Notification changes reject a request when the existing notification or story sounds differ between platforms, because the Telegram input schema exposes only one sound per category. This preserves existing sound settings until platform-specific behavior is established.
+
+## Channel settings, join requests and own profile
+
+`chat approve` and `chat decline` require a visible chat in `admin`, reject blocked users, check administrator rights in dry-run and journal the intent before writing.
+
+`account profile` reads the current user with `users.getFullUser(self)`; `account emoji-statuses` reads default or recent statuses with a zero hash.
+
+`message readers` reads group receipts or a private outgoing message read date. It rejects channels, bots and Saved Messages, filters blocked people, and uses locally stored names without a separate lookup. Telegram determines whether receipts remain available.
+
+`chat set` requires the visible chat in `admin`; it validates chat types before writes and applies settings in order. Signatures and signature profiles share one Telegram request. A dry run checks administrator rights. A failed intent journal prevents the write. A batch can partially succeed, and flood wait or lost authorization stops the remainder. The same journal records individual join-request decisions. `chat requests` filters blocked applicants before storing people or returning them. Its encrypted cursor expires when the Daemon restarts.
+
+`account set` and `account privacy set` require the owner's `profile` permission. Profile changes are applied in order and can partially succeed. Privacy set replaces the entire key and requires `--yes` unless it is a dry run. Hidden existing exceptions prevent replacement unless `--replace-hidden` is supplied. The journal records field names or the privacy key, without birthday values or exception lists. `--dry-run` sends no write and creates no journal record. Unsupported privacy rule shapes are rejected rather than replaced silently.
+
+## Buttons and auto-delete
 
 `message buttons` reads keyboard metadata without exposing callback bytes. `message press` accepts only callback buttons without a password, requires a visible chat in `write` and requires `--yes` unless previewed. A bot response timeout returns `answered: false` without retry. `chat auto-delete` uses the same access and confirmation rules. `send-media --self-destruct` requires a single photo or video in a private user chat and passes its TTL to Telegram. See [the command reference](cli/buttons-stickers-auto-delete.md).
 
 Inline queries require write access to the destination and visibility of the bot. The Daemon retains query and result IDs for the destination for 60 to 600 seconds; sending checks that association and does not automatically repeat the Telegram request. Media replacement checks the original message and allowed file root before upload. Sticker sets are read independently of chat access; sending requires write access. Search and installed-set responses omit animation and video properties because their single Telegram response does not provide them. These commands are described in [the command reference](cli/buttons-stickers-auto-delete.md).
 
-### Media downloads
+## Media downloads
 
 `message download` checks the owner's `downloads` roots and the output directory
 before accessing Telegram. It reads fresh message metadata and refuses protected

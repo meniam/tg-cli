@@ -1184,3 +1184,40 @@ func TestNegativeIDNeedsDoubleDash(t *testing.T) {
 		}
 	}
 }
+
+func (f *fakeTelegram) MessageReaders(_ context.Context, ref chatref.Ref, id int) (rpc.MessageReadersResult, error) {
+	return rpc.MessageReadersResult{ChatID: 77, ID: id, Readers: []rpc.MessageReader{{UserID: 5, Name: "Alice", Username: "alice", Date: "2026-01-01T00:00:00Z"}}}, nil
+}
+
+func (f *fakeTelegram) AccountProfile(context.Context) (rpc.AccountProfile, error) {
+	return rpc.AccountProfile{ID: 42, FirstName: "Alice"}, nil
+}
+
+func (f *fakeTelegram) AccountEmojiStatuses(context.Context, bool) (rpc.EmojiStatusesResult, error) {
+	return rpc.EmojiStatusesResult{Statuses: []rpc.EmojiStatusOption{{DocumentID: 123}}}, nil
+}
+
+func (f *fakeTelegram) HandleJoinRequest(context.Context, chatref.Ref, chatref.Ref, bool) error {
+	return nil
+}
+
+func (f *fakeTelegram) SetChannelSetting(context.Context, chatref.Ref, string, string, *string, *string) (bool, error) {
+	return true, nil
+}
+
+func (f *fakeTelegram) SetAccountField(context.Context, string, string, string, *chatref.Ref) (bool, error) {
+	return true, nil
+}
+
+func (f *fakeTelegram) ChatRequests(context.Context, chatref.Ref, rpc.JoinRequestsParams) (rpc.JoinRequestsResult, error) {
+	return rpc.JoinRequestsResult{Requests: []rpc.JoinRequest{{UserID: 5, Name: "Alice", Username: "alice", Date: "2026-01-01T00:00:00Z", About: "hello"}}}, nil
+}
+
+func (f *fakeTelegram) AccountPrivacyGet(_ context.Context, key string) (rpc.PrivacyRules, error) {
+	return rpc.PrivacyRules{Key: key, Default: "nobody", AllowUsers: []int64{}, DenyUsers: []int64{}, AllowChats: []int64{}, DenyChats: []int64{}}, nil
+}
+func (f *fakeTelegram) AccountPrivacySet(_ context.Context, p rpc.PrivacySetParams, _, _, _, _ []chatref.Ref) (rpc.PrivacyRules, error) {
+	return rpc.PrivacyRules{Key: p.Key, Default: p.Default, AllowUsers: []int64{}, DenyUsers: []int64{}, AllowChats: []int64{}, DenyChats: []int64{}}, nil
+}
+
+func (f *fakeTelegram) CacheJoinRequestUsers(context.Context, []rpc.JoinRequest) error { return nil }

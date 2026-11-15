@@ -18,6 +18,16 @@ import (
 type Telegram interface {
 	messageExtrasTelegram
 	usersTelegram
+	CacheJoinRequestUsers(context.Context, []rpc.JoinRequest) error
+	AccountPrivacyGet(context.Context, string) (rpc.PrivacyRules, error)
+	AccountPrivacySet(context.Context, rpc.PrivacySetParams, []chatref.Ref, []chatref.Ref, []chatref.Ref, []chatref.Ref) (rpc.PrivacyRules, error)
+	ChatRequests(context.Context, chatref.Ref, rpc.JoinRequestsParams) (rpc.JoinRequestsResult, error)
+	SetAccountField(context.Context, string, string, string, *chatref.Ref) (bool, error)
+	SetChannelSetting(context.Context, chatref.Ref, string, string, *string, *string) (bool, error)
+	HandleJoinRequest(context.Context, chatref.Ref, chatref.Ref, bool) error
+	AccountEmojiStatuses(context.Context, bool) (rpc.EmojiStatusesResult, error)
+	AccountProfile(context.Context) (rpc.AccountProfile, error)
+	MessageReaders(context.Context, chatref.Ref, int) (rpc.MessageReadersResult, error)
 	downloadTelegram
 	ChatAdmin
 	// Run connects and keeps the connection until ctx ends. It returns
@@ -89,6 +99,18 @@ type Telegram interface {
 	Typing(ctx context.Context, ref chatref.Ref, p rpc.TypingParams) (rpc.TypingResult, error)
 	MarkRead(ctx context.Context, ref chatref.Ref) (rpc.MarkReadResult, error)
 	ownerStateTelegram
+	SavedList(context.Context, rpc.SavedListParams) (rpc.SavedListResult, error)
+	SavedMessages(context.Context, int64, *chatref.Ref, rpc.SavedMessagesParams, bool) (rpc.MessagesResult, error)
+	SavedTags(context.Context, *chatref.Ref) (rpc.SavedTagsResult, error)
+	RenameSavedTag(context.Context, rpc.SavedTagRenameParams) error
+	WriteFolder(context.Context, rpc.FolderWriteParams, string) (rpc.FolderWriteResult, error)
+	OrderFolders(context.Context, []int, bool) error
+	FolderInviteInfo(context.Context, string) (rpc.FolderInviteResult, error)
+	ChangeNotify(context.Context, chatref.Ref, rpc.NotifyParams) (rpc.NotifyResult, error)
+	RefreshDialogStates(context.Context, []chatref.Ref) (rpc.ChatStatesResult, error)
+	ArchiveDialogs(context.Context, []chatref.Ref, bool) error
+	PinDialog(context.Context, chatref.Ref, bool) error
+	TerminateSession(context.Context, int64) error
 	unreadTelegram
 }
 

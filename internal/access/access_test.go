@@ -325,3 +325,21 @@ func TestFileRootsReloadAndPermissions(t *testing.T) {
 		t.Fatalf("restored mode policy=%+v err=%v", p, err)
 	}
 }
+
+func TestDialogAndSessionPermissions(t *testing.T) {
+	for _, tc := range []struct {
+		raw                        string
+		dialogs, sessions, invalid bool
+	}{
+		{`{}`, false, false, false},
+		{`{"dialogs":true,"sessions":true}`, true, true, false},
+		{`{"dialogs":false,"sessions":false}`, false, false, false},
+		{`{"dialogs":null}`, false, false, true},
+		{`{"sessions":1}`, false, false, true},
+	} {
+		p, err := parse([]byte(tc.raw))
+		if (err != nil) != tc.invalid || p.DialogsAllowed() != tc.dialogs || p.SessionsAllowed() != tc.sessions {
+			t.Errorf("%s: %+v %v", tc.raw, p, err)
+		}
+	}
+}
