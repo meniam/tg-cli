@@ -85,6 +85,12 @@ tg daemon start --client desktop
 TG_API_ID=... TG_API_HASH=... tg daemon start
 ```
 
+Settings live in `~/.config/tg-cli/config.toml`: it selects the profile home,
+file names, behaviour, and per-profile client, device, transport, and proxy.
+`tg config path`, `tg config show`, and `tg config migrate` inspect or migrate
+those settings. `TG_CLI_HOME` remains a one-invocation override of the configured
+home.
+
 Use one source or the other, never both. A preset is remembered per profile and is downloaded from GitHub on every start that uses it. A repeated `tg daemon start` on a running profile answers `running: true` with the same PID, needs no credentials and starts nothing. The journal, `--foreground`, `--idle-timeout` and `tg daemon logs` are in [daemon-and-auth.md](docs/cli/daemon-and-auth.md).
 
 **2. Log in.** The login code and the 2FA password are asked interactively and are never accepted as flags. Phone login is not confirmed end to end on a live account: see [`FEATURES.md`](FEATURES.md) 1.1.

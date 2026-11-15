@@ -65,7 +65,7 @@ func DuplicateProfiles(p Paths, id string, runningOnly bool) ([]string, error) {
 		dir := filepath.Join(filepath.Dir(p.Dir), entry.Name())
 		running := false
 		if runningOnly {
-			release, e := acquireLock(filepath.Join(dir, "daemon.lock"))
+			release, e := acquireLock(filepath.Join(dir, filepath.Base(p.Lock)))
 			if e == nil {
 				release()
 				continue
@@ -75,7 +75,7 @@ func DuplicateProfiles(p Paths, id string, runningOnly bool) ([]string, error) {
 			}
 			running = true
 		}
-		b, err := os.ReadFile(filepath.Join(dir, "session.json"))
+		b, err := os.ReadFile(filepath.Join(dir, filepath.Base(p.Session)))
 		if err != nil {
 			if running {
 				return nil, fmt.Errorf("cannot inspect running profile %s", entry.Name())

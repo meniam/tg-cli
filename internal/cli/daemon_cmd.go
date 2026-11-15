@@ -3,8 +3,9 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
-	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -27,7 +28,7 @@ func (a *app) daemonCommand() *cobra.Command {
 		Short: "Start the daemon in the background and wait until it answers",
 		Long: "Start the daemon in the background and wait until it answers on its socket.\n" +
 			"The background process has no terminal, writes its journal to\n" +
-			"<profile>/daemon.log and keeps running after this command returns; stop it with\n" +
+			"the profile journal and keeps running after this command returns; stop it with\n" +
 			"`tg daemon stop`. With --foreground the daemon runs in this terminal instead,\n" +
 			"and returns {\"stopped\":true} after it stops.\n\n" +
 			"Starting a profile that already has a running daemon is not an error: the\n" +
@@ -103,7 +104,7 @@ func (a *app) credentials(cmd *cobra.Command, paths daemon.Paths) (daemon.Telegr
 
 	name := flagClient
 	if name == "" {
-		name = savedClient(paths.Client)
+		name = a.config.Profiles[filepath.Base(paths.Dir)].Client
 	}
 	if name == "" {
 		return cfg, fail(exitcode.Usage, "no application credentials: set TG_API_ID and TG_API_HASH (an application from https://my.telegram.org) or start with --client <preset>, for example --client desktop")
@@ -120,32 +121,13 @@ func (a *app) credentials(cmd *cobra.Command, paths daemon.Paths) (daemon.Telegr
 		return cfg, fail(exitcode.Usage, "%v", err)
 	}
 	if flagClient != "" {
-		if err := saveClient(paths, name); err != nil {
-			return cfg, fail(exitcode.Failure, "remember the client preset: %v", err)
+		if err := a.saveProfile(paths, map[string]string{"client": name}, false); err != nil {
+			return cfg, err
 		}
 	}
 	a.warn(cmd, "note: using the %q official client preset. Telegram puts accounts of unofficial clients under observation (opentele documentation, quoting Telegram's API terms); the risk for this tool is not assessed.", name)
 	cfg.AppID, cfg.AppHash = creds.AppID, creds.AppHash
 	return cfg, nil
-}
-
-// savedClient returns the preset saved for the profile, or "".
-func savedClient(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	if name := strings.TrimSpace(string(data)); presetName.MatchString(name) {
-		return name
-	}
-	return ""
-}
-
-func saveClient(paths daemon.Paths, name string) error {
-	if err := os.MkdirAll(paths.Dir, 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(paths.Client, []byte(name+"\n"), 0o600)
 }
 
 // maxDeviceName bounds the device name: Telegram shows it in a narrow list.
@@ -157,11 +139,7 @@ const maxDeviceName = 64
 func (a *app) deviceModel(cmd *cobra.Command, paths daemon.Paths) (string, error) {
 	name, _ := cmd.Flags().GetString("device")
 	if name == "" {
-		data, err := os.ReadFile(paths.Device)
-		if err != nil {
-			return "", nil
-		}
-		return strings.TrimSpace(string(data)), nil
+		return a.config.Profiles[filepath.Base(paths.Dir)].Device, nil
 	}
 	name = strings.TrimSpace(name)
 	if name == "" || utf8.RuneCountInString(name) > maxDeviceName {
@@ -172,19 +150,30 @@ func (a *app) deviceModel(cmd *cobra.Command, paths daemon.Paths) (string, error
 			return "", fail(exitcode.Usage, "the device name must not contain control characters")
 		}
 	}
-	if err := os.MkdirAll(paths.Dir, 0o700); err != nil {
-		return "", fail(exitcode.Failure, "remember the device name: %v", err)
-	}
-	if err := os.WriteFile(paths.Device, []byte(name+"\n"), 0o600); err != nil {
-		return "", fail(exitcode.Failure, "remember the device name: %v", err)
+	if err := a.saveProfile(paths, map[string]string{"device": name}, false); err != nil {
+		return "", err
 	}
 	return name, nil
 }
 
 func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
+	if err := a.migrateProfiles(); err != nil {
+		return err
+	}
 	profile, paths, err := a.profile(cmd)
 	if err != nil {
 		return err
+	}
+	warnings, err := daemon.CheckFileNames(paths)
+	if err != nil {
+		var conflict *daemon.FileConflictError
+		if errors.As(err, &conflict) {
+			return fail(exitcode.Usage, "%v", err)
+		}
+		return fail(exitcode.Failure, "%v", err)
+	}
+	for _, warning := range warnings {
+		fmt.Fprintln(a.deps.Stderr, "warning: "+warning)
 	}
 	foreground, _ := cmd.Flags().GetBool("foreground")
 	journalPath, _ := cmd.Flags().GetString("journal")
@@ -220,9 +209,7 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if cfg.DeviceModel, err = a.deviceModel(cmd, paths); err != nil {
 		return err
 	}
-	initialCfg := cfg
-	initialCfg.Network = daemon.InitialNetwork(cfg.Network)
-	tg, err := a.deps.NewTelegram(initialCfg)
+	tg, newTelegram, err := a.telegramFactory(cfg)
 	if err != nil {
 		return fail(exitcode.Failure, "create the Telegram client: %v", err)
 	}
@@ -240,26 +227,42 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		logger = slog.New(slog.NewTextHandler(journal, &slog.HandlerOptions{Level: level}))
 	}
 	err = daemon.Run(cmd.Context(), daemon.Options{
-		Profile:  profile,
-		Paths:    paths,
-		Telegram: tg,
-		NewTelegram: func(ctx context.Context, cfg daemon.TelegramConfig) (daemon.Telegram, error) {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			return a.deps.NewTelegram(cfg)
-		},
-		TelegramConfig: cfg,
-		Log:            logger,
-		IdleTimeout:    idle,
+		FileWarningsReported: true,
+		ClientPreset:         a.config.Profiles[profile].Client,
+		Profile:              profile,
+		Paths:                paths,
+		Telegram:             tg,
+		NewTelegram:          newTelegram,
+		TelegramConfig:       cfg,
+		Log:                  logger,
+		IdleTimeout:          idle,
 	})
 	if err != nil {
-		if errors.Is(err, daemon.ErrSessionInUse) {
+		var conflict *daemon.FileConflictError
+		if errors.Is(err, daemon.ErrSessionInUse) || errors.As(err, &conflict) {
 			return fail(exitcode.Usage, "%v", err)
 		}
 		return fail(exitcode.Failure, "%v", err)
 	}
 	return a.success(cmd, daemonStartedResult{Stopped: true})
+}
+
+// telegramFactory starts with the concrete initial transport and keeps the
+// original configuration available to the daemon for later replacements.
+func (a *app) telegramFactory(cfg daemon.TelegramConfig) (daemon.Telegram, func(context.Context, daemon.TelegramConfig) (daemon.Telegram, error), error) {
+	initial := cfg
+	initial.Network = daemon.InitialNetwork(cfg.Network)
+	client, err := a.deps.NewTelegram(initial)
+	if err != nil {
+		return nil, nil, err
+	}
+	factory := func(ctx context.Context, cfg daemon.TelegramConfig) (daemon.Telegram, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return a.deps.NewTelegram(cfg)
+	}
+	return client, factory, nil
 }
 
 // startBackground launches the daemon as a separate process and waits for its

@@ -44,7 +44,7 @@ func (d *daemon) changeDialog(ctx context.Context, raw json.RawMessage, action s
 		ids = append(ids, id)
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, "dialog management requires dialogs: true in access.json")
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("dialog management requires dialogs: true in access.json"))
 	}
 	result := rpc.DialogArchiveResult{Chats: make([]rpc.DialogItem, 0, len(ids)), DryRun: p.DryRun}
 	for _, id := range ids {
@@ -63,7 +63,7 @@ func (d *daemon) changeDialog(ctx context.Context, raw json.RawMessage, action s
 		}
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, "dialog management requires dialogs: true in access.json")
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("dialog management requires dialogs: true in access.json"))
 	}
 	var err error
 	if archive {
@@ -104,7 +104,7 @@ func (d *daemon) changeNotify(ctx context.Context, raw json.RawMessage) (any, er
 		return nil, err
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, "dialog management requires dialogs: true in access.json")
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("dialog management requires dialogs: true in access.json"))
 	}
 	ref := chatref.Ref{Kind: chatref.ID, ID: id}
 	out, err := d.telegram(ctx).ChangeNotify(ctx, ref, p)

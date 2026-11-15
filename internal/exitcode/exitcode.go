@@ -53,7 +53,7 @@ var notes = map[int]string{
 	FloodWait:        "Telegram asked to wait before the next request",
 	NotFound:         "the chat, user, message or note does not exist or is not visible",
 	CursorExpired:    "the event cursor is older than the retained journal",
-	WriteDisabled:    "the owner did not allow writes to the chat in access.json",
+	WriteDisabled:    "the owner did not allow writes to the chat in the access file",
 }
 
 // Note returns a one-line description of a code, or "" for an undefined one.

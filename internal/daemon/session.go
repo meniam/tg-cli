@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"strings"
 
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/sessionstr"
@@ -49,8 +48,7 @@ func (d *daemon) sessionExport(ctx context.Context, params json.RawMessage) (any
 			return nil, rpc.NewError(rpc.CodeNotAuthorized, "session is unavailable")
 		}
 	}
-	client, _ := os.ReadFile(d.opts.Paths.Client)
-	encoded, data, err := sessionstr.Encode(raw, strings.TrimSpace(string(client)), 0)
+	encoded, data, err := sessionstr.Encode(raw, d.opts.ClientPreset, 0)
 	if err != nil {
 		return nil, rpc.NewError(rpc.CodeNotAuthorized, "session is unavailable")
 	}

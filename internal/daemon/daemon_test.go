@@ -362,7 +362,7 @@ type running struct {
 
 func start(t *testing.T, tg Telegram, home string) *running {
 	t.Helper()
-	paths, err := ResolvePaths(home, "test")
+	paths, err := ResolvePaths(home, "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,20 +424,28 @@ func rpcCode(t *testing.T, err error) int {
 }
 
 func TestResolvePaths(t *testing.T) {
-	p, err := ResolvePaths("/h", "work")
+	p, err := ResolvePaths("/h", "work", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Dir != "/h/work" || p.Socket != "/h/work/daemon.sock" || p.Lock != "/h/work/daemon.lock" || p.Session != "/h/work/session.json" || p.Client != "/h/work/client" || p.Device != "/h/work/device" || p.Database != "/h/work/store.db" || p.Deletions != "/h/work/deletions.jsonl" {
+	if p.Dir != "/h/work" || p.Socket != "/h/work/daemon.sock" || p.Lock != "/h/work/daemon.lock" || p.Session != "/h/work/session.json" || p.Database != "/h/work/store.db" || p.Deletions != "/h/work/deletions.jsonl" {
 		t.Errorf("unexpected paths %+v", p)
 	}
 	for _, bad := range []string{"", "Work", "../x", "a/b", "-a", strings.Repeat("a", 33)} {
-		if _, err := ResolvePaths("/h", bad); err == nil {
+		if _, err := ResolvePaths("/h", bad, DefaultFileNames()); err == nil {
 			t.Errorf("profile %q must be rejected", bad)
 		}
 	}
-	if _, err := ResolvePaths("/"+strings.Repeat("d", MaxSocketPath), "p"); err == nil {
-		t.Error("a too long socket path must be rejected")
+	if _, err := ResolvePaths("/"+strings.Repeat("d", MaxSocketPath), "p", DefaultFileNames()); err == nil || !strings.Contains(err.Error(), "set home in config.toml or TG_CLI_HOME to a shorter directory") {
+		t.Errorf("unexpected socket path error: %v", err)
+	}
+	files := FileNames{Database: "tg.db", Session: "key.json", Log: "app.log", Deletions: "deleted.log", Access: "acl.json"}
+	p, err = ResolvePaths("/h", "work", files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Database != "/h/work/tg.db" || p.Session != "/h/work/key.json" || p.Log != "/h/work/app.log" || p.Deletions != "/h/work/deleted.log" || p.Access != "/h/work/acl.json" {
+		t.Errorf("unexpected custom paths %+v", p)
 	}
 }
 
@@ -513,7 +521,7 @@ func TestSecondDaemonOnSameProfileIsRefused(t *testing.T) {
 
 func TestStaleSocketIsReplaced(t *testing.T) {
 	home := shortTempDir(t)
-	paths, err := ResolvePaths(home, "test")
+	paths, err := ResolvePaths(home, "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}

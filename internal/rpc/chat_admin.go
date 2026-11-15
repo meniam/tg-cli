@@ -173,5 +173,5 @@ func ValidateChatAbout(about string) error {
 	return nil
 }
 func ErrAdminDisabled() *Error {
-	return &Error{Code: CodeWriteDisabled, Message: "admin access is disabled: add the chat to the admin list in access.json", Data: map[string]any{"list": "admin"}}
+	return &Error{Code: CodeWriteDisabled, Message: "admin access is disabled: add the chat to the admin list in the access file", Data: map[string]any{"list": "admin"}}
 }

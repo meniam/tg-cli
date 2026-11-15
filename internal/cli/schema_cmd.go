@@ -22,12 +22,41 @@ const schemaVersion = 1
 // schemaDoc is the machine description of the command line.
 type schemaDoc struct {
 	SchemaVersion int             `json:"schema_version"`
+	Config        []configKeyDoc  `json:"config"`
 	Tool          toolInfo        `json:"tool"`
 	Output        outputDoc       `json:"output"`
 	ExitCodes     []exitCodeDoc   `json:"exit_codes"`
 	GlobalFlags   []flagDoc       `json:"global_flags"`
 	Commands      []commandDoc    `json:"commands"`
 	Subscription  subscriptionDoc `json:"subscription"`
+}
+
+// configKeyDoc describes one supported TOML key and its overrides.
+type configKeyDoc struct {
+	Key         string `json:"key"`
+	Type        string `json:"type"`
+	Default     string `json:"default"`
+	Environment string `json:"environment"`
+	Flag        string `json:"flag"`
+}
+
+func configKeyDocs() []configKeyDoc {
+	return []configKeyDoc{
+		{"home", "string", "os.UserConfigDir()/tg-cli", "TG_CLI_HOME", ""},
+		{"default_profile", "string", "default", "", "--profile"},
+		{"files.database", "string", "store.db", "", ""},
+		{"files.session", "string", "session.json", "", ""},
+		{"files.log", "string", "daemon.log", "", ""},
+		{"files.deletions", "string", "deletions.jsonl", "", ""},
+		{"files.access", "string", "access.json", "", ""},
+		{"behavior.throttle_percent", "number", "60", "TG_CLI_THROTTLE_PERCENT", ""},
+		{"behavior.flood_autowait", "string", "10s", "TG_CLI_FLOOD_AUTOWAIT", ""},
+		{"behavior.expect_user", "string", "", "TG_CLI_EXPECT_USER", "--expect-user"},
+		{"profiles.<profile>.client", "string", "", "", "daemon start --client"},
+		{"profiles.<profile>.device", "string", "", "", "daemon start --device"},
+		{"profiles.<profile>.transport", "string", "tcp", "", "daemon start --transport"},
+		{"profiles.<profile>.proxy", "string", "none", "TG_CLI_PROXY", "daemon start --proxy"},
+	}
 }
 
 // subscriptionDoc describes the raw RPC stream before a CLI watch command is
@@ -136,6 +165,7 @@ func schemaDocFor(root *cobra.Command, specs map[*cobra.Command]commandSpec) sch
 	info := buildinfo.Get()
 	doc := schemaDoc{
 		SchemaVersion: schemaVersion,
+		Config:        configKeyDocs(),
 		Tool:          toolInfo{Name: root.Name(), Version: info.Version, Revision: info.Revision},
 		Output: outputDoc{
 			Formats: formatNames(output.Formats()),

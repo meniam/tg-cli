@@ -7,12 +7,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"tg-cli/internal/chatref"
+	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
@@ -339,6 +341,7 @@ func newEnv(t *testing.T) *testEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	t.Setenv("HOME", home)
 	return &testEnv{
 		t:    t,
 		home: home,
@@ -368,6 +371,7 @@ func (e *testEnv) deps(stdout, stderr *safeBuffer) Deps {
 		return v, nil
 	}
 	return Deps{
+		ConfigPath: filepath.Join(e.home, ".config", "tg-cli", "config.toml"),
 		Stdout:     stdout,
 		Stderr:     stderr,
 		Stdin:      e.stdin,
@@ -438,7 +442,7 @@ func (e *testEnv) startDaemon(extraArgs ...string) *daemonRun {
 		}
 	})
 
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -656,6 +660,15 @@ func (e *testEnv) stopDaemon(d *daemonRun) {
 	}
 }
 
+func (e *testEnv) savedProfile(name string) config.Profile {
+	e.t.Helper()
+	cfg, err := config.Load(filepath.Join(e.home, ".config", "tg-cli", "config.toml"))
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return cfg.Profiles[name]
+}
+
 func (e *testEnv) usePreset() {
 	delete(e.env, "TG_API_ID")
 	delete(e.env, "TG_API_HASH")
@@ -680,10 +693,12 @@ func TestStartWithClientPresetAndRemembersIt(t *testing.T) {
 	}
 
 	// The choice is remembered: the next start needs no flag.
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
-	info, err := os.Stat(paths.Client)
+	if got := e.savedProfile("default").Client; got != "desktop" {
+		t.Fatalf("saved preset %q", got)
+	}
+	info, err := os.Stat(filepath.Join(e.home, ".config", "tg-cli", "config.toml"))
 	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("the saved preset name: %v, %v", info, err)
+		t.Fatalf("config permissions: %v, %v", info, err)
 	}
 	d = e.startDaemon()
 	e.mu.Lock()
@@ -707,9 +722,8 @@ func TestClientFlagOverridesTheSavedPreset(t *testing.T) {
 		t.Errorf("--client must win over the saved preset: %+v", cfg)
 	}
 	e.stopDaemon(d)
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
-	if data, _ := os.ReadFile(paths.Client); strings.TrimSpace(string(data)) != "ios" {
-		t.Errorf("the saved preset must follow the flag, got %q", data)
+	if got := e.savedProfile("default").Client; got != "ios" {
+		t.Errorf("saved preset %q", got)
 	}
 }
 
@@ -736,9 +750,8 @@ func TestUnknownPresetIsRejectedAndNotSaved(t *testing.T) {
 	if strings.Contains(r.stdout+r.stderr, fixtureDesktopHash) {
 		t.Error("an error must not contain hashes")
 	}
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
-	if _, err := os.Stat(paths.Client); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("an unknown preset must not be saved, stat error: %v", err)
+	if got := e.savedProfile("default").Client; got != "" {
+		t.Errorf("unknown preset saved: %q", got)
 	}
 }
 
@@ -760,9 +773,8 @@ func TestPresetDownloadFailure(t *testing.T) {
 	if !strings.Contains(r.stdout, "network is down") {
 		t.Errorf("the reason must be reported: %q", r.stdout)
 	}
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
-	if _, err := os.Stat(paths.Client); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("a failed start must not save the preset, stat error: %v", err)
+	if got := e.savedProfile("default").Client; got != "" {
+		t.Errorf("preset saved after failure: %q", got)
 	}
 }
 
@@ -826,7 +838,7 @@ func TestInterruptEndsLoginWaitingForInput(t *testing.T) {
 func TestAuthCancel(t *testing.T) {
 	e := newEnv(t)
 	e.startDaemon()
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -912,7 +924,7 @@ func TestAuthResendFromAnotherTerminal(t *testing.T) {
 	// No login is waiting yet.
 	wantFailure(t, e.run("auth", "resend"), exitcode.Failure)
 
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -995,10 +1007,8 @@ func TestDeviceNameIsPassedAndRemembered(t *testing.T) {
 		t.Errorf("the device name from --device: %q", cfg().DeviceModel)
 	}
 	e.stopDaemon(d)
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
-	info, err := os.Stat(paths.Device)
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("the saved device name: %v, %v", info, err)
+	if got := e.savedProfile("default").Device; got != "MacBook Pro M1 BRN" {
+		t.Fatalf("saved device %q", got)
 	}
 
 	// The next start needs no flag.
@@ -1014,9 +1024,8 @@ func TestInvalidDeviceNames(t *testing.T) {
 	for _, name := range []string{"   ", strings.Repeat("x", 65), "a\nb", "a\x1b[0m"} {
 		wantFailure(t, e.run("daemon", "start", "--foreground", "--device", name), exitcode.Usage)
 	}
-	paths, _ := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
-	if _, err := os.Stat(paths.Device); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("an invalid name must not be saved, stat error: %v", err)
+	if got := e.savedProfile("default").Device; got != "" {
+		t.Errorf("invalid device saved: %q", got)
 	}
 }
 

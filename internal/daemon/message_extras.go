@@ -156,7 +156,7 @@ func (d *daemon) messageEditMedia(ctx context.Context, raw json.RawMessage) (any
 	}
 	policy := d.policy()
 	if !policy.FilesAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, "sending files is disabled: ask the owner to add file roots to files in access.json")
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("sending files is disabled: ask the owner to add file roots to files in access.json"))
 	}
 	open := d.openMediaFile
 	if open == nil {

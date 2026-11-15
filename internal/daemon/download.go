@@ -32,7 +32,7 @@ func (d *daemon) messageDownload(ctx context.Context, raw json.RawMessage) (any,
 	}
 	policy := d.policy()
 	if !policy.DownloadsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, "downloads are disabled: ask the owner to add downloads to access.json")
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("downloads are disabled: ask the owner to add downloads to access.json"))
 	}
 	dir, err := fileroot.OpenDownloadDir(policy.DownloadRoots(), p.Output)
 	if err != nil {
