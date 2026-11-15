@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
+	"strings"
 	"time"
 
 	"tg-cli/internal/access"
@@ -21,6 +23,13 @@ type ownerStateTelegram interface {
 }
 
 func (d *daemon) registerOwnerState() {
+	d.handle(rpc.MethodAccountTerminate, d.terminateSession)
+	d.handle(rpc.MethodFolderInviteInfo, d.folderInviteInfo)
+	d.handle(rpc.MethodFolderOrder, d.folderOrder)
+	for method, action := range map[string]string{rpc.MethodFolderCreate: "create", rpc.MethodFolderEdit: "edit", rpc.MethodFolderDelete: "delete"} {
+		action := action
+		d.handle(method, func(ctx context.Context, raw json.RawMessage) (any, error) { return d.folderWrite(ctx, raw, action) })
+	}
 	d.handle(rpc.MethodFolderList, d.folderList)
 	d.handle(rpc.MethodChatState, d.chatState)
 	d.handle(rpc.MethodAccountSessions, d.accountSessions)
@@ -169,7 +178,12 @@ func (d *daemon) accountSessions(ctx context.Context, raw json.RawMessage) (any,
 		return nil, err
 	}
 	if p.Local {
-		return d.store.Sessions(ctx)
+		r, err := d.store.Sessions(ctx)
+		if err != nil {
+			return nil, err
+		}
+		setSessionIDs(&r)
+		return r, nil
 	}
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
@@ -181,6 +195,7 @@ func (d *daemon) accountSessions(ctx context.Context, raw json.RawMessage) (any,
 	if r.Sessions == nil {
 		r.Sessions = []rpc.Session{}
 	}
+	setSessionIDs(&r)
 	now := time.Now().Unix()
 	r.SyncedAt = &now
 	d.save(ctx, rpc.MethodAccountSessions, func(ctx context.Context) error { return d.store.ReplaceSessions(ctx, r) })
@@ -256,4 +271,192 @@ func (d *daemon) accountNotify(ctx context.Context, raw json.RawMessage) (any, e
 	}
 	d.save(ctx, rpc.MethodAccountNotify, func(ctx context.Context) error { return d.store.ReplaceNotifyDefaults(ctx, r.Defaults) })
 	return r, nil
+}
+
+func (d *daemon) folderInviteInfo(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p rpc.FolderInviteParams
+	if err := decodeParams(raw, &p); err != nil {
+		return nil, err
+	}
+	slug, err := chatref.ParseChatlist(p.Link)
+	if err != nil {
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "invalid chat folder invite link")
+	}
+	if !d.policy().InviteAllowed() {
+		return nil, rpc.ErrChatNotFound()
+	}
+	if err = d.requireAccount(ctx); err != nil {
+		return nil, err
+	}
+	result, err := d.opts.Telegram.FolderInviteInfo(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]rpc.FolderInviteChat, 0, len(result.Chats))
+	for _, chat := range result.Chats {
+		if d.policy().Allowed(chat.ID) {
+			filtered = append(filtered, chat)
+		}
+	}
+	result.Chats = filtered
+	return result, nil
+}
+
+func (d *daemon) folderOrder(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p rpc.FolderOrderParams
+	if err := decodeParams(raw, &p); err != nil {
+		return nil, err
+	}
+	if err := d.requireAccount(ctx); err != nil {
+		return nil, err
+	}
+	if !d.policy().DialogsAllowed() {
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "folder management requires dialogs: true in access.json")
+	}
+	if err := d.opts.Telegram.OrderFolders(ctx, p.IDs, p.DryRun); err != nil {
+		return nil, err
+	}
+	if !p.DryRun {
+		if _, err := d.folderList(ctx, []byte(`{}`)); err != nil {
+			d.log.Warn("folder refresh failed")
+		}
+	}
+	return rpc.FolderOrderResult{IDs: p.IDs, DryRun: p.DryRun}, nil
+}
+
+func (d *daemon) folderWrite(ctx context.Context, raw json.RawMessage, action string) (any, error) {
+	var p rpc.FolderWriteParams
+	if err := decodeParams(raw, &p); err != nil {
+		return nil, err
+	}
+	if action != "create" && p.ID < 2 {
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "invalid folder id")
+	}
+	if action == "delete" && !p.Yes && !p.DryRun {
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "--yes is required")
+	}
+	if action == "create" && (p.Title == nil || strings.TrimSpace(*p.Title) == "") {
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "folder title is required")
+	}
+	if action == "create" && len(p.Include) == 0 && len(p.Pin) == 0 {
+		included := false
+		if p.Rules != nil {
+			for _, rule := range strings.Split(*p.Rules, ",") {
+				switch rule {
+				case "contacts", "non-contacts", "groups", "channels", "bots":
+					included = true
+				}
+			}
+		}
+		if !included {
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "folder needs an inclusion source")
+		}
+	}
+	if p.Rules != nil {
+		for _, rule := range strings.Split(*p.Rules, ",") {
+			switch rule {
+			case "", "contacts", "non-contacts", "groups", "channels", "bots", "exclude-muted", "exclude-read", "exclude-archived":
+			default:
+				return nil, rpc.NewError(rpc.CodeInvalidParams, "unknown folder rule")
+			}
+		}
+	}
+	for _, list := range []*[]string{&p.Include, &p.Add, &p.Remove, &p.Exclude, &p.Unexclude, &p.Pin, &p.Unpin} {
+		for i, name := range *list {
+			_, id, err := d.writeReference(ctx, name, false)
+			if err != nil {
+				return nil, err
+			}
+			(*list)[i] = strconv.FormatInt(id, 10)
+		}
+	}
+	if err := d.requireAccount(ctx); err != nil {
+		return nil, err
+	}
+	if !d.policy().DialogsAllowed() {
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "folder management requires dialogs: true in access.json")
+	}
+	var existing rpc.Folder
+	hidden := 0
+	if action == "delete" || action == "edit" {
+		folders, err := d.opts.Telegram.Folders(ctx)
+		if err != nil {
+			return nil, err
+		}
+		found := false
+		for _, f := range folders.Folders {
+			if f.ID == p.ID && f.Kind == "filter" {
+				existing = f
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "folder does not exist or cannot be edited")
+		}
+		seen := map[int64]bool{}
+		for _, peers := range [][]rpc.FolderPeer{existing.Pinned, existing.Include, existing.Exclude} {
+			for _, peer := range peers {
+				if !d.policy().Allowed(peer.ID) && !seen[peer.ID] {
+					hidden++
+					seen[peer.ID] = true
+				}
+			}
+		}
+	}
+	for _, list := range [][]string{p.Include, p.Add, p.Remove, p.Exclude, p.Unexclude, p.Pin, p.Unpin} {
+		for _, value := range list {
+			id, _ := strconv.ParseInt(value, 10, 64)
+			if !d.policy().Allowed(id) {
+				return nil, rpc.ErrChatNotFound()
+			}
+		}
+	}
+	if !d.policy().DialogsAllowed() {
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "folder management requires dialogs: true in access.json")
+	}
+	if action == "delete" && !p.DryRun {
+		self, err := d.opts.Telegram.Self(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if self == nil {
+			return nil, rpc.NewError(rpc.CodeNotAuthorized, "not logged in")
+		}
+		record := map[string]any{"time": time.Now().UTC().Format(time.RFC3339), "account": self.ID, "tool": "tg", "phase": "intent", "action": "folder_delete", "folder": existing, "outcome": "pending"}
+		if err = d.accountJournal(record); err != nil {
+			return nil, err
+		}
+		out, err := d.opts.Telegram.WriteFolder(ctx, p, action)
+		record["time"] = time.Now().UTC().Format(time.RFC3339)
+		record["phase"] = "result"
+		record["outcome"] = "success"
+		if err != nil {
+			record["outcome"] = "failed"
+		}
+		if e := d.accountJournal(record); e != nil {
+			d.log.Error("account result journal failed")
+		}
+		if err != nil {
+			return nil, err
+		}
+		if _, e := d.folderList(ctx, []byte(`{}`)); e != nil {
+			d.log.Warn("folder refresh failed")
+		}
+		return rpc.FolderDeleteResult{ID: out.ID, Deleted: true}, nil
+	}
+	out, err := d.opts.Telegram.WriteFolder(ctx, p, action)
+	if err != nil {
+		return nil, err
+	}
+	out.Hidden = hidden
+	if action == "delete" {
+		return rpc.FolderDeleteResult{ID: out.ID, Deleted: true, DryRun: p.DryRun}, nil
+	}
+	if !p.DryRun {
+		if _, e := d.folderList(ctx, []byte(`{}`)); e != nil {
+			d.log.Warn("folder refresh failed")
+		}
+	}
+	return out, nil
 }

@@ -150,6 +150,7 @@ func (a *app) rootCommand() *cobra.Command {
 		a.contactCommand(),
 		a.messageCommand(),
 		a.folderCommand(),
+		a.savedCommand(),
 		a.accountCommand(),
 		a.noteCommand(),
 		a.searchCommand(),

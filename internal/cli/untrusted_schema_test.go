@@ -7,8 +7,15 @@ import (
 
 func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 	want := map[string][]string{
+		"saved list":                 {"dialogs.title"},
+		"saved history":              {"messages.sender.name", "messages.sender.username", "messages.text"},
+		"saved search":               {"messages.sender.name", "messages.sender.username", "messages.text"},
+		"saved tags":                 {"tags.title"},
+		"saved tag-rename":           {"title"},
+		"folder invite-info":         {"title", "chats.title"},
 		"folder list":                {"folders.title", "folders.pinned.title", "folders.include.title", "folders.exclude.title"},
 		"account blocked":            {"peers.title", "peers.username"},
+		"account terminate":          {"device_model", "platform", "app_name"},
 		"account sessions":           {"sessions.device_model", "sessions.platform", "sessions.system_version", "sessions.app_name", "sessions.app_version"},
 		"user profile":               {"first_name", "last_name", "username", "bio"},
 		"contact list":               {"contacts.first_name", "contacts.last_name", "contacts.username"},

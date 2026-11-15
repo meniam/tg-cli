@@ -87,6 +87,18 @@ type Telegram interface {
 	Typing(ctx context.Context, ref chatref.Ref, p rpc.TypingParams) (rpc.TypingResult, error)
 	MarkRead(ctx context.Context, ref chatref.Ref) (rpc.MarkReadResult, error)
 	ownerStateTelegram
+	SavedList(context.Context, rpc.SavedListParams) (rpc.SavedListResult, error)
+	SavedMessages(context.Context, int64, *chatref.Ref, rpc.SavedMessagesParams, bool) (rpc.MessagesResult, error)
+	SavedTags(context.Context, *chatref.Ref) (rpc.SavedTagsResult, error)
+	RenameSavedTag(context.Context, rpc.SavedTagRenameParams) error
+	WriteFolder(context.Context, rpc.FolderWriteParams, string) (rpc.FolderWriteResult, error)
+	OrderFolders(context.Context, []int, bool) error
+	FolderInviteInfo(context.Context, string) (rpc.FolderInviteResult, error)
+	ChangeNotify(context.Context, chatref.Ref, rpc.NotifyParams) (rpc.NotifyResult, error)
+	RefreshDialogStates(context.Context, []chatref.Ref) (rpc.ChatStatesResult, error)
+	ArchiveDialogs(context.Context, []chatref.Ref, bool) error
+	PinDialog(context.Context, chatref.Ref, bool) error
+	TerminateSession(context.Context, int64) error
 	unreadTelegram
 }
 

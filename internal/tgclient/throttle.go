@@ -75,6 +75,8 @@ func classifyPeer(peer tg.InputPeerClass) (throttle.Class, string) {
 
 func writeRequest(input bin.Encoder) bool {
 	switch input.(type) {
+	case *tg.FoldersEditPeerFoldersRequest, *tg.MessagesToggleDialogPinRequest, *tg.AccountUpdateNotifySettingsRequest, *tg.MessagesUpdateDialogFilterRequest, *tg.MessagesUpdateDialogFiltersOrderRequest, *tg.MessagesUpdateSavedReactionTagRequest, *tg.AccountResetAuthorizationRequest:
+		return true
 	case *tg.ChannelsJoinChannelRequest, *tg.MessagesImportChatInviteRequest,
 		*tg.ChannelsLeaveChannelRequest, *tg.MessagesDeleteChatUserRequest,
 		*tg.ChannelsCreateChannelRequest, *tg.ChannelsEditTitleRequest,

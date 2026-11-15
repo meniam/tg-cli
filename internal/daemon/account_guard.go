@@ -58,5 +58,5 @@ func (c *accountCache) check(req rpc.Request) error {
 	return nil
 }
 func accountMethod(method string) bool {
-	return method == rpc.MethodSearch || method == rpc.MethodSubscribe || method == rpc.MethodUnsubscribe || strings.HasPrefix(method, "chat.") || strings.HasPrefix(method, "message.") || strings.HasPrefix(method, "note.") || strings.HasPrefix(method, "history_sync.")
+	return method == rpc.MethodSearch || method == rpc.MethodSubscribe || method == rpc.MethodUnsubscribe || strings.HasPrefix(method, "chat.") || strings.HasPrefix(method, "message.") || strings.HasPrefix(method, "note.") || strings.HasPrefix(method, "history_sync.") || strings.HasPrefix(method, "folder.") || strings.HasPrefix(method, "saved.") || strings.HasPrefix(method, "account.")
 }

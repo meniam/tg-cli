@@ -14,13 +14,15 @@ import (
 
 // Policy is an immutable snapshot of one access file.
 type Policy struct {
-	allow  map[int64]struct{}
-	block  map[int64]struct{}
-	write  map[int64]struct{}
-	admin  map[int64]struct{}
-	create bool
-	files  []string
-	denied bool
+	allow    map[int64]struct{}
+	block    map[int64]struct{}
+	write    map[int64]struct{}
+	admin    map[int64]struct{}
+	create   bool
+	dialogs  bool
+	sessions bool
+	files    []string
+	denied   bool
 }
 
 // Allowed reports whether chatID is visible under this snapshot.
@@ -52,6 +54,9 @@ func (p Policy) AdminAllowed(chatID int64) bool {
 
 // CreateAllowed reports whether creating chats is enabled.
 func (p Policy) CreateAllowed() bool { return !p.denied && p.create }
+
+func (p Policy) DialogsAllowed() bool  { return !p.denied && p.dialogs }
+func (p Policy) SessionsAllowed() bool { return !p.denied && p.sessions }
 
 // AdminCount returns the number of explicitly listed chats.
 func (p Policy) AdminCount() int { return len(p.admin) }
@@ -218,6 +223,15 @@ func parse(data []byte) (Policy, error) {
 				return Policy{}, errors.New("create must be a boolean")
 			}
 			policy.create = bytes.Equal(value, []byte("true"))
+		case "dialogs", "sessions":
+			if !bytes.Equal(value, []byte("true")) && !bytes.Equal(value, []byte("false")) {
+				return Policy{}, fmt.Errorf("%s must be a boolean", key)
+			}
+			if key == "dialogs" {
+				policy.dialogs = bytes.Equal(value, []byte("true"))
+			} else {
+				policy.sessions = bytes.Equal(value, []byte("true"))
+			}
 		case "files":
 			if len(value) == 0 || value[0] != '[' {
 				return Policy{}, errors.New("files must be an array of absolute directory paths")

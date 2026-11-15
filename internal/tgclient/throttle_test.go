@@ -502,3 +502,16 @@ func TestClientFloodWaitRemaining(t *testing.T) {
 		t.Fatalf("nil limiter pause = %s", got)
 	}
 }
+
+func TestDialogWritesAreNotRetriedOnFloodWait(t *testing.T) {
+	for _, request := range []bin.Encoder{&tg.FoldersEditPeerFoldersRequest{}, &tg.MessagesToggleDialogPinRequest{}, &tg.AccountUpdateNotifySettingsRequest{}, &tg.MessagesUpdateDialogFilterRequest{}, &tg.MessagesUpdateDialogFiltersOrderRequest{}, &tg.MessagesUpdateSavedReactionTagRequest{}, &tg.AccountResetAuthorizationRequest{}} {
+		clock := newThrottleClock()
+		limiter := limiterWithClock(t, clock, nil)
+		calls := 0
+		invoke := throttleMiddleware(limiter).Handle(telegram.InvokeFunc(func(context.Context, bin.Encoder, bin.Decoder) error { calls++; return tgerr.New(420, "FLOOD_WAIT_1") }))
+		err := invoke(context.Background(), request, nil)
+		if _, ok := tgerr.AsFloodWait(err); !ok || calls != 1 {
+			t.Fatalf("%T: calls=%d err=%v", request, calls, err)
+		}
+	}
+}

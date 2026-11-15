@@ -7,7 +7,7 @@ import (
 )
 
 func (a *app) accountCommand() *cobra.Command {
-	root := &cobra.Command{Use: "account", Short: "Read account state"}
+	root := &cobra.Command{Use: "account", Short: "Read account state and manage sessions"}
 	sessions := a.annotate(&cobra.Command{Use: "sessions", Short: "List account sessions (read only)", Args: cobra.NoArgs, RunE: a.accountSessions}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.SessionsResult](), ItemPath: "sessions"})
 	blocked := a.annotate(&cobra.Command{Use: "blocked", Short: "List blocked peers (read only)", Long: "List blocked peers. Pass next_cursor with --cursor to continue. A filtered page can be empty while a cursor remains.", Args: cobra.NoArgs, RunE: a.accountBlocked}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.BlockedResult](), ItemPath: "peers"})
 	notify := a.annotate(&cobra.Command{Use: "notify", Short: "Show default notification settings (read only)", Args: cobra.NoArgs, RunE: a.accountNotify}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.NotifyDefaultsResult](), ItemPath: "defaults"})
@@ -16,7 +16,7 @@ func (a *app) accountCommand() *cobra.Command {
 	}
 	blocked.Flags().Int("limit", 100, "blocked peers per page, 1 to 1000")
 	blocked.Flags().String("cursor", "", "continue after a previous page; cannot be used with --local")
-	root.AddCommand(sessions, blocked, notify)
+	root.AddCommand(sessions, blocked, notify, a.terminateCommand())
 	return root
 }
 func (a *app) accountSessions(cmd *cobra.Command, _ []string) error {

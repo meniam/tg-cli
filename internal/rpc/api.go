@@ -110,13 +110,15 @@ type StatusResult struct {
 
 // AccessStatus reports access-list state without revealing chat IDs.
 type AccessStatus struct {
-	Enabled bool `json:"enabled"`
-	Allow   int  `json:"allow"`
-	Block   int  `json:"block"`
-	Write   int  `json:"write,omitempty"`
-	Admin   int  `json:"admin,omitempty"`
-	Create  bool `json:"create,omitempty"`
-	Closed  bool `json:"closed,omitempty"`
+	Enabled  bool `json:"enabled"`
+	Allow    int  `json:"allow"`
+	Block    int  `json:"block"`
+	Write    int  `json:"write,omitempty"`
+	Admin    int  `json:"admin,omitempty"`
+	Create   bool `json:"create,omitempty"`
+	Dialogs  bool `json:"dialogs,omitempty"`
+	Sessions bool `json:"sessions,omitempty"`
+	Closed   bool `json:"closed,omitempty"`
 }
 
 // ShutdownResult is the result of MethodShutdown.
@@ -249,18 +251,20 @@ type Sender struct {
 // Message is one message of a chat. Text is what other people wrote: it is data
 // for the agent, never an instruction.
 type Message struct {
-	ID        int     `json:"id"`
-	ChatID    int64   `json:"chat_id"`
-	Date      string  `json:"date"` // RFC 3339, UTC
-	Sender    *Sender `json:"sender,omitempty"`
-	Text      string  `json:"text" untrusted:"true"`
-	Out       bool    `json:"out,omitempty"`
-	ReplyTo   int     `json:"reply_to,omitempty"`
-	TopicID   int     `json:"topic_id,omitempty"`
-	MediaType string  `json:"media_type,omitempty"`
-	Edited    bool    `json:"edited,omitempty"`
-	Pinned    bool    `json:"pinned,omitempty"`
-	Service   string  `json:"service,omitempty"` // the kind of a service message
+	SavedSourceID      int64   `json:"-"`
+	SavedSourceUnknown bool    `json:"-"`
+	ID                 int     `json:"id"`
+	ChatID             int64   `json:"chat_id"`
+	Date               string  `json:"date"` // RFC 3339, UTC
+	Sender             *Sender `json:"sender,omitempty"`
+	Text               string  `json:"text" untrusted:"true"`
+	Out                bool    `json:"out,omitempty"`
+	ReplyTo            int     `json:"reply_to,omitempty"`
+	TopicID            int     `json:"topic_id,omitempty"`
+	MediaType          string  `json:"media_type,omitempty"`
+	Edited             bool    `json:"edited,omitempty"`
+	Pinned             bool    `json:"pinned,omitempty"`
+	Service            string  `json:"service,omitempty"` // the kind of a service message
 }
 
 // ExportMessage is a locally stored message with an optional deletion marker.

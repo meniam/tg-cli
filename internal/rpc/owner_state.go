@@ -78,6 +78,7 @@ type ChatStatesResult struct {
 }
 type Session struct {
 	Hash            int64  `json:"-"`
+	ID              string `json:"id"`
 	Current         bool   `json:"current"`
 	OfficialApp     bool   `json:"official_app"`
 	PasswordPending bool   `json:"password_pending"`
