@@ -203,6 +203,8 @@ tg auth login [flags]
 <!-- schema:flags tg auth login -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
+| `--no-input` | bool | `false` | do not prompt for login credentials |
+| `--password-file` | string | `none` | read the two-factor password from an owner-only file |
 | `--phone` | string | `none` | phone number in international format; asked when omitted |
 | `--qr` | bool | `false` | log in by scanning a QR code in the Telegram app of a logged-in device, no code is needed |
 <!-- /schema:flags -->
@@ -210,9 +212,11 @@ tg auth login [flags]
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon (`tg daemon start`) and a terminal for the prompts. Not logged in yet: a repeated login on a logged-in profile is refused, and so is a second login while one is in progress (cancel it first).
+**Preconditions.** A running Daemon (`tg daemon start`); a terminal is needed for interactive prompts. Not logged in yet: a repeated login on a logged-in profile is refused, and so is a second login while one is in progress (cancel it first).
 
 **Steps.**
+
+With `--no-input`, specify `--phone` or `--qr`. Submit the code with `tg auth code`, and, when needed, submit the password with `tg auth password`. The login expires five minutes after it starts. `--password-file` supplies the password without a prompt.
 
 1. Phone login. Without `--phone` the command asks for the number in international format. Telegram sends a code and the command says where it went: the Telegram app on another device, SMS, a phone call or e-mail. Then it asks for the code. Typing `resend` at the code prompt asks Telegram for another delivery, as `tg auth resend` does. When the account has two-factor authentication, it asks for the password.
 2. QR login (`--qr`). No code is needed. The command draws a QR code on stderr (and prints its URL; `NO_COLOR` turns the colors off, `--quiet` hides the drawing). Scan it in the Telegram app of a logged-in device: Settings, Devices, Link Desktop Device. The code refreshes by itself.
@@ -235,7 +239,7 @@ tg auth login --qr
 
 **Answer fields** (`data`): `state` string, `delivery` string (optional), `next_delivery` string (optional), `resend_after_seconds` integer (optional), `qr_url` string (optional), `expires_in_seconds` integer (optional), `user` object (optional), `user.id` integer (optional), `user.username` string (optional), `user.first_name` string (optional), `user.last_name` string (optional).
 
-`state` is `qr_scan`, `code_required`, `password_required` or `authorized`. The intermediate states are not printed on stdout: they drive the prompts. `delivery` is `app`, `sms`, `call`, `email` or `other`; `next_delivery` and `resend_after_seconds` say how a resend would arrive and when Telegram allows it; `qr_url` and `expires_in_seconds` come with `qr_scan`.
+`state` is `qr_scan`, `code_required`, `password_required` or `authorized`. With `--no-input`, `code_required` and `password_required` are returned on stdout for a later command; otherwise intermediate states drive the prompts. `delivery` is `app`, `sms`, `call`, `email` or `other`; `next_delivery` and `resend_after_seconds` say how a resend would arrive and when Telegram allows it; `qr_url` and `expires_in_seconds` come with `qr_scan`.
 
 **Exit codes.** 0 logged in; 1 the login was interrupted or the login state does not fit; 2 an unreadable input; 3 no Daemon; 5 Telegram rejected the step (a wrong code ends the login with the reason of Telegram, start again).
 
@@ -347,3 +351,24 @@ tg auth cancel
 **Exit codes.** 0; 3 no Daemon.
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 1.10.
+
+### tg auth code
+
+Submit a login code from standard input for a login waiting for a code. If a password is requested, `--password-file` submits it in the same command.
+
+<!-- schema:flags tg auth code -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--password-file` | string | `none` | read the two-factor password from an owner-only file |
+<!-- /schema:flags -->
+
+### tg auth password
+
+Submit the two-factor password from an owner-only file, standard input, or a terminal without echo. Select `--password-stdin` when using standard input. File permissions must exclude group and other users.
+
+<!-- schema:flags tg auth password -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--password-file` | string | `none` | read the password from an owner-only file |
+| `--password-stdin` | bool | `false` | read the password from stdin |
+<!-- /schema:flags -->
