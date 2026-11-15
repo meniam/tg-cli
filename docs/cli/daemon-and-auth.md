@@ -83,6 +83,8 @@ No command flags.
 
 **Preconditions.** A running Daemon. No login.
 
+If `auth_lost` is present, account commands return exit code 4 with the loss kind. Stop the Daemon before importing a replacement session. For another login, stop and start the Daemon before `auth login`; an invalid key may still prevent the client from reconnecting.
+
 **Example.**
 
 ```sh
@@ -101,7 +103,7 @@ A fresh profile without a login and without `access.json`:
 {"ok":true,"data":{"transport":"tcp","connection":"connecting","reconnects":0,"profile":"default","pid":48213,"connected":false,"authorized":false,"active_requests":0}}
 ```
 
-**Answer fields** (`data`): `transport` string, `proxy` string (optional, without credentials), `connection` string, `dc` integer (optional), `reconnects` integer, `profile` string, `pid` integer, `connected` boolean, `authorized` boolean, `user` object (optional), `user.id` integer (optional), `user.username` string (optional), `user.first_name` string (optional), `user.last_name` string (optional), `login_state` string (optional), `active_requests` integer, `access` object (optional), `access.enabled` boolean (optional), `access.allow` integer (optional), `access.block` integer (optional), `access.write` integer (optional), `access.closed` boolean (optional).
+**Answer fields** (`data`): `transport` string, `proxy` string (optional, without credentials), `connection` string, `dc` integer (optional), `reconnects` integer, `profile` string, `pid` integer, `connected` boolean, `authorized` boolean, `user` object (optional), `user.id` integer (optional), `user.username` string (optional), `user.first_name` string (optional), `user.last_name` string (optional), `login_state` string (optional), `auth_lost` string (optional), `active_requests` integer, `access` object (optional), `access.enabled` boolean (optional), `access.allow` integer (optional), `access.block` integer (optional), `access.write` integer (optional), `access.closed` boolean (optional).
 
 `connection` is `connecting`, `ready` or `disconnected`; `connected` is true when it is `ready`. While offline, the last cached account is shown without a Telegram request. A Telegram request waits up to 15 seconds for a connection and then returns exit code 10 (`offline`). Local operations remain available.
 
@@ -266,7 +268,7 @@ No command flags.
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon. No login.
+**Preconditions.** A running Daemon. No login. When `auth_lost` is present, follow the recovery steps in [daemon status](#tg-daemon-status).
 
 **Example.**
 
@@ -280,7 +282,7 @@ tg auth status
 {"ok":true,"data":{"profile":"default","connected":true,"authorized":true,"user":{"id":123456789,"username":"me"}}}
 ```
 
-**Answer fields** (`data`): `profile` string, `connected` boolean, `authorized` boolean, `user` object (optional), `user.id` integer (optional), `user.username` string (optional), `user.first_name` string (optional), `user.last_name` string (optional), `login_state` string (optional).
+**Answer fields** (`data`): `profile` string, `connected` boolean, `authorized` boolean, `user` object (optional), `user.id` integer (optional), `user.username` string (optional), `user.first_name` string (optional), `user.last_name` string (optional), `login_state` string (optional), `auth_lost` string (optional).
 
 **Exit codes.** 0; 3 no Daemon.
 

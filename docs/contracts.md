@@ -76,3 +76,7 @@ content. It accepts up to 20 IDs, 100 MiB per file and 500 MiB per call. Files
 are written through `os.Root` with mode 0600 to a temporary name and linked to a
 final generated name without replacement. A failed download removes its temporary
 file. The original file name and MIME type are untrusted. Dry runs do not write.
+
+## Authorization loss
+
+When the client reports lost authorization, the Daemon retains the loss kind, rejects account requests with code 4, and remains available for status and shutdown even if the client exits. It does not delete the session file. Stop the Daemon before importing a replacement session. Reconnecting with an invalid key may fail; automatic key replacement is not implemented.
