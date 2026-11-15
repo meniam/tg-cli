@@ -174,7 +174,7 @@ func (a *app) diagnose(cmd *cobra.Command, format string, args ...any) {
 // failure prints the failure envelope in the format the run asked for, falling
 // back to JSON when the flag value itself is the problem or the command never
 // got far enough to know its formats.
-func (a *app) failure(cmd *cobra.Command, exit int, message string) {
+func (a *app) failure(cmd *cobra.Command, exit int, message string, details ...map[string]any) {
 	format, err := requestedFormat(cmd.Root())
 	if err != nil {
 		format = output.FormatJSON // the flag value itself is the problem
@@ -182,5 +182,9 @@ func (a *app) failure(cmd *cobra.Command, exit int, message string) {
 	// A write error on stdout cannot be reported anywhere else, and it must not
 	// replace the command's own failure: the exit code already tells the agent
 	// that something went wrong.
-	_ = output.FailureWithThrottle(a.deps.Stdout, format, exitcode.Name(exit), redact.Text(message), a.throttledMS)
+	var data map[string]any
+	if len(details) > 0 {
+		data = details[0]
+	}
+	_ = output.Write(a.deps.Stdout, format, output.FailureDataWithDetails(exitcode.Name(exit), redact.Text(message), a.throttledMS, data))
 }

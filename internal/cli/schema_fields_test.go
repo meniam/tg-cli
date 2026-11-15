@@ -64,6 +64,8 @@ var realResponseCases = map[string][]string{
 	"chat approve":           {"chat", "approve", "@teamchat", "@aliceuser"},
 	"chat decline":           {"chat", "decline", "@teamchat", "@aliceuser"},
 	"chat info":              {"chat", "info", "@teamchat"},
+	"chat stats":             {"chat", "stats", "@teamchat"},
+	"chat boosts":            {"chat", "boosts", "@teamchat"},
 	"chat invite-info":       {"chat", "invite-info", "https://t.me/+AbCdEfGh1234"},
 	"chat list":              {"chat", "list"},
 	"chat members":           {"chat", "members", "@teamchat"},
@@ -74,6 +76,7 @@ var realResponseCases = map[string][]string{
 	"daemon logs":            {"daemon", "logs"},
 	"message get":            {"message", "get", "@teamchat", "30"},
 	"message readers":        {"message", "readers", "@teamchat", "30"},
+	"message transcribe":     {"message", "transcribe", "@teamchat", "40", "--wait", "0s"},
 	"message history":        {"message", "history", "@teamchat"},
 	"message pinned":         {"message", "pinned", "@teamchat"},
 	"note add":               {"note", "add", "--chat", "77", "--author", "ai", "--tag", "t", "one more"},
@@ -123,6 +126,7 @@ func realResponses(t *testing.T) map[string][]byte {
 	}
 	e.tg.mu.Lock()
 	e.tg.peopleFixture = true
+	e.tg.messages = append(e.tg.messages, rpc.Message{ID: 40, ChatID: 77, MediaType: "voice"})
 	for i := range e.tg.messages {
 		if e.tg.messages[i].ID == 30 {
 			e.tg.messages[i].MediaType = "document"

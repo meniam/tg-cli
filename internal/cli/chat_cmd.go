@@ -43,6 +43,7 @@ func (a *app) chatCommand() *cobra.Command {
 	cmd.AddCommand(a.chatJoinRequestCommands()...)
 	cmd.AddCommand(a.chatSetCommand())
 	cmd.AddCommand(a.chatRequestsCommand())
+	cmd.AddCommand(a.chatStatsCommand(), a.chatBoostsCommand())
 	cmd.AddCommand(a.chatAutoDeleteCommand())
 	return cmd
 }

@@ -6,9 +6,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 
 	"github.com/coder/websocket"
 	"github.com/gotd/td/telegram/dcs"
+	"github.com/gotd/td/transport"
 	"golang.org/x/net/proxy"
 	"tg-cli/internal/netconf"
 )
@@ -17,10 +19,38 @@ func resolverFor(s netconf.Settings) (dcs.Resolver, error) {
 	return resolverForDial(s, proxy.Direct)
 }
 
+func resolverForState(s netconf.Settings, state *connectionState) (dcs.Resolver, error) {
+	return resolverForDialState(s, proxy.Direct, state.activeTransport)
+}
+
 // resolverForDial uses forward only to reach the selected proxy.
 func resolverForDial(s netconf.Settings, forward proxy.Dialer) (dcs.Resolver, error) {
+	return resolverForDialState(s, forward, nil)
+}
+func resolverForDialState(s netconf.Settings, forward proxy.Dialer, report func(string, bool)) (dcs.Resolver, error) {
 	if err := s.Validate(); err != nil {
 		return nil, err
+	}
+	if s.Transport == netconf.Auto {
+		wssSettings := s
+		wssSettings.Transport = netconf.WSS
+		ws, err := resolverForDialState(wssSettings, forward, nil)
+		if err != nil {
+			return nil, err
+		}
+		if s.Proxy != nil && s.Proxy.Kind == netconf.HTTP {
+			return &autoResolver{ws: ws, sticky: true, report: report}, nil
+		}
+		tcpSettings := s
+		tcpSettings.Transport = netconf.TCP
+		tcp, err := resolverForDialState(tcpSettings, forward, nil)
+		if err != nil {
+			return nil, err
+		}
+		if tcp == nil {
+			tcp = dcs.DefaultResolver()
+		}
+		return &autoResolver{tcp: tcp, ws: ws, report: report}, nil
 	}
 	var dial func(context.Context, string, string) (net.Conn, error)
 	if s.Proxy != nil {
@@ -78,4 +108,50 @@ func resolverForDial(s netconf.Settings, forward proxy.Dialer) (dcs.Resolver, er
 		return dcs.Plain(dcs.PlainOptions{Dial: dial}), nil
 	}
 	return nil, nil
+}
+
+type autoResolver struct {
+	mu      sync.Mutex
+	tcp, ws dcs.Resolver
+	sticky  bool
+	report  func(string, bool)
+}
+
+func (r *autoResolver) dial(ctx context.Context, dc int, list dcs.List, which func(dcs.Resolver, context.Context, int, dcs.List) (transport.Conn, error)) (transport.Conn, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.sticky {
+		conn, err := which(r.ws, ctx, dc, list)
+		if err == nil && r.report != nil {
+			r.report("wss", false)
+		}
+		return conn, err
+	}
+	conn, err := which(r.tcp, ctx, dc, list)
+	if err == nil {
+		if r.report != nil {
+			r.report("tcp", false)
+		}
+		return conn, nil
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	conn, err = which(r.ws, ctx, dc, list)
+	if err == nil {
+		r.sticky = true
+		if r.report != nil {
+			r.report("wss", true)
+		}
+	}
+	return conn, err
+}
+func (r *autoResolver) Primary(ctx context.Context, dc int, list dcs.List) (transport.Conn, error) {
+	return r.dial(ctx, dc, list, dcs.Resolver.Primary)
+}
+func (r *autoResolver) MediaOnly(ctx context.Context, dc int, list dcs.List) (transport.Conn, error) {
+	return r.dial(ctx, dc, list, dcs.Resolver.MediaOnly)
+}
+func (r *autoResolver) CDN(ctx context.Context, dc int, list dcs.List) (transport.Conn, error) {
+	return r.dial(ctx, dc, list, dcs.Resolver.CDN)
 }

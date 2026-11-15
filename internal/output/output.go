@@ -63,7 +63,11 @@ type ErrorBody struct {
 	// Code is the stable machine name of the exit code, see package exitcode.
 	Code string `json:"code"`
 	// Message is a human-readable explanation, never containing secrets.
-	Message string `json:"message"`
+	Message           string `json:"message"`
+	Reason            string `json:"reason,omitempty"`
+	TrialRemains      *int   `json:"trial_remains,omitempty"`
+	TrialResetsAt     string `json:"trial_resets_at,omitempty"`
+	RetryAfterSeconds *int   `json:"retry_after_seconds,omitempty"`
 }
 
 type failure struct {
@@ -88,6 +92,22 @@ func FailureData(code, message string) any {
 // FailureDataWithThrottle adds a positive server wait to the failure envelope.
 func FailureDataWithThrottle(code, message string, milliseconds int64) any {
 	return failure{OK: false, Error: ErrorBody{Code: code, Message: message}, ThrottledMS: milliseconds}
+}
+
+// FailureDataWithDetails includes supported structured Telegram error details.
+func FailureDataWithDetails(code, message string, milliseconds int64, data map[string]any) any {
+	body := ErrorBody{Code: code, Message: message}
+	body.Reason, _ = data["reason"].(string)
+	body.TrialResetsAt, _ = data["trial_resets_at"].(string)
+	if n, ok := data["trial_remains"].(float64); ok {
+		v := int(n)
+		body.TrialRemains = &v
+	}
+	if n, ok := data["retry_after_seconds"].(float64); ok {
+		v := int(n)
+		body.RetryAfterSeconds = &v
+	}
+	return failure{OK: false, Error: body, ThrottledMS: milliseconds}
 }
 
 // Success writes a success envelope in the format.

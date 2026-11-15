@@ -20,7 +20,7 @@ var writeCall = regexp.MustCompile(`^(` + writeVerbs + `)|^(Messages|Channels|Co
 // readFiles are the files that read chats and messages. They must stay
 // read-only: login code lives in other files and is allowed to use sign-in
 // methods. The same rule is stated in the security section of AGENTS.md.
-var readFiles = []string{"download.go", "history.go", "peers.go", "message.go", "convert.go", "cursor.go", "client.go", "errors.go", "members.go", "topics_common.go", "users_read.go", "buttons_read.go", "stickers_read.go", "channels_profile_read.go", "privacy_read.go", "chatlist_read.go", "saved_read.go"}
+var readFiles = []string{"download.go", "history.go", "peers.go", "message.go", "convert.go", "cursor.go", "client.go", "errors.go", "members.go", "topics_common.go", "users_read.go", "buttons_read.go", "stickers_read.go", "channels_profile_read.go", "privacy_read.go", "chatlist_read.go", "saved_read.go", "transcribe.go", "stats.go", "phone_read.go"}
 
 func TestReadFilesCallNothingThatWrites(t *testing.T) {
 	fset := token.NewFileSet()
@@ -36,6 +36,9 @@ func TestReadFilesCallNothingThatWrites(t *testing.T) {
 				return true
 			}
 			if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name != "UploadGetFile" && writeCall.MatchString(sel.Sel.Name) {
+				if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "strings" && sel.Sel.Name == "Join" {
+					return true
+				}
 				bad = append(bad, sel.Sel.Name+" at "+fset.Position(sel.Pos()).String())
 			}
 			return true
