@@ -4,9 +4,9 @@ How agents record facts found by experience. A learning is not a choice but
 an observation: expected one thing, got another, verified it. It has no
 alternatives and no cost, so it is not a decision (see `decisions.md`).
 
-**Defaults, not law.** A project rule — its `AGENTS.md`, its docs, or a decision
-in `.agents/decisions/` — wins over this file; see `AGENTS.md`, "Precedence".
-A lasting deviation is recorded there, not left to the code.
+**Defaults, not law.** A project's `AGENTS.md` and docs win over this file; a
+project file with the same name replaces it entirely. See `AGENTS.md`,
+"Precedence".
 
 ## Location and Naming
 
@@ -69,8 +69,9 @@ What to do or not do from now on. One line.
   learning.
 - `Found` never changes. `Current` is the only line edited later:
   `no since YYYY-MM-DD, reason`.
-- A learning that becomes a rule for agents is duplicated in `AGENTS.md`;
-  the record stays as the explanation.
+- A learning that becomes a rule for agents goes to `AGENTS.md` only on the
+  user's request, as one line linking here; the record stays as the
+  explanation.
 
 ## Expiry
 
@@ -113,4 +114,5 @@ Index of `.agents/learnings/`. Rules: `learning.md`.
    `.agents/decisions/`.
 4. Header has `Found`, `Current`.
 5. `_TOC.md` has the line; expired records changed only in `Current` and the mark.
-6. A rule for agents is duplicated in `AGENTS.md`.
+6. A rule for agents is in `AGENTS.md` only on the user's request, as one line
+   linking here.

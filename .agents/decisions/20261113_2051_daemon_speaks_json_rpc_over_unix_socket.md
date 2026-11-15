@@ -1,7 +1,10 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+paths: [internal/rpc]
+---
 # Daemon говорит по JSON-RPC 2.0 через Unix-сокет
-
-Decided: 2026-11-13
-Revised: —
 
 ## Context
 

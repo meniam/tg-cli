@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Atlas configuration (.atlas.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["index", "paths"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "version": {"const": 1},
+    "root": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Root of the analyzed project relative to .atlas.json; defaults to the file directory"
+    },
+    "index": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Index directory relative to .atlas.json, e.g. var/cache/atlas"
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {"$ref": "#/$defs/patterns", "description": "Directories, files and globs with code"},
+        "docs": {"$ref": "#/$defs/patterns", "description": "Directories, files and globs with documentation"},
+        "exclude": {"$ref": "#/$defs/patterns", "description": "Globs excluded from analysis"},
+        "scopes": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/patterns"},
+          "description": "Custom search scopes: name -> globs"
+        }
+      }
+    },
+    "symfony": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apps": {"$ref": "#/$defs/strings", "description": "Application contours (Symfony environments)"}
+      }
+    },
+    "bridges": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "http": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from_codebase", "path_prefix", "to_app"],
+            "properties": {
+              "from_codebase": {"type": "string", "minLength": 1},
+              "path_prefix": {"type": "string", "minLength": 1},
+              "to_app": {"type": "string", "minLength": 1},
+              "rewrite": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["from", "to"],
+                "properties": {
+                  "from": {"type": "string", "minLength": 1},
+                  "to": {"type": "string", "minLength": 1}
+                }
+              }
+            }
+          }
+        },
+        "http_wrappers": {"$ref": "#/$defs/strings", "description": "Wrapper functions around fetch"}
+      }
+    },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "synonyms": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {"$ref": "#/$defs/strings"},
+              {"type": "string", "pattern": "^\\s*[^,\\s][^,]*(,\\s*[^,\\s][^,]*)*$"}
+            ]
+          },
+          "description": "Term -> search variants: an array or a comma-separated string"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "strings": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "patterns": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

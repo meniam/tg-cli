@@ -1,7 +1,11 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+revises: [20261113_2116_login_uses_official_client_presets]
+paths: [internal/tgclient/client.go, internal/cli/daemon_cmd.go]
+---
 # Имя устройства по умолчанию MacBook Pro M1 BRN, --device переопределяет
-
-Decided: 2026-11-13
-Revised: —
 
 ## Context
 

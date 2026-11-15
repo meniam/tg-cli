@@ -330,9 +330,6 @@ The config is a default, and defaults get overridden with a reason:
 - Do not use `ALL` or bare `# noqa`. Dropping a rule that is unsuitable for
   the domain is allowed with a reason; hiding a real defect is not. Agents
   can make routine adaptations within the task without requesting approval.
-- Record lasting deviations in the project decision journal, following
-  `decisions.md` (normally separate files in `.agents/decisions/`); do not
-  append decisions to the shared rule file itself.
 
 ## Checklist
 

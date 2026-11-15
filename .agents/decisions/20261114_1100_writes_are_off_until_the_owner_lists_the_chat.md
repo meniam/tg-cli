@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+paths: [internal/daemon/write.go, internal/rpc/write.go, internal/cli/write_cmd.go]
+---
 # Запись выключена, пока человек не внёс чат в список write, удаление идёт с --yes и журналом, повторов нет
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

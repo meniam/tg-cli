@@ -55,9 +55,9 @@ PR: —
 
 ## Decision log
 
-| Date | Decision | Reason | Confirmed by |
+| Date | Decision | Reason | Confirmed |
 | --- | --- | --- | --- |
-| 2026-11-14 | Исправляем дыру отдельным планом, поиск чата по `id` через `ChatsOfMessages` | Находка плана выгрузки, пункт 10.3 | Мязин Евгений: «Да, отдельным планом (Recommended)» |
+| 2026-11-14 | Исправляем дыру отдельным планом, поиск чата по `id` через `ChatsOfMessages` | Находка плана выгрузки, пункт 10.3 (было: Мязин Евгений: «Да, отдельным планом (Recommended)») | yes |
 
 ## Step 0. Fix decisions before changes
 

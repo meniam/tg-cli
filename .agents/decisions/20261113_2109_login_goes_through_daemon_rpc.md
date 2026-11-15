@@ -1,7 +1,10 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/daemon/login.go, internal/cli/auth_cmd.go]
+---
 # Вход в аккаунт идёт через Daemon по RPC
-
-Decided: 2026-11-13
-Revised: —
 
 ## Context
 

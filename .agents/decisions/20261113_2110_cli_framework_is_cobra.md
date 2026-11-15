@@ -1,7 +1,10 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/cli/cli.go, go.mod]
+---
 # CLI-фреймворк cobra
-
-Decided: 2026-11-13
-Revised: —
 
 ## Context
 

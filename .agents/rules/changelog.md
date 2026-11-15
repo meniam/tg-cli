@@ -3,97 +3,127 @@
 How agents record what changed in the project. The changelog answers "what
 changed and when", the plan "how", the decision "why", the learning "what we
 learned". The changelog reader is whoever updates the project or looks for
-the day something broke.
+the day something broke. The agent is mostly its writer: it records cheaply
+and looks things up by search, it does not read the whole history.
 
-**Defaults, not law.** A project rule — its `AGENTS.md`, its docs, or a decision
-in `.agents/decisions/` — wins over this file; see `AGENTS.md`, "Precedence".
-A lasting deviation is recorded there, not left to the code.
+**Defaults, not law.** A project's `AGENTS.md` and docs win over this file; a
+project file with the same name replaces it entirely. See `AGENTS.md`,
+"Precedence".
 
 ## Location
 
-- One file `CHANGELOG.md` in the project root. The unit is a day, so a file
-  per record and `_TOC.md` are not needed.
-- **No releases and no `## Unreleased`.** A release ritual assumes someone
-  deploys and decides when a batch is cut. That decision is not made here, so
-  a permanent `Unreleased` would only grow and the changelog would stop
-  answering "when".
-- The heading is the date of the change, newest on top:
-  `## 5 сентября 2026, Суббота` — day, month in the genitive, year, then the
-  weekday capitalised. The weekday is there so a reader recognises the day
-  without a calendar.
-- Inside a day, newest action on top. Reading the file top to bottom means
-  walking back in time, and the last thing done is the first thing seen.
+- Folder `.agents/changelog/` in the project. One change, one file. There is
+  no `CHANGELOG.md` and no `_TOC.md`: concurrent work adds different files, so
+  merges do not conflict.
+- File name as for plans and decisions: `YYYYMMDD_HHMM_short_statement.md`,
+  latin `snake_case`, creation time. Never changes after creation.
+- The current month lies in the folder root. A past month moves by `mv` to a
+  subfolder `YYYY-MM/` once, at the start of the next month, in a separate
+  commit. Files are never edited or merged during the move.
+- **No releases and no `Unreleased`.** A release ritual assumes someone deploys
+  and decides when a batch is cut. That decision is not made here, so the date
+  of the record is the date of the change.
+- The folder has its own short `AGENTS.md`: what lies here, that the files are
+  read through the project's recipe, and a link to this file.
 
 ## What Is Recorded
 
-A change visible outside the code: behaviour, API, DB schema, data format,
-config, environment variables, commands, deploy order, dependencies with
-incompatibilities.
+Test: a reader outside the development team must either do something or see
+the system work differently. A record exists only if one of the two is true.
 
-Not recorded: refactoring with no behaviour change, tests, documentation,
-plans and journals, text and typo edits, internal renames.
+Recorded:
 
-Test: "after the update a user or operator will notice that …" completes
-without guessing. If it does not, it is not in the changelog.
+- Product behaviour a user notices: a new capability, a changed result, a fix
+  of a visible symptom that was in a released version.
+- Contracts: API, data format, DB schema, events.
+- Operator actions: environment variables, config, commands, deploy order,
+  a migration with a manual step, a dependency with incompatibilities.
+- Security.
+
+Not recorded:
+
+- Refactoring with no behaviour change, tests, documentation, plans and
+  journals, text and typo edits, internal renames.
+- Developer tooling and agent skills or instructions.
+- Log events, metrics, log levels and alert texts, unless the operator must
+  act on them.
+- Changes of internal libraries or a UI kit with no visible effect.
+- Intermediate steps of a feature: one record per feature, written when it
+  becomes visible outside.
+- A fix of an error that was never in a released version.
+- A repeat edit of the same place: the existing record is edited, not a new
+  one added.
 
 ## When
 
-- A line is added under today's date in the same commit as the change. If
-  today has no heading yet, it is created at the top of the file.
-- A plan that reaches `done` leaves at least one line, or an explicit note in
+- The record is added in the same commit as the change.
+- A change that continues an earlier record edits that file. The name stays.
+- A plan that reaches `done` leaves at least one record, or an explicit note in
   the plan that nothing visible outside changed.
 
-## Structure
-
-The type of change is a prefix on the line, not a section. Sections split one
-day's work into blocks that have to be read in parallel; a prefix keeps the
-day in one list and in one order.
+## Format
 
 ```markdown
-# Changelog
-
-## 5 сентября 2026, Суббота
-
-- Изменено: API заказов возвращает московское время без смещения:
-  `2026-06-25T12:05:00` вместо `2026-06-25T09:05:00+00:00`
-  ([решение](.agents/decisions/20260831_1554_order_time_is_moscow_without_zone.md)).
-- Добавлено: поиск по товарам через `/search`.
-
-## 1 сентября 2026, Вторник
-
-- Удалено: таблица `meta`, настройки переехали в `config.yml`.
-- Исправлено: индекс `order_created_at_idx` снова используется фильтром по дате.
-- Безопасность: из `docs/servers/README.md` убран лежавший открытым текстом
-  токен Cloudflare — вместо него плейсхолдер.
+---
+date: 2026-09-05T14:30:00+03:00
+type: Изменено
+breaking: false
+decision: 20260831_1554_short_statement
+---
+API заказов возвращает московское время без смещения: `2026-06-25T12:05:00`.
 ```
 
-Prefixes: `Добавлено`, `Изменено`, `Устарело`, `Удалено`, `Исправлено`,
-`Безопасность`. One prefix per line, capitalised, colon after it.
+- `date` is required: the moment of the change, ISO 8601 with time and UTC
+  offset. The recipe fills it, an agent does not type it. The recipe writes
+  Moscow time (`Europe/Moscow`, `+03:00`) unless the project sets another
+  timezone in its `AGENTS.md`. It never changes, not even when the record is
+  edited later.
+- `type` is required, one of six: `Добавлено`, `Изменено`, `Устарело`,
+  `Удалено`, `Исправлено`, `Безопасность`.
+- `breaking` is optional, `true` only for an incompatible change. The line
+  then says what to do: "ключи партнёров переехали в `public.partner_api_key`,
+  перевыпустите командой `just keys migrate`".
+- `decision` is optional: the name of the decision file without extension.
+  There is no link to the plan.
+- The file name carries the same moment to the minute. If the two differ,
+  `date` wins.
+- The body is one line, at most 200 characters. It is the result as the reader
+  outside sees it: "Индекс снова используется", not "Починили индекс". What
+  does not fit goes to the decision or the plan; the line keeps the outcome.
+- `Устарело` names the replacement and the removal date.
 
-Change line:
+## Recipes
 
-- One line, one change, phrased as the result: "Индекс снова используется",
-  not "Починили индекс".
-- Written for the reader outside: what it is now, not what was done in code.
-- An incompatible change starts with `**Breaking.**` after the prefix and says
-  what to do: "Изменено: **Breaking.** ключи партнёров переехали в
-  `public.partner_api_key`, перевыпустите старые командой `just keys migrate`".
-- Link to the decision at the end of the line, if any. No link to the plan.
-- A migration with a manual step goes under `Изменено` with the command.
+A project provides recipes with these names; the implementation is its own
+(`justfile.md`).
+
+- `just changelog add`: creates the file with the current `date`, checks `type`
+  and the 200-character limit, takes the optional fields. The agent does not write the file by hand
+  and does not read the folder to add a record.
+- `just changelog list`: prints the records newest first under a heading per day,
+  `## 5 сентября 2026, Суббота`, and filters by days, type, `breaking`.
+- `just changelog archive`: moves past months to `YYYY-MM/`.
+
+To find when something changed, search with `just changelog list`, `grep` over the
+folder, or `git log -S`. Do not read the folder in full.
 
 ## Relation to Journals
 
-- Plan: one changelog line per change visible outside from the plan's
+- Plan: one record per change visible outside from the plan's
   "Definition of done".
-- Decision: the changelog line links the decision when the change follows
-  from it. The decision itself is not retold in the changelog.
+- Decision: the record names it in `decision` when the change follows from it.
+  The decision is not retold in the record.
 - Learning never goes to the changelog: it is not a project change.
 
 ## Checklist
 
-1. Line under today's date in the same commit as the change.
-2. The change is visible outside the code; otherwise no line.
-3. Prefix is one of the six and matches what happened.
-4. Breaking is marked and says what to do.
-5. Link to the decision, if any; no link to the plan.
-6. Newest day on top, newest action on top inside the day.
+1. The record is in the same commit as the change.
+2. The reader outside must act or sees different behaviour; otherwise no
+   record.
+3. `date` is set by the recipe with time and offset, and never changes.
+4. `type` is one of the six and matches what happened.
+5. The body is one line, at most 200 characters, a result.
+6. `breaking` is set for an incompatible change and the line says what to do.
+7. `decision` names the decision file, if any; there is no link to the plan.
+8. A continuation edits the existing file; the name does not change.
+9. The record is added by `just changelog add`, not by hand.

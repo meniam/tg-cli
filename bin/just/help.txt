@@ -26,7 +26,14 @@
     just tidy                   Tidy go.mod and go.sum
     just clean                  Remove build output from dist/
 
+  Changelog
+    just changelog              Records of changes visible outside the code: list, add, archive
+
+  Code map
+    just atlas                  Atlas: code graph and docs index for AI agents
+
   Run just check before every commit.
 
   Help for a command: -h or --help after it, for example just check -h
+  Help for a module: just changelog, just atlas
   Full recipe list: just --list

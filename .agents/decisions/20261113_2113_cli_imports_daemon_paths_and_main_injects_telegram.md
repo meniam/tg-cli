@@ -1,7 +1,10 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+paths: [internal/cli/cli.go, internal/cli/daemon_cmd.go, cmd/tg-cli/main.go, internal/rpc/api.go]
+---
 # cli импортирует daemon ради путей, Telegram-клиент подставляет main
-
-Decided: 2026-11-13
-Revised: revised by [cli зависит от store только через daemon, прямой импорт запрещён](20261114_0005_cli_may_reach_the_store_only_through_the_daemon.md) 2026-11-14
 
 ## Context
 

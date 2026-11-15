@@ -1,7 +1,10 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+paths: [internal/tgclient/cursor.go, internal/tgclient/history_page.go, internal/daemon/read.go, internal/output/output.go]
+---
 # Чтение страницами с курсором по id сообщения, JSONL с завершающей строкой курсора
-
-Decided: 2026-11-13
-Revised: —
 
 ## Context
 

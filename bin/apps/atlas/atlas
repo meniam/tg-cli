@@ -1,0 +1,14 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.14"
+# dependencies = ["atlas"]
+# [tool.uv.sources]
+# atlas = { path = ".", editable = true }
+# ///
+# Atlas launcher: .atlas.json is looked up upwards from this file, not from the current directory.
+from atlas.cli import main
+
+# WHY: parse workers on macOS start via spawn and re-import this file;
+# without the guard every worker would run the whole command.
+if __name__ == "__main__":
+    raise SystemExit(main())

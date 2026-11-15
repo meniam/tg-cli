@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
-# Help for one recipe: `just <recipe> -h`. The text lives in bin/just/root/<recipe>.txt,
-# the banner with the command is built here, rendering is shared with help.sh.
+# Help for one recipe: `just <recipe> -h` or `just <module> <recipe> -h`. The text lives in
+# bin/just/<module>/<recipe>.txt (root recipes: bin/just/root/), the banner with the command
+# is built here, rendering is shared with help.sh.
 set -euo pipefail
 
-recipe="${1:?Pass the recipe name}"
+if [[ $# -ge 2 ]]; then
+    module="$1"
+    recipe="$2"
+    command="just $module $recipe"
+    title="tg-cli · $module $recipe"
+else
+    module=root
+    recipe="${1:?Pass the recipe name}"
+    command="just $recipe"
+    title="tg-cli · $recipe"
+fi
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-file="$dir/bin/just/root/$recipe.txt"
-command="just $recipe"
-title="tg-cli · $recipe"
+file="$dir/bin/just/$module/$recipe.txt"
 
 if [[ ! -f "$file" ]]; then
     printf 'No help for %s: expected %s\n' "$command" "${file#"$dir/"}" >&2

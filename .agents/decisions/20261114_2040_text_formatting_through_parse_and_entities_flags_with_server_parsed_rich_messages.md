@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/daemon/write.go, internal/tgclient/write_format.go, internal/tgclient/rich_message_text.go, internal/cli/write_cmd.go]
+---
 # Форматирование идёт флагами --parse и --entities у send и edit, RichMessage разбирает сервер, упоминание по id берётся из кэша пиров, в базу пишется итоговый простой текст
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

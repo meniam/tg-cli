@@ -1,0 +1,17 @@
+╭─────────────────╮
+│  Atlas · index  │
+╰─────────────────╯
+
+    Rebuilds the project index from .atlas.json from scratch: the code
+    graph and the docs. Takes a while on a large project.
+
+  What runs
+    1. bin/atlas sync --full -o pretty
+
+    The index lives in the directory from the index field of .atlas.json.
+    Everyday commands catch the index up by themselves; rebuild only when
+    it looks broken or after changing .atlas.json.
+
+  Examples
+    just atlas index
+    just atlas status
