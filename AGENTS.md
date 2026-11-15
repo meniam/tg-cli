@@ -40,15 +40,15 @@ internal/             cli, daemon, rpc, tgclient, netconf, throttle, access, fil
 ```
 
 - Code lives only in `cmd/` and `internal/`. Do not create `src/`, `pkg/`, `models/`, `utils/`.
-- `internal/cli` must not import `tgclient`, gotd or `store` (`store` is reachable only through `daemon`, which owns the database). It may import `rpc`, `output`, `exitcode`, `clientpreset`, `chatref`, `netconf` and `daemon` (paths and `Run`). `main` injects the Telegram client into the Daemon.
+- `internal/cli` must not import `tgclient`, gotd or `store` (`store` is reachable only through `daemon`, which owns the database). It may import `config`, `rpc`, `output`, `exitcode`, `clientpreset`, `chatref`, `netconf` and `daemon` (paths and `Run`). `main` injects the Telegram client into the Daemon.
 - The package that uses an interface declares it.
 - Tests sit next to the code, fixtures in `testdata/`. Do not run tests against live Telegram by default. `internal/cli` has a test that fails when a command or flag of `tg schema` has no section in `docs/cli/` or when a Markdown link is broken: write the section together with the command.
 - The executor of Go code loads the `expert-golang` skill first.
 
 ## Running
 
-- `daemon start` takes credentials from `--client <preset>` (official client preset, remembered per profile) or from `TG_API_ID` and `TG_API_HASH` (your own application), never both. `TG_CLI_HOME` is the optional base directory of profiles.
-- `daemon start --transport tcp|wss` and `--proxy` configure the remembered network path; `TG_CLI_PROXY` can supply the proxy without a command-line secret.
+- Configuration is `~/.config/tg-cli/config.toml`; `tg config path`, `show` and `migrate` inspect it or migrate the former profile setting files. `home` selects the base directory of profiles; `TG_CLI_HOME` overrides it without changing the file.
+- `daemon start` takes credentials from `--client <preset>` (official client preset, stored in the selected config profile) or from `TG_API_ID` and `TG_API_HASH` (your own application), never both. `daemon start --transport tcp|wss` and `--proxy` store the network path in that profile; `TG_CLI_PROXY` can supply the proxy without a command-line secret.
 - Start the Daemon before `auth login`. Login, session and the socket belong to the Daemon: never run a second client on its session.
 - Every command prints one JSON envelope on stdout; prompts and logs go to stderr. Exit codes are in `internal/exitcode` and in [docs/cli/overview.md](docs/cli/overview.md).
 - A chat is given as `@username`, a Bot API id (write `--` before a negative id), a contact's phone number or a `t.me` link.
