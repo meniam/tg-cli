@@ -4,13 +4,13 @@
 
 ## Who edits the file
 
-Only a human edits `<profile>/access.json`, with an editor. There is no command that writes it, and the agent never changes it: not `allow`, not `block`, not `write`, not `files`. The filter protects against accidental reading, against reading induced through a chat, and against accidental writes. It does not protect against an agent that deliberately bypasses it: an agent running as the same user can edit the file or open the SQLite database directly.
+Only a human edits `<profile>/access.json`, with an editor. There is no command that writes it, and the agent never changes any field. The filter protects against accidental reading, against reading induced through a chat, and against accidental writes. It does not protect against an agent that deliberately bypasses it: an agent running as the same user can edit the file or open the SQLite database directly.
 
 The file lives in the profile directory, next to the session and the database (see [Profiles and the data directory](overview.md#profiles-and-the-data-directory)): `<TG_CLI_HOME>/<profile>/access.json`, or `tg-cli/<profile>/access.json` inside the user config directory.
 
 ## The file
 
-A JSON object with up to four optional fields. Every field is an array.
+A JSON object with optional fields. Chat lists and file roots are arrays; `create` and `profile` are booleans.
 
 | Field | Content | Effect |
 | --- | --- | --- |
@@ -18,6 +18,9 @@ A JSON object with up to four optional fields. Every field is an array.
 | `block` | nonzero integer chat ids, no duplicates | these chats are never visible; `block` wins over `allow` |
 | `write` | nonzero integer chat ids, no duplicates | the chats where the agent may write (send, edit, delete, forward, react, pin, poll, mark read, send files) |
 | `files` | absolute directory paths, no duplicates | the directories from which `message send-media` may read files |
+| `admin` | nonzero integer chat ids, no duplicates | the visible chats where administration is allowed |
+| `create` | boolean | allows creating chats when true |
+| `profile` | boolean | allows own-profile and privacy changes when true; off by default |
 
 Chat ids are in the Bot API form that `tg chat list` prints: users positive, groups negative, channels from `-1000000000000`. An example file:
 
@@ -46,7 +49,7 @@ Create the file with a mode that is not writable by group or others, for example
 
 The file is checked when it is read, and it fails closed:
 
-- An unknown field, a non-numeric or zero id, a duplicate id, a field that is not an array, a relative or empty `files` path, a duplicate path, or content that is not a JSON object makes the whole file invalid.
+- An unknown field, a non-numeric or zero id, a duplicate id, a list field that is not an array, a non-boolean `create` or `profile`, a relative or empty `files` path, a duplicate path, or content that is not a JSON object makes the whole file invalid.
 - A file that is writable by group or others (any of the mode bits `0o022`; `0664` and `0666` count, `0644` and `0600` do not) is invalid.
 - A file that cannot be read is invalid, and so is a failed `stat` of it.
 - An invalid file closes **everything**: all chats are hidden from the agent, writing and sending files are off. The Daemon keeps running, and each request that checks access writes at least one Error record `access policy unavailable` to the journal, without the file content (see [daemon logs](daemon-and-auth.md#tg-daemon-logs)).
@@ -59,7 +62,7 @@ The Daemon rereads the file when its modification time, size or mode changes. No
 
 ## What the Daemon shows: `daemon status`
 
-`tg daemon status` shows the field `access` when the read filter is on or `write` is not empty:
+`tg daemon status` shows the field `access` when the read filter is on, a write or admin list is nonempty, or `create` or `profile` is enabled:
 
 ```json
 {"ok":true,"data":{"profile":"default","pid":48213,"connected":true,"authorized":true,"active_requests":0,"access":{"enabled":true,"allow":1,"block":0,"write":1}}}
@@ -70,6 +73,7 @@ The Daemon rereads the file when its modification time, size or mode changes. No
 | `enabled` | the read filter is on (a nonempty `allow` or `block`, or a closed file) |
 | `allow`, `block` | the counts of ids |
 | `write` | the count of ids, shown when it is not empty |
+| `profile` | `true` when the owner has enabled own-profile changes |
 | `closed` | `true` when the file does not parse, cannot be read or has a mode that is too wide |
 
 It never shows chat ids. With `{"write": [-1001234567890]}` only, `enabled` is `false` and `write` is `1`.
@@ -99,3 +103,5 @@ The mark `untrusted` in `tg schema` and the `| ` frame of `--human` are hints fo
 ## Checks
 
 Verification of the access filter is tracked in [FEATURES.md](../../FEATURES.md), item 9.2.
+
+Older versions reject the `profile` field as unknown and close access until the owner removes it.

@@ -88,7 +88,7 @@ tg chat resolve @release_team
 
 ### tg chat info
 
-The `settings` object contains available chat rights and configuration. Custom reactions include their document ID.
+The `settings` object contains available chat rights and configuration. Channel settings include `antispam` and `signature_profiles`. Custom reactions include their document ID. The first observation of the additional settings on an already cached chat may create a chat changes version.
 
 Shows a chat with its description and size.
 
@@ -879,4 +879,69 @@ Show locally stored chat versions, newest first. The daemon is required, but a T
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--limit` | int | `20` | maximum versions, 1 to 100 |
+<!-- /schema:flags -->
+
+### tg chat approve
+
+Approve one user's join request. The chat must be visible and listed in `admin`. A dry run checks the current administrator rights without writing.
+
+```text
+tg chat approve <chat> <user> [--dry-run]
+```
+
+<!-- schema:flags tg chat approve -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+### tg chat decline
+
+Decline one user's join request under the same access rules as `chat approve`.
+
+```text
+tg chat decline <chat> <user> [--dry-run]
+```
+
+<!-- schema:flags tg chat decline -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+<!-- /schema:flags -->
+
+### tg chat set
+
+Change one or more settings in a visible channel or supergroup listed in `admin`. Settings are applied in order; errors can leave earlier changes in place. `--dry-run` checks administrator rights without writing.
+
+```text
+tg chat set <chat> [flags]
+```
+
+<!-- schema:flags tg chat set -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--antispam` | string | `none` | set antispam on or off |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--forum` | string | `none` | set forum on or off |
+| `--join-requests` | string | `none` | set join-requests on or off |
+| `--join-to-send` | string | `none` | set join-to-send on or off |
+| `--prehistory` | string | `none` | set prehistory visible or hidden |
+| `--signature-profiles` | string | `none` | set signature-profiles on or off |
+| `--signatures` | string | `none` | set signatures on or off |
+<!-- /schema:flags -->
+
+### tg chat requests
+
+List pending join requests for a visible channel or supergroup. Telegram requires administrator access. Names, usernames and descriptions are untrusted; blocked people are removed. Cursors expire when the Daemon restarts.
+
+```text
+tg chat requests <chat> [flags]
+```
+
+<!-- schema:flags tg chat requests -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--cursor` | string | `none` | continue from a previous page |
+| `--limit` | int | `20` | requests per page, 1 to 100 |
+| `--search` | string | `none` | search pending requests |
 <!-- /schema:flags -->

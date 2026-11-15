@@ -482,3 +482,15 @@ Read unread incoming messages without marking them read. Use `--topic` for a for
 | `--limit` | int | `20` | messages per page, 1 to 100 |
 | `--topic` | int | `0` | forum topic id |
 <!-- /schema:flags -->
+
+### tg message readers
+
+Read the users who read an outgoing message in a group, supergroup or private user chat. Telegram limits receipt availability by message age, group size and privacy settings. Names are untrusted. Blocked users are omitted.
+
+```text
+tg message readers <chat> <id>
+```
+
+<!-- schema:flags tg message readers -->
+No command flags.
+<!-- /schema:flags -->
