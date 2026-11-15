@@ -97,6 +97,8 @@ tg message scheduled delete <chat> <id>... [flags]
 
 The chat must be visible and in `write`; every id is positive. `--dry-run` performs these checks without a Telegram write. No deletion record is added locally because the messages were not delivered.
 
+At most 1000 IDs are accepted. Requests are sent in groups of at most 100; a partial result follows the batch envelope described in the [overview](overview.md#the-answer-envelope).
+
 ```sh
 tg message scheduled delete @release_team 17 18 --dry-run
 tg message scheduled delete @release_team 17 18
@@ -125,6 +127,8 @@ tg message scheduled send-now <chat> <id>... [flags]
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
 The chat must be visible and in `write`; every id is positive. `--dry-run` makes no Telegram write and returns `messages: null`. A real call returns a `messages` array. If Telegram returns complete delivered message objects, the Daemon marks them `out: true` and saves them through the normal message store. If it returns only delivered ids, the items contain `chat_id`, `id`, `date: ""`, `text: ""`, and `out: true`; they are not saved locally.
+
+At most 1000 IDs are accepted. Requests are sent in groups of at most 100; a partial result follows the batch envelope described in the [overview](overview.md#the-answer-envelope).
 
 ```sh
 tg message scheduled send-now @release_team 17
@@ -355,7 +359,7 @@ tg message delete <chat> <id>... [flags]
 
 **Delete guard.** For private chats and basic groups Telegram deletes by message id without naming the chat, and ids are unique per account. So before deleting, the Daemon checks in the local database that every id belongs to the chosen chat. An id that is unknown locally or belongs to another chat is exit code 7 `not_found`: read the message first (`message get` or `message history`). Channels need no check.
 
-**Deletion journal.** `<profile>/deletions.jsonl` (mode `0600`) gets one JSON line per phase: `time`, `account`, `tool` (`tg`), `phase` (`intent` before the Telegram call, `result` after), `chat_id`, `ids`, `revoke` and `outcome`. It holds no message text. If the `intent` line cannot be written, the deletion is cancelled. The file is not rotated. Deleted messages get `deleted_at` in the local database.
+**Deletion journal.** Up to 1000 IDs are accepted and sent in groups of at most 100. `<profile>/deletions.jsonl` (mode `0600`) gets an `intent` and `result` line for each sent group: `time`, `account`, `tool` (`tg`), `phase`, `chat_id`, `ids`, `revoke` and `outcome`. It holds no message text. If an `intent` cannot be written, that group and the remaining groups are not sent. The file is not rotated. IDs in successful groups get `deleted_at` in the local database; the list represents accepted requests, not proof that every ID existed.
 
 **Example.**
 
@@ -397,6 +401,14 @@ tg message forward <from> <to> <id>... [flags]
 
 **Preconditions.** A running Daemon, a login, the source chat readable by the access lists and the target chat in `write`. No `--yes`. A forward is not saved to the local database.
 
+At most 1000 IDs are sent in groups of at most 100. Each returned message has `source_id`, the original message ID; `date` is empty if Telegram returned no date. A missing correlated ID appears in `errors`; an uncorrelated response is an error. `FLOOD_WAIT` or loss of authorization stops later groups. Other failed groups do not stop them. A partial result saved under an idempotency key is replayed with `replayed: true` and exit 1; retry failed IDs in a new call with a new key.
+
+A partial answer exits with code 1:
+
+```json
+{"ok":true,"data":{"partial":true,"errors":[{"id":4103,"code":"not_found","message":"message not found or not returned by Telegram"}],"chat_id":-1002345678901,"messages":[{"source_id":4102,"id":77,"date":"2026-11-14T09:40:00Z"}]}}
+```
+
 **Example.**
 
 ```sh
@@ -407,10 +419,10 @@ tg message forward --silent @release_team @archive_team 4102
 **Answer.**
 
 ```json
-{"ok":true,"data":{"chat_id":-1002345678901,"messages":[{"id":77,"date":"2026-11-14T09:40:00Z"}]}}
+{"ok":true,"data":{"chat_id":-1002345678901,"messages":[{"source_id":4102,"id":77,"date":"2026-11-14T09:40:00Z"}]}}
 ```
 
-**Answer fields** (`data`): `chat_id` integer, `messages` array, `messages.id` integer, `messages.date` string, `dry_run` boolean (optional), `action` string (optional), `count` integer (optional).
+**Answer fields** (`data`): `chat_id` integer, `messages` array, `messages.source_id` integer, `messages.id` integer, `messages.date` string, `dry_run` boolean (optional), `action` string (optional), `count` integer (optional).
 
 With `--idempotency-key`, `replayed` is an optional boolean. With `--dry-run`, `replay_available` is an optional boolean.
 
