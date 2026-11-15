@@ -35,3 +35,4 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-14 — [Форматирование идёт флагами --parse и --entities у send и edit, RichMessage разбирает сервер, упоминание по id берётся из кэша пиров, в базу пишется итоговый простой текст](20261114_2040_text_formatting_through_parse_and_entities_flags_with_server_parsed_rich_messages.md)
 - 2026-11-15 — [Поиск по коду и документам идёт через Atlas и агента pathfinder](20261115_1213_search_goes_through_atlas_and_the_pathfinder_agent.md)
 - 2026-11-15 — [Docker не делаем: образ не решает задачи владельца, сессия аккаунта в контейнере рискованнее](20261115_1743_docker_is_not_built.md)
+- 2026-11-15 — [Остаток Could делится на три части: берём 14.2, 13.4, 18.1, 17.4, 19.1, не делаем 12 пунктов, откладываем 6](20261115_1800_remaining_could_features_are_split_into_take_wont_and_defer.md)
