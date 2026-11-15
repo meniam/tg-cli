@@ -88,6 +88,8 @@ tg chat resolve @release_team
 
 ### tg chat info
 
+The `settings` object contains available chat rights and configuration. Custom reactions include their document ID.
+
 Shows a chat with its description and size.
 
 ```text
@@ -857,3 +859,24 @@ tg chat slow-mode <chat> <seconds>
 Example: `tg chat slow-mode @example_group 30 --dry-run`.
 
 For these administration commands, exit codes are 0 on success, 2 for invalid input or missing confirmation, 3 when the Daemon is unavailable, 4 without a login, 5 for a Telegram error, 6 for `FLOOD_WAIT`, 7 for an unknown or closed chat or user, and 9 when the owner has not granted the required permission. A dry-run returns `dry_run`, `action` and `count`, with IDs and validated parameters when applicable; titles and descriptions are represented by their lengths.
+
+### tg chat unread
+
+List unread chats in Telegram order without marking them read. `--archived` selects the archive. `scanned` counts examined dialogs; `complete` is false when the limit or the scan ceiling of 1000 stops the scan.
+
+<!-- schema:flags tg chat unread -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--archived` | bool | `false` | read archived dialogs only |
+| `--limit` | int | `100` | maximum unread chats, 1 to 500 |
+<!-- /schema:flags -->
+
+### tg chat changes
+
+Show locally stored chat versions, newest first. The daemon is required, but a Telegram login is not. `--limit` bounds previous versions. The current state is included separately.
+
+<!-- schema:flags tg chat changes -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--limit` | int | `20` | maximum versions, 1 to 100 |
+<!-- /schema:flags -->
