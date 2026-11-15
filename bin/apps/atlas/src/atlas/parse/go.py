@@ -427,6 +427,7 @@ class _GoExtractor:
                 signature=signature(member, None),
                 docblock=_doc(member),
                 flags=_exported(name),
+                meta={"sig": _shape(member)},
             )
         )
         self._contains(owner_id, method_id, member)
@@ -531,6 +532,8 @@ class _GoExtractor:
             returns = self._named_type(first, scope)
             if returns is not None and _external_type(returns):
                 meta["returns"] = returns
+        if kind is NodeKind.METHOD:
+            meta["sig"] = _shape(declaration)
         self._add(
             Node(
                 id=function_id,
@@ -1054,6 +1057,78 @@ def _receiver(parameters: TsNode | None) -> _Receiver | None:
         return None
     name = declaration.child_by_field_name("name")
     return _Receiver(text(name) if name is not None else None, text(type_node), params)
+
+
+def _shape(declaration: TsNode) -> str:
+    """Форма сигнатуры метода для сравнения с интерфейсом: типы без имён и пакетов.
+
+    Имена параметров и результатов и пакетные префиксы не меняют тип, поэтому
+    ``(ctx context.Context) (n int, err error)`` и ``(Context) (int, error)`` совпадают.
+
+    Returns:
+        Строка вида ``(int,string)(error)``: параметры и результаты.
+    """
+    return _shape_key(
+        declaration.child_by_field_name("parameters"),
+        declaration.child_by_field_name("result"),
+    )
+
+
+def _shape_key(parameters: TsNode | None, result: TsNode | None) -> str:
+    results = (
+        _parameter_types(result)
+        if result is not None and result.type == "parameter_list"
+        else [_type_key(result)]
+        if result is not None
+        else []
+    )
+    shape = f"({','.join(_parameter_types(parameters))})"
+    return f"{shape}({','.join(results)})" if results else shape
+
+
+def _parameter_types(parameters: TsNode | None) -> list[str]:
+    """Тип каждого параметра, по одному на имя: ``a, b int`` даёт два ``int``."""
+    found: list[str] = []
+    if parameters is None:
+        return found
+    for child in parameters.named_children:
+        if child.type not in {
+            "parameter_declaration",
+            "variadic_parameter_declaration",
+        }:
+            continue
+        key = _type_key(child.child_by_field_name("type"))
+        if child.type == "variadic_parameter_declaration":
+            key = f"...{key}"
+        found.extend([key] * max(1, len(child.children_by_field_name("name"))))
+    return found
+
+
+def _type_key(node: TsNode | None) -> str:
+    """Тип без пакетных префиксов и имён параметров вложенных функций."""
+    if node is None:
+        return ""
+    if node.type == "qualified_type":
+        return text(node.child_by_field_name("name"))
+    if node.type == "function_type":
+        return "func" + _shape_key(
+            node.child_by_field_name("parameters"), node.child_by_field_name("result")
+        )
+    if node.child_count == 0:
+        return text(node)
+    key = ""
+    for child in node.children:
+        if child.type == "comment":
+            continue
+        part = _type_key(child)
+        if (
+            key
+            and (key[-1].isalnum() or key[-1] == "_")
+            and (part[:1].isalnum() or part[:1] == "_")
+        ):
+            key += " "
+        key += part
+    return key
 
 
 def _first_result_type(result: TsNode | None) -> TsNode | None:
