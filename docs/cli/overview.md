@@ -326,3 +326,5 @@ Per-method buckets remain an open item: `getDialogs` can hit `FLOOD_WAIT` before
 | `tg version` | `read` | no | [notes-and-search.md](notes-and-search.md#tg-version) |
 
 Commands that need a login or a Daemon are listed in [What each group of commands needs](#the-daemon-lifecycle). Global flags apply to all of them.
+
+Saved Messages commands: [saved.md](saved.md).

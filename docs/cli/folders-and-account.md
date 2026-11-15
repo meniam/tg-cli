@@ -30,7 +30,7 @@ Exit codes: 0; 2 invalid arguments; 3 no Daemon; 4 no login for a Telegram read;
 
 ## tg account sessions
 
-Lists account sessions and the authorization TTL in days. Session hash and IP are not printed. Device and application names are untrusted.
+Lists account sessions and the authorization TTL in days. Each session has an `id`, the first 16 hexadecimal characters of SHA-256 over its hash encoded as eight big-endian bytes. Session hash and IP are not printed. Device and application names are untrusted.
 
 ```text
 tg account sessions [--local]
@@ -107,3 +107,85 @@ tg account notify --local
 ```
 
 Exit codes: 0; 2 invalid arguments; 3 no Daemon; 4 no login for a Telegram read; 6 flood wait.
+
+## tg account terminate
+
+Terminates one other session. The owner must enable `sessions` in `access.json`. The current session cannot be terminated. Preview with `--dry-run`; an actual termination requires `--yes` and is recorded in `account.jsonl`.
+
+```sh
+tg account terminate <id> [--yes] [--dry-run]
+```
+
+<!-- schema:flags tg account terminate -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | preview without terminating the session |
+| `--yes` | bool | `false` | confirm session termination |
+<!-- /schema:flags -->
+
+**Safety class:** `account_write`, `dangerous`. Device and application names in the preview are untrusted.
+
+## tg folder invite-info
+
+Shows a shared folder invite without joining. A nonempty `allow` list closes this command. Blocked chats are omitted. Folder and chat titles are untrusted.
+
+<!-- schema:flags tg folder invite-info -->
+No command flags.
+<!-- /schema:flags -->
+
+## tg folder order
+
+Sets the folder order. Supply every existing folder ID exactly once. The owner must enable `dialogs` in `access.json`.
+
+<!-- schema:flags tg folder order -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | preview without changing Telegram |
+<!-- /schema:flags -->
+
+## tg folder create
+
+Manages a chat folder. The owner must enable `dialogs` in `access.json`. Deletion requires `--yes` or `--dry-run` and is journaled. Concurrent edits can overwrite each other.
+
+<!-- schema:flags tg folder create -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--color` | int | `0` | folder color ID |
+| `--dry-run` | bool | `false` | preview without changing Telegram |
+| `--emoticon` | string | `none` | folder emoticon |
+| `--exclude` | stringArray | `[]` | chat reference; repeat for multiple chats |
+| `--include` | stringArray | `[]` | chat reference; repeat for multiple chats |
+| `--pin` | stringArray | `[]` | chat reference; repeat for multiple chats |
+| `--rules` | string | `none` | comma-separated folder rules |
+<!-- /schema:flags -->
+
+## tg folder edit
+
+Manages a chat folder. The owner must enable `dialogs` in `access.json`. Deletion requires `--yes` or `--dry-run` and is journaled. Concurrent edits can overwrite each other.
+
+<!-- schema:flags tg folder edit -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--add` | stringArray | `[]` | chat reference; repeat for multiple chats |
+| `--color` | int | `0` | folder color ID |
+| `--dry-run` | bool | `false` | preview without changing Telegram |
+| `--emoticon` | string | `none` | folder emoticon |
+| `--exclude` | stringArray | `[]` | chat reference; repeat for multiple chats |
+| `--pin` | stringArray | `[]` | chat reference; repeat for multiple chats |
+| `--remove` | stringArray | `[]` | chat reference; repeat for multiple chats |
+| `--rules` | string | `none` | comma-separated folder rules |
+| `--title` | string | `none` | new folder title |
+| `--unexclude` | stringArray | `[]` | chat reference; repeat for multiple chats |
+| `--unpin` | stringArray | `[]` | chat reference; repeat for multiple chats |
+<!-- /schema:flags -->
+
+## tg folder delete
+
+Manages a chat folder. The owner must enable `dialogs` in `access.json`. Deletion requires `--yes` or `--dry-run` and is journaled. Concurrent edits can overwrite each other.
+
+<!-- schema:flags tg folder delete -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry-run` | bool | `false` | preview without changing Telegram |
+| `--yes` | bool | `false` | confirm deletion |
+<!-- /schema:flags -->

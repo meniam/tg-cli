@@ -10,13 +10,17 @@ The file lives in the profile directory, next to the session and the database (s
 
 ## The file
 
-A JSON object with up to four optional fields. Every field is an array.
+A JSON object with optional fields.
 
 | Field | Content | Effect |
 | --- | --- | --- |
 | `allow` | nonzero integer chat ids, no duplicates | when not empty, only these chats are visible to the agent |
 | `block` | nonzero integer chat ids, no duplicates | these chats are never visible; `block` wins over `allow` |
 | `write` | nonzero integer chat ids, no duplicates | the chats where the agent may write (send, edit, delete, forward, react, pin, poll, mark read, send files) |
+| `admin` | nonzero integer chat ids, no duplicates | chats where administrative actions are permitted |
+| `create` | boolean | whether creating chats is permitted |
+| `dialogs` | boolean | permits dialog and folder management |
+| `sessions` | boolean | permits terminating another session |
 | `files` | absolute directory paths, no duplicates | the directories from which `message send-media` may read files |
 
 Chat ids are in the Bot API form that `tg chat list` prints: users positive, groups negative, channels from `-1000000000000`. An example file:
@@ -59,7 +63,7 @@ The Daemon rereads the file when its modification time, size or mode changes. No
 
 ## What the Daemon shows: `daemon status`
 
-`tg daemon status` shows the field `access` when the read filter is on or `write` is not empty:
+`tg daemon status` shows the field `access` when the read filter is on or a write permission is present:
 
 ```json
 {"ok":true,"data":{"profile":"default","pid":48213,"connected":true,"authorized":true,"active_requests":0,"access":{"enabled":true,"allow":1,"block":0,"write":1}}}
@@ -70,6 +74,7 @@ The Daemon rereads the file when its modification time, size or mode changes. No
 | `enabled` | the read filter is on (a nonempty `allow` or `block`, or a closed file) |
 | `allow`, `block` | the counts of ids |
 | `write` | the count of ids, shown when it is not empty |
+| `dialogs`, `sessions` | `true` when the corresponding permission is enabled |
 | `closed` | `true` when the file does not parse, cannot be read or has a mode that is too wide |
 
 It never shows chat ids. With `{"write": [-1001234567890]}` only, `enabled` is `false` and `write` is `1`.
