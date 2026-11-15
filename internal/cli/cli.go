@@ -150,6 +150,7 @@ func (a *app) rootCommand() *cobra.Command {
 	root.AddCommand(
 		a.daemonCommand(),
 		a.authCommand(),
+		a.sessionCommand(),
 		a.chatCommand(),
 		a.userCommand(),
 		a.contactCommand(),

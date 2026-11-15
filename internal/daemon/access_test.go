@@ -65,7 +65,8 @@ func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 	d.register()
 	d.srv.SetEventSource(d.hub, d.replayEvents)
 	classes := map[string]string{
-		rpc.MethodFolderCreate: "account-write", rpc.MethodFolderEdit: "account-write", rpc.MethodFolderDelete: "account-write",
+		rpc.MethodSessionExport: "none",
+		rpc.MethodFolderCreate:  "account-write", rpc.MethodFolderEdit: "account-write", rpc.MethodFolderDelete: "account-write",
 		rpc.MethodSavedList:    "chat-list",
 		rpc.MethodSavedHistory: "chat-ref", rpc.MethodSavedSearch: "chat-search",
 		rpc.MethodSavedTags: "chat-ref", rpc.MethodSavedTagRename: "chat-write",
@@ -88,7 +89,7 @@ func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 		rpc.MethodMessageScheduledList: "chat-ref", rpc.MethodMessageScheduledDelete: "chat-write", rpc.MethodMessageScheduledSendNow: "chat-write",
 		rpc.MethodMessageSend: "chat-write", rpc.MethodMessageSendMedia: "chat-write", rpc.MethodMessageEdit: "chat-write", rpc.MethodMessageDelete: "chat-write", rpc.MethodMessageForward: "chat-write",
 		rpc.MethodMessageReact: "chat-write", rpc.MethodMessagePin: "chat-write", rpc.MethodMessageUnpin: "chat-write", rpc.MethodMessagePoll: "chat-write",
-		rpc.MethodMessageSearch: "chat-ref", rpc.MethodMessageContext: "chat-ref", rpc.MethodMessageExportLocal: "chat-ref", rpc.MethodMessageComments: "chat-ref", rpc.MethodMessageLink: "chat-ref", rpc.MethodMessageSearchPublic: "chat-search", rpc.MethodChatMarkRead: "chat-write", rpc.MethodChatTyping: "chat-write",
+		rpc.MethodMessageSearch: "chat-ref", rpc.MethodMessageContext: "chat-ref", rpc.MethodMessageExportLocal: "chat-ref", rpc.MethodMessageExportMonth: "chat-ref", rpc.MethodMessageExportVerify: "chat-ref", rpc.MethodMessageComments: "chat-ref", rpc.MethodMessageLink: "chat-ref", rpc.MethodMessageSearchPublic: "chat-search", rpc.MethodChatMarkRead: "chat-write", rpc.MethodChatTyping: "chat-write",
 		rpc.MethodNoteAdd: "chat-notes", rpc.MethodNoteList: "chat-notes", rpc.MethodNoteDelete: "chat-notes", rpc.MethodNoteDeleteByAuthor: "none", rpc.MethodSearch: "chat-search",
 		rpc.MethodHistorySyncStart: "chat-ref", rpc.MethodHistorySyncStatus: "chat-search", rpc.MethodHistorySyncCancel: "chat-ref",
 		rpc.MethodSubscribe: "chat-stream", rpc.MethodUnsubscribe: "none",

@@ -394,6 +394,129 @@ tg message export --local --after 4102 -- -1001234567890
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 10.4.
 
+### tg message export-month
+
+Writes one completed UTC calendar month of locally saved messages to an archive
+inside an owner-approved `downloads` root.
+
+```text
+tg message export-month <chat>... --month YYYY-MM --output <directory> [flags]
+```
+
+<!-- schema:flags tg message export-month -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--include-deleted` | bool | `false` | include locally marked deleted messages |
+| `--month` | string | `none` | completed UTC month (YYYY-MM) |
+| `--output` | string | `none` | required absolute output directory |
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Output formats:** `json`,
+`jsonl`, `toon`, `human`.
+
+**Preconditions.** The Daemon must be running and must know the account id. The
+command reads only the local database and does not call Telegram. The owner must
+list a `downloads` directory in `access.json`; the absolute existing `--output`
+directory must be inside one of those roots. No root is code 9; an invalid
+output directory is code 2.
+
+**Month and chats.** Give one through 50 distinct visible chats. `--month` is a
+completed UTC month, such as `2026-10`; the current and future months and invalid
+month strings are code 2. The selection is `[2026-10-01T00:00:00Z,
+2026-11-01T00:00:00Z)`. Every JSONL line has the same encoding as `message
+export --local` with those boundaries and the selected `--include-deleted`
+setting, ordered by message id. A line over 768 KiB or all JSONL files over 1
+GiB stops the command with code 1.
+
+**Archive.** The Daemon creates `tg-export-<account_id>-<month>` below
+`--output`, mode 0700. It writes `<chat_id>.jsonl` for each chat, then
+`SHA256SUMS`, then `manifest.json`; files are mode 0600. `SHA256SUMS` is in the
+`shasum -a 256 -c` form `<hex>  <name>`. `manifest.json` is the completion
+marker. It contains its format and version, account id, month, UTC boundaries,
+include-deleted setting, creation time, tool version, and each file's id, count,
+byte size, SHA-256, first and last message id, and saved sync coverage. It
+contains no chat names or message text.
+
+`--output` cannot contain an existing symbolic link below its configured
+`downloads` root. Archive files are first written under the opened downloads
+root and published there with a new hard link. On macOS and Linux, every
+directory component used to publish a file is opened with `O_NOFOLLOW`, so a
+directory substituted with a symbolic link cannot receive the file. Other
+platforms reject archive writes.
+
+`sync.month_start_covered` is true when the stored history load is complete, or
+when its oldest locally loaded message predates the month. It does not prove that
+Telegram has no unseen messages or changes. An empty month still creates an
+empty JSONL file with the SHA-256 of empty input.
+
+**Repeat and failure.** A complete archive is verified and returned with
+`existing:true`; it is never rewritten. An existing directory without
+`manifest.json` is left untouched and fails with code 1. A failure while creating
+a new archive removes only that new archive directory. Unknown or closed chats
+fail with code 7 before a new directory is created.
+
+**Output.** The result has `dir`, `month`, `existing`, `manifest_sha256`, and
+`files`. A file item has `name`, `chat_id`, `messages`, `bytes`, `sha256`, and
+`month_start_covered`; `--format jsonl` prints one file item per line.
+
+```sh
+tg chat sync start @release_team
+tg chat sync status @release_team
+tg message export-month @release_team --month 2026-10 --output /Users/me/tg-archives
+```
+
+**Exit codes.** 0 a new or valid existing archive; 1 an incomplete archive, a
+line or total-size limit, or another archive failure; 2 invalid month, chat
+count, duplicate chat, or output outside `downloads`; 3 no Daemon; 4 unknown
+account; 7 unknown or closed chat; 9 no permitted downloads root.
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 13.4.
+
+### tg message export-verify
+
+Checks a monthly archive without contacting Telegram.
+
+```text
+tg message export-verify <archive-directory>
+```
+
+<!-- schema:flags tg message export-verify -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`,
+`toon`, `human`.
+
+The archive directory must be absolute and inside an owner-approved `downloads`
+root. The command reads `manifest.json`, each listed JSONL file and
+`SHA256SUMS`, compares hashes and byte counts, checks missing and extra files,
+and rejects symbolic links. The result has `dir`, `month`, `ok`, `files`,
+`missing`, and `extra`. A file item has `name`, `ok`, `expected_sha256`,
+`actual_sha256`, and `bytes`; `--format jsonl` prints one item per line.
+
+`ok:false` prints the result and exits 1. A missing or invalid manifest is also
+code 1. Verification only proves saved archive bytes and structure, not the
+completeness of Telegram history.
+
+```sh
+tg message export-verify /Users/me/tg-archives/tg-export-123456789-2026-10
+shasum -a 256 -c /Users/me/tg-archives/tg-export-123456789-2026-10/SHA256SUMS
+```
+
+For an external monthly schedule, run after the UTC month ends. This macOS
+example sets the scheduler's time zone to UTC; `date -v` is a BSD `date` flag.
+
+```cron
+CRON_TZ=UTC
+10 3 1 * * tg message export-month @release_team --month "$(date -u -v-1m +\%Y-\%m)" --output /Users/me/tg-archives
+```
+
+**Exit codes.** 0 verified; 1 mismatch or invalid archive; 2 invalid archive
+directory; 3 no Daemon; 7 a now-closed chat in the manifest; 9 no permitted
+downloads root.
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 13.4.
+
 ## Live events
 
 ### tg message watch

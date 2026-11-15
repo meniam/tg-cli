@@ -53,6 +53,7 @@ type Client struct {
 	connection        *connectionState
 	appID             int
 	appHash           string
+	sessionStorage    *telegram.FileSessionStorage
 	tg                *telegram.Client
 	ready             chan struct{}
 	readyOnce         sync.Once
@@ -63,6 +64,8 @@ type Client struct {
 	sinkMu            sync.RWMutex
 	sink              func(rpc.Event)
 	transcriptionSink func(rpc.Transcription)
+	authLostMu        sync.RWMutex
+	authLostSink      func(string)
 
 	mgr         *peers.Manager // resolves chat references to Telegram peers
 	mgrMu       sync.Mutex
@@ -85,12 +88,17 @@ func NewWithNetwork(cfg Config) (*Client, error) {
 		return nil, err
 	}
 	c := &Client{connection: connection, appID: cfg.AppID, appHash: cfg.AppHash, ready: make(chan struct{}), authReady: make(chan struct{}, 1), stateKV: cfg.StateKV, throttle: cfg.Throttle}
+	c.sessionStorage = &telegram.FileSessionStorage{Path: cfg.SessionPath}
 	options := telegram.Options{
 		Resolver:               resolver,
 		OnConnectionStateEvent: c.connection.update,
-		SessionStorage:         &telegram.FileSessionStorage{Path: cfg.SessionPath},
-		Device:                 deviceConfig(cfg.DeviceModel),
-		UpdateHandler:          managerHandler{client: c},
+		SessionStorage:         c.sessionStorage,
+		OnAuthLost: func(_ context.Context, err error) error {
+			c.notifyAuthLost(err)
+			return nil
+		},
+		Device:        deviceConfig(cfg.DeviceModel),
+		UpdateHandler: managerHandler{client: c},
 	}
 	options.Middlewares = []telegram.Middleware{c.connectionMiddleware()}
 	if cfg.Throttle != nil {
@@ -248,4 +256,20 @@ func displayName(u *tg.User) string {
 	}
 	username, _ := u.GetUsername()
 	return username
+}
+
+// SetAuthLostSink reports authorization loss to the daemon.
+func (c *Client) SetAuthLostSink(f func(string)) {
+	c.authLostMu.Lock()
+	defer c.authLostMu.Unlock()
+	c.authLostSink = f
+}
+
+func (c *Client) notifyAuthLost(err error) {
+	c.authLostMu.RLock()
+	f := c.authLostSink
+	c.authLostMu.RUnlock()
+	if f != nil {
+		f(telegram.AuthLostKindOf(err).String())
+	}
 }

@@ -40,6 +40,8 @@ const noteIDToken = "@note"
 // realResponseCases are the commands that a response fixture covers, with the
 // arguments of the run. The token noteIDToken is replaced at run time.
 var realResponseCases = map[string][]string{
+	"auth code":              {"auth", "code"},
+	"auth password":          {"auth", "password", "--password-stdin"},
 	"user profile":           {"user", "profile", "@aliceuser"},
 	"user block":             {"user", "block", "@aliceuser"},
 	"user unblock":           {"user", "unblock", "@aliceuser"},
@@ -167,8 +169,11 @@ func realResponses(t *testing.T) map[string][]byte {
 		return strconv.FormatInt(note.ID, 10)
 	}
 
-	out := map[string][]byte{}
+	out := authStepResponses(t)
 	for path, args := range realResponseCases {
+		if path == "auth code" || path == "auth password" {
+			continue
+		}
 		run := make([]string, len(args))
 		for i, arg := range args {
 			if arg == "@media" {
@@ -191,6 +196,29 @@ func realResponses(t *testing.T) map[string][]byte {
 		t.Errorf("daemon stop: exit %d, %q", r.code, r.stdout)
 	} else {
 		out["daemon stop"] = parse(t, r).Data
+	}
+	return out
+}
+
+// authStepResponses exercises both steps on one separate login flow. The other
+// response cases require an already authorized account.
+func authStepResponses(t *testing.T) map[string][]byte {
+	t.Helper()
+	e := newEnv(t)
+	e.tg.need2FA = true
+	e.startDaemon()
+	start := e.run("auth", "login", "--phone", "+15550001111", "--no-input")
+	if start.code != exitcode.OK {
+		t.Fatalf("start login: exit %d, %q", start.code, start.stdout)
+	}
+	out := map[string][]byte{}
+	for _, step := range []struct{ path, input string }{{"auth code", "CODE777\n"}, {"auth password", "PASS888\n"}} {
+		e.stdin = strings.NewReader(step.input)
+		r := e.run(realResponseCases[step.path]...)
+		if r.code != exitcode.OK {
+			t.Fatalf("%s: exit %d, %q", step.path, r.code, r.stdout)
+		}
+		out[step.path] = parse(t, r).Data
 	}
 	return out
 }
@@ -242,6 +270,8 @@ var uncoveredCommands = map[string]string{
 	"chat permissions":           "account write is covered by net.Pipe CLI tests",
 	"chat slow-mode":             "account write is covered by net.Pipe CLI tests",
 	"daemon stop":                "runs last, after the cases that need the daemon it stops, so it is checked separately",
+	"session export":             "exports a secret to a separate owner-only file",
+	"session import":             "imports a secret into a separate stopped profile",
 	"auth login":                 "asks for a phone number, a code and a password on stdin",
 	"auth resend":                "needs a login that waits for the code, started by another command",
 	"daemon start":               "runs until the daemon stops, the other cases need the daemon it starts",
@@ -275,12 +305,13 @@ var uncoveredCommands = map[string]string{
 }
 
 // fixtureResponseCases cover commands whose daemon side effects are isolated by net.Pipe.
-var fixtureResponseCases = map[string]bool{"message download": true}
+var fixtureResponseCases = map[string]bool{"message download": true, "message export-month": true, "message export-verify": true}
 
 // TestEveryCommandResponseIsCompared makes sure the comparison covers the whole
 // command tree: a command that is neither exercised nor explained fails here.
 func TestEveryCommandResponseIsCompared(t *testing.T) {
 	t.Run("message download", TestDownloadResponseFixture)
+	t.Run("message export-month and verify", TestExportMonthCLI)
 	cases := map[string]bool{}
 	for path := range realResponseCases {
 		cases[path] = true

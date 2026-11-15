@@ -7,20 +7,21 @@ import (
 
 // Method names of the daemon API.
 const (
-	MethodPing         = "ping"
-	MethodStatus       = "status"
-	MethodShutdown     = "shutdown"
-	MethodAuthStart    = "auth.start"
-	MethodAuthCode     = "auth.code"
-	MethodAuthPassword = "auth.password"
-	MethodAuthResend   = "auth.resend"
-	MethodAuthStartQR  = "auth.start_qr"
-	MethodAuthWait     = "auth.wait"
-	MethodAuthCancel   = "auth.cancel"
-	MethodChatList     = "chat.list"
-	MethodChatMembers  = "chat.members"
-	MethodChatTopics   = "chat.topics"
-	MethodChatCommon   = "chat.common"
+	MethodSessionExport = "session.export"
+	MethodPing          = "ping"
+	MethodStatus        = "status"
+	MethodShutdown      = "shutdown"
+	MethodAuthStart     = "auth.start"
+	MethodAuthCode      = "auth.code"
+	MethodAuthPassword  = "auth.password"
+	MethodAuthResend    = "auth.resend"
+	MethodAuthStartQR   = "auth.start_qr"
+	MethodAuthWait      = "auth.wait"
+	MethodAuthCancel    = "auth.cancel"
+	MethodChatList      = "chat.list"
+	MethodChatMembers   = "chat.members"
+	MethodChatTopics    = "chat.topics"
+	MethodChatCommon    = "chat.common"
 
 	MethodChatResolve         = "chat.resolve"
 	MethodChatInfo            = "chat.info"
@@ -107,6 +108,7 @@ type StatusResult struct {
 	Authorized      bool          `json:"authorized"`
 	User            *User         `json:"user,omitempty"`
 	LoginState      string        `json:"login_state,omitempty"`
+	AuthLost        string        `json:"auth_lost,omitempty"`
 	ActiveRequests  int           `json:"active_requests"`
 	Access          *AccessStatus `json:"access,omitempty"`
 }
@@ -472,4 +474,19 @@ type SearchHit struct {
 // SearchResult contains hits grouped by scope.
 type SearchResult struct {
 	Hits []SearchHit `json:"hits"`
+}
+
+// SessionExportParams requests export to a new local file.
+type SessionExportParams struct {
+	Path string `json:"path"`
+	Yes  bool   `json:"yes"`
+}
+
+// SessionExportResult contains only public metadata.
+type SessionExportResult struct {
+	Format string `json:"format"`
+	DC     int    `json:"dc"`
+	UserID int64  `json:"user_id,omitempty"`
+	KeyID  string `json:"key_id"`
+	Client string `json:"client,omitempty"`
 }

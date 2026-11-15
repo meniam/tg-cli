@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -51,6 +50,8 @@ const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
 	account              accountCache
+	authLostMu           sync.RWMutex
+	authLost             string
 	idempotencyLocks     keyLocks
 	transcriptionLocks   keyLocks
 	phoneLimit           phoneLimiter
@@ -101,6 +102,11 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 	defer release()
+	releaseStart, err := guardSessionStart(opts.Paths)
+	if err != nil {
+		return err
+	}
+	releaseStart()
 	ownedStore := opts.Store
 	if ownedStore == nil {
 		ownedStore, err = store.Open(opts.Paths.Database)
@@ -137,17 +143,16 @@ func Run(ctx context.Context, opts Options) error {
 	authorized := make(chan struct{}, 1)
 	d.login.onUser = d.account.set
 	d.login.onAuthorized = func() {
+		d.setAuthLost("")
 		select {
 		case authorized <- struct{}{}:
 		default:
 		}
 	}
-	d.srv.SetRequestGuard(func(req rpc.Request) error {
-		if strings.HasPrefix(req.Method, "user.") || strings.HasPrefix(req.Method, "contact.") {
-			req.Method = "chat." + req.Method
-		}
-		return d.account.check(req)
-	})
+	if source, ok := opts.Telegram.(interface{ SetAuthLostSink(func(string)) }); ok {
+		source.SetAuthLostSink(d.setAuthLost)
+	}
+	d.srv.SetRequestGuard(d.guardRequest)
 	contactsDone := make(chan struct{})
 	accountDone := make(chan struct{})
 	go func() {
@@ -222,20 +227,7 @@ func Run(ctx context.Context, opts Options) error {
 		opts.OnListening()
 	}
 
-	var runErr error
-	tgFinished := false
-	select {
-	case <-runCtx.Done():
-	case err := <-tgDone:
-		tgFinished = true
-		if err != nil && !errors.Is(err, context.Canceled) {
-			runErr = fmt.Errorf("telegram client stopped: %w", err)
-		}
-	case err := <-serveDone:
-		if err != nil && !errors.Is(err, rpc.ErrServerClosed) {
-			runErr = fmt.Errorf("serve: %w", err)
-		}
-	}
+	runErr, tgFinished := d.waitForShutdown(runCtx, tgDone, serveDone)
 
 	log.Info("daemon stopping")
 	cancel()
@@ -312,6 +304,7 @@ func (d *daemon) handle(method string, h rpc.Handler) {
 }
 
 func (d *daemon) register() {
+	d.handle(rpc.MethodSessionExport, d.sessionExport)
 	d.handle(rpc.MethodPing, d.ping)
 	d.handle(rpc.MethodStatus, d.status)
 	d.handle(rpc.MethodShutdown, d.shutdown)
@@ -365,6 +358,10 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodMessageSearchPublic, d.messageSearchPublic)
 	d.handle(rpc.MethodMessageContext, d.messageContext)
 	d.handle(rpc.MethodMessageExportLocal, d.messageExportLocal)
+	d.handle(rpc.MethodMessageExportMonth, d.messageExportMonth)
+	d.srv.SetMethodTimeout(rpc.MethodMessageExportMonth, 600*time.Second)
+	d.handle(rpc.MethodMessageExportVerify, d.messageExportVerify)
+	d.srv.SetMethodTimeout(rpc.MethodMessageExportVerify, 600*time.Second)
 	d.handle(rpc.MethodMessageComments, d.messageComments)
 	d.handle(rpc.MethodMessageLink, d.messageLink)
 	d.handle(rpc.MethodChatDraftGet, d.draftGet)
@@ -399,11 +396,15 @@ func (d *daemon) status(ctx context.Context, _ json.RawMessage) (any, error) {
 		Profile:    d.opts.Profile,
 		PID:        os.Getpid(),
 		LoginState: d.login.state(),
+		AuthLost:   d.getAuthLost(),
 		// The status request itself is active while it runs, do not count it.
 		ActiveRequests: max(d.srv.Active()-1, 0),
 	}
 	if policy := d.policy(); policy.Enabled() || policy.WriteCount() > 0 || policy.AdminCount() > 0 || policy.CreateAllowed() || policy.ProfileAllowed() || policy.DialogsAllowed() || policy.SessionsAllowed() {
 		st.Access = &rpc.AccessStatus{Enabled: policy.Enabled(), Allow: policy.AllowCount(), Block: policy.BlockCount(), Write: policy.WriteCount(), Admin: policy.AdminCount(), Create: policy.CreateAllowed(), Profile: policy.ProfileAllowed(), Dialogs: policy.DialogsAllowed(), Sessions: policy.SessionsAllowed(), Closed: policy.Closed()}
+	}
+	if st.AuthLost != "" {
+		return st, nil
 	}
 	if d.fillConnection(&st) {
 		return st, nil
@@ -560,4 +561,50 @@ func decodeParams(params json.RawMessage, v any) error {
 		return rpc.NewError(rpc.CodeInvalidParams, "invalid params")
 	}
 	return nil
+}
+
+func (d *daemon) setAuthLost(kind string) {
+	d.authLostMu.Lock()
+	d.authLost = kind
+	d.authLostMu.Unlock()
+}
+func (d *daemon) getAuthLost() string {
+	d.authLostMu.RLock()
+	defer d.authLostMu.RUnlock()
+	return d.authLost
+}
+
+// guardRequest rejects account operations after authorization loss.
+func (d *daemon) guardRequest(req rpc.Request) error {
+	if kind := d.getAuthLost(); kind != "" && accountMethod(req.Method) {
+		return rpc.NewError(rpc.CodeNotAuthorized, "authorization lost: "+kind+"; stop the daemon and log in again")
+	}
+	return d.account.check(req)
+}
+
+// A permanently stopped Telegram client must not take the RPC server down
+// after authorization loss: status and shutdown remain available.
+func (d *daemon) waitForShutdown(ctx context.Context, tgDone, serveDone <-chan error) (error, bool) {
+	tgFinished := false
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, tgFinished
+		case err := <-tgDone:
+			tgFinished = true
+			if d.getAuthLost() != "" {
+				tgDone = nil
+				continue
+			}
+			if err != nil && !errors.Is(err, context.Canceled) {
+				return fmt.Errorf("telegram client stopped: %w", err), true
+			}
+			return nil, true
+		case err := <-serveDone:
+			if err != nil && !errors.Is(err, rpc.ErrServerClosed) {
+				return fmt.Errorf("serve: %w", err), tgFinished
+			}
+			return nil, tgFinished
+		}
+	}
 }
