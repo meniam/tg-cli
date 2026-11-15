@@ -428,7 +428,7 @@ func TestResolvePaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Dir != "/h/work" || p.Socket != "/h/work/daemon.sock" || p.Lock != "/h/work/daemon.lock" || p.Session != "/h/work/session.json" || p.Client != "/h/work/client" || p.Device != "/h/work/device" || p.Database != "/h/work/store.db" || p.Deletions != "/h/work/deletions.jsonl" {
+	if p.Dir != "/h/work" || p.Socket != "/h/work/daemon.sock" || p.Lock != "/h/work/daemon.lock" || p.Session != "/h/work/session.json" || p.Database != "/h/work/store.db" || p.Deletions != "/h/work/deletions.jsonl" {
 		t.Errorf("unexpected paths %+v", p)
 	}
 	for _, bad := range []string{"", "Work", "../x", "a/b", "-a", strings.Repeat("a", 33)} {

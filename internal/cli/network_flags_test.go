@@ -12,7 +12,7 @@ import (
 
 func TestNetworkSettingsPersistence(t *testing.T) {
 	dir := t.TempDir()
-	paths := daemon.Paths{Dir: filepath.Join(dir, "default"), Transport: filepath.Join(dir, "transport"), Proxy: filepath.Join(dir, "proxy")}
+	paths := daemon.Paths{Dir: filepath.Join(dir, "default")}
 	var err error
 	t.Setenv("HOME", t.TempDir())
 	path := filepath.Join(t.TempDir(), "config.toml")
@@ -55,7 +55,7 @@ func TestNetworkSettingsPersistence(t *testing.T) {
 }
 func TestNetworkBadProxyDoesNotExposeSecret(t *testing.T) {
 	dir := t.TempDir()
-	paths := daemon.Paths{Dir: filepath.Join(dir, "default"), Transport: filepath.Join(dir, "transport"), Proxy: filepath.Join(dir, "proxy")}
+	paths := daemon.Paths{Dir: filepath.Join(dir, "default")}
 	var err error
 	t.Setenv("HOME", t.TempDir())
 	path := filepath.Join(t.TempDir(), "config.toml")

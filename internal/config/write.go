@@ -30,19 +30,33 @@ func updateProfile(path, name string, changes map[string]string, onlyMissing boo
 	if !profileName.MatchString(name) {
 		return Config{}, invalid("invalid profile name")
 	}
+	var cfg Config
+	err := withConfigLock(path, func() error {
+		var err error
+		cfg, err = updateProfileLocked(path, name, changes, onlyMissing, action)
+		return err
+	})
+	return cfg, err
+}
+
+func withConfigLock(path string, fn func() error) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return Config{}, fmt.Errorf("create config directory: %w", err)
+		return fmt.Errorf("create config directory: %w", err)
 	}
 	lock, err := os.OpenFile(filepath.Join(dir, "config.lock"), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
-		return Config{}, fmt.Errorf("open config lock: %w", err)
+		return fmt.Errorf("open config lock: %w", err)
 	}
 	defer lock.Close()
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return Config{}, fmt.Errorf("lock config: %w", err)
+		return fmt.Errorf("lock config: %w", err)
 	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	return fn()
+}
+
+func updateProfileLocked(path, name string, changes map[string]string, onlyMissing bool, action func() error) (Config, error) {
 	cfg, err := Load(path)
 	if err != nil {
 		return Config{}, err

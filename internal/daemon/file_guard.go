@@ -83,7 +83,7 @@ func CheckFileNames(p Paths) ([]string, error) {
 		return nil, fmt.Errorf("inspect profile directory: %w", err)
 	}
 	protected := map[string]bool{}
-	for _, path := range []string{p.Session, p.Access, p.Log, p.Deletions, p.Lock, p.Socket, p.Proxy, p.Transport, p.Client, p.Device} {
+	for _, path := range []string{p.Session, p.Access, p.Log, p.Deletions, p.Lock, p.Socket} {
 		protected[filepath.Base(path)] = true
 	}
 	for _, name := range []string{"session.json", "access.json", "daemon.log", "deletions.jsonl", "proxy", "client", "device", "transport", ".session-start.lock"} {

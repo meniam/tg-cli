@@ -39,6 +39,9 @@ func (a *app) sessionCommand() *cobra.Command {
 	return group
 }
 func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
+	if err := a.migrateProfiles(); err != nil {
+		return err
+	}
 	yes, _ := cmd.Flags().GetBool("yes")
 	out, _ := cmd.Flags().GetString("out")
 	if !yes || out == "" || out == "-" {
@@ -96,6 +99,9 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 	return a.success(cmd, result)
 }
 func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
+	if err := a.migrateProfiles(); err != nil {
+		return err
+	}
 	yes, _ := cmd.Flags().GetBool("yes")
 	from, _ := cmd.Flags().GetString("from")
 	force, _ := cmd.Flags().GetBool("force")

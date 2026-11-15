@@ -156,6 +156,9 @@ func (a *app) deviceModel(cmd *cobra.Command, paths daemon.Paths) (string, error
 }
 
 func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
+	if err := a.migrateProfiles(); err != nil {
+		return err
+	}
 	profile, paths, err := a.profile(cmd)
 	if err != nil {
 		return err
