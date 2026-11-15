@@ -66,7 +66,7 @@ func (d *daemon) folderList(ctx context.Context, raw json.RawMessage) (any, erro
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	result, err := d.opts.Telegram.Folders(ctx)
+	result, err := d.telegram(ctx).Folders(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (d *daemon) chatState(ctx context.Context, raw json.RawMessage) (any, error
 	} else if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	result, err := d.opts.Telegram.ChatStates(ctx, ref, limit)
+	result, err := d.telegram(ctx).ChatStates(ctx, ref, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +188,7 @@ func (d *daemon) accountSessions(ctx context.Context, raw json.RawMessage) (any,
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	r, err := d.opts.Telegram.Sessions(ctx)
+	r, err := d.telegram(ctx).Sessions(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (d *daemon) accountBlocked(ctx context.Context, raw json.RawMessage) (any, 
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	r, err := d.opts.Telegram.Blocked(ctx, p)
+	r, err := d.telegram(ctx).Blocked(ctx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func (d *daemon) accountNotify(ctx context.Context, raw json.RawMessage) (any, e
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	r, err := d.opts.Telegram.NotifyDefaults(ctx)
+	r, err := d.telegram(ctx).NotifyDefaults(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +288,7 @@ func (d *daemon) folderInviteInfo(ctx context.Context, raw json.RawMessage) (any
 	if err = d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	result, err := d.opts.Telegram.FolderInviteInfo(ctx, slug)
+	result, err := d.telegram(ctx).FolderInviteInfo(ctx, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +313,7 @@ func (d *daemon) folderOrder(ctx context.Context, raw json.RawMessage) (any, err
 	if !d.policy().DialogsAllowed() {
 		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("folder management requires dialogs: true in access.json"))
 	}
-	if err := d.opts.Telegram.OrderFolders(ctx, p.IDs, p.DryRun); err != nil {
+	if err := d.telegram(ctx).OrderFolders(ctx, p.IDs, p.DryRun); err != nil {
 		return nil, err
 	}
 	if !p.DryRun {
@@ -379,7 +379,7 @@ func (d *daemon) folderWrite(ctx context.Context, raw json.RawMessage, action st
 	var existing rpc.Folder
 	hidden := 0
 	if action == "delete" || action == "edit" {
-		folders, err := d.opts.Telegram.Folders(ctx)
+		folders, err := d.telegram(ctx).Folders(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -416,7 +416,7 @@ func (d *daemon) folderWrite(ctx context.Context, raw json.RawMessage, action st
 		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("folder management requires dialogs: true in access.json"))
 	}
 	if action == "delete" && !p.DryRun {
-		self, err := d.opts.Telegram.Self(ctx)
+		self, err := d.telegram(ctx).Self(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -427,7 +427,7 @@ func (d *daemon) folderWrite(ctx context.Context, raw json.RawMessage, action st
 		if err = d.accountJournal(record); err != nil {
 			return nil, err
 		}
-		out, err := d.opts.Telegram.WriteFolder(ctx, p, action)
+		out, err := d.telegram(ctx).WriteFolder(ctx, p, action)
 		record["time"] = time.Now().UTC().Format(time.RFC3339)
 		record["phase"] = "result"
 		record["outcome"] = "success"
@@ -445,7 +445,7 @@ func (d *daemon) folderWrite(ctx context.Context, raw json.RawMessage, action st
 		}
 		return rpc.FolderDeleteResult{ID: out.ID, Deleted: true}, nil
 	}
-	out, err := d.opts.Telegram.WriteFolder(ctx, p, action)
+	out, err := d.telegram(ctx).WriteFolder(ctx, p, action)
 	if err != nil {
 		return nil, err
 	}

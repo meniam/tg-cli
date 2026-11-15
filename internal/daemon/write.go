@@ -87,7 +87,7 @@ func (d *daemon) writeReference(ctx context.Context, value string, writing bool)
 	if ref.Kind != chatref.ID {
 		if resolved == nil {
 			var chat rpc.Chat
-			chat, err = d.opts.Telegram.Resolve(ctx, ref)
+			chat, err = d.telegram(ctx).Resolve(ctx, ref)
 			if err != nil {
 				return ref, 0, err
 			}
@@ -125,7 +125,7 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	var check rpc.TextCheck
 	if p.DryRun || formatRequested(p) {
-		check, err = d.opts.Telegram.CheckText(ctx, p)
+		check, err = d.telegram(ctx).CheckText(ctx, p)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +188,7 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 		}
 		return result, nil
 	}
-	res, err := d.opts.Telegram.Send(ctx, ref, p)
+	res, err := d.telegram(ctx).Send(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +220,7 @@ func (d *daemon) messageEdit(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	var check rpc.TextCheck
 	if p.DryRun || formatRequested(checkParams) {
-		check, err = d.opts.Telegram.CheckText(ctx, checkParams)
+		check, err = d.telegram(ctx).CheckText(ctx, checkParams)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +232,7 @@ func (d *daemon) messageEdit(ctx context.Context, raw json.RawMessage) (any, err
 		}
 		return result, nil
 	}
-	res, err := d.opts.Telegram.Edit(ctx, ref, p)
+	res, err := d.telegram(ctx).Edit(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +273,7 @@ func (d *daemon) messageDelete(ctx context.Context, raw json.RawMessage) (any, e
 	if p.DryRun {
 		return rpc.DeleteResult{ChatID: id, Deleted: []int{}, DryRun: true, Action: "delete", Count: len(p.IDs)}, nil
 	}
-	user, err := d.opts.Telegram.Self(ctx)
+	user, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 		}
 		return result, nil
 	}
-	res, err := d.opts.Telegram.Forward(ctx, from, to, p)
+	res, err := d.telegram(ctx).Forward(ctx, from, to, p)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func (d *daemon) messageReact(ctx context.Context, raw json.RawMessage) (any, er
 	if p.DryRun {
 		return rpc.ReactResult{ChatID: id, ID: p.ID, Emoji: p.Emoji, Removed: p.Remove, DryRun: true, Action: "react", Count: 1}, nil
 	}
-	res, err := d.opts.Telegram.React(ctx, ref, p)
+	res, err := d.telegram(ctx).React(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +373,7 @@ func (d *daemon) messagePin(ctx context.Context, raw json.RawMessage) (any, erro
 	if p.DryRun {
 		return rpc.PinResult{ChatID: id, ID: p.ID, Pinned: true, DryRun: true, Action: "pin", Count: 1}, nil
 	}
-	res, err := d.opts.Telegram.Pin(ctx, ref, p)
+	res, err := d.telegram(ctx).Pin(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +397,7 @@ func (d *daemon) messageUnpin(ctx context.Context, raw json.RawMessage) (any, er
 	if p.DryRun {
 		return rpc.PinResult{ChatID: id, ID: p.ID, Pinned: false, DryRun: true, Action: "unpin", Count: 1}, nil
 	}
-	res, err := d.opts.Telegram.Unpin(ctx, ref, p)
+	res, err := d.telegram(ctx).Unpin(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -448,7 +448,7 @@ func (d *daemon) messagePoll(ctx context.Context, raw json.RawMessage) (any, err
 		}
 		return result, nil
 	}
-	res, err := d.opts.Telegram.SendPoll(ctx, ref, p)
+	res, err := d.telegram(ctx).SendPoll(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}

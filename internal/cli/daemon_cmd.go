@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -208,7 +209,7 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if cfg.DeviceModel, err = a.deviceModel(cmd, paths); err != nil {
 		return err
 	}
-	tg, err := a.deps.NewTelegram(cfg)
+	tg, newTelegram, err := a.telegramFactory(cfg)
 	if err != nil {
 		return fail(exitcode.Failure, "create the Telegram client: %v", err)
 	}
@@ -231,6 +232,8 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		Profile:              profile,
 		Paths:                paths,
 		Telegram:             tg,
+		NewTelegram:          newTelegram,
+		TelegramConfig:       cfg,
 		Log:                  logger,
 		IdleTimeout:          idle,
 	})
@@ -242,6 +245,24 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		return fail(exitcode.Failure, "%v", err)
 	}
 	return a.success(cmd, daemonStartedResult{Stopped: true})
+}
+
+// telegramFactory starts with the concrete initial transport and keeps the
+// original configuration available to the daemon for later replacements.
+func (a *app) telegramFactory(cfg daemon.TelegramConfig) (daemon.Telegram, func(context.Context, daemon.TelegramConfig) (daemon.Telegram, error), error) {
+	initial := cfg
+	initial.Network = daemon.InitialNetwork(cfg.Network)
+	client, err := a.deps.NewTelegram(initial)
+	if err != nil {
+		return nil, nil, err
+	}
+	factory := func(ctx context.Context, cfg daemon.TelegramConfig) (daemon.Telegram, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return a.deps.NewTelegram(cfg)
+	}
+	return client, factory, nil
 }
 
 // startBackground launches the daemon as a separate process and waits for its

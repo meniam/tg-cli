@@ -78,7 +78,7 @@ func (d *daemon) resolveStoredReference(ctx context.Context, value string, perso
 	if err := d.requireAccount(ctx); err != nil {
 		return 0, false, err
 	}
-	resolved, err := d.opts.Telegram.Resolve(ctx, ref)
+	resolved, err := d.telegram(ctx).Resolve(ctx, ref)
 	if err != nil {
 		return 0, false, err
 	}

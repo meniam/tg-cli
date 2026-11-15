@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"tg-cli/internal/netconf"
 	"tg-cli/internal/rpc"
 )
 
@@ -12,12 +13,18 @@ type connectionSink interface {
 	SetConnectionSink(func(rpc.ConnectionInfo))
 }
 
-func (d *daemon) fillConnection(st *rpc.StatusResult) bool {
-	reporter, ok := d.opts.Telegram.(connectionReporter)
+func (d *daemon) fillConnection(ctx context.Context, st *rpc.StatusResult) bool {
+	reporter, ok := d.telegram(ctx).(connectionReporter)
 	if !ok {
 		return false
 	}
 	info := reporter.Connection()
+	if d.auto != nil && d.opts.TelegramConfig.Network.Transport == netconf.Auto {
+		info.Transport = string(netconf.Auto)
+		if d.auto.hasSwitched() {
+			info.TransportSwitches = 1
+		}
+	}
 	st.ConnectionInfo = &info
 	st.Connected = st.Connection == "ready"
 	if st.Connected {
@@ -32,32 +39,24 @@ func (d *daemon) fillConnection(st *rpc.StatusResult) bool {
 	d.account.mu.RUnlock()
 	return true
 }
-func (d *daemon) logConnection(ctx context.Context) {
-	source, ok := d.opts.Telegram.(connectionSink)
+func (d *daemon) logConnection(ctx context.Context, client Telegram, observe func(rpc.ConnectionInfo)) {
+	source, ok := client.(connectionSink)
 	if !ok {
 		return
 	}
-	updates := make(chan rpc.ConnectionInfo, 16)
-	source.SetConnectionSink(func(s rpc.ConnectionInfo) {
-		select {
-		case updates <- s:
-		default:
+	source.SetConnectionSink(func(state rpc.ConnectionInfo) {
+		if ctx.Err() != nil {
+			return
+		}
+		if observe != nil {
+			observe(state)
+		}
+		if state.Connection == "disconnected" {
+			d.log.Warn("telegram connection", "state", state.Connection, "dc", state.DC)
+		} else {
+			d.log.Info("telegram connection", "state", state.Connection, "dc", state.DC)
 		}
 	})
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case s := <-updates:
-				if s.Connection == "disconnected" {
-					d.log.Warn("telegram connection", "state", s.Connection, "dc", s.DC)
-				} else {
-					d.log.Info("telegram connection", "state", s.Connection, "dc", s.DC)
-				}
-			}
-		}
-	}()
 }
 
 const connectionWait = 15 * time.Second

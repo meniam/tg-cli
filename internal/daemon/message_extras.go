@@ -59,13 +59,13 @@ func (d *daemon) stickerSearch(ctx context.Context, raw json.RawMessage) (any, e
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.SearchStickerSets(ctx, p)
+	return d.telegram(ctx).SearchStickerSets(ctx, p)
 }
 func (d *daemon) stickerInstalled(ctx context.Context, raw json.RawMessage) (any, error) {
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.InstalledStickerSets(ctx)
+	return d.telegram(ctx).InstalledStickerSets(ctx)
 }
 
 func (d *daemon) stickerSet(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -80,7 +80,7 @@ func (d *daemon) stickerSet(ctx context.Context, raw json.RawMessage) (any, erro
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.StickerSet(ctx, name)
+	return d.telegram(ctx).StickerSet(ctx, name)
 }
 func (d *daemon) messageSendSticker(ctx context.Context, raw json.RawMessage) (any, error) {
 	var p rpc.SendStickerParams
@@ -114,7 +114,7 @@ func (d *daemon) messageSendSticker(ctx context.Context, raw json.RawMessage) (a
 		result.Replayed = true
 		return result, nil
 	}
-	result, err := d.opts.Telegram.SendSticker(ctx, ref, p)
+	result, err := d.telegram(ctx).SendSticker(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (d *daemon) messageEditMedia(ctx context.Context, raw json.RawMessage) (any
 	if err != nil {
 		return nil, err
 	}
-	old, err := d.opts.Telegram.Message(ctx, ref, p.ID)
+	old, err := d.telegram(ctx).Message(ctx, ref, p.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func (d *daemon) messageEditMedia(ctx context.Context, raw json.RawMessage) (any
 	if p.DryRun {
 		return result, nil
 	}
-	response, err := d.opts.Telegram.EditMedia(ctx, ref, p, checked)
+	response, err := d.telegram(ctx).EditMedia(ctx, ref, p, checked)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (d *daemon) messageSendInline(ctx context.Context, raw json.RawMessage) (an
 		}
 		return result, nil
 	}
-	result, message, err := d.opts.Telegram.SendInline(ctx, ref, p)
+	result, message, err := d.telegram(ctx).SendInline(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +268,7 @@ func (d *daemon) messageInlineQuery(ctx context.Context, raw json.RawMessage) (a
 	if bot.Type != "bot" {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "inline query requires a bot")
 	}
-	result, err := d.opts.Telegram.InlineQuery(ctx, ref, botRef, p)
+	result, err := d.telegram(ctx).InlineQuery(ctx, ref, botRef, p)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +313,7 @@ func (d *daemon) messageButtons(ctx context.Context, raw json.RawMessage) (any, 
 	if err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.MessageButtons(ctx, ref, p.ID)
+	return d.telegram(ctx).MessageButtons(ctx, ref, p.ID)
 }
 func (d *daemon) messagePress(ctx context.Context, raw json.RawMessage) (any, error) {
 	var p rpc.PressParams
@@ -327,7 +327,7 @@ func (d *daemon) messagePress(ctx context.Context, raw json.RawMessage) (any, er
 	if err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.PressButton(ctx, ref, p)
+	return d.telegram(ctx).PressButton(ctx, ref, p)
 }
 func (d *daemon) chatAutoDelete(ctx context.Context, raw json.RawMessage) (any, error) {
 	var p rpc.AutoDeleteParams
@@ -346,7 +346,7 @@ func (d *daemon) chatAutoDelete(ctx context.Context, raw json.RawMessage) (any, 
 	if p.DryRun {
 		return result, nil
 	}
-	if err := d.opts.Telegram.SetAutoDelete(ctx, ref, period); err != nil {
+	if err := d.telegram(ctx).SetAutoDelete(ctx, ref, period); err != nil {
 		return nil, err
 	}
 	return result, nil

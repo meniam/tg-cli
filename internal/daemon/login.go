@@ -22,6 +22,8 @@ type loginEvent struct {
 }
 
 type loginFlow struct {
+	tg         Telegram
+	release    func()
 	ctx        context.Context
 	cancel     context.CancelFunc
 	events     chan loginEvent // buffered, holds only the latest event
@@ -50,7 +52,8 @@ func (f *loginFlow) emit(ev loginEvent) {
 // the code and the password through callbacks; the manager turns them into
 // the RPC steps auth.start, auth.code and auth.password.
 type loginManager struct {
-	onAuthorized func()
+	onAuthorized func() error
+	acquire      func(context.Context) (context.Context, Telegram, func(), error)
 	onUser       func(*rpc.User)
 	tg           Telegram
 	baseCtx      context.Context
@@ -78,33 +81,55 @@ func (m *loginManager) state() string {
 
 // begin checks that a login can start and registers a new flow.
 func (m *loginManager) begin(ctx context.Context) (*loginFlow, error) {
-	if err := m.waitReady(ctx); err != nil {
-		return nil, err
+	fctx, cancel := context.WithTimeout(m.baseCtx, loginTimeout)
+	client, release := m.tg, func() {}
+	if m.acquire != nil {
+		var err error
+		fctx, client, release, err = m.acquire(fctx)
+		if err != nil {
+			cancel()
+			return nil, err
+		}
 	}
-	user, err := m.tg.Self(ctx)
+	keep := false
+	defer func() {
+		if !keep {
+			release()
+			cancel()
+		}
+	}()
+	stop := context.AfterFunc(ctx, cancel)
+	defer stop()
+	select {
+	case <-client.Ready():
+	case <-fctx.Done():
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fctx.Err()
+	}
+	user, err := client.Self(fctx)
 	if err != nil {
 		return nil, err
 	}
 	if user != nil {
 		return nil, rpc.NewError(rpc.CodeLoginState, "already logged in")
 	}
-
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.flow != nil {
 		return nil, rpc.NewError(rpc.CodeLoginState, "a login is already in progress; cancel it first")
 	}
-	fctx, cancel := context.WithTimeout(m.baseCtx, loginTimeout)
 	f := &loginFlow{
-		ctx:        fctx,
-		cancel:     cancel,
-		events:     make(chan loginEvent, 1),
-		codeCh:     make(chan string),
-		passwordCh: make(chan string),
-		resendCh:   make(chan struct{}),
+		tg: client, release: release, ctx: fctx, cancel: cancel,
+		events: make(chan loginEvent, 1), codeCh: make(chan string),
+		passwordCh: make(chan string), resendCh: make(chan struct{}),
 	}
-	m.flow = f
-	m.done = nil
+	m.flow, m.done = f, nil
+	keep = true
 	return f, nil
 }
 
@@ -253,15 +278,6 @@ func (m *loginManager) cancel() bool {
 	return true
 }
 
-func (m *loginManager) waitReady(ctx context.Context) error {
-	select {
-	case <-m.tg.Ready():
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
 func (m *loginManager) wait(ctx context.Context, f *loginFlow) (rpc.AuthResult, error) {
 	select {
 	case ev := <-f.events:
@@ -312,7 +328,7 @@ func (m *loginManager) setState(f *loginFlow, state string, ev loginEvent) {
 
 // run executes the phone login and reports every state change as an event.
 func (m *loginManager) run(f *loginFlow, phone string) {
-	err := m.tg.Login(f.ctx, phone,
+	err := f.tg.Login(f.ctx, phone,
 		func(ctx context.Context, prompt rpc.CodePrompt) (string, bool, error) {
 			m.setState(f, rpc.AuthCodeRequired, loginEvent{state: rpc.AuthCodeRequired, prompt: prompt})
 			select {
@@ -330,7 +346,7 @@ func (m *loginManager) run(f *loginFlow, phone string) {
 
 // runQR executes the QR login and reports every new token as an event.
 func (m *loginManager) runQR(f *loginFlow) {
-	err := m.tg.LoginQR(f.ctx,
+	err := f.tg.LoginQR(f.ctx,
 		func(_ context.Context, token rpc.QRToken) error {
 			m.setState(f, rpc.AuthQRScan, loginEvent{state: rpc.AuthQRScan, qr: token})
 			return nil
@@ -348,7 +364,7 @@ func (m *loginManager) finish(f *loginFlow, err error) {
 	case err != nil:
 		ev = loginEvent{err: safeLoginError(err)}
 	default:
-		ev.user, ev.err = m.tg.Self(f.ctx)
+		ev.user, ev.err = f.tg.Self(f.ctx)
 		if ev.err != nil {
 			ev.err = safeLoginError(ev.err)
 		}
@@ -357,8 +373,13 @@ func (m *loginManager) finish(f *loginFlow, err error) {
 		}
 	}
 
+	if f.release != nil {
+		f.release()
+	}
 	if ev.err == nil && ev.user != nil && m.onAuthorized != nil {
-		m.onAuthorized()
+		if err := m.onAuthorized(); err != nil {
+			ev.err = safeLoginError(err)
+		}
 	}
 	m.mu.Lock()
 	if m.flow == f {

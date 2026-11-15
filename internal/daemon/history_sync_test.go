@@ -708,3 +708,27 @@ func TestHistorySyncFailedPageIsNotSaved(t *testing.T) {
 		t.Fatalf("failed page changed progress: found=%v err=%v", found, err)
 	}
 }
+
+func TestHistorySyncAdmissionDrainsAfterCancellation(t *testing.T) {
+	d, tg, _, _, _ := syncFixture(t)
+	d.opts.NewTelegram = func(context.Context, TelegramConfig) (Telegram, error) { return tg, nil }
+	d.admission.unblock(tg)
+	entered := make(chan struct{})
+	tg.page = func(ctx context.Context, _ chatref.Ref, _ int) (rpc.HistoryPage, error) {
+		close(entered)
+		<-ctx.Done()
+		return rpc.HistoryPage{}, ctx.Err()
+	}
+	startSync(t, d, 42)
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("history request did not start")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := d.admission.drain(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	awaitSyncState(t, d, 42, rpc.HistorySyncCancelled)
+}
