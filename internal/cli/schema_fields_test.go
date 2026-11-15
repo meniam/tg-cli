@@ -271,12 +271,13 @@ var uncoveredCommands = map[string]string{
 }
 
 // fixtureResponseCases cover commands whose daemon side effects are isolated by net.Pipe.
-var fixtureResponseCases = map[string]bool{"message download": true}
+var fixtureResponseCases = map[string]bool{"message download": true, "message export-month": true, "message export-verify": true}
 
 // TestEveryCommandResponseIsCompared makes sure the comparison covers the whole
 // command tree: a command that is neither exercised nor explained fails here.
 func TestEveryCommandResponseIsCompared(t *testing.T) {
 	t.Run("message download", TestDownloadResponseFixture)
+	t.Run("message export-month and verify", TestExportMonthCLI)
 	cases := map[string]bool{}
 	for path := range realResponseCases {
 		cases[path] = true
