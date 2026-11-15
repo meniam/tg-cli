@@ -49,7 +49,7 @@ tg chat list --limit 2 --format jsonl
 
 **Exit codes.** 0; 2 `--limit` below 0 or above 500, or an unknown `--type`; 3 no Daemon; 4 no login; 6 `FLOOD_WAIT` longer than the auto-wait.
 
-**Verification.** Unread message counts are returned in `unread`; unread messages and unread topics are unavailable. See [FEATURES.md](../../FEATURES.md), item 7.1.
+**Verification.** Unread message counts are returned in `unread`. Read the messages with [`message unread`](messages-read.md#tg-message-unread), including a forum topic with `--topic`; list unread chats with [`chat unread`](#tg-chat-unread). See [FEATURES.md](../../FEATURES.md), item 7.1.
 
 ### tg chat resolve
 
@@ -677,7 +677,7 @@ tg chat state --local --limit 20
 The result contains `states` and the Unix timestamp `synced_at`, or null when no snapshot exists. Each state has read markers, unread counts, pin and archive flags, notification settings and its own timestamp. An absent optional notification value is null. Exit codes: 0; 2 invalid arguments; 3 no Daemon; 4 no login for a Telegram read; 6 flood wait; 7 unknown or closed chat.
 ## Chat administration
 
-These commands require a running Daemon and a logged-in account. The owner must grant `write` for join and leave, `admin` for moderation and editing, and `create` for creation in `access.json`. Closed chats return not found. Use `--dry-run` to check an action without changing Telegram. The Daemon reads administrator rights for moderation previews. Leave, kick and ban require `--yes` unless `--dry-run` is used. Moderation intent is recorded before the Telegram request.
+These commands require a running Daemon and a logged-in account. The owner must grant `write` for join and leave, `admin` for moderation and editing, and `create` for creation in `access.json`. For example, `{"write":[-1001234567890],"admin":[-1001234567890],"create":true}` grants these permissions. See [access.md](access.md). Closed chats return not found. Use `--dry-run` to check an action without changing Telegram. The Daemon reads administrator rights for moderation previews. Leave, kick and ban require `--yes` unless `--dry-run` is used. Moderation intent is recorded before the Telegram request.
 
 The safety class is `account_write`; leave, kick and ban are dangerous. The output formats are `json`, `toon` and `human`. A preview of a kick can return:
 
@@ -716,7 +716,7 @@ tg chat leave <chat> --yes
 | `--yes` | bool | `false` | confirm the action |
 <!-- /schema:flags -->
 
-Example: `tg chat leave @example_group --dry-run`. The result contains `chat_id` and `left`.
+Example: `tg chat leave @example_group --yes`. The result contains `chat_id` and `left`.
 
 ### tg chat create
 
@@ -769,7 +769,7 @@ tg chat kick <chat> <user> --yes
 | `--yes` | bool | `false` | confirm the action |
 <!-- /schema:flags -->
 
-Example: `tg chat kick @example_group @example_user --dry-run`.
+Example: `tg chat kick @example_group @example_user --yes`. The result contains `chat_id`, `user_id` and `kicked`.
 
 ### tg chat ban
 
@@ -787,7 +787,7 @@ tg chat ban <chat> <user> --yes [--until TIME]
 | `--yes` | bool | `false` | confirm the action |
 <!-- /schema:flags -->
 
-Example: `tg chat ban @example_group @example_user --dry-run`.
+Example: `tg chat ban @example_group @example_user --yes`. The result contains `chat_id`, `user_id` and `banned`.
 
 ### tg chat unban
 
@@ -871,6 +871,10 @@ List unread chats in Telegram order without marking them read. `--archived` sele
 | `--limit` | int | `100` | maximum unread chats, 1 to 500 |
 <!-- /schema:flags -->
 
+**Safety class:** `read`. **Example:** `tg chat unread --limit 20`.
+
+Example response: `{"ok":true,"data":{"chats":[],"scanned":0,"complete":true}}`. The response contains `chats` (with IDs, titles, unread counts and read markers), `scanned` and `complete`. Exit codes: 0 success; 2 invalid arguments; 3 no Daemon; 4 no login; 5 Telegram error; 6 flood wait.
+
 ### tg chat changes
 
 Show locally stored chat versions, newest first. The daemon is required, but a Telegram login is not. `--limit` bounds previous versions. The current state is included separately.
@@ -880,3 +884,7 @@ Show locally stored chat versions, newest first. The daemon is required, but a T
 | --- | --- | --- | --- |
 | `--limit` | int | `20` | maximum versions, 1 to 100 |
 <!-- /schema:flags -->
+
+**Safety class:** `read`. **Example:** `tg chat changes @example_group --limit 10`.
+
+Example response: `{"ok":true,"data":{"chat_id":123,"current":{"type":"user","title":"Alice","username":null,"about":null,"settings":null},"versions":[]}}`. The response contains `chat_id`, `current` and `versions`; snapshots contain `type`, `title`, `username`, `about` and `settings`, and versions also contain `version` and `observed_at`. Exit codes: 0 success; 2 invalid arguments; 3 no Daemon; 7 unknown or closed chat.
