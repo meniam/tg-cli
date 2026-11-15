@@ -994,6 +994,44 @@ tg chat decline <chat> <user> [--dry-run]
 | `--dry-run` | bool | `false` | check without changing Telegram |
 <!-- /schema:flags -->
 
+### tg chat stats
+
+Read the statistics of a visible channel or supergroup. The command is read-only and does not require the chat in `admin`; Telegram decides whether the logged-in account can see statistics.
+
+```text
+tg chat stats <chat> [--graph <name>]
+```
+
+<!-- schema:flags tg chat stats -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--graph` | string | `none` | load a named statistics graph |
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+Without `--graph`, the result has `chat_id`, `kind` (`broadcast` or `megagroup`), `period` (`min_date`, `max_date`), and `graphs`. Each graph has `name` and `state`: `ready`, `async`, or `error`. Every metric below is an optional object with `current` and `previous` numbers. A broadcast can return `followers`, `views_per_post`, `shares_per_post`, `reactions_per_post`, `views_per_story`, `shares_per_story`, and `reactions_per_story`, plus optional `enabled_notifications_percent`. Its `recent_posts` entries have `kind` (`message` or `story`), `id`, `views`, `forwards`, and `reactions`. A megagroup can return `members`, `messages`, `viewers`, and `posters`; its optional `top_posters`, `top_admins`, and `top_inviters` entries have `user_id` and untrusted `name`. A top poster can also have `messages` and `avg_chars`; an admin can have `deleted`, `kicked`, and `banned`; an inviter can have `invitations`. People closed by the access lists are removed from the top lists.
+
+Pass a graph name from `graphs` to `--graph` to return only `chat_id`, `name`, and `data`. `data` is an untrusted JSON value from Telegram. An asynchronous graph is loaded before the answer. An unknown graph is exit code 2 and names the available values.
+
+Private chats and basic groups are exit code 2. Closed or unknown chats are exit code 7. Telegram refusals, including missing statistics access or an unavailable graph, are exit code 5. Metrics and graph data are not saved in the profile database. Visible people from the top lists are saved as people.
+
+### tg chat boosts
+
+Read the boost status of a visible channel or supergroup. The command is read-only and does not list the accounts that boosted the chat.
+
+```text
+tg chat boosts <chat>
+```
+
+<!-- schema:flags tg chat boosts -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+The result has `chat_id`, `level`, `current_level_boosts`, `boosts`, `boost_url`, and `my_boost`. When Telegram provides them, it also has `gift_boosts`, `next_level_boosts`, and `premium_audience_percent`. A private chat or basic group is exit code 2, a closed or unknown chat is exit code 7, and a Telegram refusal is exit code 5.
+
 ### tg chat set
 
 Change one or more settings in a visible channel or supergroup listed in `admin`. Settings are applied in order; errors can leave earlier changes in place. `--dry-run` checks administrator rights without writing.

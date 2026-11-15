@@ -49,28 +49,33 @@ type Options struct {
 const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
-	account             accountCache
-	authLostMu          sync.RWMutex
-	authLost            string
-	idempotencyLocks    keyLocks
-	opts                Options
-	log                 *slog.Logger
-	srv                 *rpc.Server
-	hub                 *rpc.Hub
-	login               *loginManager
-	store               *store.DB
-	sync                *historySyncManager
-	cancel              context.CancelFunc
-	once                sync.Once
-	eventMu             sync.Mutex
-	deletionsMu         sync.Mutex
-	contactsMu          sync.Mutex
-	inlineMu            sync.Mutex
-	inlineQueries       map[string]inlineQueryEntry
-	addEvent            func(context.Context, store.Event) (int64, bool, error)
-	findMessageChats    func(context.Context, []int) ([]int64, error)
-	markMessagesDeleted func(context.Context, int64, []int) (int, error)
-	openMediaFile       func([]string, string, int64) (*os.File, int64, error)
+	account              accountCache
+	authLostMu           sync.RWMutex
+	authLost             string
+	idempotencyLocks     keyLocks
+	transcriptionLocks   keyLocks
+	phoneLimit           phoneLimiter
+	phoneResolveMu       sync.Mutex
+	opts                 Options
+	log                  *slog.Logger
+	srv                  *rpc.Server
+	hub                  *rpc.Hub
+	login                *loginManager
+	store                *store.DB
+	sync                 *historySyncManager
+	cancel               context.CancelFunc
+	once                 sync.Once
+	eventMu              sync.Mutex
+	deletionsMu          sync.Mutex
+	contactsMu           sync.Mutex
+	inlineMu             sync.Mutex
+	transcriptionMu      sync.Mutex
+	transcriptionWaiters map[transcriptionKey]*transcriptionWaiter
+	inlineQueries        map[string]inlineQueryEntry
+	addEvent             func(context.Context, store.Event) (int64, bool, error)
+	findMessageChats     func(context.Context, []int) ([]int64, error)
+	markMessagesDeleted  func(context.Context, int64, []int) (int, error)
+	openMediaFile        func([]string, string, int64) (*os.File, int64, error)
 	// lastActivity is the Unix time of the last request that started or ended,
 	// in nanoseconds. A request is often shorter than the idle check, so the
 	// count of requests in flight alone would miss it.
@@ -188,6 +193,9 @@ func Run(ctx context.Context, opts Options) error {
 	d.register()
 	d.srv.SetEventSource(d.hub, d.replayEvents)
 	opts.Telegram.SetEventSink(d.handleEvent)
+	if client, ok := opts.Telegram.(transcriptionTelegram); ok {
+		client.SetTranscriptionSink(d.handleTranscription)
+	}
 	if _, err := d.store.PruneIdempotency(runCtx, time.Now()); err != nil {
 		d.log.Warn("idempotency cleanup failed")
 	}
@@ -313,10 +321,14 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodChatCommon, d.chatCommon)
 	d.handle(rpc.MethodChatResolve, d.chatResolve)
 	d.handle(rpc.MethodChatInfo, d.chatInfo)
+	d.handle(rpc.MethodChatStats, d.chatStats)
+	d.handle(rpc.MethodChatBoosts, d.chatBoosts)
 	d.handle(rpc.MethodChatInviteInfo, d.chatInviteInfo)
 	d.handle(rpc.MethodMessageHistory, d.messageHistory)
 	d.handle(rpc.MethodMessageGet, d.messageGet)
 	d.handle(rpc.MethodMessageReaders, d.messageReaders)
+	d.handle(rpc.MethodMessageTranscribe, d.messageTranscribe)
+	d.srv.SetMethodTimeout(rpc.MethodMessageTranscribe, 100*time.Second)
 	d.handle(rpc.MethodAccountProfile, d.accountProfile)
 	d.handle(rpc.MethodAccountPrivacyGet, d.accountPrivacyGet)
 	d.handle(rpc.MethodAccountPrivacySet, d.accountPrivacySet)

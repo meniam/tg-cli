@@ -4,7 +4,7 @@ Commands that read a user profile, manage the account's block list, and read or 
 
 ## Rules shared by these commands
 
-`<user>` accepts a username, a positive user id, a phone number of a known contact, or a public `t.me` link. Groups, channels, negative ids and private invite links are exit code 2. A user hidden by `access.json` is treated as unknown: exit code 7. A visible target for `user block`, `user unblock`, `contact add` or `contact delete` must also be in `write`; otherwise the command exits with code 9 before Telegram receives a write request. The owner alone changes `access.json`.
+`<user>` accepts a username, a positive user id, a phone number, or a public `t.me` link. Groups, channels, negative ids and private invite links are exit code 2. A user hidden by `access.json` is treated as unknown: exit code 7. A visible target for `user block`, `user unblock`, `contact add` or `contact delete` must also be in `write`; otherwise the command exits with code 9 before Telegram receives a write request. The owner alone changes `access.json`.
 
 `--dry-run` checks the reference, visibility and write permission, then calls no Telegram write method. Contact and profile reads save returned people locally. A non-local contact search or list needs a running Daemon and a login; `--local` reads the local database and needs no login.
 
@@ -24,7 +24,7 @@ No command flags.
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
-**Preconditions.** A running Daemon, a login and a visible user. The Daemon reads the full profile and saves the person locally.
+**Preconditions.** A running Daemon, a login and a visible user. The Daemon reads the full profile and saves the person locally. For a phone number absent from contacts and the peer cache, only this command calls `contacts.resolvePhone`; it does not add the person as a contact. The Daemon permits at most one such lookup per three seconds and 20 in a rolling 24 hours. The counter is in memory and resets when the Daemon restarts. A limit hit is exit code 6 with `error.retry_after_seconds`; Telegram does not receive that request.
 
 **Answer fields** (`data`): `id` integer, `type` (`user` or `bot`), `first_name`, `last_name`, `username`, `usernames`, `phone` (optional), `bio`, `is_contact`, `mutual_contact`, `blocked`, `verified`, `premium`, `scam`, `fake`, `deleted`, `status`, `last_seen` (only for `offline`) and `common_chats_count`. `status` is `online`, `offline`, `recently`, `last_week`, `last_month` or `hidden`.
 

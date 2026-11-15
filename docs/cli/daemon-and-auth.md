@@ -19,8 +19,8 @@ tg daemon start [flags]
 | `--device` | string | `none` | device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN) |
 | `--foreground` | bool | `false` | run the daemon in this terminal instead of the background |
 | `--idle-timeout` | duration | `0s` | stop the daemon after this long without a request, like 30m; 0 means never |
-| `--proxy` | string | `none` | SOCKS5 or Telegram proxy URL, or none (remembered for the profile) |
-| `--transport` | string | `none` | Telegram transport: tcp or wss (remembered for the profile) |
+| `--proxy` | string | `none` | SOCKS5, HTTP or Telegram proxy URL, or none (remembered for the profile) |
+| `--transport` | string | `none` | Telegram transport: tcp, wss or auto (remembered for the profile) |
 <!-- /schema:flags -->
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
@@ -35,7 +35,7 @@ tg daemon start [flags]
 
 Both sources together are exit code 2 (`use either --client or TG_API_ID and TG_API_HASH, not both`). No source at all is exit code 2 too. When a preset is used the command prints a warning on stderr (`--quiet` hides it): according to the opentele documentation, Telegram puts accounts of unofficial clients under observation, and the risk for this tool is not assessed. The credentials never go into the arguments of the background process, where `ps` would show them: the process reads them from its environment or the preset from the profile. Never print or log keys or hashes.
 
-**Network.** `--transport tcp|wss` selects the transport, TCP by default. `--proxy` accepts `socks5://[user:password@]host:port`, `tg://proxy?server=...&port=...&secret=...`, `https://t.me/proxy?...`, or `none` to clear it. WSS cannot be combined with MTProxy. A SOCKS5 proxy can be combined with either transport. `TG_CLI_PROXY` supplies the proxy; the flag takes precedence. The profile remembers both settings in `transport` and `proxy` (mode `0600`). A proxy passed on the command line may be visible in shell history and process listings; use the environment variable to avoid that. The background process reads the profile file rather than receiving the proxy in its arguments. HTTP proxy environment variables are not used for Telegram connections. A different setting for a running Daemon is rejected; stop it first. WSS media-only and CDN connections are not supported by the resolver.
+**Network.** `--transport tcp|wss|auto` selects the transport, TCP by default. `auto` is an explicit choice: it first tries TCP and, when that connection or transport handshake fails, tries WSS for the same DC. After a successful WSS connection it stays on WSS until the Daemon restarts. It does not switch merely because TCP has not become ready within ten seconds. `--proxy` accepts `socks5://[user:password@]host:port`, `http://[user:password@]host:port`, `tg://proxy?server=...&port=...&secret=...`, `https://t.me/proxy?...`, or `none` to clear it. HTTP proxies work only with WSS or auto and use HTTP CONNECT for WSS; auto with an HTTP proxy starts on WSS. HTTP Basic proxy credentials travel to the proxy without TLS. SOCKS5 works with TCP, WSS and both branches of auto. MTProxy cannot be combined with WSS or auto. `TG_CLI_PROXY` supplies the proxy; the flag takes precedence. The profile remembers both settings in `transport` and `proxy` (mode `0600`). A proxy passed on the command line may be visible in shell history and process listings; use the environment variable to avoid that. The background process reads the profile file rather than receiving the proxy in its arguments. HTTP proxy environment variables are not used for Telegram connections. A different setting for a running Daemon is rejected; stop it first. WSS media-only and CDN connections are not supported by the resolver.
 
 **Device name.** Telegram lists the session in its device list. The default name is `MacBook Pro M1 BRN`. `--device <name>` changes it, and the name is remembered for the profile in `<profile>/device`. The name must be 1 to 64 characters without control characters, otherwise exit code 2 (`the device name must be 1 to 64 characters`, `the device name must not contain control characters`).
 
@@ -94,16 +94,16 @@ tg daemon status
 **Answer.** A logged-in profile with the read filter on and one chat in `write`:
 
 ```json
-{"ok":true,"data":{"transport":"tcp","connection":"ready","dc":2,"reconnects":0,"profile":"default","pid":48213,"connected":true,"authorized":true,"user":{"id":123456789,"username":"me"},"active_requests":0,"access":{"enabled":true,"allow":1,"block":0,"write":1}}}
+{"ok":true,"data":{"transport":"auto","active_transport":"wss","transport_switches":1,"connection":"ready","dc":2,"reconnects":0,"profile":"default","pid":48213,"connected":true,"authorized":true,"user":{"id":123456789,"username":"me"},"active_requests":0,"access":{"enabled":true,"allow":1,"block":0,"write":1}}}
 ```
 
 A fresh profile without a login and without `access.json`:
 
 ```json
-{"ok":true,"data":{"transport":"tcp","connection":"connecting","reconnects":0,"profile":"default","pid":48213,"connected":false,"authorized":false,"active_requests":0}}
+{"ok":true,"data":{"transport":"tcp","transport_switches":0,"connection":"connecting","reconnects":0,"profile":"default","pid":48213,"connected":false,"authorized":false,"active_requests":0}}
 ```
 
-**Answer fields** (`data`): `transport` string, `proxy` string (optional, without credentials), `connection` string, `dc` integer (optional), `reconnects` integer, `profile` string, `pid` integer, `connected` boolean, `authorized` boolean, `user` object (optional), `user.id` integer (optional), `user.username` string (optional), `user.first_name` string (optional), `user.last_name` string (optional), `login_state` string (optional), `auth_lost` string (optional), `active_requests` integer, `access` object (optional), `access.enabled` boolean (optional), `access.allow` integer (optional), `access.block` integer (optional), `access.write` integer (optional), `access.closed` boolean (optional).
+**Answer fields** (`data`): `transport` string, `active_transport` string (optional, `tcp` or `wss` after a connection), `transport_switches` integer, `proxy` string (optional, without credentials), `connection` string, `dc` integer (optional), `reconnects` integer, `profile` string, `pid` integer, `connected` boolean, `authorized` boolean, `user` object (optional), `user.id` integer (optional), `user.username` string (optional), `user.first_name` string (optional), `user.last_name` string (optional), `login_state` string (optional), `auth_lost` string (optional), `active_requests` integer, `access` object (optional), `access.enabled` boolean (optional), `access.allow` integer (optional), `access.block` integer (optional), `access.write` integer (optional), `access.closed` boolean (optional).
 
 `connection` is `connecting`, `ready` or `disconnected`; `connected` is true when it is `ready`. While offline, the last cached account is shown without a Telegram request. A Telegram request waits up to 15 seconds for a connection and then returns exit code 10 (`offline`). Local operations remain available.
 

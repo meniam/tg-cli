@@ -7,7 +7,7 @@ import (
 )
 
 func TestProxyParsingAndRedaction(t *testing.T) {
-	for _, input := range []string{"socks5://alice:marker@proxy.example:1080", "tg://proxy?server=example.org&port=443&secret=dddddddddddddddddddddddddddddddddd", "https://t.me/proxy?server=example.org&port=443&secret=EREREREREREREREREREREQ"} {
+	for _, input := range []string{"socks5://alice:marker@proxy.example:1080", "http://alice:marker@proxy.example:8080", "tg://proxy?server=example.org&port=443&secret=dddddddddddddddddddddddddddddddddd", "https://t.me/proxy?server=example.org&port=443&secret=EREREREREREREREREREREQ"} {
 		p, err := ParseProxy(input)
 		if err != nil {
 			t.Fatal(err)
@@ -19,7 +19,7 @@ func TestProxyParsingAndRedaction(t *testing.T) {
 			}
 		}
 	}
-	for _, input := range []string{"socks5://x:0", "socks5://x:65536", "socks4://x:80", "http://x:80", "socks5://:3", "tg://proxy?server=x&port=3&secret=marker"} {
+	for _, input := range []string{"socks5://x:0", "socks5://x:65536", "socks4://x:80", "socks5://:3", "tg://proxy?server=x&port=3&secret=marker"} {
 		if _, err := ParseProxy(input); err == nil {
 			t.Fatalf("accepted %s", input)
 		} else if strings.Contains(err.Error(), "marker") {
@@ -32,5 +32,18 @@ func TestProxyParsingAndRedaction(t *testing.T) {
 	}
 	if err = (Settings{Transport: WSS, Proxy: p}).Validate(); err == nil {
 		t.Fatal("accepted wss with MTProxy")
+	}
+	httpProxy, err := ParseProxy("http://alice:marker@proxy.example:8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := (Settings{Transport: TCP, Proxy: httpProxy}).Validate(); err == nil {
+		t.Fatal("accepted HTTP proxy with TCP")
+	}
+	if err := (Settings{Transport: WSS, Proxy: httpProxy}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if got := httpProxy.Redacted(); got != "http://proxy.example:8080" {
+		t.Fatalf("redacted proxy = %q", got)
 	}
 }

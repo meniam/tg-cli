@@ -36,6 +36,18 @@ func newConnection(s netconf.Settings) *connectionState {
 	}
 	return &connectionState{info: rpc.ConnectionInfo{Transport: transport, Proxy: s.Proxy.Redacted(), Connection: "connecting"}, changed: make(chan struct{}), catchup: make(chan struct{}, 1)}
 }
+func (s *connectionState) activeTransport(value string, switched bool) {
+	s.mu.Lock()
+	s.info.ActiveTransport = value
+	if switched {
+		s.info.TransportSwitches++
+	}
+	info, notify := s.info, s.notify
+	s.mu.Unlock()
+	if notify != nil {
+		notify(info)
+	}
+}
 func (s *connectionState) update(e telegram.ConnectionStateEvent) {
 	s.mu.Lock()
 	old := s.info.Connection
@@ -43,6 +55,14 @@ func (s *connectionState) update(e telegram.ConnectionStateEvent) {
 	s.info.Connection = state
 	if state == "ready" {
 		s.info.DC = e.DC
+		if s.info.ActiveTransport == "" {
+			switch s.info.Transport {
+			case "tcp", "mtproxy":
+				s.info.ActiveTransport = "tcp"
+			case "wss":
+				s.info.ActiveTransport = "wss"
+			}
+		}
 		s.hadReady = true
 		if s.disconnected && s.started && !s.catchupPending {
 			s.catchupPending = true

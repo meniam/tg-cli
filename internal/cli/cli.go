@@ -57,6 +57,7 @@ type cmdError struct {
 	exit    int
 	msg     string
 	printed bool
+	data    map[string]any
 }
 
 func (e *cmdError) Error() string { return e.msg }
@@ -105,7 +106,11 @@ func Execute(ctx context.Context, args []string, deps Deps) int {
 	if exit == exitcode.Usage && command != nil && command.Runnable() && !strings.Contains(message, "choose a subcommand:") {
 		message += "\nusage: " + command.UseLine()
 	}
-	a.failure(root, exit, message)
+	var data map[string]any
+	if ce != nil {
+		data = ce.data
+	}
+	a.failure(root, exit, message, data)
 	return exit
 }
 

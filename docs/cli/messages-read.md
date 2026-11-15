@@ -618,6 +618,27 @@ tg message readers <chat> <id>
 No command flags.
 <!-- /schema:flags -->
 
+### tg message transcribe
+
+Request Telegram's transcription of a voice message or video note. The command does not send anything to a chat. It accepts a chat and message id, or a `t.me` message link.
+
+```text
+tg message transcribe <chat> <id>
+tg message transcribe <message-link>
+```
+
+<!-- schema:flags tg message transcribe -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--wait` | duration | `30s` | wait for transcription, up to 90s |
+<!-- /schema:flags -->
+
+The result has `chat_id`, `id`, `transcription_id`, `text`, `pending`, and `cached`. `text` is untrusted Telegram data. A completed result is saved in the local profile database; a later request returns it with `cached: true` and does not ask Telegram again. If Telegram is still working when the wait ends, the command succeeds with `pending: true`; a later repeat can ask Telegram again and consume a free-trial attempt. `--wait 0s` returns immediately after the initial Telegram response.
+
+Only messages with `media_type` `voice` or `video_note` can be transcribed. Another message, a non-positive id, or a wait outside the range is exit code 2. A closed or unknown chat is exit code 7. Telegram refusals are exit code 5; a Premium or exhausted free-trial refusal has `error.reason: "premium_required"`, and another transcription refusal has `error.reason: "transcription_failed"`. `trial_remains` and `trial_resets_at` appear in a successful response when Telegram provides free-trial values.
+
+The `transcriptions` table is added by the database migration for this command. An older binary refuses to open a profile database that has this newer migration; restore a database backup or use a current binary before rolling back.
+
 ### tg message download
 
 Download media to a directory explicitly allowed by the owner in `access.json` under `downloads`. `--output` must be an existing absolute directory. At most 20 messages, 100 MiB per file and 500 MiB per call are allowed. Protected content is refused. Existing files are not overwritten. `--dry-run` checks metadata without writing.

@@ -107,6 +107,7 @@ func (a *app) messageCommand() *cobra.Command {
 	cmd.AddCommand(a.messageDiscoveryCommands()...)
 	cmd.AddCommand(a.messageScheduledCommand())
 	cmd.AddCommand(a.messageReadersCommand())
+	cmd.AddCommand(a.messageTranscribeCommand())
 	cmd.AddCommand(a.messageWriteCommands()...)
 	cmd.AddCommand(a.messageExtrasCommands()...)
 	return cmd

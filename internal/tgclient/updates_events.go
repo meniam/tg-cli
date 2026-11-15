@@ -158,6 +158,10 @@ func (c *Client) gapEvent(channelID int64, reason string) {
 
 func (c *Client) updateDispatcher() tg.UpdateDispatcher {
 	d := tg.NewUpdateDispatcher()
+	d.OnTranscribedAudio(func(_ context.Context, _ tg.Entities, u *tg.UpdateTranscribedAudio) error {
+		c.transcribedAudio(u)
+		return nil
+	})
 	d.OnAnyNewMessage(func(_ context.Context, e tg.Entities, m tg.MessageClass) error {
 		return c.messageEvent(rpc.EventMessageNew, e, m)
 	})
