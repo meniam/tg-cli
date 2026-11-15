@@ -138,6 +138,7 @@ func TestThrottleRequestClasses(t *testing.T) {
 	}{
 		{"send message user", &tg.MessagesSendMessageRequest{Peer: user}, throttle.PrivateSend, "user:42"},
 		{"send media self", &tg.MessagesSendMediaRequest{Peer: &tg.InputPeerSelf{}}, throttle.PrivateSend, "self"},
+		{"send inline user", &tg.MessagesSendInlineBotResultRequest{Peer: user}, throttle.PrivateSend, "user:42"},
 		{"send album chat", &tg.MessagesSendMultiMediaRequest{Peer: &tg.InputPeerChat{ChatID: 51}}, throttle.GroupSend, "chat:51"},
 		{"forward destination", &tg.MessagesForwardMessagesRequest{FromPeer: user, ToPeer: channel}, throttle.GroupSend, "channel:53"},
 		{"user from message", &tg.MessagesSendMessageRequest{Peer: &tg.InputPeerUserFromMessage{UserID: 42}}, throttle.PrivateSend, "user:42"},
@@ -269,6 +270,9 @@ func TestThrottleWriteFloodNeverRetries(t *testing.T) {
 		request bin.Encoder
 	}{
 		{"edit", &tg.MessagesEditMessageRequest{Peer: &tg.InputPeerUser{UserID: 1}, ID: 3}},
+		{"callback", &tg.MessagesGetBotCallbackAnswerRequest{}},
+		{"send inline", &tg.MessagesSendInlineBotResultRequest{}},
+		{"history ttl", &tg.MessagesSetHistoryTTLRequest{}},
 		{"send media", &tg.MessagesSendMediaRequest{Peer: &tg.InputPeerUser{UserID: 1}}},
 		{"send album", &tg.MessagesSendMultiMediaRequest{Peer: &tg.InputPeerUser{UserID: 1}}},
 		{"delete", &tg.MessagesDeleteMessagesRequest{ID: []int{3}}},

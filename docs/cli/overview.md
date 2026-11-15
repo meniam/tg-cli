@@ -9,6 +9,7 @@ This page covers what every command shares: installation, profiles, the Daemon l
 | [daemon-and-auth.md](daemon-and-auth.md) | `daemon start`, `status`, `stop`, `logs`; `auth login`, `status`, `resend`, `cancel` |
 | [chats.md](chats.md) | `chat` reads, unread, changes, state, drafts, typing, administration and `sync` |
 | [messages-read.md](messages-read.md) | `message history`, `get`, `pinned`, `search`, `context`, `comments`, `link`, `export`, `watch` |
+| [buttons-stickers-auto-delete.md](buttons-stickers-auto-delete.md) | `message buttons`, `press`, `inline-query`, `send-inline`, `edit-media`, `send-sticker`, `sticker search`, `set`, `installed`, `chat auto-delete` |
 | [messages-write.md](messages-write.md) | `message send`, `edit`, `delete`, `forward`, `send-media`, `react`, `pin`, `unpin`, `poll`, text formatting |
 | [users-and-contacts.md](users-and-contacts.md) | `user profile`, `block`, `unblock`; `contact list`, `add`, `delete`, `search` |
 | [folders-and-account.md](folders-and-account.md) | `folder list`; `account sessions`, `blocked`, `notify` |

@@ -386,3 +386,13 @@ func TestSendMediaStorageFailureOnlyLogs(t *testing.T) {
 		t.Fatalf("storage failure changed Telegram result: result=%+v err=%v journal=%s", result, err, journal.String())
 	}
 }
+
+func TestSendMediaSelfDestructRejectsGroupBeforeOpening(t *testing.T) {
+	c := newMediaCase(t)
+	c.p.As = "photo"
+	c.p.SelfDestruct = "view-once"
+	_, err := c.d.messageSendMedia(context.Background(), params(t, c.p))
+	if writeCode(t, err) != rpc.CodeInvalidParams || len(c.opened) != 0 || c.tg.calls != 0 {
+		t.Fatalf("group: err=%v opened=%d writes=%d", err, len(c.opened), c.tg.calls)
+	}
+}

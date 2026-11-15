@@ -25,6 +25,12 @@ func withIdempotencyKey(cmd *cobra.Command, params any) (any, error) {
 	case rpc.SendMediaParams:
 		p.IdempotencyKey = key
 		return p, nil
+	case rpc.SendStickerParams:
+		p.IdempotencyKey = key
+		return p, nil
+	case rpc.SendInlineParams:
+		p.IdempotencyKey = key
+		return p, nil
 	case rpc.ForwardParams:
 		p.IdempotencyKey = key
 		return p, nil

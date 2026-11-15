@@ -367,6 +367,10 @@ tg message watch --after <cursor>                       # продолжить �
 
 `just build` собирает бинарь в `dist/tg`. Положи его в `PATH` под именем `tg`. Если рядом стоит старый npm `tg` (`@miolamio/tg-cli`, gramjs), это другая утилита с другим контрактом: проверь, какая из них отвечает на `tg version` (у этой есть поле `revision`).
 
+### Кнопки и медиа
+
+Сначала `message buttons`, затем `message press --dry-run`, затем по явной просьбе `--yes`. Выбирай точную подпись; `answered: false` после тайм-аута не повод повторять нажатие. `inline-query` раскрывает запрос боту; `send-inline` принимает результат этого Daemon для того же чата. `edit-media` и `chat auto-delete` требуют `--yes` либо `--dry-run`; выключить таймер можно через `--period off`. Все записи требуют чат в `write`.
+
 Медиа: владелец задаёт каталоги `downloads` в `access.json`; затем
 `tg message download <чат> <id> --output /абсолютный/каталог`. Защищённое
 медиа не скачивается. Для выгрузки сообщений запусти `chat sync start`, дождись
