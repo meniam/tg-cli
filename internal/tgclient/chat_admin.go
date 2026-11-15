@@ -431,11 +431,11 @@ func ownAdminRights(ctx context.Context, api *tg.Client, p peers.Peer) (rpc.Chat
 		switch v := raw.(type) {
 		case *tg.Chat:
 			if int64(-v.ID) == int64(p.TDLibPeerID()) {
-				return rpc.ChatOwnAdminRights{Creator: v.Creator, ChangeInfo: v.AdminRights.ChangeInfo, BanUsers: v.AdminRights.BanUsers}, nil
+				return rpc.ChatOwnAdminRights{Creator: v.Creator, ChangeInfo: v.AdminRights.ChangeInfo, BanUsers: v.AdminRights.BanUsers, InviteUsers: v.AdminRights.InviteUsers}, nil
 			}
 		case *tg.Channel:
 			if -channelIDBase-v.ID == int64(p.TDLibPeerID()) {
-				return rpc.ChatOwnAdminRights{Creator: v.Creator, ChangeInfo: v.AdminRights.ChangeInfo, BanUsers: v.AdminRights.BanUsers}, nil
+				return rpc.ChatOwnAdminRights{Creator: v.Creator, ChangeInfo: v.AdminRights.ChangeInfo, BanUsers: v.AdminRights.BanUsers, InviteUsers: v.AdminRights.InviteUsers}, nil
 			}
 		}
 	}

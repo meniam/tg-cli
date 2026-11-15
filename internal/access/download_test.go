@@ -18,11 +18,11 @@ func TestDownloadsPolicy(t *testing.T) {
 }
 
 func TestDownloadsWithOtherPolicyFields(t *testing.T) {
-	p, err := parse([]byte(`{"allow":[42],"block":[43],"write":[42],"admin":[42],"create":true,"files":["/tmp/source"],"downloads":["/tmp/target"]}`))
+	p, err := parse([]byte(`{"allow":[42],"block":[43],"write":[42],"admin":[42],"create":true,"profile":true,"files":["/tmp/source"],"downloads":["/tmp/target"]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.DownloadsAllowed() || !p.FilesAllowed() || !p.Allowed(42) || !p.WriteAllowed(42) || p.Allowed(43) {
+	if !p.DownloadsAllowed() || !p.FilesAllowed() || !p.ProfileAllowed() || !p.CreateAllowed() || !p.AdminAllowed(42) || !p.Allowed(42) || !p.WriteAllowed(42) || p.Allowed(43) {
 		t.Fatalf("policy=%+v", p)
 	}
 	roots := p.DownloadRoots()

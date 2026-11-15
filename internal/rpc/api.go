@@ -117,6 +117,7 @@ type AccessStatus struct {
 	Write   int  `json:"write,omitempty"`
 	Admin   int  `json:"admin,omitempty"`
 	Create  bool `json:"create,omitempty"`
+	Profile bool `json:"profile,omitempty"`
 	Closed  bool `json:"closed,omitempty"`
 }
 
