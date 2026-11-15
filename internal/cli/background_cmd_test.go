@@ -49,7 +49,7 @@ func backgroundEnv(t *testing.T) (*testEnv, *fakeLauncher) {
 // carry no credential, because `ps` shows them to every user.
 func TestDaemonStartInBackground(t *testing.T) {
 	e, f := backgroundEnv(t)
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestDaemonStartInBackground(t *testing.T) {
 // its journal, not a silent success.
 func TestDaemonStartReportsAnEarlyExit(t *testing.T) {
 	e, f := backgroundEnv(t)
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestDaemonStartTwiceKeepsOneClient(t *testing.T) {
 func TestDaemonStartReportsLiveProfileWithoutCredentials(t *testing.T) {
 	e, f := backgroundEnv(t)
 	e.startDaemon()
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestProxySecretDoesNotReachBackgroundOutputs(t *testing.T) {
 	e, f := backgroundEnv(t)
 	secret := "unique-test-proxy-secret"
 	e.env["TG_CLI_PROXY"] = "socks5://user:" + secret + "@proxy.example:1080"
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}

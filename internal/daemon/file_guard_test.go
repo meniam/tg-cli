@@ -31,7 +31,7 @@ func TestFileNameGuard(t *testing.T) {
 			case "session":
 				files.Session = tc.newName
 			}
-			p, err := ResolvePaths(home, "test", files)
+			p, err := ResolvePaths(home, dbRoot(t), "test", files)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -59,7 +59,7 @@ func TestFileNameGuardWarnings(t *testing.T) {
 	files := DefaultFileNames()
 	files.Log = "other.log"
 	files.Deletions = "other.jsonl"
-	p, err := ResolvePaths(home, "test", files)
+	p, err := ResolvePaths(home, dbRoot(t), "test", files)
 	if err != nil {
 		t.Fatal(err)
 	}

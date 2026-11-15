@@ -122,7 +122,7 @@ var realResponseCases = map[string][]string{
 func realResponses(t *testing.T) map[string][]byte {
 	t.Helper()
 	e := loggedInEnv(t)
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}

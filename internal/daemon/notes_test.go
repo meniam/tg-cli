@@ -264,11 +264,14 @@ func TestNoteRPCValidationSearchAndSecrets(t *testing.T) {
 }
 
 func TestRunDatabaseFailureBeforeSocket(t *testing.T) {
-	paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
+	paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(paths.Dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(paths.Database, 0700); err != nil {
@@ -290,7 +293,7 @@ func TestRunStoreOwnershipBeforeListening(t *testing.T) {
 			name = "injected"
 		}
 		t.Run(name, func(t *testing.T) {
-			paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
+			paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -298,6 +301,11 @@ func TestRunStoreOwnershipBeforeListening(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := os.WriteFile(filepath.Join(paths.Socket, "keep"), []byte("x"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			// Run does not create the database directory yet: the step that moves
+			// the database owns it. Create it here, as a start would find it.
+			if err := os.MkdirAll(paths.DatabaseDir, 0700); err != nil {
 				t.Fatal(err)
 			}
 			opts := Options{Profile: "test", Paths: paths, Telegram: newFake()}

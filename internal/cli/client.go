@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -26,7 +27,10 @@ func (a *app) profile(cmd *cobra.Command) (string, daemon.Paths, error) {
 		home = a.config.Home
 	}
 	files := a.config.Files
-	paths, err := daemon.ResolvePaths(home, profile, daemon.FileNames{Database: files.Database, Session: files.Session, Log: files.Log, Deletions: files.Deletions, Access: files.Access})
+	// The database root sits next to the configuration file: the history does
+	// not move with home or TG_CLI_HOME.
+	dbRoot := filepath.Join(filepath.Dir(a.deps.ConfigPath), "db")
+	paths, err := daemon.ResolvePaths(home, dbRoot, profile, daemon.FileNames{Database: files.Database, Session: files.Session, Log: files.Log, Deletions: files.Deletions, Access: files.Access})
 	if err != nil {
 		return "", daemon.Paths{}, fail(exitcode.Usage, "%v", err)
 	}

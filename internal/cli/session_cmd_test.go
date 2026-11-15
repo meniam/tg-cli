@@ -19,7 +19,7 @@ import (
 
 func TestSessionTransferOffline(t *testing.T) {
 	e := newEnv(t)
-	p, err := daemon.ResolvePaths(e.home, "default", daemon.DefaultFileNames())
+	p, err := daemon.ResolvePaths(e.home, e.dbRoot(), "default", daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestSessionTransferOffline(t *testing.T) {
 
 func TestImportPresetFailureDoesNotReplaceSession(t *testing.T) {
 	e := newEnv(t)
-	p, err := daemon.ResolvePaths(e.home, "default", daemon.DefaultFileNames())
+	p, err := daemon.ResolvePaths(e.home, e.dbRoot(), "default", daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestConcurrentSessionImports(t *testing.T) {
 
 func TestSessionImportRejectsLockedAndCorruptProfile(t *testing.T) {
 	e := newEnv(t)
-	p, err := daemon.ResolvePaths(e.home, "default", daemon.DefaultFileNames())
+	p, err := daemon.ResolvePaths(e.home, e.dbRoot(), "default", daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}

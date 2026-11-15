@@ -333,6 +333,13 @@ func shortTempDir(t *testing.T) string {
 	return dir
 }
 
+// dbRoot returns the database root of a test, inside its own temporary
+// directory. It never points at a real configuration directory.
+func dbRoot(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "db")
+}
+
 type safeBuffer struct {
 	mu sync.Mutex
 	b  bytes.Buffer
@@ -362,8 +369,13 @@ type running struct {
 
 func start(t *testing.T, tg Telegram, home string) *running {
 	t.Helper()
-	paths, err := ResolvePaths(home, "test", DefaultFileNames())
+	paths, err := ResolvePaths(home, dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
+		t.Fatal(err)
+	}
+	// Run does not create the database directory yet: the step that moves the
+	// database owns it. Create it here, as a start will find it.
+	if err := os.MkdirAll(paths.DatabaseDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	logs := &safeBuffer{}
@@ -424,27 +436,33 @@ func rpcCode(t *testing.T, err error) int {
 }
 
 func TestResolvePaths(t *testing.T) {
-	p, err := ResolvePaths("/h", "work", DefaultFileNames())
+	p, err := ResolvePaths("/h", "/c/db", "work", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Dir != "/h/work" || p.Socket != "/h/work/daemon.sock" || p.Lock != "/h/work/daemon.lock" || p.Session != "/h/work/session.json" || p.Database != "/h/work/store.db" || p.Deletions != "/h/work/deletions.jsonl" {
-		t.Errorf("unexpected paths %+v", p)
+	if p.Dir != "/h/work" || p.Socket != "/h/work/daemon.sock" || p.Lock != "/h/work/daemon.lock" || p.Session != "/h/work/session.json" || p.Access != "/h/work/access.json" || p.Deletions != "/h/work/deletions.jsonl" || p.Log != "/h/work/daemon.log" {
+		t.Errorf("unexpected data paths %+v", p)
+	}
+	if p.DatabaseDir != "/c/db/work" || p.Database != "/c/db/work/store.db" || p.LegacyDatabase != "/h/work/store.db" {
+		t.Errorf("unexpected database paths %+v", p)
 	}
 	for _, bad := range []string{"", "Work", "../x", "a/b", "-a", strings.Repeat("a", 33)} {
-		if _, err := ResolvePaths("/h", bad, DefaultFileNames()); err == nil {
+		if _, err := ResolvePaths("/h", "/c/db", bad, DefaultFileNames()); err == nil {
 			t.Errorf("profile %q must be rejected", bad)
 		}
 	}
-	if _, err := ResolvePaths("/"+strings.Repeat("d", MaxSocketPath), "p", DefaultFileNames()); err == nil || !strings.Contains(err.Error(), "set home in config.toml or TG_CLI_HOME to a shorter directory") {
+	if _, err := ResolvePaths("/h", "", "work", DefaultFileNames()); err == nil || !strings.Contains(err.Error(), "database directory is empty") {
+		t.Errorf("an empty database root must be rejected: %v", err)
+	}
+	if _, err := ResolvePaths("/"+strings.Repeat("d", MaxSocketPath), "/c/db", "p", DefaultFileNames()); err == nil || !strings.Contains(err.Error(), "set home in config.toml or TG_CLI_HOME to a shorter directory") {
 		t.Errorf("unexpected socket path error: %v", err)
 	}
 	files := FileNames{Database: "tg.db", Session: "key.json", Log: "app.log", Deletions: "deleted.log", Access: "acl.json"}
-	p, err = ResolvePaths("/h", "work", files)
+	p, err = ResolvePaths("/h", "/c/db", "work", files)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Database != "/h/work/tg.db" || p.Session != "/h/work/key.json" || p.Log != "/h/work/app.log" || p.Deletions != "/h/work/deleted.log" || p.Access != "/h/work/acl.json" {
+	if p.Database != "/c/db/work/tg.db" || p.LegacyDatabase != "/h/work/tg.db" || p.Session != "/h/work/key.json" || p.Log != "/h/work/app.log" || p.Deletions != "/h/work/deleted.log" || p.Access != "/h/work/acl.json" {
 		t.Errorf("unexpected custom paths %+v", p)
 	}
 }
@@ -521,7 +539,7 @@ func TestSecondDaemonOnSameProfileIsRefused(t *testing.T) {
 
 func TestStaleSocketIsReplaced(t *testing.T) {
 	home := shortTempDir(t)
-	paths, err := ResolvePaths(home, "test", DefaultFileNames())
+	paths, err := ResolvePaths(home, dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}

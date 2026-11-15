@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 
 	"github.com/spf13/cobra"
@@ -74,8 +75,10 @@ func (a *app) configShow(cmd *cobra.Command, _ []string) error {
 	sort.Strings(names)
 	files := a.config.Files
 	fileNames := daemon.FileNames{Database: files.Database, Session: files.Session, Log: files.Log, Deletions: files.Deletions, Access: files.Access}
+	// The database root sits next to the configuration file.
+	dbRoot := filepath.Join(filepath.Dir(a.deps.ConfigPath), "db")
 	for _, name := range names {
-		if _, err := daemon.ResolvePaths(home, name, fileNames); err != nil {
+		if _, err := daemon.ResolvePaths(home, dbRoot, name, fileNames); err != nil {
 			return fail(exitcode.Usage, "%v", err)
 		}
 	}
