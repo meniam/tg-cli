@@ -87,6 +87,8 @@ func translate(err error) error {
 
 func exitForRPC(e *rpc.Error) int {
 	switch e.Code {
+	case rpc.CodeOffline:
+		return exitcode.Offline
 	case rpc.CodeNotAuthorized:
 		return exitcode.NotAuthorized
 	case rpc.CodeFloodWait:

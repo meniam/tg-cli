@@ -132,6 +132,9 @@ func (c *Client) preloadDialogs(ctx context.Context) bool {
 // toChatOf converts a resolved peer.
 func toChatOf(p peers.Peer) rpc.Chat {
 	chat := rpc.Chat{ID: int64(p.TDLibPeerID()), Title: p.VisibleName()}
+	if user, ok := p.(peers.User); ok {
+		chat.Title = displayName(user.Raw())
+	}
 	chat.Username, _ = p.Username()
 	chat.Type = peerType(p)
 	return chat
@@ -179,6 +182,7 @@ func (c *Client) ChatInfo(ctx context.Context, ref chatref.Ref) (rpc.ChatInfo, e
 			return rpc.ChatInfo{}, mapInfoError(err)
 		} else {
 			info.About, _ = full.GetAbout()
+			info.Settings = userSettings(full)
 		}
 	case peers.Chat:
 		info.Members = v.ParticipantsCount()
@@ -186,6 +190,7 @@ func (c *Client) ChatInfo(ctx context.Context, ref chatref.Ref) (rpc.ChatInfo, e
 			return rpc.ChatInfo{}, mapInfoError(err)
 		} else {
 			info.About = full.About
+			info.Settings = groupSettings(v.Raw(), full)
 		}
 	case peers.Channel:
 		info.Members = v.ParticipantsCount()
@@ -194,6 +199,7 @@ func (c *Client) ChatInfo(ctx context.Context, ref chatref.Ref) (rpc.ChatInfo, e
 			return rpc.ChatInfo{}, mapInfoError(err)
 		} else {
 			info.About = full.About
+			info.Settings = channelSettings(v.Raw(), full)
 			if info.Members == 0 {
 				info.Members, _ = full.GetParticipantsCount()
 			}

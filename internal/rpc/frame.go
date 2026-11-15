@@ -17,29 +17,47 @@ const MaxFrameSize = 1 << 20
 var ErrFrameTooLarge = errors.New("rpc: frame exceeds 1 MiB")
 
 type frameReader struct {
-	sc *bufio.Scanner
+	r *bufio.Reader
 }
 
 func newFrameReader(r io.Reader) *frameReader {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64*1024), MaxFrameSize)
-	return &frameReader{sc: sc}
+	return &frameReader{r: bufio.NewReaderSize(r, 4*1024)}
 }
 
 // next returns the next non-empty line. The slice is valid until the next call.
 func (f *frameReader) next() ([]byte, error) {
-	for f.sc.Scan() {
-		if line := f.sc.Bytes(); len(line) > 0 {
-			return line, nil
+	for {
+		var line []byte
+		for {
+			part, err := f.r.ReadSlice('\n')
+			if len(line)+len(part) > MaxFrameSize+1 {
+				return nil, ErrFrameTooLarge
+			}
+			line = append(line, part...)
+			if errors.Is(err, bufio.ErrBufferFull) {
+				continue
+			}
+			if err != nil && !errors.Is(err, io.EOF) {
+				return nil, err
+			}
+			if len(line) > 0 && line[len(line)-1] == '\n' {
+				line = line[:len(line)-1]
+			}
+			if len(line) > MaxFrameSize {
+				return nil, ErrFrameTooLarge
+			}
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
+			if len(line) > 0 {
+				return line, nil
+			}
+			if errors.Is(err, io.EOF) {
+				return nil, io.EOF
+			}
+			break
 		}
 	}
-	if err := f.sc.Err(); err != nil {
-		if errors.Is(err, bufio.ErrTooLong) {
-			return nil, ErrFrameTooLarge
-		}
-		return nil, err
-	}
-	return nil, io.EOF
 }
 
 type frameWriter struct {

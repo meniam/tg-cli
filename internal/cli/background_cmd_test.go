@@ -176,3 +176,33 @@ func TestDaemonStopConfirmsTheProcessIsGone(t *testing.T) {
 	}
 	wantFailure(t, e.run("daemon", "stop"), exitcode.DaemonNotRunning)
 }
+
+func TestProxySecretDoesNotReachBackgroundOutputs(t *testing.T) {
+	e, f := backgroundEnv(t)
+	secret := "unique-test-proxy-secret"
+	e.env["TG_CLI_PROXY"] = "socks5://user:" + secret + "@proxy.example:1080"
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.onLaunch = func() {
+		if err := os.WriteFile(paths.Log, []byte("startup failed\n"), 0600); err != nil {
+			t.Error(err)
+		}
+		f.exited <- nil
+	}
+	result := e.run("--verbose", "daemon", "start")
+	wantFailure(t, result, exitcode.Failure)
+	for _, part := range append(append([]string{}, f.args...), result.stdout, result.stderr) {
+		if strings.Contains(part, secret) || strings.Contains(part, "--proxy") {
+			t.Fatalf("proxy secret or flag reached output or child arguments: %q", part)
+		}
+	}
+	data, err := os.ReadFile(paths.Proxy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), secret) {
+		t.Fatal("proxy was not persisted")
+	}
+}

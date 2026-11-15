@@ -98,7 +98,7 @@ func (d *daemon) saveChatInfo(ctx context.Context, info rpc.ChatInfo) {
 	item := store.Chat{
 		ID: info.ID, Type: info.Type, Title: info.Title, Username: optionalText(info.Username),
 		About: optionalText(info.About), Members: positiveIntPointer(info.Members), // 0 means unknown
-		Forum: boolPointer(info.Forum), Verified: boolPointer(info.Verified),
+		Forum: boolPointer(info.Forum), Verified: boolPointer(info.Verified), Settings: info.Settings,
 	}
 	d.save(ctx, rpc.MethodChatInfo, func(ctx context.Context) error {
 		return d.store.UpsertChats(ctx, []store.Chat{item})

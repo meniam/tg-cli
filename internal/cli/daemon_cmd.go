@@ -43,6 +43,8 @@ func (a *app) daemonCommand() *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: a.daemonStart,
 	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[backgroundStartedResult](), ResultVariants: []resultVariant{{Flag: "foreground", Result: typeOf[daemonStartedResult]()}}, Choices: []flagChoices{{Flag: "client", Values: []string{"desktop", "android", "ios", "macos", "web-z", "web-k"}}}})
+	start.Flags().String("transport", "", "Telegram transport: tcp or wss (remembered for the profile)")
+	start.Flags().String("proxy", "", "SOCKS5 or Telegram proxy URL, or none (remembered for the profile)")
 	start.Flags().String("client", "", "official client preset to use instead of your own application, for example desktop")
 	start.Flags().String("device", "", "device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN)")
 	start.Flags().Bool("foreground", false, "run the daemon in this terminal instead of the background")
@@ -198,7 +200,17 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if !foreground {
 		return a.startBackground(cmd, profile, paths, idle)
 	}
+	if _, pingErr := daemon.Ping(cmd.Context(), paths.Socket); pingErr == nil {
+		if err := a.checkRunningNetwork(cmd, paths); err != nil {
+			return err
+		}
+		return fail(exitcode.Failure, "a daemon is already running for this profile")
+	}
 	cfg, err := a.credentials(cmd, paths)
+	if err != nil {
+		return err
+	}
+	cfg.Network, err = a.networkSettings(cmd, paths, true)
 	if err != nil {
 		return err
 	}
@@ -244,9 +256,15 @@ func (a *app) startBackground(cmd *cobra.Command, profile string, paths daemon.P
 	// A running daemon needs no credentials from this process. Check it before
 	// resolving keys or saving a new device name.
 	if pid, err := daemon.Ping(cmd.Context(), paths.Socket); err == nil {
+		if err := a.checkRunningNetwork(cmd, paths); err != nil {
+			return err
+		}
 		return a.backgroundStarted(cmd, profile, daemon.Background{PID: pid, Socket: paths.Socket, Log: paths.Log})
 	} else if !rpc.IsNotRunning(err) {
 		return fail(exitcode.Failure, "ask the daemon for its state: %v", err)
+	}
+	if _, err := a.networkSettings(cmd, paths, true); err != nil {
+		return err
 	}
 	// The credentials are resolved here first, so a wrong or missing preset is
 	// an answer of this command and not a silent failure of a process the user
