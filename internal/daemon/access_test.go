@@ -65,7 +65,8 @@ func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 	d.register()
 	d.srv.SetEventSource(d.hub, d.replayEvents)
 	classes := map[string]string{
-		rpc.MethodFolderCreate: "account-write", rpc.MethodFolderEdit: "account-write", rpc.MethodFolderDelete: "account-write",
+		rpc.MethodSessionExport: "none",
+		rpc.MethodFolderCreate:  "account-write", rpc.MethodFolderEdit: "account-write", rpc.MethodFolderDelete: "account-write",
 		rpc.MethodSavedList:    "chat-list",
 		rpc.MethodSavedHistory: "chat-ref", rpc.MethodSavedSearch: "chat-search",
 		rpc.MethodSavedTags: "chat-ref", rpc.MethodSavedTagRename: "chat-write",

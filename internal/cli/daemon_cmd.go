@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"regexp"
@@ -243,6 +244,9 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		IdleTimeout: idle,
 	})
 	if err != nil {
+		if errors.Is(err, daemon.ErrSessionInUse) {
+			return fail(exitcode.Usage, "%v", err)
+		}
 		return fail(exitcode.Failure, "%v", err)
 	}
 	return a.success(cmd, daemonStartedResult{Stopped: true})
@@ -290,6 +294,10 @@ func (a *app) startBackground(cmd *cobra.Command, profile string, paths daemon.P
 	if err != nil {
 		// An error of a background start is never hidden: --quiet silences
 		// hints, not the reason a daemon did not come up.
+		var exited interface{ ExitCode() int }
+		if errors.As(err, &exited) && exited.ExitCode() == exitcode.Usage {
+			return fail(exitcode.Usage, "%v", err)
+		}
 		return fail(exitcode.Failure, "%v", err)
 	}
 	return a.backgroundStarted(cmd, profile, bg)
