@@ -10,9 +10,9 @@ PR: —
 
 ## Status
 
-- Current status: draft
+- Current status: approved
 - Last update: 2026-11-15
-- Next safe step: все вопросы решены (Q1 = C, Q2 до Q4 сняты, Q5 до Q10 = A); менеджер ставит `approved` и вносит тег `[Wont]` для 14.2 в `FEATURES.md` (текст в Decision log); затем шаг 1 (аудит, Codex Terra в worktree `../tg-cli-history_export`).
+- Next safe step: шаг 1, аудит (Codex); тег 14.2 в FEATURES.md внесён менеджером (ee89540 в main)
 
 ## Context and sources
 
@@ -169,7 +169,7 @@ Takeout технически возможен (gotd и документация 
 
 - [x] Ответы на Q1 до Q10 записаны в Decision log, контракт поправлен под ответы (2026-11-15).
 - [x] По Q1 = C из плана убраны шаги Takeout, ключ `takeout`, состояние `waiting_takeout`, таблица сессий и миграция 0007.
-- [ ] Менеджер внёс тег `[Wont]` для 14.2 в `FEATURES.md` по тексту из Decision log.
+- [x] Менеджер внёс тег `[Wont]` для 14.2 в `FEATURES.md` по тексту из Decision log.
 - [ ] Исполнитель Go-кода (Codex Terra) прочитал `expert-golang` и `.agents/rules/testing.md` и подтвердил это в отчёте аудита.
 - [x] Ветка `feature/20261115_1747_history_export` создана от `main` (`82d4c6a`) в worktree `../tg-cli-history_export`.
 
