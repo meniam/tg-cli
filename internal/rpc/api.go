@@ -1,6 +1,9 @@
 package rpc
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Method names of the daemon API.
 const (
@@ -205,14 +208,15 @@ type ChatRefParams struct {
 // ChatInfo describes one chat in more detail than Chat. Optional fields are
 // left out when Telegram does not give them.
 type ChatInfo struct {
-	ID       int64  `json:"id"`
-	Type     string `json:"type"`
-	Title    string `json:"title" untrusted:"true"`
-	Username string `json:"username,omitempty" untrusted:"true"`
-	About    string `json:"about,omitempty" untrusted:"true"`
-	Members  int    `json:"members,omitempty"`
-	Forum    bool   `json:"forum,omitempty"`
-	Verified bool   `json:"verified,omitempty"`
+	Settings json.RawMessage `json:"settings,omitempty"`
+	ID       int64           `json:"id"`
+	Type     string          `json:"type"`
+	Title    string          `json:"title" untrusted:"true"`
+	Username string          `json:"username,omitempty" untrusted:"true"`
+	About    string          `json:"about,omitempty" untrusted:"true"`
+	Members  int             `json:"members,omitempty"`
+	Forum    bool            `json:"forum,omitempty"`
+	Verified bool            `json:"verified,omitempty"`
 }
 
 // InviteInfo is what an invite link shows without joining the chat.
@@ -283,6 +287,7 @@ type HistoryParams struct {
 
 // HistoryQuery is HistoryParams after validation, the form Telegram clients take.
 type HistoryQuery struct {
+	MinID  int
 	Limit  int
 	Since  time.Time
 	Until  time.Time
