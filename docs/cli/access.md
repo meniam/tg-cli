@@ -4,20 +4,22 @@
 
 ## Who edits the file
 
-Only a human edits `<profile>/access.json`, with an editor. There is no command that writes it, and the agent never changes it: not `allow`, not `block`, not `write`, not `files`. The filter protects against accidental reading, against reading induced through a chat, and against accidental writes. It does not protect against an agent that deliberately bypasses it: an agent running as the same user can edit the file or open the SQLite database directly.
+Only a human edits `<profile>/access.json`, with an editor. There is no command that writes it, and the agent never changes it: not `allow`, `block`, `write`, `files`, `admin` or `create`. The filter protects against accidental reading, against reading induced through a chat, and against accidental writes. It does not protect against an agent that deliberately bypasses it: an agent running as the same user can edit the file or open the SQLite database directly.
 
 The file lives in the profile directory, next to the session and the database (see [Profiles and the data directory](overview.md#profiles-and-the-data-directory)): `<TG_CLI_HOME>/<profile>/access.json`, or `tg-cli/<profile>/access.json` inside the user config directory.
 
 ## The file
 
-A JSON object with up to four optional fields. Every field is an array.
+A JSON object with up to six optional fields. All fields except `create` are arrays.
 
 | Field | Content | Effect |
 | --- | --- | --- |
 | `allow` | nonzero integer chat ids, no duplicates | when not empty, only these chats are visible to the agent |
 | `block` | nonzero integer chat ids, no duplicates | these chats are never visible; `block` wins over `allow` |
-| `write` | nonzero integer chat ids, no duplicates | the chats where the agent may write (send, edit, delete, forward, react, pin, poll, mark read, send files) |
+| `write` | nonzero integer chat ids, no duplicates | the chats where the agent may write (message writes, scheduled messages, drafts, typing, join and leave, user blocking and contact changes) |
 | `files` | absolute directory paths, no duplicates | the directories from which `message send-media` may read files |
+| `admin` | nonzero integer chat ids, no duplicates | visible chats where moderation and editing are permitted |
+| `create` | boolean | whether chat creation is permitted |
 
 Chat ids are in the Bot API form that `tg chat list` prints: users positive, groups negative, channels from `-1000000000000`. An example file:
 
@@ -36,17 +38,19 @@ Create the file with a mode that is not writable by group or others, for example
 
 ## How the lists combine
 
-- **No file, an empty file, or all lists empty:** the read filter is off and every chat is visible. Writing is off everywhere, and so is sending files.
+- **No file, an empty file, or all lists empty:** the read filter is off and every chat is visible. Writing, administration, chat creation and sending files are off.
 - **A nonempty `allow`:** only its chats are visible. Invitations (`chat invite-info`) are closed while `allow` is nonempty, because an invite has no known chat id before it is resolved.
 - **`block`:** blocked chats are closed, even when they are in `allow`. A `block` alone turns the read filter on for those chats.
 - **`write`:** a chat accepts writes only when it is in `write`, is visible by the read rules and is not in `block`. `write` alone does not turn the read filter on. A chat outside `write` gives exit code 9 `write_disabled` with a hint to add it; a chat closed for reading gives exit code 7 like an unknown chat.
+- **`admin`:** moderation and chat editing require a visible chat in this list.
+- **`create`:** chat creation requires `true`.
 - **`files`:** sending files needs the chat in `write` and every file under a directory of `files`. No `files` key or an empty list means sending files is off: exit code 9 `write_disabled` with a hint to ask the owner to add the directory. Paths are checked as described in [message send-media](messages-write.md#tg-message-send-media): a path outside every root, a `..` that leaves a root, a symlink that leads out and a root that does not exist all give the same exit code 2, `file is outside the allowed roots`.
 
 ## Errors in the file: everything closes
 
 The file is checked when it is read, and it fails closed:
 
-- An unknown field, a non-numeric or zero id, a duplicate id, a field that is not an array, a relative or empty `files` path, a duplicate path, or content that is not a JSON object makes the whole file invalid.
+- An unknown field, a non-numeric or zero id, a duplicate id, an array field that is not an array, a non-boolean `create`, a relative or empty `files` path, a duplicate path, or content that is not a JSON object makes the whole file invalid.
 - A file that is writable by group or others (any of the mode bits `0o022`; `0664` and `0666` count, `0644` and `0600` do not) is invalid.
 - A file that cannot be read is invalid, and so is a failed `stat` of it.
 - An invalid file closes **everything**: all chats are hidden from the agent, writing and sending files are off. The Daemon keeps running, and each request that checks access writes at least one Error record `access policy unavailable` to the journal, without the file content (see [daemon logs](daemon-and-auth.md#tg-daemon-logs)).
@@ -99,3 +103,9 @@ The mark `untrusted` in `tg schema` and the `| ` frame of `--human` are hints fo
 ## Checks
 
 Verification of the access filter is tracked in [FEATURES.md](../../FEATURES.md), item 9.2.
+
+The optional `downloads` array contains absolute directory roots where the
+Daemon may save media. It is independent of `files`; an absent or empty list
+disables downloads. Only the owner edits the access file. Before rolling back to
+a version without `downloads`, the owner must remove that field: older versions
+reject unknown fields and close access to chats.

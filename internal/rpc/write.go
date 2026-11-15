@@ -101,6 +101,8 @@ type ForwardParams struct {
 	To             string `json:"to"`
 	IDs            []int  `json:"ids"`
 	Silent         bool   `json:"silent,omitempty"`
+	Copy           bool   `json:"copy,omitempty"`
+	NoCaptions     bool   `json:"no_captions,omitempty"`
 	DryRun         bool   `json:"dry_run,omitempty"`
 }
 

@@ -26,6 +26,7 @@ const (
 	MethodChatInfo            = "chat.info"
 	MethodChatInviteInfo      = "chat.invite_info"
 	MethodMessageHistory      = "message.history"
+	MethodMessageDownload     = "message.download"
 	MethodMessageGet          = "message.get"
 	MethodMessagePinned       = "message.pinned"
 	MethodMessageSend         = "message.send"

@@ -108,7 +108,9 @@ func throttleMiddleware(limiter *throttle.Limiter) telegram.Middleware {
 			history := isHistory && historyPageFromContext(ctx)
 			_, smallPart := input.(*tg.UploadSaveFilePartRequest)
 			_, bigPart := input.(*tg.UploadSaveBigFilePartRequest)
-			uploadPart := smallPart || bigPart
+			_, getFile := input.(*tg.UploadGetFileRequest)
+			_, getCDN := input.(*tg.UploadGetCDNFileRequest)
+			uploadPart := smallPart || bigPart || getFile || getCDN
 			admissionCtx := ctx
 			if history || uploadPart {
 				admissionCtx = throttle.WithBackground(ctx)

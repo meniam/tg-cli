@@ -18,6 +18,7 @@ import (
 type Telegram interface {
 	messageExtrasTelegram
 	usersTelegram
+	downloadTelegram
 	ChatAdmin
 	// Run connects and keeps the connection until ctx ends. It returns
 	// ctx.Err() on a clean stop.

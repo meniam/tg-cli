@@ -300,7 +300,7 @@ func TestThrottleWriteFloodNeverRetries(t *testing.T) {
 }
 
 func TestUploadPartFloodHasNoMiddlewareRetryAndOrdinaryGate(t *testing.T) {
-	for _, request := range []bin.Encoder{&tg.UploadSaveFilePartRequest{}, &tg.UploadSaveBigFilePartRequest{}} {
+	for _, request := range []bin.Encoder{&tg.UploadSaveFilePartRequest{}, &tg.UploadSaveBigFilePartRequest{}, &tg.UploadGetFileRequest{}, &tg.UploadGetCDNFileRequest{}} {
 		clock := newThrottleClock()
 		limiter := limiterWithClock(t, clock, nil)
 		flood := tgerr.New(420, "FLOOD_WAIT_11")

@@ -288,6 +288,9 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 	if err := decodeParams(raw, &p); err != nil {
 		return nil, err
 	}
+	if p.NoCaptions && !p.Copy {
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "no_captions requires copy")
+	}
 	if err := validWriteIDs(p.IDs); err != nil {
 		return nil, err
 	}
