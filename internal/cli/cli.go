@@ -176,6 +176,7 @@ func (a *app) rootCommand() *cobra.Command {
 	root.PersistentFlags().String("profile", daemon.DefaultProfile, "account profile, each has its own session and daemon")
 	addOutputFlags(root)
 	root.AddCommand(
+		a.configCommand(),
 		a.daemonCommand(),
 		a.authCommand(),
 		a.sessionCommand(),
