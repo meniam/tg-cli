@@ -466,8 +466,16 @@ func TestPingStatusShutdown(t *testing.T) {
 		t.Fatalf("ping: %v %+v", err, pong)
 	}
 	var st rpc.StatusResult
-	if err := r.client.Call(ctxTimeout(t), rpc.MethodStatus, nil, &st); err != nil {
-		t.Fatal(err)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if err := r.client.Call(ctxTimeout(t), rpc.MethodStatus, nil, &st); err != nil {
+			t.Fatal(err)
+		}
+		if st.ActiveRequests == 0 || time.Now().After(deadline) {
+			break
+		}
+		// The ping response can arrive before its server goroutine finishes.
+		time.Sleep(10 * time.Millisecond)
 	}
 	if st.Profile != "test" || st.PID != os.Getpid() || !st.Connected || st.Authorized || st.ActiveRequests != 0 {
 		t.Errorf("unexpected status %+v", st)
