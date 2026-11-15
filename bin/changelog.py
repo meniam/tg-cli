@@ -7,7 +7,7 @@
 
 Records live in .agents/changelog/: one file per record, frontmatter (date, type, breaking,
 decision) and one line of text. The current month is in the folder root, past months in
-YYYY-MM/ subfolders. Rules: .agents/rules/changelog.md. Types and the text are Russian.
+YYYY-MM/ subfolders. Rules: .agents/rules/changelog.md. The six types are Russian (the master rule fixes them), the text is English.
 """
 import argparse
 import re
