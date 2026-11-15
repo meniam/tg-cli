@@ -189,3 +189,84 @@ Manages a chat folder. The owner must enable `dialogs` in `access.json`. Deletio
 | `--dry-run` | bool | `false` | preview without changing Telegram |
 | `--yes` | bool | `false` | confirm deletion |
 <!-- /schema:flags -->
+
+### tg account profile
+
+Read the current account's profile, birthday, personal channel and emoji status. Names, username and biography are untrusted.
+
+```text
+tg account profile
+```
+
+<!-- schema:flags tg account profile -->
+No command flags.
+<!-- /schema:flags -->
+
+### tg account emoji-statuses
+
+List default or recently used emoji statuses. Collectible titles and slugs are untrusted.
+
+```text
+tg account emoji-statuses [--recent]
+```
+
+<!-- schema:flags tg account emoji-statuses -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--recent` | bool | `false` | show recently used statuses |
+<!-- /schema:flags -->
+
+### tg account set
+
+Change the birthday, personal channel or emoji status. The owner must enable `profile` in `access.json`. Multiple settings are applied in order and may partially succeed. `--dry-run` checks without writing.
+
+```text
+tg account set [flags]
+```
+
+<!-- schema:flags tg account set -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--birthday` | string | `none` | birthday YYYY-MM-DD, MM-DD or none |
+| `--dry-run` | bool | `false` | check without changing Telegram |
+| `--emoji-status` | string | `none` | emoji document id or none |
+| `--emoji-status-until` | string | `none` | status expiry in RFC 3339 |
+| `--personal-channel` | string | `none` | personal channel or none |
+<!-- /schema:flags -->
+
+### tg account privacy get
+
+Read privacy rules for a key. IDs hidden by access lists are omitted and counted in `hidden`. Keys: `last-seen`, `phone-number`, `added-by-phone`, `profile-photo`, `forwards`, `calls`, `p2p-calls`, `invites`, `voice-messages`, `bio`, `birthday`, `gifts-auto-save`, `no-paid-messages`, `saved-music`.
+
+```text
+tg account privacy get <key>
+```
+
+<!-- schema:flags tg account privacy get -->
+No command flags.
+<!-- /schema:flags -->
+
+### tg account privacy set
+
+Replace all rules for a key. This requires the `profile` permission and `--yes`, or `--dry-run` to preview. Hidden existing exceptions require `--replace-hidden` before replacement. Exceptions may be passed more than once.
+
+```text
+tg account privacy set <key> --default everybody|contacts|nobody [flags]
+```
+
+<!-- schema:flags tg account privacy set -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--allow-bots` | bool | `false` | allow-bots |
+| `--allow-chat` | stringArray | `[]` | add allow-chat exception |
+| `--allow-close-friends` | bool | `false` | allow-close-friends |
+| `--allow-premium` | bool | `false` | allow-premium |
+| `--allow-user` | stringArray | `[]` | add allow-user exception |
+| `--default` | string | `none` | default: everybody, contacts or nobody |
+| `--deny-bots` | bool | `false` | deny-bots |
+| `--deny-chat` | stringArray | `[]` | add deny-chat exception |
+| `--deny-user` | stringArray | `[]` | add deny-user exception |
+| `--dry-run` | bool | `false` | dry-run |
+| `--replace-hidden` | bool | `false` | replace-hidden |
+| `--yes` | bool | `false` | yes |
+<!-- /schema:flags -->

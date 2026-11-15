@@ -4,9 +4,9 @@ How agents write and maintain task plans. Applies to any project.
 A plan lets another agent continue the task without guessing: goal, scope,
 decisions, order of steps, checks, risks, status, next safe step.
 
-**Defaults, not law.** A project rule — its `AGENTS.md`, its docs, or a decision
-in `.agents/decisions/` — wins over this file; see `AGENTS.md`, "Precedence".
-A lasting deviation is recorded there, not left to the code.
+**Defaults, not law.** A project's `AGENTS.md` and docs win over this file; a
+project file with the same name replaces it entirely. See `AGENTS.md`,
+"Precedence".
 
 ## Location and Naming
 
@@ -159,9 +159,14 @@ compatible, queue / DSN unchanged, no legacy assets in Network.
 
 ## Decision log
 
-| Date       | Decision | Reason | Confirmed by |
-| ---------- | -------- | ------ | ------------ |
-| YYYY-MM-DD | ...      | ...    | ...          |
+| Date       | Decision | Reason | Confirmed |
+| ---------- | -------- | ------ | --------- |
+| YYYY-MM-DD | ...      | ...    | yes       |
+
+`Confirmed`: `yes` if the user chose or confirmed the decision, `no` if the
+agent decided alone (the same values as `confirmed` in a decision record). A
+row that outlives the plan gets a record in `.agents/decisions/`, and its
+Decision cell links it (see `decisions.md`).
 
 ## Step 0. Fix decisions before changes
 
@@ -271,7 +276,7 @@ checkboxes by the rules above. New facts go to "Known facts", decisions to the
 "Decision log". A strategy change is written explicitly: was, became, why. A
 check that did not run says "not run" and why.
 
-## Quality Checklist
+## Checklist
 
 1. The expected result is clear.
 2. Out of scope is clear.

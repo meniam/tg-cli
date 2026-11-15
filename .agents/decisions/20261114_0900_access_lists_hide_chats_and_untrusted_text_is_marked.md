@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/access, internal/daemon/access.go]
+---
 # Списки чатов в access.json скрывают закрытый чат, пустые списки открывают всё, чужой текст помечен признаком в схеме и рамкой в human
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

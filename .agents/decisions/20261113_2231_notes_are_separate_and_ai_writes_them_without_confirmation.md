@@ -1,7 +1,10 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+paths: [internal/store/notes.go, internal/daemon/notes.go, internal/cli/note_cmd.go]
+---
 # Пометки лежат отдельно, AI пишет их без подтверждения
-
-Decided: 2026-11-13
-Revised: —
 
 ## Context
 

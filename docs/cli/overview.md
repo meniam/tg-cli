@@ -7,10 +7,12 @@ This page covers what every command shares: installation, profiles, the Daemon l
 | Page | Commands |
 | --- | --- |
 | [daemon-and-auth.md](daemon-and-auth.md) | `daemon start`, `status`, `stop`, `logs`; `auth login`, `status`, `resend`, `cancel` |
-| [chats.md](chats.md) | `chat list`, `resolve`, `info`, `invite-info`, `members`, `topics`, `common`, `mark-read`; `chat sync start`, `status`, `cancel` |
+| [chats.md](chats.md) | `chat` reads, unread, changes, state, drafts, typing, administration and `sync` |
 | [messages-read.md](messages-read.md) | `message history`, `get`, `pinned`, `search`, `context`, `comments`, `link`, `export`, `watch` |
+| [buttons-stickers-auto-delete.md](buttons-stickers-auto-delete.md) | `message buttons`, `press`, `inline-query`, `send-inline`, `edit-media`, `send-sticker`, `sticker search`, `set`, `installed`, `chat auto-delete` |
 | [messages-write.md](messages-write.md) | `message send`, `edit`, `delete`, `forward`, `send-media`, `react`, `pin`, `unpin`, `poll`, text formatting |
 | [users-and-contacts.md](users-and-contacts.md) | `user profile`, `block`, `unblock`; `contact list`, `add`, `delete`, `search` |
+| [folders-and-account.md](folders-and-account.md) | `folder list`; `account sessions`, `blocked`, `notify` |
 | [notes-and-search.md](notes-and-search.md) | `note add`, `list`, `delete`; `search`; `version`; `schema` |
 | [access.md](access.md) | `access.json`: chat access lists, the `write` list, the `files` roots |
 
@@ -103,7 +105,7 @@ Without a login, a command that needs one exits with code 4 and the message ``no
 
 Global flags work in any position, before or after the command.
 
-`--expect-user <id|@username>` requires the selected profile to belong to that account. A numeric value matches the account ID; `@username` matches the username without regard to case. The flag wins over `TG_CLI_EXPECT_USER`; when the flag is absent, that variable supplies the value. An empty value disables the check. The Daemon applies it before handlers for `chat`, `message`, `note`, `search`, `chat sync` and `message watch`, including its subscription; `daemon`, `auth`, `schema` and `version` are excluded. A missing or different account is exit code 4 `not_authorized`; a mismatch names the expected value and the actual account ID and username, never a phone number.
+`--expect-user <id|@username>` requires the selected profile to belong to that account. A numeric value matches the account ID; `@username` matches the username without regard to case. The flag wins over `TG_CLI_EXPECT_USER`; when the flag is absent, that variable supplies the value. An empty value disables the check. The Daemon applies it before handlers for `chat`, `message`, `note`, `user`, `contact`, `folder`, `account`, `search`, `chat sync` and `message watch`, including its subscription; `daemon`, `auth`, `schema` and `version` are excluded. A missing or different account is exit code 4 `not_authorized`; a mismatch names the expected value and the actual account ID and username, never a phone number.
 
 <!-- schema:global-flags -->
 | Flag | Type | Default | Description |
@@ -279,52 +281,6 @@ Per-method buckets remain an open item: `getDialogs` can hit `FLOOD_WAIT` before
 
 ## All commands
 
-| Command | Safety | Dangerous | Reference |
-| --- | --- | --- | --- |
-| `tg auth cancel` | `account_write` | no | [daemon-and-auth.md](daemon-and-auth.md#tg-auth-cancel) |
-| `tg auth login` | `account_write` | no | [daemon-and-auth.md](daemon-and-auth.md#tg-auth-login) |
-| `tg auth resend` | `account_write` | no | [daemon-and-auth.md](daemon-and-auth.md#tg-auth-resend) |
-| `tg auth status` | `read` | no | [daemon-and-auth.md](daemon-and-auth.md#tg-auth-status) |
-| `tg chat common` | `read` | no | [chats.md](chats.md#tg-chat-common) |
-| `tg chat info` | `read` | no | [chats.md](chats.md#tg-chat-info) |
-| `tg chat invite-info` | `read` | no | [chats.md](chats.md#tg-chat-invite-info) |
-| `tg chat list` | `read` | no | [chats.md](chats.md#tg-chat-list) |
-| `tg chat mark-read` | `account_write` | no | [chats.md](chats.md#tg-chat-mark-read) |
-| `tg chat members` | `read` | no | [chats.md](chats.md#tg-chat-members) |
-| `tg chat resolve` | `read` | no | [chats.md](chats.md#tg-chat-resolve) |
-| `tg chat sync cancel` | `local_write` | no | [chats.md](chats.md#tg-chat-sync-cancel) |
-| `tg chat sync start` | `local_write` | no | [chats.md](chats.md#tg-chat-sync-start) |
-| `tg chat sync status` | `read` | no | [chats.md](chats.md#tg-chat-sync-status) |
-| `tg chat topics` | `read` | no | [chats.md](chats.md#tg-chat-topics) |
-| `tg daemon logs` | `read` | no | [daemon-and-auth.md](daemon-and-auth.md#tg-daemon-logs) |
-| `tg daemon start` | `local_write` | no | [daemon-and-auth.md](daemon-and-auth.md#tg-daemon-start) |
-| `tg daemon status` | `read` | no | [daemon-and-auth.md](daemon-and-auth.md#tg-daemon-status) |
-| `tg daemon stop` | `local_write` | no | [daemon-and-auth.md](daemon-and-auth.md#tg-daemon-stop) |
-| `tg message comments` | `read` | no | [messages-read.md](messages-read.md#tg-message-comments) |
-| `tg message context` | `read` | no | [messages-read.md](messages-read.md#tg-message-context) |
-| `tg message delete` | `account_write` | yes | [messages-write.md](messages-write.md#tg-message-delete) |
-| `tg message edit` | `account_write` | yes | [messages-write.md](messages-write.md#tg-message-edit) |
-| `tg message export` | `read` | no | [messages-read.md](messages-read.md#tg-message-export) |
-| `tg message forward` | `account_write` | no | [messages-write.md](messages-write.md#tg-message-forward) |
-| `tg message get` | `read` | no | [messages-read.md](messages-read.md#tg-message-get) |
-| `tg message history` | `read` | no | [messages-read.md](messages-read.md#tg-message-history) |
-| `tg message link` | `read` | no | [messages-read.md](messages-read.md#tg-message-link) |
-| `tg message pin` | `account_write` | no | [messages-write.md](messages-write.md#tg-message-pin) |
-| `tg message pinned` | `read` | no | [messages-read.md](messages-read.md#tg-message-pinned) |
-| `tg message poll` | `account_write` | no | [messages-write.md](messages-write.md#tg-message-poll) |
-| `tg message react` | `account_write` | no | [messages-write.md](messages-write.md#tg-message-react) |
-| `tg message search` | `read` | no | [messages-read.md](messages-read.md#tg-message-search) |
-| `tg message send` | `account_write` | no | [messages-write.md](messages-write.md#tg-message-send) |
-| `tg message send-media` | `account_write` | no | [messages-write.md](messages-write.md#tg-message-send-media) |
-| `tg message unpin` | `account_write` | no | [messages-write.md](messages-write.md#tg-message-unpin) |
-| `tg message watch` | `read` | no | [messages-read.md](messages-read.md#tg-message-watch) |
-| `tg note add` | `local_write` | no | [notes-and-search.md](notes-and-search.md#tg-note-add) |
-| `tg note delete` | `local_write` | yes | [notes-and-search.md](notes-and-search.md#tg-note-delete) |
-| `tg note list` | `read` | no | [notes-and-search.md](notes-and-search.md#tg-note-list) |
-| `tg schema` | `read` | no | [notes-and-search.md](notes-and-search.md#tg-schema) |
-| `tg search` | `read` | no | [notes-and-search.md](notes-and-search.md#tg-search) |
-| `tg version` | `read` | no | [notes-and-search.md](notes-and-search.md#tg-version) |
-
-Commands that need a login or a Daemon are listed in [What each group of commands needs](#the-daemon-lifecycle). Global flags apply to all of them.
+List command paths with `tg schema --fields commands.path`. The pages above describe their usage.
 
 Saved Messages commands: [saved.md](saved.md).

@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -39,56 +40,76 @@ const noteIDToken = "@note"
 // realResponseCases are the commands that a response fixture covers, with the
 // arguments of the run. The token noteIDToken is replaced at run time.
 var realResponseCases = map[string][]string{
-	"user profile":       {"user", "profile", "@aliceuser"},
-	"user block":         {"user", "block", "@aliceuser"},
-	"user unblock":       {"user", "unblock", "@aliceuser"},
-	"contact list":       {"contact", "list"},
-	"contact add":        {"contact", "add", "@aliceuser"},
-	"contact delete":     {"contact", "delete", "@aliceuser", "--yes"},
-	"contact search":     {"contact", "search", "ann"},
-	"auth cancel":        {"auth", "cancel"},
-	"auth status":        {"auth", "status"},
-	"saved list":         {"saved", "list"},
-	"saved history":      {"saved", "history", "77"},
-	"saved search":       {"saved", "search", "test"},
-	"saved tags":         {"saved", "tags"},
-	"saved tag-rename":   {"saved", "tag-rename", "👍", "--title", "tag", "--dry-run"},
-	"folder create":      {"folder", "create", "test", "--include", "77", "--dry-run"},
-	"folder edit":        {"folder", "edit", "2", "--title", "test", "--dry-run"},
-	"folder delete":      {"folder", "delete", "2", "--dry-run"},
-	"folder order":       {"folder", "order", "2", "--dry-run"},
-	"folder invite-info": {"folder", "invite-info", "t.me/addlist/AbCdEfGh"},
-	"folder list":        {"folder", "list"},
-	"chat state":         {"chat", "state"},
-	"chat mute":          {"chat", "mute", "77", "--dry-run"},
-	"chat unmute":        {"chat", "unmute", "77", "--dry-run"},
-	"chat notify":        {"chat", "notify", "77", "--silent=true", "--dry-run"},
-	"chat archive":       {"chat", "archive", "77", "--dry-run"},
-	"chat unarchive":     {"chat", "unarchive", "77", "--dry-run"},
-	"chat pin":           {"chat", "pin", "77", "--dry-run"},
-	"chat unpin":         {"chat", "unpin", "77", "--dry-run"},
-	"account sessions":   {"account", "sessions"},
-	"account terminate":  {"account", "terminate", "cd2662154e6d76b2", "--dry-run"},
-	"account blocked":    {"account", "blocked"},
-	"account notify":     {"account", "notify"},
-	"chat info":          {"chat", "info", "@teamchat"},
-	"chat invite-info":   {"chat", "invite-info", "https://t.me/+AbCdEfGh1234"},
-	"chat list":          {"chat", "list"},
-	"chat members":       {"chat", "members", "@teamchat"},
-	"chat topics":        {"chat", "topics", "@teamchat"},
-	"chat common":        {"chat", "common", "@aliceuser"},
-	"chat resolve":       {"chat", "resolve", "@teamchat"},
-	"daemon status":      {"daemon", "status"},
-	"daemon logs":        {"daemon", "logs"},
-	"message get":        {"message", "get", "@teamchat", "30"},
-	"message history":    {"message", "history", "@teamchat"},
-	"message pinned":     {"message", "pinned", "@teamchat"},
-	"note add":           {"note", "add", "--chat", "77", "--author", "ai", "--tag", "t", "one more"},
-	"note delete":        {"note", "delete", noteIDToken},
-	"note list":          {"note", "list"},
-	"schema":             {"schema"},
-	"search":             {"search", "third"},
-	"version":            {"version"},
+	"user profile":           {"user", "profile", "@aliceuser"},
+	"user block":             {"user", "block", "@aliceuser"},
+	"user unblock":           {"user", "unblock", "@aliceuser"},
+	"contact list":           {"contact", "list"},
+	"contact add":            {"contact", "add", "@aliceuser"},
+	"contact delete":         {"contact", "delete", "@aliceuser", "--yes"},
+	"contact search":         {"contact", "search", "ann"},
+	"auth cancel":            {"auth", "cancel"},
+	"auth status":            {"auth", "status"},
+	"folder list":            {"folder", "list"},
+	"chat state":             {"chat", "state"},
+	"account sessions":       {"account", "sessions"},
+	"account privacy get":    {"account", "privacy", "get", "last-seen"},
+	"account privacy set":    {"account", "privacy", "set", "last-seen", "--default", "nobody", "--yes"},
+	"account set":            {"account", "set", "--birthday", "none"},
+	"account profile":        {"account", "profile"},
+	"account emoji-statuses": {"account", "emoji-statuses"},
+	"account blocked":        {"account", "blocked"},
+	"account notify":         {"account", "notify"},
+	"chat requests":          {"chat", "requests", "@teamchat"},
+	"chat set":               {"chat", "set", "@teamchat", "--forum", "on"},
+	"chat approve":           {"chat", "approve", "@teamchat", "@aliceuser"},
+	"chat decline":           {"chat", "decline", "@teamchat", "@aliceuser"},
+	"chat info":              {"chat", "info", "@teamchat"},
+	"chat invite-info":       {"chat", "invite-info", "https://t.me/+AbCdEfGh1234"},
+	"chat list":              {"chat", "list"},
+	"chat members":           {"chat", "members", "@teamchat"},
+	"chat topics":            {"chat", "topics", "@teamchat"},
+	"chat common":            {"chat", "common", "@aliceuser"},
+	"chat resolve":           {"chat", "resolve", "@teamchat"},
+	"daemon status":          {"daemon", "status"},
+	"daemon logs":            {"daemon", "logs"},
+	"message get":            {"message", "get", "@teamchat", "30"},
+	"message readers":        {"message", "readers", "@teamchat", "30"},
+	"message history":        {"message", "history", "@teamchat"},
+	"message pinned":         {"message", "pinned", "@teamchat"},
+	"note add":               {"note", "add", "--chat", "77", "--author", "ai", "--tag", "t", "one more"},
+	"note delete":            {"note", "delete", noteIDToken},
+	"note list":              {"note", "list"},
+	"schema":                 {"schema"},
+	"search":                 {"search", "third"},
+	"version":                {"version"},
+	"sticker search":         {"sticker", "search", "cats"},
+	"sticker installed":      {"sticker", "installed"},
+	"sticker set":            {"sticker", "set", "fixture"},
+	"message send-sticker":   {"message", "send-sticker", "5", "--set", "fixture", "--index", "0", "--dry-run"},
+	"message edit-media":     {"message", "edit-media", "5", "30", "--as", "document", "--file", "@media", "--dry-run"},
+	"message inline-query":   {"message", "inline-query", "5", "--bot", "@fixturebot", "--query", "test"},
+	"message send-inline":    {"message", "send-inline", "5", "--query-id", "123", "--result", "result", "--dry-run"},
+	"message buttons":        {"message", "buttons", "@teamchat", "30"},
+	"message press":          {"message", "press", "5", "30", "--button", "0", "--dry-run"},
+	"chat auto-delete":       {"chat", "auto-delete", "5", "--period", "1d", "--dry-run"},
+	"saved list":             {"saved", "list"},
+	"saved history":          {"saved", "history", "77"},
+	"saved search":           {"saved", "search", "test"},
+	"saved tags":             {"saved", "tags"},
+	"saved tag-rename":       {"saved", "tag-rename", "👍", "--title", "tag", "--dry-run"},
+	"folder create":          {"folder", "create", "test", "--include", "77", "--dry-run"},
+	"folder edit":            {"folder", "edit", "2", "--title", "test", "--dry-run"},
+	"folder delete":          {"folder", "delete", "2", "--dry-run"},
+	"folder order":           {"folder", "order", "2", "--dry-run"},
+	"folder invite-info":     {"folder", "invite-info", "t.me/addlist/AbCdEfGh"},
+	"chat mute":              {"chat", "mute", "77", "--dry-run"},
+	"chat unmute":            {"chat", "unmute", "77", "--dry-run"},
+	"chat notify":            {"chat", "notify", "77", "--silent=true", "--dry-run"},
+	"chat archive":           {"chat", "archive", "77", "--dry-run"},
+	"chat unarchive":         {"chat", "unarchive", "77", "--dry-run"},
+	"chat pin":               {"chat", "pin", "77", "--dry-run"},
+	"chat unpin":             {"chat", "unpin", "77", "--dry-run"},
+	"account terminate":      {"account", "terminate", "cd2662154e6d76b2", "--dry-run"},
 }
 
 // realResponses runs the commands of realResponseCases against the fake daemon
@@ -102,9 +123,22 @@ func realResponses(t *testing.T) map[string][]byte {
 	}
 	e.tg.mu.Lock()
 	e.tg.peopleFixture = true
+	for i := range e.tg.messages {
+		if e.tg.messages[i].ID == 30 {
+			e.tg.messages[i].MediaType = "document"
+		}
+	}
 	e.tg.mu.Unlock()
-	if err := os.WriteFile(paths.Access, []byte(`{"write":[1,5,42],"sessions":true,"dialogs":true}`), 0o600); err != nil {
+	mediaPath := filepath.Join(e.home, "fixture.dat")
+	if err := os.WriteFile(mediaPath, []byte("fixture"), 0600); err != nil {
 		t.Fatal(err)
+	}
+	accessData, _ := json.Marshal(map[string]any{"write": []int{1, 5, 42}, "admin": []int{77}, "profile": true, "dialogs": true, "sessions": true, "files": []string{e.home}, "downloads": []string{e.home}})
+	if err := os.WriteFile(paths.Access, accessData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r := e.run("message", "inline-query", "5", "--bot", "@fixturebot", "--query", "test"); r.code != exitcode.OK {
+		t.Fatalf("inline query setup: %q", r.stdout)
 	}
 	if err := os.WriteFile(paths.Log, []byte("test line\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -133,6 +167,9 @@ func realResponses(t *testing.T) map[string][]byte {
 	for path, args := range realResponseCases {
 		run := make([]string, len(args))
 		for i, arg := range args {
+			if arg == "@media" {
+				arg = mediaPath
+			}
 			if arg == noteIDToken {
 				arg = own()
 			}
@@ -233,11 +270,18 @@ var uncoveredCommands = map[string]string{
 	"chat sync cancel":           "background cancellation is covered by net.Pipe CLI tests",
 }
 
+// fixtureResponseCases cover commands whose daemon side effects are isolated by net.Pipe.
+var fixtureResponseCases = map[string]bool{"message download": true}
+
 // TestEveryCommandResponseIsCompared makes sure the comparison covers the whole
 // command tree: a command that is neither exercised nor explained fails here.
 func TestEveryCommandResponseIsCompared(t *testing.T) {
+	t.Run("message download", TestDownloadResponseFixture)
 	cases := map[string]bool{}
 	for path := range realResponseCases {
+		cases[path] = true
+	}
+	for path := range fixtureResponseCases {
 		cases[path] = true
 	}
 	for path := range uncoveredCommands {

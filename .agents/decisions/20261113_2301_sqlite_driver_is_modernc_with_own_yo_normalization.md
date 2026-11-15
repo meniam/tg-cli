@@ -1,7 +1,11 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+revises: [20261113_2230_storage_is_one_sqlite_per_profile_with_slow_opt_in_history]
+paths: [internal/store/store.go, internal/textnorm/textnorm.go]
+---
 # Драйвер SQLite modernc.org/sqlite, нормализацию «ё» делаем сами
-
-Decided: 2026-11-13
-Revised: —
 
 ## Context
 

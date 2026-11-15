@@ -28,6 +28,10 @@ func classifyRequest(input bin.Encoder) (throttle.Class, string) {
 		if request != nil {
 			return classifyPeer(request.Peer)
 		}
+	case *tg.MessagesSendInlineBotResultRequest:
+		if request != nil {
+			return classifyPeer(request.Peer)
+		}
 	case *tg.MessagesSendMultiMediaRequest:
 		if request != nil {
 			return classifyPeer(request.Peer)
@@ -83,11 +87,18 @@ func writeRequest(input bin.Encoder) bool {
 		*tg.MessagesEditChatTitleRequest, *tg.MessagesEditChatAboutRequest,
 		*tg.ChannelsEditBannedRequest, *tg.MessagesEditChatDefaultBannedRightsRequest,
 		*tg.ChannelsToggleSlowModeRequest,
+		*tg.ChannelsToggleSignaturesRequest, *tg.ChannelsToggleAntiSpamRequest,
+		*tg.ChannelsToggleForumRequest, *tg.ChannelsTogglePreHistoryHiddenRequest,
+		*tg.ChannelsToggleJoinRequestRequest, *tg.ChannelsToggleJoinToSendRequest,
+		*tg.MessagesHideChatJoinRequestRequest, *tg.AccountUpdateBirthdayRequest,
+		*tg.AccountUpdatePersonalChannelRequest, *tg.AccountUpdateEmojiStatusRequest,
+		*tg.AccountSetPrivacyRequest,
 		*tg.ContactsAddContactRequest, *tg.ContactsDeleteContactsRequest,
 		*tg.ContactsBlockRequest, *tg.ContactsUnblockRequest:
 		return true
 	case *tg.MessagesSaveDraftRequest, *tg.MessagesDeleteScheduledMessagesRequest, *tg.MessagesSendScheduledMessagesRequest, *tg.MessagesSetTypingRequest, *tg.MessagesSendMessageRequest, *tg.MessagesSendMediaRequest, *tg.MessagesSendMultiMediaRequest,
 		*tg.MessagesForwardMessagesRequest,
+		*tg.MessagesGetBotCallbackAnswerRequest, *tg.MessagesSendInlineBotResultRequest, *tg.MessagesSetHistoryTTLRequest,
 		*tg.MessagesEditMessageRequest, *tg.MessagesDeleteMessagesRequest, *tg.ChannelsDeleteMessagesRequest,
 		*tg.MessagesReadHistoryRequest, *tg.ChannelsReadHistoryRequest,
 		*tg.MessagesSendReactionRequest,
@@ -105,7 +116,9 @@ func throttleMiddleware(limiter *throttle.Limiter) telegram.Middleware {
 			history := isHistory && historyPageFromContext(ctx)
 			_, smallPart := input.(*tg.UploadSaveFilePartRequest)
 			_, bigPart := input.(*tg.UploadSaveBigFilePartRequest)
-			uploadPart := smallPart || bigPart
+			_, getFile := input.(*tg.UploadGetFileRequest)
+			_, getCDN := input.(*tg.UploadGetCDNFileRequest)
+			uploadPart := smallPart || bigPart || getFile || getCDN
 			admissionCtx := ctx
 			if history || uploadPart {
 				admissionCtx = throttle.WithBackground(ctx)

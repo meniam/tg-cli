@@ -61,7 +61,7 @@ func TestChatAdminErrors(t *testing.T) {
 	}
 }
 func TestChatAdminWriteRequests(t *testing.T) {
-	requests := []bin.Encoder{&tg.ChannelsJoinChannelRequest{}, &tg.MessagesImportChatInviteRequest{}, &tg.ChannelsLeaveChannelRequest{}, &tg.MessagesDeleteChatUserRequest{}, &tg.ChannelsCreateChannelRequest{}, &tg.ChannelsEditTitleRequest{}, &tg.MessagesEditChatTitleRequest{}, &tg.MessagesEditChatAboutRequest{}, &tg.ChannelsEditBannedRequest{}, &tg.MessagesEditChatDefaultBannedRightsRequest{}, &tg.ChannelsToggleSlowModeRequest{}}
+	requests := []bin.Encoder{&tg.ChannelsJoinChannelRequest{}, &tg.MessagesImportChatInviteRequest{}, &tg.ChannelsLeaveChannelRequest{}, &tg.MessagesDeleteChatUserRequest{}, &tg.ChannelsCreateChannelRequest{}, &tg.ChannelsEditTitleRequest{}, &tg.MessagesEditChatTitleRequest{}, &tg.MessagesEditChatAboutRequest{}, &tg.ChannelsEditBannedRequest{}, &tg.MessagesEditChatDefaultBannedRightsRequest{}, &tg.ChannelsToggleSlowModeRequest{}, &tg.ChannelsToggleSignaturesRequest{}, &tg.ChannelsToggleAntiSpamRequest{}, &tg.ChannelsToggleForumRequest{}, &tg.ChannelsTogglePreHistoryHiddenRequest{}, &tg.ChannelsToggleJoinRequestRequest{}, &tg.ChannelsToggleJoinToSendRequest{}, &tg.MessagesHideChatJoinRequestRequest{}, &tg.AccountUpdateBirthdayRequest{}, &tg.AccountUpdatePersonalChannelRequest{}, &tg.AccountUpdateEmojiStatusRequest{}, &tg.AccountSetPrivacyRequest{}}
 	for _, req := range requests {
 		if !writeRequest(req) {
 			t.Errorf("not classified as write: %T", req)

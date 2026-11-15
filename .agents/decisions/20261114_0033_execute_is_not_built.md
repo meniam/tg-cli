@@ -1,7 +1,9 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+---
 # Метод execute не делаем
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

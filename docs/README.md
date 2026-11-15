@@ -11,6 +11,7 @@ An index of the documentation of `tg`, a console client for a personal Telegram 
 | to list, resolve and describe chats, read members, topics and common chats, mark a chat read, load a whole chat history | [cli/chats.md](cli/chats.md) |
 | to read folders, account sessions, blocked peers and notification defaults | [cli/folders-and-account.md](cli/folders-and-account.md) |
 | to read messages, search Telegram, read the context of a message or the comments of a post, build a message link, export saved messages, follow live events | [cli/messages-read.md](cli/messages-read.md) |
+| to inspect and press buttons or set chat auto-delete | [cli/buttons-stickers-auto-delete.md](cli/buttons-stickers-auto-delete.md) |
 | to send, edit, delete and forward messages, send files, react, pin and unpin, create polls, format text | [cli/messages-write.md](cli/messages-write.md) |
 | to keep notes, search the local database, print the version, read the machine description of all commands | [cli/notes-and-search.md](cli/notes-and-search.md) |
 | to decide which chats the agent sees, where it may write and which directories it may send files from | [cli/access.md](cli/access.md) |

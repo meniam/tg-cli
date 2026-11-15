@@ -1,7 +1,10 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+paths: [cmd/tg-cli, go.mod]
+---
 # Код лежит в cmd/ и internal/, без src/ и pkg/
-
-Decided: 2026-11-13
-Revised: revised by [cli импортирует daemon ради путей, Telegram-клиент подставляет main](20261113_2113_cli_imports_daemon_paths_and_main_injects_telegram.md) 2026-11-13
 
 ## Context
 

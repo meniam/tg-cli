@@ -71,14 +71,14 @@ PR: —
 
 ## Decision log
 
-| Date | Decision | Reason | Confirmed by |
+| Date | Decision | Reason | Confirmed |
 | --- | --- | --- | --- |
-| 2026-11-14 | У списка участников `--search`, `--offset` и `--filter recent|admins|bots` | Админы и боты нужны агенту часто | Мязин Евгений: «--search, --offset и --filter (Recommended)» |
-| 2026-11-14 | Люди из ответов сохраняются в `people`, таблицы членства нет | Единообразие с «всё прочитанное сохраняется» | Мязин Евгений: «Да, в таблицу people (Recommended)» |
-| 2026-11-14 | Команды `chat members`, `chat topics`, `chat common` | Единая группа `chat` | Мязин Евгений: «chat members, chat topics, chat common (Recommended)» |
-| 2026-11-14 | `--search` и `--filter` можно совмещать: роль выбирает Telegram, текст применяет Daemon к полученной странице | Удобство агента: найти админа по имени | Мязин Евгений: «Можно, фильтруем сами» |
-| 2026-11-14 | В `chat common` закрытые чаты убираются до ответа и до записи, пустую после фильтра страницу Daemon заменяет следующей (до десяти запросов) | Закрытый чат не должен быть виден даже косвенно | Мязин Евгений: «Тихо убрать и добрать следующую (Recommended)» |
-| 2026-11-14 | Для канала без прав админа ошибка Telegram, а не пустой список | Пустой список ввёл бы агента в заблуждение | Мязин Евгений: «Ошибка Telegram, код 5 (Recommended)» |
+| 2026-11-14 | [У списка участников `--search`, `--offset` и `--filter recent\|admins\|bots`](../decisions/20261114_2002_chat_members_topics_and_common_are_read_lists_with_text_search_on_the_loaded_page.md) | Админы и боты нужны агенту часто (было: Мязин Евгений: «--search, --offset и --filter (Recommended)») | yes |
+| 2026-11-14 | [Люди из ответов сохраняются в `people`, таблицы членства нет](../decisions/20261114_2002_chat_members_topics_and_common_are_read_lists_with_text_search_on_the_loaded_page.md) | Единообразие с «всё прочитанное сохраняется» (было: Мязин Евгений: «Да, в таблицу people (Recommended)») | yes |
+| 2026-11-14 | [Команды `chat members`, `chat topics`, `chat common`](../decisions/20261114_2002_chat_members_topics_and_common_are_read_lists_with_text_search_on_the_loaded_page.md) | Единая группа `chat` (было: Мязин Евгений: «chat members, chat topics, chat common (Recommended)») | yes |
+| 2026-11-14 | [`--search` и `--filter` можно совмещать: роль выбирает Telegram, текст применяет Daemon к полученной странице](../decisions/20261114_2002_chat_members_topics_and_common_are_read_lists_with_text_search_on_the_loaded_page.md) | Удобство агента: найти админа по имени (было: Мязин Евгений: «Можно, фильтруем сами») | yes |
+| 2026-11-14 | [В `chat common` закрытые чаты убираются до ответа и до записи, пустую после фильтра страницу Daemon заменяет следующей (до десяти запросов)](../decisions/20261114_2002_chat_members_topics_and_common_are_read_lists_with_text_search_on_the_loaded_page.md) | Закрытый чат не должен быть виден даже косвенно (было: Мязин Евгений: «Тихо убрать и добрать следующую (Recommended)») | yes |
+| 2026-11-14 | [Для канала без прав админа ошибка Telegram, а не пустой список](../decisions/20261114_2002_chat_members_topics_and_common_are_read_lists_with_text_search_on_the_loaded_page.md) | Пустой список ввёл бы агента в заблуждение (было: Мязин Евгений: «Ошибка Telegram, код 5 (Recommended)») | yes |
 
 ## Step 0. Fix decisions before changes
 

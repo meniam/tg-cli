@@ -13,7 +13,7 @@ func (a *app) messageExportCommand() *cobra.Command {
 	cmd := a.annotate(&cobra.Command{
 		Use: "export <chat>", Short: "Stream locally saved messages in ID order",
 		Long: "Export messages already saved in this profile's database, oldest ID first.\n" +
-			"--local is required; exporting directly from Telegram is not implemented.\n" +
+			"--local is required; first run chat sync start and wait for chat sync status.\n" +
 			"The default format is jsonl, one message per line. Use --after with the last\n" +
 			"printed id to resume. --limit caps the total number of printed messages.\n" +
 			"--since and --until are inclusive RFC 3339 times. Put -- before a negative chat id.",
@@ -49,7 +49,7 @@ func (a *app) messageExport(cmd *cobra.Command, args []string) error {
 	}
 	local, _ := cmd.Flags().GetBool("local")
 	if !local {
-		return fail(exitcode.Usage, "--local is required; export from Telegram is not implemented")
+		return fail(exitcode.Usage, "--local is required; run chat sync start and wait for chat sync status first")
 	}
 	if settings.format != output.FormatJSONL && settings.format != output.FormatHuman {
 		return fail(exitcode.Usage, "message export supports only jsonl and human formats")

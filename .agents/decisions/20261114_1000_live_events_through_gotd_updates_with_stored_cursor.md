@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+paths: [internal/daemon/events.go, internal/store/events.go, internal/store/migrations/0003_events.sql, internal/rpc/subscription_server.go, internal/cli/watch_cmd.go]
+---
 # Живые события идут из менеджера обновлений gotd через журнал SQLite с курсором по id, subscribe шлёт уведомления, message watch печатает jsonl
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

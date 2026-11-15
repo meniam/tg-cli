@@ -1,10 +1,17 @@
 # Single entry point of tg-cli. Help: `just`; every recipe accepts `-h` or `--help`.
 #
 # Layout: help texts live in bin/just/ (root help.txt and <recipe>.txt in
-# bin/just/root/), rendered by bin/lib/help.sh; recipe help is assembled by
-# bin/lib/recipe-help.sh. When you change a command, update its help text too.
+# bin/just/root/; a module has its own folder bin/just/<module>/ with mod.just,
+# help.txt and <recipe>.txt), rendered by bin/lib/help.sh; recipe help is assembled
+# by bin/lib/recipe-help.sh. When you change a command, update its help text too.
 #
-# Install: brew install just
+# Install: brew install just. The changelog and atlas modules need uv: brew install uv
+
+# Changelog: records of changes visible outside the code
+mod changelog 'bin/just/changelog/mod.just'
+
+# Atlas: code graph and docs index for AI agents (a copy of the build, do not edit)
+mod atlas 'bin/apps/atlas/justfile'
 
 # Show help
 [default]

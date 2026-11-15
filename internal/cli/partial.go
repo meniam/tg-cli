@@ -17,8 +17,14 @@ func isPartial(data any) bool {
 func printPartialSummary(w io.Writer, cmd *cobra.Command, data any) error {
 	var failed, total int
 	switch v := data.(type) {
+	case *rpc.AccountSetResult:
+		failed, total = len(v.Errors), len(v.Errors)+len(v.Changes)
+	case *rpc.ChatSetResult:
+		failed, total = len(v.Errors), len(v.Errors)+len(v.Changes)
 	case *rpc.DeleteResult:
 		failed, total = len(v.Errors), len(v.Errors)+len(v.Deleted)
+	case *rpc.DownloadResult:
+		failed, total = len(v.Errors), len(v.Errors)+len(v.Files)
 	case *rpc.ForwardResult:
 		failed, total = len(v.Errors), len(v.Errors)+len(v.Messages)
 	case *rpc.ScheduledResult:

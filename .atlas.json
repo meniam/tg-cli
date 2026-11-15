@@ -1,0 +1,29 @@
+{
+  "$schema": "./bin/apps/atlas/src/atlas/schema/atlas.schema.json",
+  "version": 1,
+  "root": ".",
+  "index": "var/cache/atlas",
+  "paths": {
+    "code": ["cmd", "internal"],
+    "docs": [
+      "docs",
+      "README.md",
+      "AGENTS.md",
+      "INTENT.md",
+      "FEATURES.md",
+      ".agents/rules",
+      ".agents/skills"
+    ],
+    "exclude": [
+      "dist",
+      "var",
+      "**/testdata/**",
+      ".agents/plans/**"
+    ],
+    "scopes": {
+      "decision": [".agents/decisions/**"],
+      "learning": [".agents/learnings/**"],
+      "changelog": [".agents/changelog/**"]
+    }
+  }
+}

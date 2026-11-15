@@ -1,7 +1,10 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/daemon/paths.go, internal/daemon/lock_unix.go, internal/cli/daemon_cmd.go]
+---
 # Данные профиля лежат в каталоге профиля, ключи приложения берутся из окружения
-
-Decided: 2026-11-13
-Revised: revised by [Вход идёт по пресету официального клиента, своё приложение необязательно](20261113_2116_login_uses_official_client_presets.md) 2026-11-13
 
 ## Context
 

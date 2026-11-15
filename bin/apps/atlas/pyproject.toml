@@ -1,0 +1,29 @@
+[project]
+name = "atlas"
+version = "0.1.0"
+description = "Локальная карта проекта для ИИ-агентов: граф кода TS, JS, PHP, Python, Go и индекс документации"
+authors = [
+    { name = "Eugene Myazin", email = "eugene.myazin@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "pyyaml>=6.0.2",
+    # 0.26.0 портит память на Python 3.14: segfault при разборе admin/ в catalog
+    # после сотни файлов подряд. Снять верхнюю границу, когда исправят в 0.26.x.
+    "tree-sitter>=0.25.2,<0.26",
+    "tree-sitter-go>=0.25.0",
+    "tree-sitter-javascript>=0.25.0",
+    "tree-sitter-php>=0.24.1",
+    "tree-sitter-python>=0.25.0",
+    "tree-sitter-typescript>=0.23.2",
+]
+
+[project.scripts]
+atlas = "atlas.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+python-preference = "only-managed"

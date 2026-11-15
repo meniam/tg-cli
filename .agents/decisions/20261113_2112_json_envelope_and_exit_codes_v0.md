@@ -1,7 +1,10 @@
+---
+decided: 2026-11-13
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+paths: [internal/exitcode, internal/output]
+---
 # Ответ CLI это JSON-конверт, коды выхода версии 0 закреплены
-
-Decided: 2026-11-13
-Revised: —
 
 ## Context
 

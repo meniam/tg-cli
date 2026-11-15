@@ -15,12 +15,12 @@ const writeVerbs = `Send|Edit|Delete|Forward|Join|Leave|Invite|Kick|Ban|Block|Un
 
 // writeCall matches a call name that writes: either a plain verb (peers.User.Block,
 // peers.Channel.Leave) or a raw API method (MessagesSendMessage, ChannelsEditTitle).
-var writeCall = regexp.MustCompile(`^(` + writeVerbs + `)|^(Messages|Channels|Contacts|Account|Users|Auth|Phone|Stories|Payments|Bots|Folders|Chatlists)(` + writeVerbs + `)`)
+var writeCall = regexp.MustCompile(`^(` + writeVerbs + `)|^(Messages|Channels|Contacts|Account|Users|Auth|Phone|Stories|Payments|Bots|Folders|Chatlists)(` + writeVerbs + `)|^MessagesGet(BotCallbackAnswer|InlineBotResults)$`)
 
 // readFiles are the files that read chats and messages. They must stay
 // read-only: login code lives in other files and is allowed to use sign-in
 // methods. The same rule is stated in the security section of AGENTS.md.
-var readFiles = []string{"history.go", "peers.go", "message.go", "convert.go", "cursor.go", "client.go", "errors.go", "members.go", "topics_common.go", "users_read.go", "chatlist_read.go", "saved_read.go"}
+var readFiles = []string{"download.go", "history.go", "peers.go", "message.go", "convert.go", "cursor.go", "client.go", "errors.go", "members.go", "topics_common.go", "users_read.go", "buttons_read.go", "stickers_read.go", "channels_profile_read.go", "privacy_read.go", "chatlist_read.go", "saved_read.go"}
 
 func TestReadFilesCallNothingThatWrites(t *testing.T) {
 	fset := token.NewFileSet()
@@ -35,7 +35,7 @@ func TestReadFilesCallNothingThatWrites(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if sel, ok := call.Fun.(*ast.SelectorExpr); ok && writeCall.MatchString(sel.Sel.Name) {
+			if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name != "UploadGetFile" && writeCall.MatchString(sel.Sel.Name) {
 				bad = append(bad, sel.Sel.Name+" at "+fset.Position(sel.Pos()).String())
 			}
 			return true
@@ -53,6 +53,7 @@ func TestWriteCallPatternCatchesWriters(t *testing.T) {
 		"ChannelsJoinChannel", "ChannelsLeaveChannel", "ContactsBlock", "AccountUpdateProfile",
 		"Block", "Leave", "Join", "ImportInvite", "SendCode", "ReportSpam", "MessagesSetTyping",
 		"MessagesForwardMessages", "MessagesSaveDraft", "MessagesUnpinAllMessages",
+		"MessagesGetBotCallbackAnswer", "MessagesGetInlineBotResults",
 	} {
 		if !writeCall.MatchString(name) {
 			t.Errorf("%s must be recognised as a write", name)
