@@ -115,9 +115,10 @@ type ChatAdminResult struct {
 
 // ChatOwnAdminRights reports freshly fetched permissions for dry-run checks.
 type ChatOwnAdminRights struct {
-	Creator    bool `json:"creator"`
-	ChangeInfo bool `json:"change_info"`
-	BanUsers   bool `json:"ban_users"`
+	Creator     bool `json:"creator"`
+	ChangeInfo  bool `json:"change_info"`
+	BanUsers    bool `json:"ban_users"`
+	InviteUsers bool `json:"invite_users"`
 }
 
 var ChatAdminRights = []string{"send-plain", "send-media", "send-photos", "send-videos", "send-roundvideos", "send-audios", "send-voices", "send-docs", "send-stickers", "send-gifs", "send-games", "send-inline", "send-polls", "embed-links", "send-reactions", "change-info", "invite-users", "pin-messages", "manage-topics"}

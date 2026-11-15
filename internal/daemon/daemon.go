@@ -321,6 +321,16 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodChatInviteInfo, d.chatInviteInfo)
 	d.handle(rpc.MethodMessageHistory, d.messageHistory)
 	d.handle(rpc.MethodMessageGet, d.messageGet)
+	d.handle(rpc.MethodMessageReaders, d.messageReaders)
+	d.handle(rpc.MethodAccountProfile, d.accountProfile)
+	d.handle(rpc.MethodAccountPrivacyGet, d.accountPrivacyGet)
+	d.handle(rpc.MethodAccountPrivacySet, d.accountPrivacySet)
+	d.handle(rpc.MethodAccountSet, d.accountSet)
+	d.handle(rpc.MethodChatSet, d.chatSet)
+	d.handle(rpc.MethodChatRequests, d.chatRequests)
+	d.handle(rpc.MethodChatApprove, d.approveJoinRequest)
+	d.handle(rpc.MethodChatDecline, d.declineJoinRequest)
+	d.handle(rpc.MethodAccountEmojiStatuses, d.accountEmojiStatuses)
 	d.handle(rpc.MethodMessagePinned, d.messagePinned)
 	d.handle(rpc.MethodMessageScheduledList, d.scheduledList)
 	d.handle(rpc.MethodMessageScheduledDelete, d.scheduledDelete)
@@ -373,8 +383,8 @@ func (d *daemon) status(ctx context.Context, _ json.RawMessage) (any, error) {
 		// The status request itself is active while it runs, do not count it.
 		ActiveRequests: max(d.srv.Active()-1, 0),
 	}
-	if policy := d.policy(); policy.Enabled() || policy.WriteCount() > 0 || policy.AdminCount() > 0 || policy.CreateAllowed() {
-		st.Access = &rpc.AccessStatus{Enabled: policy.Enabled(), Allow: policy.AllowCount(), Block: policy.BlockCount(), Write: policy.WriteCount(), Admin: policy.AdminCount(), Create: policy.CreateAllowed(), Closed: policy.Closed()}
+	if policy := d.policy(); policy.Enabled() || policy.WriteCount() > 0 || policy.AdminCount() > 0 || policy.CreateAllowed() || policy.ProfileAllowed() {
+		st.Access = &rpc.AccessStatus{Enabled: policy.Enabled(), Allow: policy.AllowCount(), Block: policy.BlockCount(), Write: policy.WriteCount(), Admin: policy.AdminCount(), Create: policy.CreateAllowed(), Profile: policy.ProfileAllowed(), Closed: policy.Closed()}
 	}
 	if d.fillConnection(&st) {
 		return st, nil

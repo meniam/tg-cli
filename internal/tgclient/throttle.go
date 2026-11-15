@@ -81,6 +81,12 @@ func writeRequest(input bin.Encoder) bool {
 		*tg.MessagesEditChatTitleRequest, *tg.MessagesEditChatAboutRequest,
 		*tg.ChannelsEditBannedRequest, *tg.MessagesEditChatDefaultBannedRightsRequest,
 		*tg.ChannelsToggleSlowModeRequest,
+		*tg.ChannelsToggleSignaturesRequest, *tg.ChannelsToggleAntiSpamRequest,
+		*tg.ChannelsToggleForumRequest, *tg.ChannelsTogglePreHistoryHiddenRequest,
+		*tg.ChannelsToggleJoinRequestRequest, *tg.ChannelsToggleJoinToSendRequest,
+		*tg.MessagesHideChatJoinRequestRequest, *tg.AccountUpdateBirthdayRequest,
+		*tg.AccountUpdatePersonalChannelRequest, *tg.AccountUpdateEmojiStatusRequest,
+		*tg.AccountSetPrivacyRequest,
 		*tg.ContactsAddContactRequest, *tg.ContactsDeleteContactsRequest,
 		*tg.ContactsBlockRequest, *tg.ContactsUnblockRequest:
 		return true

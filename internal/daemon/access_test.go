@@ -66,14 +66,14 @@ func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 	d.srv.SetEventSource(d.hub, d.replayEvents)
 	classes := map[string]string{
 		rpc.MethodUserProfile: "user-ref", rpc.MethodUserBlock: "user-ref", rpc.MethodUserUnblock: "user-ref", rpc.MethodContactAdd: "user-ref", rpc.MethodContactDelete: "user-ref", rpc.MethodContactList: "chat-search", rpc.MethodContactSearch: "chat-search",
-		rpc.MethodPing: "none", rpc.MethodStatus: "none", rpc.MethodShutdown: "none",
+		rpc.MethodAccountEmojiStatuses: "none", rpc.MethodAccountPrivacyGet: "none", rpc.MethodAccountPrivacySet: "none", rpc.MethodAccountSet: "none", rpc.MethodAccountProfile: "none", rpc.MethodPing: "none", rpc.MethodStatus: "none", rpc.MethodShutdown: "none",
 		rpc.MethodAuthStart: "none", rpc.MethodAuthCode: "none", rpc.MethodAuthPassword: "none", rpc.MethodAuthResend: "none", rpc.MethodAuthStartQR: "none", rpc.MethodAuthWait: "none", rpc.MethodAuthCancel: "none",
 		rpc.MethodChatUnread: "chat-list", rpc.MethodChatChanges: "chat-ref", rpc.MethodMessageUnread: "chat-ref", rpc.MethodChatList: "chat-list", rpc.MethodChatResolve: "chat-ref", rpc.MethodChatInfo: "chat-ref", rpc.MethodChatInviteInfo: "chat-ref",
 		rpc.MethodFolderList: "chat-list", rpc.MethodChatState: "chat-ref", rpc.MethodAccountSessions: "none", rpc.MethodAccountBlocked: "chat-list", rpc.MethodAccountNotify: "none",
 		rpc.MethodChatDraftGet: "chat-ref", rpc.MethodChatDraftList: "chat-search", rpc.MethodChatDraftSet: "chat-write", rpc.MethodChatDraftClear: "chat-write",
 		rpc.MethodChatMembers: "chat-ref", rpc.MethodChatTopics: "chat-ref", rpc.MethodChatCommon: "chat-search",
-		rpc.MethodChatJoin: "chat-write", rpc.MethodChatLeave: "chat-write", rpc.MethodChatCreate: "chat-create", rpc.MethodChatEdit: "chat-admin", rpc.MethodChatKick: "chat-admin", rpc.MethodChatBan: "chat-admin", rpc.MethodChatUnban: "chat-admin", rpc.MethodChatRestrict: "chat-admin", rpc.MethodChatPermissions: "chat-admin", rpc.MethodChatSlowMode: "chat-admin",
-		rpc.MethodMessageHistory: "chat-ref", rpc.MethodMessageGet: "chat-ref", rpc.MethodMessagePinned: "chat-ref",
+		rpc.MethodChatRequests: "chat-ref", rpc.MethodChatSet: "chat-ref", rpc.MethodChatApprove: "chat-ref", rpc.MethodChatDecline: "chat-ref", rpc.MethodChatJoin: "chat-write", rpc.MethodChatLeave: "chat-write", rpc.MethodChatCreate: "chat-create", rpc.MethodChatEdit: "chat-admin", rpc.MethodChatKick: "chat-admin", rpc.MethodChatBan: "chat-admin", rpc.MethodChatUnban: "chat-admin", rpc.MethodChatRestrict: "chat-admin", rpc.MethodChatPermissions: "chat-admin", rpc.MethodChatSlowMode: "chat-admin",
+		rpc.MethodMessageReaders: "chat-ref", rpc.MethodMessageHistory: "chat-ref", rpc.MethodMessageGet: "chat-ref", rpc.MethodMessagePinned: "chat-ref",
 		rpc.MethodMessageScheduledList: "chat-ref", rpc.MethodMessageScheduledDelete: "chat-write", rpc.MethodMessageScheduledSendNow: "chat-write",
 		rpc.MethodMessageSend: "chat-write", rpc.MethodMessageSendMedia: "chat-write", rpc.MethodMessageEdit: "chat-write", rpc.MethodMessageDelete: "chat-write", rpc.MethodMessageForward: "chat-write",
 		rpc.MethodMessageReact: "chat-write", rpc.MethodMessagePin: "chat-write", rpc.MethodMessageUnpin: "chat-write", rpc.MethodMessagePoll: "chat-write",

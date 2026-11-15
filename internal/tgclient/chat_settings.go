@@ -62,7 +62,7 @@ func groupSettings(c *tg.Chat, full *tg.ChatFull) json.RawMessage {
 	return settingsJSON(m)
 }
 func channelSettings(c *tg.Channel, full *tg.ChannelFull) json.RawMessage {
-	m := map[string]any{"no_forwards": c.Noforwards, "join_request": c.JoinRequest, "join_to_send": c.JoinToSend, "signatures": c.Signatures, "hidden_history": full.HiddenPrehistory}
+	m := map[string]any{"no_forwards": c.Noforwards, "join_request": c.JoinRequest, "join_to_send": c.JoinToSend, "signatures": c.Signatures, "signature_profiles": c.SignatureProfiles, "antispam": full.Antispam, "hidden_history": full.HiddenPrehistory}
 	if r, ok := c.GetDefaultBannedRights(); ok {
 		m["default_denied"] = denied(r)
 	}

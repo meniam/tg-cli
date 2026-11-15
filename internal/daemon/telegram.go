@@ -17,6 +17,16 @@ import (
 // specific code (not authorized, flood wait, Telegram errors).
 type Telegram interface {
 	usersTelegram
+	CacheJoinRequestUsers(context.Context, []rpc.JoinRequest) error
+	AccountPrivacyGet(context.Context, string) (rpc.PrivacyRules, error)
+	AccountPrivacySet(context.Context, rpc.PrivacySetParams, []chatref.Ref, []chatref.Ref, []chatref.Ref, []chatref.Ref) (rpc.PrivacyRules, error)
+	ChatRequests(context.Context, chatref.Ref, rpc.JoinRequestsParams) (rpc.JoinRequestsResult, error)
+	SetAccountField(context.Context, string, string, string, *chatref.Ref) (bool, error)
+	SetChannelSetting(context.Context, chatref.Ref, string, string, *string, *string) (bool, error)
+	HandleJoinRequest(context.Context, chatref.Ref, chatref.Ref, bool) error
+	AccountEmojiStatuses(context.Context, bool) (rpc.EmojiStatusesResult, error)
+	AccountProfile(context.Context) (rpc.AccountProfile, error)
+	MessageReaders(context.Context, chatref.Ref, int) (rpc.MessageReadersResult, error)
 	ChatAdmin
 	// Run connects and keeps the connection until ctx ends. It returns
 	// ctx.Err() on a clean stop.
