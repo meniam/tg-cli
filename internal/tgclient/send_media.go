@@ -32,10 +32,23 @@ func (c *Client) SendMedia(ctx context.Context, ref chatref.Ref, p rpc.SendMedia
 	if err != nil {
 		return rpc.SendMediaResult{}, err
 	}
+	if p.SelfDestruct != "" {
+		if toChatOf(resolved).Type != "user" {
+			return rpc.SendMediaResult{}, rpc.NewError(rpc.CodeInvalidParams, "self-destruct requires a private user chat")
+		}
+	}
 	return sendMedia(ctx, c.tg.API(), resolved.InputPeer(), int64(resolved.TDLibPeerID()), p, files)
 }
 
 func validateMedia(p rpc.SendMediaParams, files []rpc.MediaFile) error {
+	if p.SelfDestruct != "" {
+		if _, err := rpc.ParseSelfDestruct(p.SelfDestruct); err != nil {
+			return err
+		}
+		if (p.As != "photo" && p.As != "video") || len(files) != 1 {
+			return rpc.NewError(rpc.CodeInvalidParams, "self-destruct requires one photo or video")
+		}
+	}
 	if p.DryRun {
 		return rpc.NewError(rpc.CodeInvalidParams, "dry-run must be handled by the daemon")
 	}
@@ -164,6 +177,14 @@ func sendAlbum(ctx context.Context, builder *message.RequestBuilder, specs []med
 }
 
 func makeMediaSpec(uploaded tg.InputFileClass, p rpc.SendMediaParams, file rpc.MediaFile, caption string) (mediaSpec, error) {
+	ttl := 0
+	if p.SelfDestruct != "" {
+		var err error
+		ttl, err = rpc.ParseSelfDestruct(p.SelfDestruct)
+		if err != nil {
+			return mediaSpec{}, err
+		}
+	}
 	var opts []message.StyledTextOption
 	if caption != "" {
 		opts = []message.StyledTextOption{styling.Plain(caption)}
@@ -172,7 +193,7 @@ func makeMediaSpec(uploaded tg.InputFileClass, p rpc.SendMediaParams, file rpc.M
 	width := valueOr(p.Width, file.Width)
 	height := valueOr(p.Height, file.Height)
 	if p.As == "photo" {
-		return mediaSpec{option: message.UploadedPhoto(uploaded, opts...), raw: &tg.InputMediaUploadedPhoto{File: uploaded}}, nil
+		return mediaSpec{option: message.UploadedPhoto(uploaded, opts...).TTLSeconds(ttl), raw: &tg.InputMediaUploadedPhoto{File: uploaded, TTLSeconds: ttl}}, nil
 	}
 	mimeType := file.MIME
 	if mimeType == "" {
@@ -187,8 +208,9 @@ func makeMediaSpec(uploaded tg.InputFileClass, p rpc.SendMediaParams, file rpc.M
 		return mediaSpec{option: base.ForceFile(true), raw: raw}, nil
 	case "video":
 		raw.MimeType = "video/mp4"
+		raw.TTLSeconds = ttl
 		raw.Attributes = append(attributes, &tg.DocumentAttributeVideo{Duration: float64(duration), W: width, H: height, SupportsStreaming: true})
-		return mediaSpec{option: base.MIME("video/mp4").Video().DurationSeconds(duration).Resolution(width, height).SupportsStreaming(), raw: raw}, nil
+		return mediaSpec{option: base.TTLSeconds(ttl).MIME("video/mp4").Video().DurationSeconds(duration).Resolution(width, height).SupportsStreaming(), raw: raw}, nil
 	case "audio":
 		if file.MIME == "" && mimeType == "application/octet-stream" {
 			raw.MimeType = "audio/mpeg"

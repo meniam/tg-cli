@@ -65,6 +65,8 @@ func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 	d.register()
 	d.srv.SetEventSource(d.hub, d.replayEvents)
 	classes := map[string]string{
+		rpc.MethodStickerSearch: "none", rpc.MethodStickerInstalled: "none",
+		rpc.MethodMessageButtons: "chat-ref", rpc.MethodMessagePress: "chat-write", rpc.MethodChatAutoDelete: "chat-write", rpc.MethodMessageInlineQuery: "chat-write", rpc.MethodMessageSendInline: "chat-write", rpc.MethodMessageEditMedia: "chat-write", rpc.MethodStickerSet: "none", rpc.MethodMessageSendSticker: "chat-write",
 		rpc.MethodUserProfile: "user-ref", rpc.MethodUserBlock: "user-ref", rpc.MethodUserUnblock: "user-ref", rpc.MethodContactAdd: "user-ref", rpc.MethodContactDelete: "user-ref", rpc.MethodContactList: "chat-search", rpc.MethodContactSearch: "chat-search",
 		rpc.MethodPing: "none", rpc.MethodStatus: "none", rpc.MethodShutdown: "none",
 		rpc.MethodAuthStart: "none", rpc.MethodAuthCode: "none", rpc.MethodAuthPassword: "none", rpc.MethodAuthResend: "none", rpc.MethodAuthStartQR: "none", rpc.MethodAuthWait: "none", rpc.MethodAuthCancel: "none",

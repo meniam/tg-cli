@@ -221,6 +221,9 @@ func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, er
 	if f.missing {
 		return rpc.Chat{}, rpc.NewError(rpc.CodeNotFound, "not found: no such chat")
 	}
+	if ref.Kind == chatref.Username && ref.Username == "fixturebot" || ref.Kind == chatref.ID && ref.ID == 6 {
+		return rpc.Chat{ID: 6, Type: "bot", Username: "fixturebot"}, nil
+	}
 	if ref.Kind == chatref.Username && ref.Username == "aliceuser" || ref.Kind == chatref.ID && ref.ID == 5 {
 		return rpc.Chat{ID: 5, Type: "user", Title: "Ann", Username: "aliceuser"}, nil
 	}

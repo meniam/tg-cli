@@ -35,6 +35,7 @@ func (a *app) messageSendMediaCommand() *cobra.Command {
 	cmd.Flags().Int("duration", 0, "media duration in seconds; overrides detected duration")
 	cmd.Flags().Int("width", 0, "video width; overrides detected width")
 	cmd.Flags().Int("height", 0, "video height; overrides detected height")
+	cmd.Flags().String("self-destruct", "", "self-destruct after 1 to 60 seconds or view-once")
 	return cmd
 }
 
@@ -44,6 +45,15 @@ func (a *app) messageSendMedia(cmd *cobra.Command, args []string) error {
 		return fail(exitcode.Usage, "--as is required: use photo, video, audio, voice or document")
 	}
 	paths, _ := cmd.Flags().GetStringArray("file")
+	selfDestruct, _ := cmd.Flags().GetString("self-destruct")
+	if cmd.Flags().Changed("self-destruct") {
+		if _, err := rpc.ParseSelfDestruct(selfDestruct); err != nil {
+			return fail(exitcode.Usage, "%s", err.Error())
+		}
+		if (as != "photo" && as != "video") || len(paths) != 1 {
+			return fail(exitcode.Usage, "self-destruct requires one photo or video")
+		}
+	}
 	if len(paths) == 0 || len(paths) > 10 || (as == "voice" && len(paths) != 1) {
 		return fail(exitcode.Usage, "provide 1 to 10 --file paths; voice requires exactly one")
 	}
@@ -78,7 +88,7 @@ func (a *app) messageSendMedia(cmd *cobra.Command, args []string) error {
 	dry, _ := cmd.Flags().GetBool("dry-run")
 	p := rpc.SendMediaParams{Chat: args[0], As: as, Files: files, Caption: caption,
 		ReplyTo: reply, Topic: topic, Silent: silent, DryRun: dry,
-		Duration: duration, Width: width, Height: height}
+		Duration: duration, Width: width, Height: height, SelfDestruct: selfDestruct}
 	keyed, err := withIdempotencyKey(cmd, p)
 	if err != nil {
 		return err

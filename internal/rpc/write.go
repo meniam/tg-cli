@@ -33,6 +33,7 @@ type SendMediaParams struct {
 	Duration       int      `json:"duration,omitempty"`
 	Width          int      `json:"width,omitempty"`
 	Height         int      `json:"height,omitempty"`
+	SelfDestruct   string   `json:"self_destruct,omitempty"`
 }
 
 // MediaFile is a checked, already-open file owned by the caller.
@@ -59,6 +60,7 @@ type SendMediaResult struct {
 	Types           []string     `json:"types,omitempty"`
 	Sizes           []int64      `json:"sizes,omitempty"`
 	CaptionLength   int          `json:"caption_length,omitempty"`
+	SelfDestruct    string       `json:"self_destruct,omitempty"`
 }
 
 type EditParams struct {

@@ -64,6 +64,8 @@ type daemon struct {
 	eventMu             sync.Mutex
 	deletionsMu         sync.Mutex
 	contactsMu          sync.Mutex
+	inlineMu            sync.Mutex
+	inlineQueries       map[string]inlineQueryEntry
 	addEvent            func(context.Context, store.Event) (int64, bool, error)
 	findMessageChats    func(context.Context, []int) ([]int64, error)
 	markMessagesDeleted func(context.Context, int64, []int) (int, error)
@@ -359,6 +361,7 @@ func (d *daemon) register() {
 	d.registerUsers()
 	d.registerChatAdmin()
 	d.registerUnread()
+	d.registerMessageExtras()
 }
 
 func (d *daemon) ping(context.Context, json.RawMessage) (any, error) {
