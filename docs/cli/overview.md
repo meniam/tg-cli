@@ -129,6 +129,8 @@ debug: call method=status took=0s failed=false
 
 ## The answer envelope
 
+A command group without a subcommand returns a `usage` error and lists its subcommands. Use `--help` for human-readable help. Usage errors include the command syntax when available.
+
 Every command, except the streams `message watch` and `message export`, prints one document on stdout, also on failure. Prompts, warnings, hints and logs go to stderr, so stdout stays parseable.
 
 ```json
