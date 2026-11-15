@@ -30,12 +30,16 @@ const (
 
 // Options configure Run.
 type Options struct {
-	Profile  string
-	Paths    Paths
-	Telegram Telegram
-	Store    *store.DB
-	Access   *access.Loader
-	Log      *slog.Logger
+	// ClientPreset is the profile preset included in session exports.
+	ClientPreset string
+	Profile      string
+	Paths        Paths
+	Telegram     Telegram
+	Store        *store.DB
+	Access       *access.Loader
+	Log          *slog.Logger
+	// FileWarningsReported suppresses warnings already shown by the caller.
+	FileWarningsReported bool
 	// IdleTimeout stops the daemon after this long without a request and with
 	// no request in flight. Zero means no idle stop: the daemon lives until
 	// `daemon stop` or a failure.
@@ -91,6 +95,15 @@ func Run(ctx context.Context, opts Options) error {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
+	warnings, err := CheckFileNames(opts.Paths)
+	if err != nil {
+		return err
+	}
+	if !opts.FileWarningsReported {
+		for _, warning := range warnings {
+			log.Warn(warning)
+		}
+	}
 	if err := os.MkdirAll(opts.Paths.Dir, 0o700); err != nil {
 		return fmt.Errorf("create profile directory: %w", err)
 	}
@@ -102,6 +115,9 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 	defer release()
+	if _, err := CheckFileNames(opts.Paths); err != nil {
+		return err
+	}
 	releaseStart, err := guardSessionStart(opts.Paths)
 	if err != nil {
 		return err

@@ -14,7 +14,7 @@ func TestWriteContractsAndDisabledError(t *testing.T) {
 		t.Fatal("write method names changed")
 	}
 	err := ErrWriteDisabled()
-	if err.Code != CodeWriteDisabled || !strings.Contains(err.Message, "write") || !strings.Contains(err.Message, "access.json") {
+	if err.Code != CodeWriteDisabled || !strings.Contains(err.Message, "write") || !strings.Contains(err.Message, "access file") {
 		t.Fatalf("disabled error: %+v", err)
 	}
 	input := SendParams{Chat: "42", Text: "agent text", ReplyTo: 7, Topic: 8, Silent: true, DryRun: true}

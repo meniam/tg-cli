@@ -122,7 +122,7 @@ var realResponseCases = map[string][]string{
 func realResponses(t *testing.T) map[string][]byte {
 	t.Helper()
 	e := loggedInEnv(t)
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,13 +304,23 @@ var uncoveredCommands = map[string]string{
 	"chat sync cancel":           "background cancellation is covered by net.Pipe CLI tests",
 }
 
-// fixtureResponseCases cover commands whose daemon side effects are isolated by net.Pipe.
-var fixtureResponseCases = map[string]bool{"message download": true, "message export-month": true, "message export-verify": true}
+// fixtureResponseCases cover commands exercised by independent response fixtures.
+var fixtureResponseCases = map[string]bool{
+	"message download":      true,
+	"message export-month":  true,
+	"message export-verify": true,
+	"config path":           true,
+	"config show":           true,
+	"config migrate":        true,
+}
 
 // TestEveryCommandResponseIsCompared makes sure the comparison covers the whole
 // command tree: a command that is neither exercised nor explained fails here.
 func TestEveryCommandResponseIsCompared(t *testing.T) {
 	t.Run("message download", TestDownloadResponseFixture)
+	for _, name := range []string{"config path", "config show", "config migrate"} {
+		t.Run(name, func(t *testing.T) { compareConfigResponse(t, name) })
+	}
 	t.Run("message export-month and verify", TestExportMonthCLI)
 	cases := map[string]bool{}
 	for path := range realResponseCases {
@@ -330,6 +340,56 @@ func TestEveryCommandResponseIsCompared(t *testing.T) {
 	for path, why := range uncoveredCommands {
 		if why == "" {
 			t.Errorf("%s: uncovered without a reason", path)
+		}
+	}
+}
+
+// compareConfigResponse checks actual offline responses against the schema.
+func compareConfigResponse(t *testing.T, path string) {
+	t.Helper()
+	commands := schemaCommands(t)
+	e := newEnv(t)
+	if path == "config show" {
+		configPath := filepath.Join(e.home, ".config", "tg-cli", "config.toml")
+		if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(configPath, []byte("[profiles.default]\nclient = 'desktop'\nproxy = 'socks5://u:p@localhost:1080'\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if path == "config migrate" {
+		dir := filepath.Join(e.home, "default")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "client"), []byte("desktop\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := e.run(strings.Fields(path)...)
+	if r.code != exitcode.OK {
+		t.Fatalf("%s: exit %d: %s", path, r.code, r.stdout)
+	}
+	data := parse(t, r).Data
+	paths, err := schema.Paths(data)
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("%s: invalid response: %v", path, err)
+	}
+	cmd, ok := commands[path]
+	if !ok {
+		t.Fatalf("%s: missing schema", path)
+	}
+	if missing := schema.Missing(paths, cmd.Fields); len(missing) > 0 {
+		t.Fatalf("%s: missing schema fields: %v", path, missing)
+	}
+	if path == "config show" && len(schema.Missing([]string{"files.unexpected"}, cmd.Fields)) != 1 {
+		t.Fatal("schema accepted an unknown fixed field")
+	}
+	if path == "config migrate" {
+		var result configMigrateResult
+		if err := json.Unmarshal(data, &result); err != nil || !result.Migrated || result.Backup == "" {
+			t.Fatalf("migration result: %+v, %v", result, err)
 		}
 	}
 }

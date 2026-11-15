@@ -14,7 +14,7 @@ import (
 
 func TestDaemonLogsTailWithoutDaemon(t *testing.T) {
 	e := newEnv(t)
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestDaemonLogsTailWithoutDaemon(t *testing.T) {
 
 func TestDaemonLogsFollowSurvivesRotation(t *testing.T) {
 	e := newEnv(t)
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile)
+	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,7 @@
 
 Only a human edits `<profile>/access.json`, with an editor. There is no command that writes it, and the agent never changes any field. The filter protects against accidental reading, against reading induced through a chat, and against accidental writes. It does not protect against an agent that deliberately bypasses it: an agent running as the same user can edit the file or open the SQLite database directly.
 
-The file lives in the profile directory, next to the session and the database (see [Profiles and the data directory](overview.md#profiles-and-the-data-directory)): `<TG_CLI_HOME>/<profile>/access.json`, or `tg-cli/<profile>/access.json` inside the user config directory.
+The file lives in the profile directory, next to the session and the database (see [Profiles and the data directory](overview.md#profiles-and-the-data-directory)): `<home>/<profile>/<access>`. By default this is `~/Library/Application Support/tg-cli/<profile>/access.json` on macOS. `home` and the access-file name come from `config.toml`; `TG_CLI_HOME` overrides `home` for one invocation.
 
 ## The file
 

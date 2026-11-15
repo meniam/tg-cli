@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 // MaxSocketPath is the longest socket path accepted. Unix socket paths are
@@ -17,10 +18,18 @@ const DefaultProfile = "default"
 
 var profileName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 
+// FileNames contains configurable profile file names.
+type FileNames struct {
+	Database, Session, Log, Deletions, Access string
+}
+
+// DefaultFileNames returns the original profile file names.
+func DefaultFileNames() FileNames {
+	return FileNames{Database: "store.db", Session: "session.json", Log: "daemon.log", Deletions: "deletions.jsonl", Access: "access.json"}
+}
+
 // Paths are the files of one profile.
 type Paths struct {
-	Transport string
-	Proxy     string
 	// Dir holds everything of the profile, mode 0700.
 	Dir string
 	// Socket is the JSON-RPC Unix socket, mode 0600.
@@ -29,12 +38,6 @@ type Paths struct {
 	Lock string
 	// Session is the Telegram session file, mode 0600. It is a secret.
 	Session string
-	// Client holds the name of the official client preset chosen for the
-	// profile. It is a name, not a credential.
-	Client string
-	// Device holds the device name the profile shows to Telegram, for example
-	// in the list of devices. It is not a secret.
-	Device string
 	// Database is the local SQLite database, mode 0600.
 	Database string
 	// Access is the human-managed chat access list.
@@ -50,7 +53,7 @@ const maxLogBytes = 10 << 20 // 10 MiB
 
 // ResolvePaths returns the paths of a profile. home is the base directory
 // (the TG_CLI_HOME value); when empty, the user config directory is used.
-func ResolvePaths(home, profile string) (Paths, error) {
+func ResolvePaths(home, profile string, files FileNames) (Paths, error) {
 	if !profileName.MatchString(profile) {
 		return Paths{}, fmt.Errorf("invalid profile name %q: use 1-32 chars of a-z, 0-9, _ and -, starting with a letter or digit", profile)
 	}
@@ -64,20 +67,25 @@ func ResolvePaths(home, profile string) (Paths, error) {
 	dir := filepath.Join(home, profile)
 	p := Paths{
 		Dir:       dir,
-		Transport: filepath.Join(dir, "transport"),
-		Proxy:     filepath.Join(dir, "proxy"),
 		Socket:    filepath.Join(dir, "daemon.sock"),
 		Lock:      filepath.Join(dir, "daemon.lock"),
-		Session:   filepath.Join(dir, "session.json"),
-		Client:    filepath.Join(dir, "client"),
-		Device:    filepath.Join(dir, "device"),
-		Database:  filepath.Join(dir, "store.db"),
-		Access:    filepath.Join(dir, "access.json"),
-		Deletions: filepath.Join(dir, "deletions.jsonl"),
-		Log:       filepath.Join(dir, "daemon.log"),
+		Session:   filepath.Join(dir, files.Session),
+		Database:  filepath.Join(dir, files.Database),
+		Access:    filepath.Join(dir, files.Access),
+		Deletions: filepath.Join(dir, files.Deletions),
+		Log:       filepath.Join(dir, files.Log),
 	}
 	if len(p.Socket) > MaxSocketPath {
-		return Paths{}, fmt.Errorf("socket path %q is %d bytes, the limit is %d: set TG_CLI_HOME to a shorter directory", p.Socket, len(p.Socket), MaxSocketPath)
+		return Paths{}, fmt.Errorf("socket path %q is %d bytes, the limit is %d: set home in config.toml or TG_CLI_HOME to a shorter directory", p.Socket, len(p.Socket), MaxSocketPath)
 	}
 	return p, nil
+}
+
+// accessMessage substitutes the configured access file name in diagnostics.
+func (d *daemon) accessMessage(message string) string {
+	name := filepath.Base(d.opts.Paths.Access)
+	if name == "." || name == "" {
+		name = "access.json"
+	}
+	return strings.ReplaceAll(message, "access.json", name)
 }

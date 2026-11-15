@@ -13,7 +13,7 @@ import (
 // to reach it. The caller stops it with t.Cleanup of the test's own context.
 func runWithIdle(t *testing.T, idle time.Duration) (*running, chan error, func()) {
 	t.Helper()
-	paths, err := ResolvePaths(shortTempDir(t), "test")
+	paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}

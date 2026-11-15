@@ -7,6 +7,7 @@ This page covers what every command shares: installation, profiles, the Daemon l
 | Page | Commands |
 | --- | --- |
 | [daemon-and-auth.md](daemon-and-auth.md) | `daemon start`, `status`, `stop`, `logs`; `auth login`, `status`, `resend`, `cancel` |
+| [config.md](config.md) | `config path`, `show`, `migrate` |
 | [chats.md](chats.md) | `chat` reads, unread, changes, state, drafts, typing, administration and `sync` |
 | [messages-read.md](messages-read.md) | `message history`, `get`, `pinned`, `search`, `context`, `comments`, `link`, `export`, `watch` |
 | [buttons-stickers-auto-delete.md](buttons-stickers-auto-delete.md) | `message buttons`, `press`, `inline-query`, `send-inline`, `edit-media`, `send-sticker`, `sticker search`, `set`, `installed`, `chat auto-delete` |
@@ -56,7 +57,13 @@ A chat that the access lists close looks the same as a chat that does not exist:
 
 `--profile <name>` selects an account. The name is 1 to 32 characters of `a-z`, `0-9`, `_` and `-`, starting with a letter or digit; anything else is exit code 2. The default profile is `default`. Every profile has its own directory with its own session, database, Daemon and access lists.
 
-The base directory is `TG_CLI_HOME`. When it is unset, the base is `tg-cli/` inside the user config directory (`os.UserConfigDir`, for example `~/Library/Application Support/tg-cli` on macOS). A profile lives in `<base>/<profile>/`, mode `0700`. The path of the socket (`<base>/<profile>/daemon.sock`) must not exceed 103 bytes, because Unix socket paths are short: with a longer one set `TG_CLI_HOME` to a shorter directory.
+A profile lives in `<home>/<profile>/`, mode `0700`. The path of the socket (`<home>/<profile>/daemon.sock`) must not exceed 103 bytes, because Unix socket paths are short.
+
+## Configuration
+
+`~/.config/tg-cli/config.toml` holds the profile data directory and the default profile. `home` defaults to `tg-cli/` inside the user config directory (`os.UserConfigDir`, for example `~/Library/Application Support/tg-cli` on macOS); `default_profile` defaults to `default`. `TG_CLI_HOME` overrides `home` for one invocation, and `--profile` overrides `default_profile`. Set `home` in `config.toml` or `TG_CLI_HOME` to a shorter directory when the socket path is too long.
+
+`tg config path` prints the file, `tg config show` prints its values with defaults and proxy credentials redacted, and `tg config migrate` transfers settings from the former profile files. A created config file has mode `0600`; a file writable by group or others is rejected. A group- or world-readable config with proxy credentials produces a warning on stderr.
 
 | File in the profile directory | What it holds |
 | --- | --- |
@@ -67,8 +74,12 @@ The base directory is `TG_CLI_HOME`. When it is unset, the base is `tg-cli/` ins
 | `daemon.log`, `daemon.log.1` to `.3` | the journal of a background Daemon, mode `0600`, see [daemon logs](daemon-and-auth.md#tg-daemon-logs) |
 | `access.json` | the chat access lists, written only by a human, see [access.md](access.md) |
 | `deletions.jsonl` | the deletion journal, mode `0600`, see [message delete](messages-write.md#tg-message-delete) |
-| `client` | the name of the remembered client preset (a name, not a credential) |
-| `device` | the remembered device name |
+| `moderation.jsonl` | the journal of chat-administration actions |
+| `account.jsonl` | the journal of account-profile and privacy actions |
+
+`[files]` may rename `store.db`, `session.json`, `daemon.log`, `deletions.jsonl`, and `access.json`; names are limited to safe base names and cannot collide. After a name change, a remaining old database, session, or access file stops the Daemon with exit code 2; an old journal produces a warning. The socket and lock names are fixed.
+
+`[profiles.<name>]` stores `client`, `device`, `transport`, and `proxy`. `daemon start --client`, `--device`, `--transport`, and `--proxy` update the selected profile only when a value changes. The former `client`, `device`, `transport`, and `proxy` files are migrated automatically before `daemon start`, `session export`, `session import`, and `config show`; `tg config migrate` runs the same migration explicitly. Migration copies those files and the previous configuration to `<home>/.config-migration-<time>/`, then removes only transferred files. It never opens or copies the session, database, access list, or journals.
 
 Secrets and risks:
 
@@ -90,7 +101,7 @@ Starting again on a profile whose Daemon is running is not an error: the command
 What each group of commands needs:
 
 | Commands | Running Daemon | Login |
-| --- | --- | --- |
+| --- | --- | --- | --- |
 | `schema`, `version`, `daemon logs` | no | no |
 | `daemon start` | no (it starts one) | no |
 | `daemon status`, `daemon stop`, `auth *` | yes | no |
@@ -222,7 +233,7 @@ The table is the one `tg schema` prints; the codes are defined in `internal/exit
 | 6 | `flood_wait` | Telegram asked to wait before the next request |
 | 7 | `not_found` | the chat, user, message or note does not exist or is not visible |
 | 8 | `cursor_expired` | the event cursor is older than the retained journal |
-| 9 | `write_disabled` | the owner did not allow writes to the chat in access.json |
+| 9 | `write_disabled` | the owner did not allow writes to the chat in the access file |
 | 10 | `offline` | Telegram is offline |
 <!-- /schema:exit-codes -->
 
@@ -266,12 +277,12 @@ Every request of the Daemon to Telegram passes one throttle per account, so a bu
 
 A `FLOOD_WAIT_X` from Telegram pauses the whole account for X seconds. A request that is not a write (send, send media, forward, edit, delete, mark read, reaction, pin, poll) and not a file upload part waits and repeats once when X is at most 10 seconds. A longer wait is exit code 6 at once. Writes and upload parts are never repeated: the agent decides what to do (the owner has not confirmed this rule yet). `SLOWMODE_WAIT` does not pause the account. While a history load waits out a `FLOOD_WAIT` longer than the auto-wait threshold, a normal command gets exit code 6 at once with the seconds left instead of waiting. Cancelling the load does not shorten the pause.
 
-Two variables tune the throttle. Set them in the environment of `tg daemon start`; a bad value is exit code 2 before any connection:
+`[behavior]` tunes the throttle. Environment variables override the corresponding config values for one invocation; a bad value is exit code 2 before any connection:
 
-| Variable | Values | Default |
-| --- | --- | --- |
-| `TG_CLI_THROTTLE_PERCENT` | a decimal number from 1 to 100: the share of the reference limits | 60 |
-| `TG_CLI_FLOOD_AUTOWAIT` | a Go duration such as `10s`; `0` turns the auto-wait off, and commands then queue during a pause | `10s` |
+| Config key | Environment variable | Values | Default |
+| --- | --- | --- | --- |
+| `behavior.throttle_percent` | `TG_CLI_THROTTLE_PERCENT` | a decimal number from 1 to 100: the share of the reference limits | 60 |
+| `behavior.flood_autowait` | `TG_CLI_FLOOD_AUTOWAIT` | a Go duration such as `10s`; `0` turns the auto-wait off, and commands then queue during a pause | `10s` |
 
 Per-method buckets remain an open item: `getDialogs` can hit `FLOOD_WAIT` before the general bucket, so keep pauses between reads. CDN pools, downloads through a foreign invoker, the init call, ping and ack bypass the throttle; the Telegram library keeps its own retries after `FLOOD_WAIT` in the updates manager, downloader and `QR.Auth`. See [FEATURES.md](../../FEATURES.md), item 11.4.
 

@@ -103,7 +103,7 @@ func opaque(path string, fields []Field) bool {
 		prefix = prefix[:i]
 		f, ok := FieldAt(fields, prefix)
 		if !ok {
-			return false
+			continue
 		}
 		switch f.Type {
 		case TypeJSON, TypeAny:

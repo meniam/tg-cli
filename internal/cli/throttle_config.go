@@ -17,6 +17,16 @@ var throttlePercentNumber = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?$`)
 // limiter again from its inherited environment before creating Telegram.
 func (a *app) daemonThrottle() (throttle.Config, *throttle.Limiter, error) {
 	cfg := throttle.DefaultConfig()
+	if a.config.Behavior.ThrottlePercent != 0 {
+		cfg.Percent = a.config.Behavior.ThrottlePercent
+	}
+	if a.config.Behavior.FloodAutoWait != "" {
+		wait, err := time.ParseDuration(a.config.Behavior.FloodAutoWait)
+		if err != nil {
+			return cfg, nil, fail(exitcode.Usage, "invalid behavior.flood_autowait")
+		}
+		cfg.FloodAutoWait = wait
+	}
 	if value := strings.TrimSpace(a.deps.Getenv("TG_CLI_THROTTLE_PERCENT")); value != "" {
 		if !throttlePercentNumber.MatchString(value) {
 			return cfg, nil, fail(exitcode.Usage, "TG_CLI_THROTTLE_PERCENT must be a decimal number from 1 to 100")
