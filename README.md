@@ -159,7 +159,7 @@ Planned, not implemented. [`FEATURES.md`](FEATURES.md) is the source of truth.
 
 - **Media.** Downloading media.
 - **Sessions and access.** Export and import of a session string, login without a terminal, SOCKS and MTProxy, WSS transport.
-- **Reliability.** Partial success of batch commands, recovery from a connection break and a DC migration.
+- **Reliability.** Recovery from a connection break and a DC migration.
 - **Local history.** Loading many chats with one command or on a schedule, export from Telegram, earlier versions of edits, writing an export to a file. Today the database holds what you read and what `chat sync` loaded on request, one chat at a time, and `message export --local` prints it.
 - And more: see the full list in `FEATURES.md`.
 
@@ -210,5 +210,3 @@ Tests run without Telegram. Do not run automated tests against a live account.
 ## License
 
 No license file has been added yet, so no license is granted for now.
-
-Unread dialogs can be listed with `tg chat unread` (or `--archived`); `tg message unread <chat>` reads incoming messages after the current read marker without marking them read. For forums, select a topic with `--topic`. `tg chat changes <chat>` shows chat changes saved locally.
