@@ -434,6 +434,8 @@ With `--idempotency-key`, `replayed` is an optional boolean. With `--dry-run`, `
 
 ### tg message send-media
 
+`--self-destruct` accepts 1 to 60 seconds or `view-once`. It requires one photo or video and a private user chat. The value is sent to Telegram as the media TTL.
+
 Sends one file or an album of 2 to 10 files as photos, videos, audio, voice messages or documents.
 
 ```text
@@ -451,6 +453,7 @@ tg message send-media <chat> [flags]
 | `--height` | int | `0` | video height; overrides detected height |
 | `--idempotency-key` | string | `none` | idempotency key: 1 to 64 characters A-Za-z0-9._:- |
 | `--reply-to` | int | `0` | reply to this message id |
+| `--self-destruct` | string | `none` | self-destruct after 1 to 60 seconds or view-once |
 | `--silent` | bool | `false` | send without a notification |
 | `--topic` | int | `0` | send in this forum topic |
 | `--width` | int | `0` | video width; overrides detected width |
