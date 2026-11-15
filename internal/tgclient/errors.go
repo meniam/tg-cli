@@ -3,6 +3,7 @@ package tgclient
 import (
 	"context"
 	"errors"
+	"net"
 	"strings"
 
 	"github.com/gotd/td/telegram/auth"
@@ -37,7 +38,14 @@ func mapError(err error) error {
 	if tgErr, ok := tgerr.As(err); ok {
 		return rpc.NewError(rpc.CodeTelegram, tgErr.Type)
 	}
-	return rpc.NewError(rpc.CodeTelegram, "telegram request failed: "+err.Error())
+	var networkError net.Error
+	if errors.As(err, &networkError) {
+		if networkError.Timeout() {
+			return rpc.NewError(rpc.CodeTelegram, "telegram request failed: timeout")
+		}
+		return rpc.NewError(rpc.CodeTelegram, "telegram request failed: network error")
+	}
+	return rpc.NewError(rpc.CodeTelegram, "telegram request failed: unexpected response")
 }
 
 // mapActionError keeps new write errors stable without changing older commands.

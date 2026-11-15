@@ -8,6 +8,7 @@ import (
 
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/output"
+	"tg-cli/internal/redact"
 	"tg-cli/internal/schema"
 )
 
@@ -128,7 +129,7 @@ func (a *app) warn(cmd *cobra.Command, format string, args ...any) {
 	if a.settings(cmd).quiet {
 		return
 	}
-	fmt.Fprintf(a.deps.Stderr, format+"\n", args...)
+	fmt.Fprintln(a.deps.Stderr, redact.Text(fmt.Sprintf(format, args...)))
 }
 
 // settings returns the output settings of a command for a path that prints no
@@ -163,5 +164,5 @@ func (a *app) failure(cmd *cobra.Command, exit int, message string) {
 	// A write error on stdout cannot be reported anywhere else, and it must not
 	// replace the command's own failure: the exit code already tells the agent
 	// that something went wrong.
-	_ = output.FailureWithThrottle(a.deps.Stdout, format, exitcode.Name(exit), message, a.throttledMS)
+	_ = output.FailureWithThrottle(a.deps.Stdout, format, exitcode.Name(exit), redact.Text(message), a.throttledMS)
 }

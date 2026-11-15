@@ -85,7 +85,8 @@ func Execute(ctx context.Context, args []string, deps Deps) int {
 	root.SetOut(deps.Stdout)
 	root.SetErr(deps.Stderr)
 
-	err := root.ExecuteContext(ctx)
+	prepareGroupHint(root, args)
+	command, err := root.ExecuteContextC(ctx)
 	if err == nil {
 		return exitcode.OK
 	}
@@ -96,7 +97,11 @@ func Execute(ctx context.Context, args []string, deps Deps) int {
 	}
 	// The command that failed may be a subcommand, an unknown name or nothing at
 	// all: the format is read from wherever cobra stopped.
-	a.failure(root, exit, withIDHint(err.Error(), args))
+	message := withIDHint(err.Error(), args)
+	if exit == exitcode.Usage && command != nil && command.Runnable() && !strings.Contains(message, "choose a subcommand:") {
+		message += "\nusage: " + command.UseLine()
+	}
+	a.failure(root, exit, message)
 	return exit
 }
 

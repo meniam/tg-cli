@@ -3,6 +3,7 @@ package cli
 import (
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -75,7 +76,8 @@ type commandDoc struct {
 	// account beyond an ordinary write.
 	Dangerous bool `json:"dangerous"`
 	// Result is the Go type of data in the success envelope.
-	Result string `json:"result"`
+	Result         string             `json:"result"`
+	ResultVariants []resultVariantDoc `json:"result_variants,omitempty"`
 	// ChatResult and ChatFields describe the object returned with a chat argument.
 	ChatResult string `json:"chat_result,omitempty"`
 	// Formats are the --format values this command accepts: JSONL is left out
@@ -91,6 +93,12 @@ type commandDoc struct {
 	SubscriptionMethod string    `json:"subscription_method,omitempty"`
 	Args               []argDoc  `json:"args,omitempty"`
 	Flags              []flagDoc `json:"flags,omitempty"`
+}
+
+type resultVariantDoc struct {
+	Flag   string         `json:"flag"`
+	Result string         `json:"result"`
+	Fields []schema.Field `json:"fields,omitempty"`
 }
 
 // itemDoc names the list inside a list result that --format jsonl prints.
@@ -134,7 +142,7 @@ func schemaDocFor(root *cobra.Command, specs map[*cobra.Command]commandSpec) sch
 			Success: `{"ok":true,"data":...,"throttled_ms":<milliseconds> (optional)}`,
 			Failure: `{"ok":false,"error":{"code":"<name>","message":"..."},"throttled_ms":<milliseconds> (optional)}`,
 		},
-		GlobalFlags: flagDocs(root.PersistentFlags(), nil),
+		GlobalFlags: flagDocs(root.PersistentFlags(), []flagChoices{{Flag: "format", Values: formatNames(output.Formats())}}),
 		Subscription: subscriptionDoc{
 			Method:       rpc.MethodSubscribe,
 			Result:       schema.Fields(reflect.TypeOf(rpc.SubscribeResult{})),
@@ -171,6 +179,9 @@ func commandDocFor(cmd *cobra.Command, path string, spec commandSpec) commandDoc
 	}
 	if doc.Description == cmd.Short {
 		doc.Description = ""
+	}
+	for _, variant := range spec.ResultVariants {
+		doc.ResultVariants = append(doc.ResultVariants, resultVariantDoc{Flag: variant.Flag, Result: resultName(variant.Result), Fields: schema.Fields(variant.Result)})
 	}
 	for _, arg := range spec.Args {
 		doc.Args = append(doc.Args, argDoc{Name: arg.Name, Required: arg.Required, Variadic: arg.Variadic})
@@ -264,11 +275,24 @@ func (a *app) versionCommand() *cobra.Command {
 // tree only: no daemon, no network, no database.
 func (a *app) schemaCommand(root *cobra.Command) *cobra.Command {
 	return a.annotate(&cobra.Command{
-		Use:   "schema",
+		Use:   "schema [command...]",
 		Short: "Print the machine description of every command, argument, flag and exit code (read only, no daemon needed)",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return a.success(cmd, schemaDocFor(root, a.specs))
+		RunE: func(cmd *cobra.Command, args []string) error {
+			doc := schemaDocFor(root, a.specs)
+			if len(args) != 0 {
+				path := strings.Join(args, " ")
+				filtered := doc.Commands[:0]
+				for _, item := range doc.Commands {
+					if item.Path == path || strings.HasPrefix(item.Path, path+" ") {
+						filtered = append(filtered, item)
+					}
+				}
+				if len(filtered) == 0 {
+					return fail(exitcode.Usage, "unknown command path %q", path)
+				}
+				doc.Commands = filtered
+			}
+			return a.success(cmd, doc)
 		},
-	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[schemaDoc]()})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[schemaDoc](), Args: []argSpec{{Name: "command", Variadic: true}}})
 }

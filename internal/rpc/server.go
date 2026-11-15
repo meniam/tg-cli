@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"tg-cli/internal/redact"
 	"tg-cli/internal/throttle"
 )
 
@@ -354,7 +355,9 @@ func (s *Server) toError(method string, err error) *Error {
 	var rpcErr *Error
 	switch {
 	case errors.As(err, &rpcErr):
-		return rpcErr
+		copy := *rpcErr
+		copy.Message = redact.Text(copy.Message)
+		return &copy
 	case errors.Is(err, context.DeadlineExceeded):
 		return NewError(CodeInternal, "request timed out")
 	case errors.Is(err, context.Canceled):
@@ -362,7 +365,7 @@ func (s *Server) toError(method string, err error) *Error {
 	}
 	// The client gets no details; the journal keeps the cause for debugging.
 	// The request record above never carries error text.
-	s.log.Error("handler failed", "method", method, "err", err)
+	s.log.Error("handler failed", "method", method, "err", redact.Text(err.Error()))
 	return NewError(CodeInternal, "internal error")
 }
 
