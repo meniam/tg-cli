@@ -64,11 +64,11 @@ PR: —
 
 Решения автора плана по рекомендациям, ожидают подтверждения владельцем.
 
-| Date | Decision | Reason | Confirmed by |
+| Date | Decision | Reason | Confirmed |
 | --- | --- | --- | --- |
-| 2026-11-14 | Поиск в Telegram: `message search` в чате и `--public` глобально; локальный `search` не меняется | 4.3 | Ожидает подтверждения |
-| 2026-11-14 | `chat mark-read` требует `write` | Отметка видна собеседнику, это запись в аккаунт | Ожидает подтверждения |
-| 2026-11-14 | Ссылки: разбор строгих известных форм, `message link` только для каналов и супергрупп | 3.10, остальные чаты ссылок не имеют | Ожидает подтверждения |
+| 2026-11-14 | [Поиск в Telegram](../decisions/20261114_1200_discovery_reads_and_links_through_the_daemon.md): `message search` в чате и `--public` глобально; локальный `search` не меняется | 4.3 (было: Ожидает подтверждения) | no |
+| 2026-11-14 | [`chat mark-read` требует `write`](../decisions/20261114_1200_discovery_reads_and_links_through_the_daemon.md) | Отметка видна собеседнику, это запись в аккаунт (было: Ожидает подтверждения) | no |
+| 2026-11-14 | [Ссылки: разбор строгих известных форм](../decisions/20261114_1200_discovery_reads_and_links_through_the_daemon.md), `message link` только для каналов и супергрупп | 3.10, остальные чаты ссылок не имеют (было: Ожидает подтверждения) | no |
 
 ## Step 0. Fix decisions before changes
 

@@ -1,107 +1,107 @@
-# Project Rules
+# Правила
 
-Shared rules of 4Partners projects by Eugene Myazin. One file, one topic.
+Общие правила от Евгения Мязина. Один файл, одна тема.
 
-**Portable.** This folder is copied into a project's `.agents/rules/` as is
-and never edited there: a change goes to the master copy
-(`~/.agents/rules`) and is copied again. The rules name no project, path,
-decision or entity of a particular project; their examples come from the
-4Partners world (order, product, partner, supplier, shipment). What only a
-project knows — its journals, its entity icons, places not yet aligned —
-lives in that project's `.agents/rules/project/`, which is never copied.
+**Переносимость.** Проект может скопировать эти правила в свой `.agents/rules/`
+или слить с собственными. Поэтому правила ссылаются только
+относительными ссылками и только внутри каталога `.agents/`. Они не ссылаются
+на решения, файлы и пути конкретного проекта. На скилл ссылайся по имени.
 
-**Defaults, not law.** These files are what a project gets before anything is
-known about it. A project that knows better wins — see `Precedence`.
+**Умолчания, а не закон.** Эти файлы определяют то, что проект получает, пока
+о нём ничего не известно. Проект, который знает лучше, имеет приоритет: см.
+«Precedence» («Приоритет»).
 
-| File            | Topic                                                                          |
-| --------------- | ------------------------------------------------------------------------------ |
-| `db.md`         | PostgreSQL naming: schemas, tables, columns, constraints, indexes; migrations  |
-| `plans.md`      | Task plans in `.agents/plans/`: names, checkboxes, statuses, branch, structure |
-| `decisions.md`  | Decision log in `.agents/decisions/`: what counts, record format, `_TOC.md`    |
-| `learning.md`   | Learnings in `.agents/learnings/`: facts found by experience, `_TOC.md`        |
-| `changelog.md`  | `CHANGELOG.md` in the project root: changes visible outside the code, by date  |
-| `justfile.md`   | `justfile`: recipes, help screen                                               |
-| `python.md`     | Python projects on uv: tool caches, layout, tooling                            |
-| `ruff.md`       | Ruff as linter and formatter: config, rule selection, suppression, CI          |
-| `testing.md`    | Verification for code changes and bug fixes; threshold for permanent tests   |
-| `response.md`   | Chat responses: direct answers, evidence, length and language                  |
-| `docs_chain.md` | Texts and docs: author writes, glavred reviews; review package, limits         |
-| `ui/`           | UI from the kit `@/shared/ui`: index `ui/AGENTS.md`, one file per topic        |
+| Файл            | Тема                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------- |
+| `db.md`         | Именование в PostgreSQL: схемы, таблицы, столбцы, ограничения, индексы; миграции         |
+| `plans.md`      | Планы задач в `.agents/plans/`: имена, чекбоксы, статусы, ветка, структура               |
+| `decisions.md`  | Журнал решений в `.agents/decisions/`. Читать перед правкой файлов, на которые указывают `paths` решений, и при выборе между вариантами |
+| `learning.md`   | Выводы в `.agents/learnings/`: факты, найденные на опыте, `_TOC.md`                      |
+| `changelog.md`  | Журнал изменений в `.agents/changelog/`: файл на запись, изменения, видимые снаружи      |
+| `justfile.md`   | `justfile`: рецепты, экран справки                                                       |
+| `python.md`     | Python-проекты на uv: кэши инструментов, структура, инструментарий                       |
+| `ruff.md`       | Ruff как линтер и форматтер: конфигурация, выбор правил, подавление, CI                  |
+| `testing.md`    | Читать при правках кода, конфигурации и тестов; порог для постоянных тестов              |
+| `response.md`   | Ответы в чате: прямые ответы, доказательства, длина и язык                               |
+| `docs_chain.md` | Тексты и документация: автор пишет, glavred проверяет; пакет проверки, лимиты            |
+| `ui/`           | UI из набора `@/shared/ui`: индекс `ui/AGENTS.md`, один файл на тему                     |
 
-Read `testing.md` when changing code or configuration, fixing bugs, or adding,
-reviewing or removing tests.
+## Precedence (Приоритет)
 
-## Precedence
+Порядок, от сильного к слабому:
 
-Order, strongest first:
+1. `AGENTS.md` проекта и его документация.
+2. Файлы `.agents/rules/` проекта.
+3. Общие правила из мастер-копии.
+4. Собственные умолчания инструмента.
 
-1. The project's own `AGENTS.md`, `.agents/rules/project/` and its docs
-   (`docs/`, `.agents/<journal>/AGENTS.md`).
-2. A decision recorded in the project's `.agents/decisions/`.
-3. These shared rules.
-4. The tool's own defaults.
+Файл проекта с тем же именем заменяет общий целиком, без слияния по разделам.
+Общий файл действует, пока в проекте нет файла с таким именем.
 
-A project rule wins over a shared rule. It needs no permission and it is not a
-violation: these files describe a good starting point, and a project learns
-things the starting point could not know — an external data source, a platform
-limit, a team convention.
+Правило проекта главнее общего правила. Для этого не нужно разрешение, и это
+не нарушение: эти файлы описывают хорошую отправную точку, а проект узнаёт то,
+чего отправная точка знать не могла: внешний источник данных, ограничение
+платформы, договорённость команды.
 
-What a deviation does need is a record. A lasting one lives in the project: a
-line in `.agents/rules/project/` or the project `AGENTS.md`, a section in the
-project docs, or a file in
-`.agents/decisions/` when the choice had alternatives worth naming
-(`decisions.md`).
+## Журналы
 
-The real problem is the undocumented deviation. Code that silently contradicts
-a rule leaves the next agent to guess which of the two is current, and that
-guess is re-made on every task — usually as an apology in a plan, sometimes as
-a change back to the rule that breaks something.
+Четыре журнала, по одному вопросу на каждый. Читатель выбирает файл по вопросу.
 
-Reading the tone: rules here are written as statements ("table is singular"),
-not as preferences. That is for checkability, not force. Read a categorical
-line as "this is the default answer", not "no other answer exists". Where a
-question has legitimate project-specific answers, the rule says so on the spot.
+| Вопрос                    | Журнал    | Единица                       | Правила        |
+| ------------------------- | --------- | ----------------------------- | -------------- |
+| Как мы это делаем?        | План      | файл на задачу                | `plans.md`     |
+| Почему так устроено?      | Решение   | файл на решение + `_TOC.md`   | `decisions.md` |
+| Что мы выяснили?          | Вывод     | файл на факт + `_TOC.md`      | `learning.md`  |
+| Что изменилось и когда?   | Changelog | файл на запись                | `changelog.md` |
 
-## Journals
+- План, решение, вывод и запись changelog используют общую схему имени файла
+  `YYYYMMDD_HHMM_short_statement.md`: время создания, латиница в `snake_case`.
+  После создания имя не меняется. Время в имени и в полях записи бери по
+  разделу «Дата и время».
+- Каждый журнал живой: запись попадает в тот же коммит, что и изменение.
+- Текст записи пиши на языке проекта. Имена секций и ключи frontmatter
+  остаются английскими: `Context`, `Decision`, `decided`, `paths`.
+- План → решение: решение, которое переживает план, получает файл в
+  `.agents/decisions/` до того, как план перейдёт в `done`. Открытые вопросы
+  плана остаются в нём, в разделе "Open questions" («Открытые вопросы»);
+  решённый вопрос получает запись, и строка плана ссылается на неё.
+- План → changelog: каждое изменение, видимое снаружи, из раздела
+  "Definition of done" («Критерии готовности») оставляет запись в
+  `.agents/changelog/`.
+- Решение и вывод: выбор между вариантами называется решением; проверенный факт без
+  альтернативы называется выводом. Вывод, найденный по пути к решению, живёт в разделе
+  `Trap` («Ловушка») этого решения.
+- Вывод никогда не попадает в changelog.
+- Не пиши в `AGENTS.md` без явного указания пользователя. Если решение или
+  вывод стали правилом для агентов, предложи пользователю строку со ссылкой
+  на запись.
 
-Four journals, one question each. The reader picks the file by the question.
+## Дата и время
 
-| Question                | Journal   | Unit                          | Rules          |
-| ----------------------- | --------- | ----------------------------- | -------------- |
-| How do we do it?        | Plan      | file per task                 | `plans.md`     |
-| Why is it like this?    | Decision  | file per decision + `_TOC.md` | `decisions.md` |
-| What did we find out?   | Learning  | file per fact + `_TOC.md`     | `learning.md`  |
-| What changed, and when? | Changelog | section per date              | `changelog.md` |
+Дату и время бери командой `date`, не из памяти и не из контекста. Часовой
+пояс по умолчанию `Europe/Moscow`; проект может задать другой. Пояс всегда
+указывай явно: машина или CI могут работать в UTC.
 
-- Plan, decision, learning share the file name scheme
-  `YYYYMMDD_HHMM_short_statement.md`: creation time, latin `snake_case`.
-  Name never changes after creation.
-- Every journal is live: the record goes in the same commit as the change.
-- Plan → decision: a decision that outlives the plan gets a file in
-  `.agents/decisions/` before the plan reaches `done`. Plan open questions
-  that remain move to `_TOC.md` "Open questions".
-- Plan → changelog: every change visible outside from "Definition of done"
-  leaves a line under the date of the change.
-- Decision vs learning: a choice between options is a decision; a verified
-  fact with no alternative is a learning. A learning found on the way to a
-  decision lives in that decision's `Trap` section.
-- Learning never goes to the changelog.
-- A rule for agents lives in the project `AGENTS.md` and links to the
-  decision that introduced it. The decision is not retold there.
+```sh
+TZ=Europe/Moscow date -Iseconds       # 2026-09-05T14:30:00+03:00: поле date
+TZ=Europe/Moscow date +%Y%m%d_%H%M    # 20260905_1430: префикс имени файла
+TZ=Europe/Moscow date +%F             # 2026-09-05: поле Found
+```
 
-## How Rules Are Written
+Без GNU `date`:
+`python3 -c 'import datetime,zoneinfo;print(datetime.datetime.now(zoneinfo.ZoneInfo("Europe/Moscow")).isoformat(timespec="seconds"))'`.
 
-- A rule, not a discussion: "table is singular", no "preferably". The tone is
-  categorical so the rule can be checked; precedence is handled by `Precedence`
-  above, not by hedging every line.
-- Every rule has an example. Every ban says what to use instead.
-- A default that projects legitimately answer differently says so where it
-  stands, in one line: what makes a project a fair exception, and that the
-  exception is recorded. Better one honest line than a rule everyone quietly
-  breaks.
-- Every rule file ends with a `## Checklist`: numbered, one check per line.
-- A rule that needs explaining is explained in one line. Longer means a
-  document, not a rule.
-- The reason lives in the rule itself, in one phrase. A shared rule never
-  links to a project decision, file or path: the copy must read the same in
-  every project.
+## Как пишутся правила
+
+- Правило, а не рассуждение: «таблица в единственном числе», без «желательно».
+  Тон категоричный, чтобы правило можно было проверить; приоритет решается
+  через «Precedence» выше, а не оговорками в каждой строке.
+- Умолчание, на которое проекты законно отвечают по-разному, говорит об этом
+  там, где стоит, одной строкой: что делает проект честным исключением. Проект
+  оформляет исключение своим файлом с тем же именем (см. «Precedence»). Лучше
+  одна честная строка, чем правило, которое все тихо нарушают.
+- Каждый файл правил заканчивается разделом `## Checklist`: нумерованный, одна
+  проверка на строку. Индекс `AGENTS.md` чек-листа не имеет.
+- Правило, которому нужно объяснение, объясняется одной строкой. Длиннее
+  значит документ, а не правило.
+- Причина живёт в самом правиле, одной фразой.

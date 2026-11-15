@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/daemon/send_media.go, internal/tgclient/send_media.go, internal/cli/send_media_cmd.go, internal/fileroot, internal/mediameta, internal/tgclient/throttle.go]
+---
 # Медиа уходит командой message send-media: файлы только из корней files в access.json, тип всегда явный, загрузка синхронная до 100 МиБ
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

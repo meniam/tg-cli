@@ -1,0 +1,14 @@
+    Shows changelog records: newest first, under a heading per day. By default
+    the last 7 days; the archive of past months is read too.
+
+  What runs
+    1. uv run bin/changelog.py list [--days N] [--all] [--type TYPE] [--breaking]
+      --days N     the last N days instead of 7
+      --all        every record of all time
+      --type TYPE  one type: Добавлено, Изменено, Устарело, Удалено, Исправлено, Безопасность
+      --breaking   incompatible changes only
+
+  Examples
+    just changelog list
+    just changelog list --days 30 --type Исправлено
+    just changelog list --all --breaking

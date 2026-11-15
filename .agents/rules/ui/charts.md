@@ -48,7 +48,7 @@
 - Свой `toLocaleString`, `String(n)` и разбор даты руками в графике не
   пишем: берём текст из `Format*` и `DateTime`.
 
-## Чек-лист
+## Checklist
 
 1. Новый график на ECharts, семейство `ChartFrame`.
 2. `label` называет показатель и период.

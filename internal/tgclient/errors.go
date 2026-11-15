@@ -36,6 +36,9 @@ func mapError(err error) error {
 		return notFound()
 	}
 	if tgErr, ok := tgerr.As(err); ok {
+		if tgErr.Type == "CHAT_FORWARDS_RESTRICTED" {
+			return rpc.NewError(rpc.CodeTelegram, "forwarding from this chat is restricted (protected content)")
+		}
 		return rpc.NewError(rpc.CodeTelegram, tgErr.Type)
 	}
 	return safeClientError(err)
@@ -62,6 +65,8 @@ func mapActionError(err error) error {
 			return rpc.NewError(rpc.CodeInvalidParams, "reaction is not available for this message")
 		case "MESSAGE_ID_INVALID", "MSG_ID_INVALID":
 			return rpc.NewError(rpc.CodeInvalidParams, "message id is invalid")
+		case "DATA_INVALID", "QUERY_ID_INVALID", "RESULT_ID_INVALID", "TTL_PERIOD_INVALID", "MEDIA_NEW_INVALID", "MEDIA_PREV_INVALID", "MESSAGE_NOT_MODIFIED", "MESSAGE_EDIT_TIME_EXPIRED", "MESSAGE_AUTHOR_REQUIRED", "STICKERSET_INVALID":
+			return rpc.NewError(rpc.CodeInvalidParams, "Telegram rejected the requested action: "+tgErr.Type)
 		case "CHAT_ADMIN_REQUIRED":
 			return rpc.NewError(rpc.CodeTelegram, "chat admin rights are required")
 		case "CHAT_SEND_POLL_FORBIDDEN":

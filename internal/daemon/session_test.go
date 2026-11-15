@@ -13,12 +13,12 @@ import (
 	"tg-cli/internal/rpc"
 )
 
-type sessionFake struct {
+type exportSessionFake struct {
 	Telegram
 	data []byte
 }
 
-func (s sessionFake) SessionBytes(context.Context) ([]byte, error) { return s.data, nil }
+func (s exportSessionFake) SessionBytes(context.Context) ([]byte, error) { return s.data, nil }
 func TestSessionExportDoesNotReturnSecret(t *testing.T) {
 	d, tg, _, _ := accessTestDaemon(t)
 	key := make([]byte, 256)
@@ -30,7 +30,7 @@ func TestSessionExportDoesNotReturnSecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.opts.Telegram = sessionFake{Telegram: tg, data: raw}
+	d.opts.Telegram = exportSessionFake{Telegram: tg, data: raw}
 	out := filepath.Join(t.TempDir(), "session")
 	for _, request := range []rpc.SessionExportParams{{Path: out}, {Path: "-", Yes: true}} {
 		if _, err := d.sessionExport(context.Background(), params(t, request)); err == nil {

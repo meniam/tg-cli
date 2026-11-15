@@ -39,7 +39,7 @@ func runWriteCLI(t *testing.T, args []string, stdin string, reply func(string, j
 		method string
 		params json.RawMessage
 	}, 1)
-	for _, method := range []string{rpc.MethodMessageSend, rpc.MethodMessageSendMedia, rpc.MethodMessageEdit, rpc.MethodMessageDelete, rpc.MethodMessageForward, rpc.MethodMessageReact, rpc.MethodMessagePin, rpc.MethodMessageUnpin, rpc.MethodMessagePoll, rpc.MethodChatTyping, rpc.MethodMessageScheduledList, rpc.MethodMessageScheduledDelete, rpc.MethodMessageScheduledSendNow, rpc.MethodChatDraftGet, rpc.MethodChatDraftList, rpc.MethodChatDraftSet, rpc.MethodChatDraftClear, rpc.MethodChatJoin, rpc.MethodChatLeave, rpc.MethodChatCreate, rpc.MethodChatEdit, rpc.MethodChatKick, rpc.MethodChatBan, rpc.MethodChatUnban, rpc.MethodChatRestrict, rpc.MethodChatPermissions, rpc.MethodChatSlowMode} {
+	for _, method := range []string{rpc.MethodMessageSend, rpc.MethodMessageSendMedia, rpc.MethodMessageEdit, rpc.MethodMessageDelete, rpc.MethodMessageForward, rpc.MethodMessageReact, rpc.MethodMessagePin, rpc.MethodMessageUnpin, rpc.MethodMessagePoll, rpc.MethodChatTyping, rpc.MethodMessageScheduledList, rpc.MethodMessageScheduledDelete, rpc.MethodMessageScheduledSendNow, rpc.MethodChatDraftGet, rpc.MethodChatDraftList, rpc.MethodChatDraftSet, rpc.MethodChatDraftClear, rpc.MethodChatJoin, rpc.MethodChatLeave, rpc.MethodChatCreate, rpc.MethodChatEdit, rpc.MethodChatKick, rpc.MethodChatBan, rpc.MethodChatUnban, rpc.MethodChatRestrict, rpc.MethodChatPermissions, rpc.MethodChatSlowMode, rpc.MethodMessageButtons, rpc.MethodMessagePress, rpc.MethodChatAutoDelete, rpc.MethodMessageEditMedia, rpc.MethodMessageInlineQuery, rpc.MethodMessageSendInline, rpc.MethodMessageSendSticker, rpc.MethodStickerSet, rpc.MethodStickerSearch, rpc.MethodStickerInstalled} {
 		method := method
 		srv.Handle(method, func(_ context.Context, raw json.RawMessage) (any, error) {
 			called <- struct {
@@ -233,5 +233,17 @@ func TestWriteTextIgnoresStdinWhenTextIsGiven(t *testing.T) {
 	got, err := a.writeText(cmd)
 	if err != nil || got != "hello" {
 		t.Fatalf("writeText = %q, %v", got, err)
+	}
+}
+
+func TestForwardCopyCLI(t *testing.T) {
+	invalid := runWriteCLI(t, []string{"message", "forward", "42", "77", "11", "--no-captions"}, "", nil, nil)
+	if invalid.code != 2 || invalid.method != "" {
+		t.Fatalf("invalid: %+v", invalid)
+	}
+	result := runWriteCLI(t, []string{"message", "forward", "42", "77", "11", "--copy", "--no-captions"}, "", nil, nil)
+	var p rpc.ForwardParams
+	if err := json.Unmarshal(result.params, &p); err != nil || result.code != 0 || !p.Copy || !p.NoCaptions {
+		t.Fatalf("result %+v params %+v error %v", result, p, err)
 	}
 }

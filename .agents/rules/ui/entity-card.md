@@ -64,7 +64,7 @@
   вложенной группе свой ключ: `useTabState(TABS, 'orders', { name: 'partner' })`
   → `partner.tab`. Свой `useQueryState` под вкладки не пишем.
 
-## Чек-лист
+## Checklist
 
 1. `breadcrumbs` по пути меню, без самой карточки.
 2. Слева от имени аватар или иконка сущности из словаря.

@@ -7,7 +7,7 @@ import (
 )
 
 func (a *app) chatCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "chat", Short: "Read chats and load local history"}
+	cmd := &cobra.Command{Use: "chat", Short: "Read and manage chats"}
 
 	list := a.annotate(&cobra.Command{
 		Use:   "list",
@@ -39,6 +39,11 @@ func (a *app) chatCommand() *cobra.Command {
 
 	cmd.AddCommand(list, resolve, info, invite, a.chatMembersCommand(), a.chatTopicsCommand(), a.chatCommonCommand(), a.chatMarkReadCommand(), a.chatTypingCommand(), a.chatDraftCommand(), a.chatSyncCommand(), a.chatStateCommand(), a.chatUnreadCommand(), a.chatChangesCommand())
 	cmd.AddCommand(a.chatAdminCommands()...)
+	cmd.AddCommand(a.dialogCommands()...)
+	cmd.AddCommand(a.chatJoinRequestCommands()...)
+	cmd.AddCommand(a.chatSetCommand())
+	cmd.AddCommand(a.chatRequestsCommand())
+	cmd.AddCommand(a.chatAutoDeleteCommand())
 	return cmd
 }
 

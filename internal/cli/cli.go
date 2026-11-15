@@ -21,7 +21,7 @@ const defaultCallTimeout = 2 * time.Minute
 const mediaCallTimeout = 600 * time.Second
 
 func (a *app) callTimeout(method string) time.Duration {
-	if method == rpc.MethodMessageSendMedia {
+	if method == rpc.MethodMessageSendMedia || method == rpc.MethodMessageEditMedia {
 		return mediaCallTimeout
 	}
 	return a.deps.CallTimeout
@@ -150,7 +150,9 @@ func (a *app) rootCommand() *cobra.Command {
 		a.userCommand(),
 		a.contactCommand(),
 		a.messageCommand(),
+		a.stickerCommand(),
 		a.folderCommand(),
+		a.savedCommand(),
 		a.accountCommand(),
 		a.noteCommand(),
 		a.searchCommand(),

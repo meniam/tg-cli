@@ -65,14 +65,14 @@ PR: —
 
 ## Decision log
 
-| Date | Decision | Reason | Confirmed by |
+| Date | Decision | Reason | Confirmed |
 | --- | --- | --- | --- |
-| 2026-11-14 | Реакции только обычными эмодзи | Выбор владельца | Мязин Евгений: «Обычные эмодзи (Recommended)» |
-| 2026-11-14 | Опросы обычные с малым числом вариантов, с флагами `--multiple`, `--public`, викториной | Выбор владельца | Мязин Евгений: «Обычные, малые выборы (Recommended)» |
-| 2026-11-14 | Команды `message react`, `message pin`, `message unpin`, `message poll`; без `--yes`, не `dangerous` | Действия обратимы и не уничтожают данные | Мязин Евгений: «Не нужны, действия обратимы (Recommended)» |
-| 2026-11-14 | После успешного `pin` и `unpin` Daemon сразу обновляет признак `pinned` у сохранённого сообщения в базе (best-effort, если сообщение сохранено) | Поток не обрабатывает `UpdatePinned*`, без этого локальные поиск и выгрузка показывали бы устаревшее | Мязин Евгений: «Принять оба (Recommended)» |
-| 2026-11-14 | Текст вопроса опроса отдаётся в `text` при чтении (правка `toMessage`), для отправленного опроса в базу пишется `text = вопрос`, `media_type = poll` | Аудит: сегодня текст опроса при чтении пуст | Мязин Евгений: «Принять оба (Recommended)» |
-| 2026-11-14 | Закрепление по умолчанию с уведомлением, `--silent` отключает | Так ведёт себя Telegram | Мязин Евгений: «С уведомлением, --silent отключает (Recommended)» |
+| 2026-11-14 | [Реакции только обычными эмодзи](../decisions/20261114_2010_reactions_pins_and_polls_are_writes_under_write_without_yes.md) | Выбор владельца (было: Мязин Евгений: «Обычные эмодзи (Recommended)») | yes |
+| 2026-11-14 | [Опросы обычные с малым числом вариантов, с флагами `--multiple`, `--public`, викториной](../decisions/20261114_2010_reactions_pins_and_polls_are_writes_under_write_without_yes.md) | Выбор владельца (было: Мязин Евгений: «Обычные, малые выборы (Recommended)») | yes |
+| 2026-11-14 | [Команды `message react`, `message pin`, `message unpin`, `message poll`; без `--yes`, не `dangerous`](../decisions/20261114_2010_reactions_pins_and_polls_are_writes_under_write_without_yes.md) | Действия обратимы и не уничтожают данные (было: Мязин Евгений: «Не нужны, действия обратимы (Recommended)») | yes |
+| 2026-11-14 | [После успешного `pin` и `unpin` Daemon сразу обновляет признак `pinned` у сохранённого сообщения в базе (best-effort, если сообщение сохранено)](../decisions/20261114_2010_reactions_pins_and_polls_are_writes_under_write_without_yes.md) | Поток не обрабатывает `UpdatePinned*`, без этого локальные поиск и выгрузка показывали бы устаревшее (было: Мязин Евгений: «Принять оба (Recommended)») | yes |
+| 2026-11-14 | [Текст вопроса опроса отдаётся в `text` при чтении (правка `toMessage`), для отправленного опроса в базу пишется `text = вопрос`, `media_type = poll`](../decisions/20261114_2010_reactions_pins_and_polls_are_writes_under_write_without_yes.md) | Аудит: сегодня текст опроса при чтении пуст (было: Мязин Евгений: «Принять оба (Recommended)») | yes |
+| 2026-11-14 | [Закрепление по умолчанию с уведомлением, `--silent` отключает](../decisions/20261114_2010_reactions_pins_and_polls_are_writes_under_write_without_yes.md) | Так ведёт себя Telegram (было: Мязин Евгений: «С уведомлением, --silent отключает (Recommended)») | yes |
 
 ## Step 0. Fix decisions before changes
 

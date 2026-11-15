@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+paths: [internal/daemon/discovery.go, internal/chatref, internal/cli/discovery_cmd.go]
+---
 # Поиск в Telegram, контекст, комментарии и ссылки идут через Daemon, ссылка строится без channels.exportMessageLink, chat mark-read это запись под write
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

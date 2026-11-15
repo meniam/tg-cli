@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/daemon/history_sync.go, internal/throttle/throttle.go, internal/store/sync_state.go, internal/tgclient/history_page.go]
+---
 # Глубокая загрузка истории идёт фоновой задачей Daemon через общий дроссель, задачи живут в памяти, сама после перезапуска не возобновляется
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

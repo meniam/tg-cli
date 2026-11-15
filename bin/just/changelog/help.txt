@@ -1,0 +1,20 @@
+╭──────────────────────╮
+│  tg-cli · changelog  │
+╰──────────────────────╯
+
+    Records of changes visible outside the code: one file per record in
+    .agents/changelog/, one line of up to 200 characters. The record rules are
+    in .agents/rules/changelog.md.
+
+  Capabilities
+    List the latest records, add a new one and move past months into the archive.
+
+  Records
+    just changelog list           Newest first, by day: --days, --all, --type, --breaking
+    just changelog add            New record: type, text, --breaking, --decision
+    just changelog archive        Past months into YYYY-MM/ subfolders, --dry-run: check only
+
+  Needs uv (macOS, Linux, Windows): https://docs.astral.sh/uv/getting-started/installation/
+  uv downloads Python 3.14 itself.
+
+  Help for a command: just changelog <command> -h

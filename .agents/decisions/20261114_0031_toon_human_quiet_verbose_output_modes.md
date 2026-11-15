@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/output/output.go, internal/output/toon.go, internal/output/human.go, internal/cli/output_cmd.go]
+---
 # Форматы вывода: toon и human рядом с json, режимы quiet и verbose
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

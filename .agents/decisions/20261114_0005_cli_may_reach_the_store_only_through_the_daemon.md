@@ -1,7 +1,11 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: no
+revises: [20261113_2113_cli_imports_daemon_paths_and_main_injects_telegram]
+paths: [internal/cli/cli_test.go, internal/daemon/daemon.go]
+---
 # cli зависит от store только через daemon, прямой импорт запрещён
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 

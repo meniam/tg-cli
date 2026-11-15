@@ -109,7 +109,7 @@
 - окно — `useWindowState`;
 - свой разбор `searchParams` и `window.history` в фичах не пишем.
 
-## Чек-лист
+## Checklist
 
 1. Корень — `PageContainer`, шапка — `PageHeader`, своих отступов на корне
    нет.

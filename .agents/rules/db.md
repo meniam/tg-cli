@@ -3,9 +3,13 @@
 PostgreSQL. Applies to migrations, SQL, ORM models, fixtures, docs.
 Naming only; data modeling is separate.
 
-**Defaults, not law.** A project rule — its `AGENTS.md`, its docs, or a decision
-in `.agents/decisions/` — wins over this file; see `AGENTS.md`, "Precedence".
-A lasting deviation is recorded there, not left to the code.
+For another DBMS (SQLite, ClickHouse) only the naming rules apply: General,
+Tables, column names, constraint and index names. Types, schemas and
+migrations come from that DBMS's documentation.
+
+**Defaults, not law.** A project's `AGENTS.md` and docs win over this file; a
+project file with the same name replaces it entirely. See `AGENTS.md`,
+"Precedence".
 
 ## General
 

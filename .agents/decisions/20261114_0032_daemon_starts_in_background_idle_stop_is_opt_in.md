@@ -1,7 +1,10 @@
+---
+decided: 2026-11-14
+decided_by: {name: "Eugene Myazin", email: eugene.myazin@gmail.com, github: meniam}
+confirmed: yes
+paths: [internal/daemon/background.go, internal/cli/daemon_cmd.go]
+---
 # Daemon уходит в фон по умолчанию, остановка по простою включается флагом
-
-Decided: 2026-11-14
-Revised: —
 
 ## Context
 
