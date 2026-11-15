@@ -352,6 +352,7 @@ func (d *daemon) register() {
 	d.registerOwnerState()
 	d.registerUsers()
 	d.registerChatAdmin()
+	d.registerUnread()
 }
 
 func (d *daemon) ping(context.Context, json.RawMessage) (any, error) {

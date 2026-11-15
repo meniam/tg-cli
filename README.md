@@ -210,3 +210,5 @@ Tests run without Telegram. Do not run automated tests against a live account.
 ## License
 
 No license file has been added yet, so no license is granted for now.
+
+Unread dialogs can be listed with `tg chat unread` (or `--archived`); `tg message unread <chat>` reads incoming messages after the current read marker without marking them read. For forums, select a topic with `--topic`. `tg chat changes <chat>` shows chat changes saved locally.
