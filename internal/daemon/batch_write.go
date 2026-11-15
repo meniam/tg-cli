@@ -39,7 +39,7 @@ func (d *daemon) deleteChunks(ctx context.Context, ref chatref.Ref, chatID, acco
 		}
 		part := p
 		part.IDs = ids
-		_, err := d.opts.Telegram.Delete(ctx, ref, part)
+		_, err := d.telegram(ctx).Delete(ctx, ref, part)
 		rec.Phase = "result"
 		rec.Time = time.Now().UTC().Format(time.RFC3339)
 		rec.Outcome = writeOutcome(err)

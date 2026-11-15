@@ -21,7 +21,7 @@ func (d *daemon) chatTyping(ctx context.Context, raw json.RawMessage) (any, erro
 	if p.DryRun {
 		return rpc.TypingResult{ChatID: id, Action: p.Action, DryRun: true}, nil
 	}
-	result, err := d.opts.Telegram.Typing(ctx, ref, p)
+	result, err := d.telegram(ctx).Typing(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}

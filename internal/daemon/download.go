@@ -46,14 +46,14 @@ func (d *daemon) messageDownload(ctx context.Context, raw json.RawMessage) (any,
 	if _, err = d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
-	chat, err := d.opts.Telegram.Resolve(ctx, ref)
+	chat, err := d.telegram(ctx).Resolve(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
 	if !d.policy().Allowed(chat.ID) {
 		return nil, rpc.ErrChatNotFound()
 	}
-	tg := d.opts.Telegram
+	tg := d.telegram(ctx)
 	res := rpc.DownloadResult{ChatID: chat.ID, Files: []rpc.DownloadedFile{}, DryRun: p.DryRun}
 	var total int64
 	gotID, failures, err := tg.Download(ctx, chatref.Ref{Kind: chatref.ID, ID: chat.ID}, p.IDs, func(f rpc.DownloadedFile, fetch func(io.Writer) error) error {

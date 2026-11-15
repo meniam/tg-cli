@@ -33,7 +33,7 @@ func (d *daemon) changeDialog(ctx context.Context, raw json.RawMessage, action s
 		if err != nil {
 			return nil, err
 		}
-		chat, err := d.opts.Telegram.Resolve(ctx, chatref.Ref{Kind: chatref.ID, ID: id})
+		chat, err := d.telegram(ctx).Resolve(ctx, chatref.Ref{Kind: chatref.ID, ID: id})
 		if err != nil {
 			return nil, err
 		}
@@ -67,14 +67,14 @@ func (d *daemon) changeDialog(ctx context.Context, raw json.RawMessage, action s
 	}
 	var err error
 	if archive {
-		err = d.opts.Telegram.ArchiveDialogs(ctx, refs, action == "archive")
+		err = d.telegram(ctx).ArchiveDialogs(ctx, refs, action == "archive")
 	} else {
-		err = d.opts.Telegram.PinDialog(ctx, refs[0], action == "pin")
+		err = d.telegram(ctx).PinDialog(ctx, refs[0], action == "pin")
 	}
 	if err != nil {
 		return nil, err
 	}
-	states, e := d.opts.Telegram.RefreshDialogStates(ctx, refs)
+	states, e := d.telegram(ctx).RefreshDialogStates(ctx, refs)
 	if e != nil {
 		d.log.Warn("dialog state refresh failed")
 	} else {
@@ -107,12 +107,12 @@ func (d *daemon) changeNotify(ctx context.Context, raw json.RawMessage) (any, er
 		return nil, rpc.NewError(rpc.CodeWriteDisabled, "dialog management requires dialogs: true in access.json")
 	}
 	ref := chatref.Ref{Kind: chatref.ID, ID: id}
-	out, err := d.opts.Telegram.ChangeNotify(ctx, ref, p)
+	out, err := d.telegram(ctx).ChangeNotify(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
 	if !p.DryRun {
-		states, e := d.opts.Telegram.RefreshDialogStates(ctx, []chatref.Ref{ref})
+		states, e := d.telegram(ctx).RefreshDialogStates(ctx, []chatref.Ref{ref})
 		if e != nil {
 			d.log.Warn("dialog state refresh failed")
 		} else {

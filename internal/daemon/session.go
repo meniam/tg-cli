@@ -20,11 +20,11 @@ func (d *daemon) sessionExport(ctx context.Context, params json.RawMessage) (any
 	if json.Unmarshal(params, &request) != nil || !request.Yes || request.Path == "" || request.Path == "-" {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "a file path and confirmation are required")
 	}
-	storage, ok := d.opts.Telegram.(sessionTelegram)
+	storage, ok := d.telegram(ctx).(sessionTelegram)
 	if !ok {
 		return nil, rpc.NewError(rpc.CodeNotAuthorized, "session is unavailable")
 	}
-	user, err := d.opts.Telegram.Self(ctx)
+	user, err := d.telegram(ctx).Self(ctx)
 	if err != nil || user == nil {
 		return nil, rpc.NewError(rpc.CodeNotAuthorized, "not logged in")
 	}

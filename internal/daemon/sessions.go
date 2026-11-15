@@ -36,7 +36,7 @@ func (d *daemon) terminateSession(ctx context.Context, raw json.RawMessage) (any
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	list, err := d.opts.Telegram.Sessions(ctx)
+	list, err := d.telegram(ctx).Sessions(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (d *daemon) terminateSession(ctx context.Context, raw json.RawMessage) (any
 	if p.DryRun {
 		return rpc.TerminateResult{ID: p.ID, DryRun: true, Action: "terminate", DeviceModel: target.DeviceModel, Platform: target.Platform, AppName: target.AppName, DateActive: target.DateActive}, nil
 	}
-	self, err := d.opts.Telegram.Self(ctx)
+	self, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (d *daemon) terminateSession(ctx context.Context, raw json.RawMessage) (any
 	if !d.policy().SessionsAllowed() {
 		return nil, rpc.NewError(rpc.CodeWriteDisabled, "session termination requires sessions: true in access.json")
 	}
-	err = d.opts.Telegram.TerminateSession(ctx, target.Hash)
+	err = d.telegram(ctx).TerminateSession(ctx, target.Hash)
 	record["time"] = time.Now().UTC().Format(time.RFC3339)
 	record["phase"] = "result"
 	record["outcome"] = "success"
@@ -88,7 +88,7 @@ func (d *daemon) terminateSession(ctx context.Context, raw json.RawMessage) (any
 	if err != nil {
 		return nil, err
 	}
-	if fresh, e := d.opts.Telegram.Sessions(ctx); e == nil {
+	if fresh, e := d.telegram(ctx).Sessions(ctx); e == nil {
 		d.save(ctx, rpc.MethodAccountSessions, func(ctx context.Context) error { return d.store.ReplaceSessions(ctx, fresh) })
 	} else {
 		d.log.Warn("session refresh failed")

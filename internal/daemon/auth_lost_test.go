@@ -76,3 +76,60 @@ func TestUnexpectedClientFailureStopsDaemon(t *testing.T) {
 		t.Fatal("unexpected client failure was ignored")
 	}
 }
+
+func TestAuthorizationLossLoginRestartsClient(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	d, _, _, _ := accessTestDaemon(t)
+	initial := newFake()
+	d.opts.Telegram = initial
+	d.opts.NewTelegram = func(context.Context, TelegramConfig) (Telegram, error) { return nil, errors.New("unused") }
+	d.admission.unblock(initial)
+	var next *fakeTelegram
+	count := 0
+	factory := func(context.Context) (Telegram, error) {
+		count++
+		client := newFake()
+		if next != nil {
+			client.user, _ = next.Self(context.Background())
+		}
+		next = client
+		return client, nil
+	}
+	d.supervisor = newClientSupervisor(ctx, &d.admission, initial, factory, func(Telegram) {}, func() bool { return d.getAuthLost() != "" }, nil, nil, time.Second)
+	d.login = newLoginManager(ctx, initial)
+	d.login.acquire = d.acquireTelegram
+	d.login.onUser = d.account.set
+	authorized := make(chan struct{}, 1)
+	d.login.onAuthorized = func() error { return d.onAuthorized(ctx, authorized) }
+	d.setAuthLost("revoked")
+	result, err := d.authStart(ctx, params(t, rpc.AuthStartParams{Phone: "+123"}))
+	if err != nil || result.(rpc.AuthResult).State != rpc.AuthCodeRequired {
+		t.Fatalf("start: %v %v", result, err)
+	}
+	result, err = d.authCode(ctx, params(t, rpc.AuthCodeParams{Code: "12345"}))
+	if err != nil || result.(rpc.AuthResult).State != rpc.AuthAuthorized {
+		t.Fatalf("code: %v %v", result, err)
+	}
+	if d.getAuthLost() != "" {
+		t.Fatal("authorization loss was not cleared")
+	}
+	if count != 2 {
+		t.Fatalf("created %d clients", count)
+	}
+	select {
+	case <-next.Ready():
+	case <-time.After(time.Second):
+		t.Fatal("replacement did not start")
+	}
+	value, err := d.status(ctx, nil)
+	if err != nil || !value.(rpc.StatusResult).Authorized {
+		t.Fatalf("status: %+v %v", value, err)
+	}
+	cancel()
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
+	defer waitCancel()
+	if err := d.supervisor.wait(waitCtx); err != nil {
+		t.Fatal(err)
+	}
+}

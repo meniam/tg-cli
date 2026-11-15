@@ -21,7 +21,7 @@ func (d *daemon) statsChat(ctx context.Context, value string) (chatref.Ref, rpc.
 	if chat.Type != "channel" && chat.Type != "supergroup" {
 		return chatref.Ref{}, chat, nil, rpc.NewError(rpc.CodeInvalidParams, "statistics require a channel or supergroup")
 	}
-	client, ok := d.opts.Telegram.(statsTelegram)
+	client, ok := d.telegram(ctx).(statsTelegram)
 	if !ok {
 		return chatref.Ref{}, chat, nil, rpc.NewError(rpc.CodeInternal, "statistics unavailable")
 	}

@@ -51,7 +51,7 @@ func (d *daemon) chatUnread(ctx context.Context, raw json.RawMessage) (any, erro
 		return nil, err
 	}
 	policy := d.policy()
-	out, states, err := d.opts.Telegram.UnreadChats(ctx, limit, p.Archived, policy.Allowed)
+	out, states, err := d.telegram(ctx).UnreadChats(ctx, limit, p.Archived, policy.Allowed)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (d *daemon) messageUnread(ctx context.Context, raw json.RawMessage) (any, e
 	if _, err = d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
-	out, state, err := d.opts.Telegram.UnreadMessages(ctx, ref, p)
+	out, state, err := d.telegram(ctx).UnreadMessages(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}

@@ -96,7 +96,7 @@ func (d *daemon) adminReference(ctx context.Context, value string, write bool, a
 			}
 			return ref, chat, rpc.ErrAdminDisabled()
 		}
-		chat, err = d.opts.Telegram.Resolve(ctx, ref)
+		chat, err = d.telegram(ctx).Resolve(ctx, ref)
 		if err != nil {
 			return ref, chat, err
 		}
@@ -139,7 +139,7 @@ func (d *daemon) memberReference(ctx context.Context, value string, rejectSelf b
 	if ref.Kind == chatref.ID && blocked(ref.ID) {
 		return ref, 0, rpc.ErrUnknownChatID()
 	}
-	user, err := d.opts.Telegram.Resolve(ctx, ref)
+	user, err := d.telegram(ctx).Resolve(ctx, ref)
 	if err != nil {
 		return ref, 0, err
 	}
@@ -149,7 +149,7 @@ func (d *daemon) memberReference(ctx context.Context, value string, rejectSelf b
 	if user.ID <= 0 || (user.Type != "user" && user.Type != "bot") {
 		return ref, 0, rpc.NewError(rpc.CodeInvalidParams, "target must be a user")
 	}
-	self, err := d.opts.Telegram.Self(ctx)
+	self, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		return ref, 0, err
 	}
@@ -201,7 +201,7 @@ func (d *daemon) chatAdmin(ctx context.Context, action string, raw json.RawMessa
 	if err := decodeParams(raw, &p); err != nil {
 		return nil, err
 	}
-	api := d.opts.Telegram
+	api := d.telegram(ctx)
 	if action == "create" {
 		if err := d.requireAccount(ctx); err != nil {
 			return nil, err
@@ -323,7 +323,7 @@ func (d *daemon) chatAdmin(ctx context.Context, action string, raw json.RawMessa
 	journal := action == "leave" || action == "kick" || action == "ban" || action == "unban" || action == "restrict" || action == "permissions"
 	var record map[string]any
 	if journal {
-		self, e := d.opts.Telegram.Self(ctx)
+		self, e := d.telegram(ctx).Self(ctx)
 		if e != nil {
 			return nil, e
 		}

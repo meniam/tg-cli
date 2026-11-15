@@ -52,7 +52,7 @@ func (d *daemon) requireAllowedChat(ctx context.Context, ref chatref.Ref) (*rpc.
 	case chatref.Invite:
 		return nil, nil
 	default:
-		chat, err := d.opts.Telegram.Resolve(ctx, ref)
+		chat, err := d.telegram(ctx).Resolve(ctx, ref)
 		if err != nil {
 			return nil, err
 		}

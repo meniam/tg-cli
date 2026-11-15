@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"tg-cli/internal/access"
+	"tg-cli/internal/netconf"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
 	"tg-cli/internal/throttle"
@@ -33,9 +34,12 @@ type Options struct {
 	Profile  string
 	Paths    Paths
 	Telegram Telegram
-	Store    *store.DB
-	Access   *access.Loader
-	Log      *slog.Logger
+	// NewTelegram constructs a replacement for the single-use client.
+	NewTelegram    func(context.Context, TelegramConfig) (Telegram, error)
+	TelegramConfig TelegramConfig
+	Store          *store.DB
+	Access         *access.Loader
+	Log            *slog.Logger
 	// IdleTimeout stops the daemon after this long without a request and with
 	// no request in flight. Zero means no idle stop: the daemon lives until
 	// `daemon stop` or a failure.
@@ -49,6 +53,9 @@ type Options struct {
 const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
+	admission            telegramAdmission
+	supervisor           *clientSupervisor
+	auto                 *autoTransport
 	account              accountCache
 	authLostMu           sync.RWMutex
 	authLost             string
@@ -136,33 +143,134 @@ func Run(ctx context.Context, opts Options) error {
 		opts.Access = access.Open(opts.Paths.Access)
 	}
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore}
+	d.admission.unblock(opts.Telegram)
 	d.sync = newHistorySyncManager(runCtx, d, nil)
 	// A daemon that has just started is not idle: the clock runs from now.
 	d.lastActivity.Store(time.Now().UnixNano())
 	d.login = newLoginManager(runCtx, opts.Telegram)
+	if opts.NewTelegram != nil {
+		d.login.acquire = d.acquireTelegram
+	}
 	authorized := make(chan struct{}, 1)
 	d.login.onUser = d.account.set
-	d.login.onAuthorized = func() {
-		d.setAuthLost("")
-		select {
-		case authorized <- struct{}{}:
-		default:
-		}
-	}
+	d.login.onAuthorized = func() error { return d.onAuthorized(runCtx, authorized) }
 	if source, ok := opts.Telegram.(interface{ SetAuthLostSink(func(string)) }); ok {
 		source.SetAuthLostSink(d.setAuthLost)
 	}
 	d.srv.SetRequestGuard(d.guardRequest)
 	contactsDone := make(chan struct{})
 	accountDone := make(chan struct{})
+
+	d.register()
+	d.srv.SetEventSource(d.hub, d.replayEvents)
+	opts.Telegram.SetEventSink(d.handleEvent)
+	if client, ok := opts.Telegram.(transcriptionTelegram); ok {
+		client.SetTranscriptionSink(d.handleTranscription)
+	}
+	if _, err := d.store.PruneIdempotency(runCtx, time.Now()); err != nil {
+		d.log.Warn("idempotency cleanup failed")
+	}
+	idempotencyDone := make(chan struct{})
+	go func() { defer close(idempotencyDone); d.pruneIdempotency(runCtx) }()
+	pruneDone := make(chan struct{})
+	go func() { defer close(pruneDone); d.pruneEvents(runCtx, eventPruneEvery, eventRetention, eventKeep) }()
+
+	var tgDone <-chan error
+	switchDone := make(chan struct{})
+	autoDone := make(chan struct{})
+	if opts.NewTelegram != nil {
+		autoReady := make(chan struct{})
+		var readyOnce sync.Once
+		auto := newAutoTransport(opts.TelegramConfig.Network, autoReady)
+		d.auto = auto
+		factory := func(ctx context.Context) (Telegram, error) {
+			cfg := opts.TelegramConfig
+			cfg.Network = auto.network()
+			return opts.NewTelegram(ctx, cfg)
+		}
+		switchRequests := make(chan struct{}, 1)
+		switchClient := func() {
+			select {
+			case switchRequests <- struct{}{}:
+			default:
+			}
+		}
+		onFailure := func() bool {
+			if auto.switchOnFailure() {
+				switchClient()
+				return true
+			}
+			return auto.hasSwitched()
+		}
+		observeConnection := func(state rpc.ConnectionInfo) {
+			if state.Connection == "disconnected" && d.getAuthLost() == "" {
+				onFailure()
+			}
+		}
+		d.logConnection(runCtx, opts.Telegram, observeConnection)
+		prepare := func(client Telegram) {
+			client.SetEventSink(d.handleEvent)
+			if source, ok := client.(interface{ SetAuthLostSink(func(string)) }); ok {
+				source.SetAuthLostSink(d.setAuthLost)
+			}
+			if source, ok := client.(transcriptionTelegram); ok {
+				source.SetTranscriptionSink(d.handleTranscription)
+			}
+			d.logConnection(runCtx, client, observeConnection)
+		}
+		d.supervisor = newClientSupervisor(runCtx, &d.admission, opts.Telegram, factory, prepare, func() bool { return d.getAuthLost() != "" }, onFailure, func() { readyOnce.Do(func() { close(autoReady) }) }, 30*time.Second)
+		go func() {
+			defer close(switchDone)
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-switchRequests:
+					if err := d.supervisor.restart(runCtx); err != nil && runCtx.Err() == nil {
+						d.log.Warn("telegram transport switch failed")
+					}
+				}
+			}
+		}()
+		if opts.TelegramConfig.Network.Transport == netconf.Auto {
+			go func() {
+				defer close(autoDone)
+				timer := time.NewTimer(10 * time.Second)
+				defer timer.Stop()
+				auto.watch(runCtx, timer.C, switchClient)
+			}()
+		} else {
+			close(autoDone)
+		}
+		tgDone = d.supervisor.exits
+	} else {
+		d.logConnection(runCtx, opts.Telegram, nil)
+		close(switchDone)
+		close(autoDone)
+		done := make(chan error, 1)
+		go func() { done <- opts.Telegram.Run(runCtx) }()
+		tgDone = done
+	}
 	go func() {
 		defer close(accountDone)
-		select {
-		case <-runCtx.Done():
-			return
-		case <-opts.Telegram.Ready():
+		client := opts.Telegram
+		leaseCtx := runCtx
+		release := func() {}
+		if d.supervisor != nil {
+			var err error
+			leaseCtx, client, release, err = d.supervisor.acquireReady(runCtx)
+			if err != nil {
+				return
+			}
+		} else {
+			select {
+			case <-runCtx.Done():
+				return
+			case <-client.Ready():
+			}
 		}
-		user, err := opts.Telegram.Self(runCtx)
+		defer release()
+		user, err := client.Self(leaseCtx)
 		if err == nil && user != nil {
 			d.account.setIfEmpty(user)
 		}
@@ -184,29 +292,21 @@ func Run(ctx context.Context, opts Options) error {
 			case <-authorized:
 			}
 		}
+		contactsCtx := runCtx
+		if opts.NewTelegram != nil {
+			leaseCtx, client, release, err := d.acquireTelegram(runCtx)
+			if err != nil {
+				return
+			}
+			defer release()
+			contactsCtx = context.WithValue(leaseCtx, telegramContextKey{}, client)
+		}
 		d.contactsMu.Lock()
 		defer d.contactsMu.Unlock()
-		if _, err := d.syncContacts(throttle.WithBackground(runCtx)); err != nil && !errors.Is(err, context.Canceled) {
+		if _, err := d.syncContacts(throttle.WithBackground(contactsCtx)); err != nil && !errors.Is(err, context.Canceled) {
 			d.log.Warn("contact sync failed")
 		}
 	}()
-	d.register()
-	d.srv.SetEventSource(d.hub, d.replayEvents)
-	opts.Telegram.SetEventSink(d.handleEvent)
-	if client, ok := opts.Telegram.(transcriptionTelegram); ok {
-		client.SetTranscriptionSink(d.handleTranscription)
-	}
-	if _, err := d.store.PruneIdempotency(runCtx, time.Now()); err != nil {
-		d.log.Warn("idempotency cleanup failed")
-	}
-	idempotencyDone := make(chan struct{})
-	go func() { defer close(idempotencyDone); d.pruneIdempotency(runCtx) }()
-	pruneDone := make(chan struct{})
-	go func() { defer close(pruneDone); d.pruneEvents(runCtx, eventPruneEvery, eventRetention, eventKeep) }()
-
-	d.logConnection(runCtx)
-	tgDone := make(chan error, 1)
-	go func() { tgDone <- opts.Telegram.Run(runCtx) }()
 	serveDone := make(chan error, 1)
 	go func() { serveDone <- d.srv.Serve(l) }()
 
@@ -235,6 +335,8 @@ func Run(ctx context.Context, opts Options) error {
 	// Join the idle monitor: a goroutine that outlived the shutdown would keep
 	// the process alive after Run returned.
 	<-idleDone
+	<-switchDone
+	<-autoDone
 	<-pruneDone
 	<-contactsDone
 	<-idempotencyDone
@@ -244,7 +346,11 @@ func Run(ctx context.Context, opts Options) error {
 	if err := d.srv.Shutdown(stopCtx); err != nil {
 		log.Warn("forced server close", "err", err)
 	}
-	if !tgFinished {
+	if d.supervisor != nil {
+		if err := d.supervisor.wait(stopCtx); err != nil {
+			log.Warn("telegram client did not stop in time")
+		}
+	} else if !tgFinished {
 		select {
 		case <-tgDone:
 		case <-stopCtx.Done():
@@ -298,6 +404,14 @@ func (d *daemon) handle(method string, h rpc.Handler) {
 	d.srv.Handle(method, d.tracking(func(ctx context.Context, params json.RawMessage) (any, error) {
 		if method != rpc.MethodPing && method != rpc.MethodStatus && method != rpc.MethodShutdown {
 			ctx = rpc.WithConnectionWait(ctx)
+		}
+		if needsTelegram(method) && d.opts.NewTelegram != nil {
+			leasedCtx, client, release, err := d.acquireTelegram(ctx)
+			if err != nil {
+				return nil, err
+			}
+			defer release()
+			ctx = context.WithValue(leasedCtx, telegramContextKey{}, client)
 		}
 		return h(ctx, params)
 	}))
@@ -404,20 +518,34 @@ func (d *daemon) status(ctx context.Context, _ json.RawMessage) (any, error) {
 		st.Access = &rpc.AccessStatus{Enabled: policy.Enabled(), Allow: policy.AllowCount(), Block: policy.BlockCount(), Write: policy.WriteCount(), Admin: policy.AdminCount(), Create: policy.CreateAllowed(), Profile: policy.ProfileAllowed(), Dialogs: policy.DialogsAllowed(), Sessions: policy.SessionsAllowed(), Closed: policy.Closed()}
 	}
 	if st.AuthLost != "" {
+		if d.opts.NewTelegram != nil && d.admission.isBlocked() {
+			info := d.unavailableConnection()
+			st.ConnectionInfo = &info
+		}
 		return st, nil
 	}
-	if d.fillConnection(&st) {
+	if d.opts.NewTelegram != nil {
+		leasedCtx, client, release, err := d.acquireTelegram(ctx)
+		if err != nil {
+			info := d.unavailableConnection()
+			st.ConnectionInfo = &info
+			return st, nil
+		}
+		defer release()
+		ctx = context.WithValue(leasedCtx, telegramContextKey{}, client)
+	}
+	if d.fillConnection(ctx, &st) {
 		return st, nil
 	}
 	select {
-	case <-d.opts.Telegram.Ready():
+	case <-d.telegram(ctx).Ready():
 		st.Connected = true
 	default:
 		return st, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, statusTimeout)
 	defer cancel()
-	user, err := d.opts.Telegram.Self(ctx)
+	user, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -426,15 +554,54 @@ func (d *daemon) status(ctx context.Context, _ json.RawMessage) (any, error) {
 	return st, nil
 }
 
+func (d *daemon) unavailableConnection() rpc.ConnectionInfo {
+	settings := d.opts.TelegramConfig.Network
+	transport := string(settings.Transport)
+	if transport == "" {
+		transport = "tcp"
+	}
+	info := rpc.ConnectionInfo{Transport: transport, Proxy: settings.Proxy.Redacted(), Connection: d.unavailableState()}
+	if d.auto != nil && d.auto.hasSwitched() {
+		info.TransportSwitches = 1
+	}
+	return info
+}
+
+func (d *daemon) unavailableState() string {
+	if d.supervisor != nil && d.supervisor.offline() {
+		return "offline"
+	}
+	return "restarting"
+}
+
 func (d *daemon) shutdown(context.Context, json.RawMessage) (any, error) {
 	d.once.Do(d.cancel)
 	return rpc.ShutdownResult{Stopping: true}, nil
+}
+
+func (d *daemon) onAuthorized(ctx context.Context, authorized chan<- struct{}) error {
+	if d.getAuthLost() != "" && d.supervisor != nil {
+		if err := d.supervisor.restart(ctx); err != nil {
+			return err
+		}
+	}
+	d.setAuthLost("")
+	select {
+	case authorized <- struct{}{}:
+	default:
+	}
+	return nil
 }
 
 func (d *daemon) authStart(ctx context.Context, params json.RawMessage) (any, error) {
 	var p rpc.AuthStartParams
 	if err := decodeParams(params, &p); err != nil {
 		return nil, err
+	}
+	if d.getAuthLost() != "" && d.supervisor != nil {
+		if err := d.supervisor.restart(ctx); err != nil {
+			return nil, rpc.NewError(rpc.CodeOffline, "telegram is offline")
+		}
 	}
 	return d.login.start(ctx, p.Phone)
 }
@@ -456,6 +623,11 @@ func (d *daemon) authPassword(ctx context.Context, params json.RawMessage) (any,
 }
 
 func (d *daemon) authStartQR(ctx context.Context, _ json.RawMessage) (any, error) {
+	if d.getAuthLost() != "" && d.supervisor != nil {
+		if err := d.supervisor.restart(ctx); err != nil {
+			return nil, rpc.NewError(rpc.CodeOffline, "telegram is offline")
+		}
+	}
 	return d.login.startQR(ctx)
 }
 
@@ -475,7 +647,7 @@ func (d *daemon) authCancel(context.Context, json.RawMessage) (any, error) {
 // in. A client may call right after the daemon started, so it waits.
 func (d *daemon) requireAccount(ctx context.Context) error {
 	if rpc.NeedsConnectionWait(ctx) {
-		if waiter, ok := d.opts.Telegram.(interface {
+		if waiter, ok := d.telegram(ctx).(interface {
 			WaitConnected(context.Context, time.Duration) error
 		}); ok {
 			if err := waiter.WaitConnected(ctx, connectionWait); err != nil {
@@ -487,11 +659,11 @@ func (d *daemon) requireAccount(ctx context.Context) error {
 		}
 	}
 	select {
-	case <-d.opts.Telegram.Ready():
+	case <-d.telegram(ctx).Ready():
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	user, err := d.opts.Telegram.Self(ctx)
+	user, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		return err
 	}
@@ -522,7 +694,7 @@ func (d *daemon) chatList(ctx context.Context, params json.RawMessage) (any, err
 	}
 	policy := d.policy()
 	requested := limit
-	chats, err := d.opts.Telegram.Chats(ctx, requested, p.Type)
+	chats, err := d.telegram(ctx).Chats(ctx, requested, p.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -539,7 +711,7 @@ func (d *daemon) chatList(ctx context.Context, params json.RawMessage) (any, err
 				break
 			}
 			requested = min(requested*2, maxChatLimit)
-			chats, err = d.opts.Telegram.Chats(ctx, requested, p.Type)
+			chats, err = d.telegram(ctx).Chats(ctx, requested, p.Type)
 			if err != nil {
 				return nil, err
 			}
@@ -574,10 +746,24 @@ func (d *daemon) getAuthLost() string {
 	return d.authLost
 }
 
+// needsTelegram excludes operations that are fully served by local storage.
+func needsTelegram(method string) bool {
+	switch method {
+	case rpc.MethodSearch, rpc.MethodNoteList, rpc.MethodNoteDelete, rpc.MethodNoteDeleteByAuthor,
+		rpc.MethodMessageExportLocal, rpc.MethodMessageExportVerify,
+		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel:
+		return false
+	}
+	return accountMethod(method) || method == rpc.MethodSessionExport
+}
+
 // guardRequest rejects account operations after authorization loss.
 func (d *daemon) guardRequest(req rpc.Request) error {
+	if d.opts.NewTelegram != nil && needsTelegram(req.Method) && d.admission.isBlocked() {
+		return rpc.NewError(rpc.CodeOffline, "telegram is offline")
+	}
 	if kind := d.getAuthLost(); kind != "" && accountMethod(req.Method) {
-		return rpc.NewError(rpc.CodeNotAuthorized, "authorization lost: "+kind+"; stop the daemon and log in again")
+		return rpc.NewError(rpc.CodeNotAuthorized, "authorization lost: "+kind+"; log in again")
 	}
 	return d.account.check(req)
 }

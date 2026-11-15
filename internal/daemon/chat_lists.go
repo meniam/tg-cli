@@ -23,7 +23,7 @@ func (d *daemon) listChat(ctx context.Context, value string) (chatref.Ref, rpc.C
 	if resolved != nil {
 		chat = *resolved
 	} else {
-		chat, err = d.opts.Telegram.Resolve(ctx, ref)
+		chat, err = d.telegram(ctx).Resolve(ctx, ref)
 		if err != nil {
 			return chatref.Ref{}, rpc.Chat{}, err
 		}
@@ -64,7 +64,7 @@ func (d *daemon) chatMembers(ctx context.Context, raw json.RawMessage) (any, err
 	if chat.Type == "user" || chat.Type == "bot" {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "members require a group, supergroup, or channel")
 	}
-	result, err := d.opts.Telegram.Members(ctx, ref, p)
+	result, err := d.telegram(ctx).Members(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (d *daemon) chatTopics(ctx context.Context, raw json.RawMessage) (any, erro
 	if chat.Type == "user" || chat.Type == "bot" {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "topics require a forum chat")
 	}
-	result, err := d.opts.Telegram.Topics(ctx, ref, p)
+	result, err := d.telegram(ctx).Topics(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (d *daemon) chatCommon(ctx context.Context, raw json.RawMessage) (any, erro
 		return nil, rpc.NewError(rpc.CodeNotFound, "not found")
 	}
 	// Resolve also supplies the person fields that CommonChatsResult does not carry.
-	user, err := d.opts.Telegram.Resolve(ctx, ref)
+	user, err := d.telegram(ctx).Resolve(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func (d *daemon) chatCommon(ctx context.Context, raw json.RawMessage) (any, erro
 	}
 	result := rpc.CommonChatsResult{Chats: []rpc.CommonChat{}}
 	for range 10 {
-		page, err := d.opts.Telegram.CommonChats(ctx, ref, p)
+		page, err := d.telegram(ctx).CommonChats(ctx, ref, p)
 		if err != nil {
 			return nil, err
 		}

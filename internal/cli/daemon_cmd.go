@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"os"
@@ -219,7 +220,9 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if cfg.DeviceModel, err = a.deviceModel(cmd, paths); err != nil {
 		return err
 	}
-	tg, err := a.deps.NewTelegram(cfg)
+	initialCfg := cfg
+	initialCfg.Network = daemon.InitialNetwork(cfg.Network)
+	tg, err := a.deps.NewTelegram(initialCfg)
 	if err != nil {
 		return fail(exitcode.Failure, "create the Telegram client: %v", err)
 	}
@@ -237,11 +240,18 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		logger = slog.New(slog.NewTextHandler(journal, &slog.HandlerOptions{Level: level}))
 	}
 	err = daemon.Run(cmd.Context(), daemon.Options{
-		Profile:     profile,
-		Paths:       paths,
-		Telegram:    tg,
-		Log:         logger,
-		IdleTimeout: idle,
+		Profile:  profile,
+		Paths:    paths,
+		Telegram: tg,
+		NewTelegram: func(ctx context.Context, cfg daemon.TelegramConfig) (daemon.Telegram, error) {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			return a.deps.NewTelegram(cfg)
+		},
+		TelegramConfig: cfg,
+		Log:            logger,
+		IdleTimeout:    idle,
 	})
 	if err != nil {
 		if errors.Is(err, daemon.ErrSessionInUse) {

@@ -27,21 +27,21 @@ func (d *daemon) messageReaders(ctx context.Context, raw json.RawMessage) (any, 
 	if _, err = d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
-	chat, err := d.opts.Telegram.Resolve(ctx, ref)
+	chat, err := d.telegram(ctx).Resolve(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
 	if !d.policy().Allowed(chat.ID) {
 		return nil, rpc.ErrChatNotFound()
 	}
-	self, err := d.opts.Telegram.Self(ctx)
+	self, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if chat.Type != "user" && chat.Type != "group" && chat.Type != "supergroup" || self != nil && chat.ID == self.ID {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "readers require a group or private user chat")
 	}
-	result, err := d.opts.Telegram.MessageReaders(ctx, chatref.Ref{Kind: chatref.ID, ID: chat.ID}, p.ID)
+	result, err := d.telegram(ctx).MessageReaders(ctx, chatref.Ref{Kind: chatref.ID, ID: chat.ID}, p.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (d *daemon) accountProfile(ctx context.Context, raw json.RawMessage) (any, 
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.AccountProfile(ctx)
+	return d.telegram(ctx).AccountProfile(ctx)
 }
 
 func (d *daemon) accountEmojiStatuses(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -95,7 +95,7 @@ func (d *daemon) accountEmojiStatuses(ctx context.Context, raw json.RawMessage) 
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.AccountEmojiStatuses(ctx, p.Recent)
+	return d.telegram(ctx).AccountEmojiStatuses(ctx, p.Recent)
 }
 
 func (d *daemon) approveJoinRequest(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -109,7 +109,7 @@ func (d *daemon) handleJoinRequest(ctx context.Context, raw json.RawMessage, app
 	if err := decodeParams(raw, &p); err != nil {
 		return nil, err
 	}
-	ref, chat, err := d.adminReference(ctx, p.Chat, false, d.opts.Telegram)
+	ref, chat, err := d.adminReference(ctx, p.Chat, false, d.telegram(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (d *daemon) handleJoinRequest(ctx context.Context, raw json.RawMessage, app
 	}
 	result := rpc.JoinRequestActionResult{ChatID: chat.ID, UserID: uid, Approved: approved, DryRun: p.DryRun}
 	if p.DryRun {
-		rights, err := d.opts.Telegram.OwnAdminRights(ctx, ref)
+		rights, err := d.telegram(ctx).OwnAdminRights(ctx, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +131,7 @@ func (d *daemon) handleJoinRequest(ctx context.Context, raw json.RawMessage, app
 		}
 		return result, nil
 	}
-	self, err := d.opts.Telegram.Self(ctx)
+	self, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (d *daemon) handleJoinRequest(ctx context.Context, raw json.RawMessage, app
 		d.finishModeration(record, denied)
 		return nil, denied
 	}
-	err = d.opts.Telegram.HandleJoinRequest(ctx, ref, user, approved)
+	err = d.telegram(ctx).HandleJoinRequest(ctx, ref, user, approved)
 	record["time"] = time.Now().UTC().Format(time.RFC3339)
 	record["phase"] = "result"
 	record["outcome"] = writeOutcome(err)
@@ -190,7 +190,7 @@ func (d *daemon) chatSet(ctx context.Context, raw json.RawMessage) (any, error) 
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
-	ref, chat, err := d.adminReference(ctx, p.Chat, false, d.opts.Telegram)
+	ref, chat, err := d.adminReference(ctx, p.Chat, false, d.telegram(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (d *daemon) chatSet(ctx context.Context, raw json.RawMessage) (any, error) 
 	}
 	out := rpc.ChatSetResult{ChatID: chat.ID, Changes: []rpc.SettingChange{}, DryRun: p.DryRun}
 	if p.DryRun {
-		rights, e := d.opts.Telegram.OwnAdminRights(ctx, ref)
+		rights, e := d.telegram(ctx).OwnAdminRights(ctx, ref)
 		if e != nil {
 			return nil, e
 		}
@@ -212,7 +212,7 @@ func (d *daemon) chatSet(ctx context.Context, raw json.RawMessage) (any, error) 
 		out.Changes = changes
 		return out, nil
 	}
-	self, err := d.opts.Telegram.Self(ctx)
+	self, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func (d *daemon) chatSet(ctx context.Context, raw json.RawMessage) (any, error) 
 			err = rpc.ErrAdminDisabled()
 		} else {
 			var changed bool
-			changed, err = d.opts.Telegram.SetChannelSetting(ctx, ref, c.Flag, c.Value, p.Signatures, p.SignatureProfiles)
+			changed, err = d.telegram(ctx).SetChannelSetting(ctx, ref, c.Flag, c.Value, p.Signatures, p.SignatureProfiles)
 			c.Changed = changed
 		}
 		group := []rpc.SettingChange{c}
@@ -315,7 +315,7 @@ func (d *daemon) accountSet(ctx context.Context, raw json.RawMessage) (any, erro
 		out.Changes = changes
 		return out, nil
 	}
-	self, err := d.opts.Telegram.Self(ctx)
+	self, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +341,7 @@ func (d *daemon) accountSet(ctx context.Context, raw json.RawMessage) (any, erro
 			if c.Flag == "personal-channel" {
 				target = channel
 			}
-			c.Changed, err = d.opts.Telegram.SetAccountField(ctx, c.Flag, c.Value, p.EmojiStatusUntil, target)
+			c.Changed, err = d.telegram(ctx).SetAccountField(ctx, c.Flag, c.Value, p.EmojiStatusUntil, target)
 		}
 		if err == nil {
 			out.Changes = append(out.Changes, c)
@@ -391,7 +391,7 @@ func (d *daemon) chatRequests(ctx context.Context, raw json.RawMessage) (any, er
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "requests require a channel or supergroup")
 	}
 	ref = chatref.Ref{Kind: chatref.ID, ID: chat.ID}
-	result, err := d.opts.Telegram.ChatRequests(ctx, ref, p)
+	result, err := d.telegram(ctx).ChatRequests(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +414,7 @@ func (d *daemon) chatRequests(ctx context.Context, raw json.RawMessage) (any, er
 		members = append(members, rpc.Member{ID: r.UserID, Name: r.Name, Username: r.Username, IsBot: r.IsBot})
 	}
 	result.Requests = visible
-	if err := d.opts.Telegram.CacheJoinRequestUsers(ctx, visible); err != nil {
+	if err := d.telegram(ctx).CacheJoinRequestUsers(ctx, visible); err != nil {
 		d.log.Error("could not cache request users")
 	}
 	d.saveMembers(ctx, members)
@@ -451,7 +451,7 @@ func (d *daemon) accountPrivacyGet(ctx context.Context, raw json.RawMessage) (an
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	result, err := d.opts.Telegram.AccountPrivacyGet(ctx, p.Key)
+	result, err := d.telegram(ctx).AccountPrivacyGet(ctx, p.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +471,7 @@ func (d *daemon) accountPrivacySet(ctx context.Context, raw json.RawMessage) (an
 	if !d.policy().ProfileAllowed() {
 		return nil, &rpc.Error{Code: rpc.CodeWriteDisabled, Message: "profile changes are disabled in access.json", Data: map[string]any{"list": "profile"}}
 	}
-	current, err := d.opts.Telegram.AccountPrivacyGet(ctx, p.Key)
+	current, err := d.telegram(ctx).AccountPrivacyGet(ctx, p.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +534,7 @@ func (d *daemon) accountPrivacySet(ctx context.Context, raw json.RawMessage) (an
 	if p.DryRun {
 		return rpc.PrivacyRules{Key: p.Key, Default: p.Default, AllowUsers: idsOf(au), DenyUsers: idsOf(du), AllowChats: idsOf(ac), DenyChats: idsOf(dc), AllowPremium: p.AllowPremium, AllowBots: p.AllowBots, DenyBots: p.DenyBots, AllowCloseFriends: p.AllowCloseFriends, DryRun: true}, nil
 	}
-	self, err := d.opts.Telegram.Self(ctx)
+	self, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -564,7 +564,7 @@ func (d *daemon) accountPrivacySet(ctx context.Context, raw json.RawMessage) (an
 		d.finishModeration(record, denied)
 		return nil, denied
 	}
-	result, err := d.opts.Telegram.AccountPrivacySet(ctx, p, au, du, ac, dc)
+	result, err := d.telegram(ctx).AccountPrivacySet(ctx, p, au, du, ac, dc)
 	record["time"] = time.Now().UTC().Format(time.RFC3339)
 	record["phase"] = "result"
 	record["outcome"] = writeOutcome(err)

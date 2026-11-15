@@ -61,7 +61,7 @@ func (d *daemon) chatResolve(ctx context.Context, params json.RawMessage) (any, 
 	if resolved != nil {
 		chat = *resolved
 	} else {
-		chat, err = d.opts.Telegram.Resolve(ctx, ref)
+		chat, err = d.telegram(ctx).Resolve(ctx, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -85,7 +85,7 @@ func (d *daemon) chatInfo(ctx context.Context, params json.RawMessage) (any, err
 	if _, err := d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
-	info, err := d.opts.Telegram.ChatInfo(ctx, ref)
+	info, err := d.telegram(ctx).ChatInfo(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (d *daemon) chatInviteInfo(ctx context.Context, params json.RawMessage) (an
 	if _, err := d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.InviteInfo(ctx, ref)
+	return d.telegram(ctx).InviteInfo(ctx, ref)
 }
 
 // parseTime reads an RFC 3339 time; an empty string is the zero time.
@@ -156,7 +156,7 @@ func (d *daemon) messageHistory(ctx context.Context, params json.RawMessage) (an
 	if _, err := d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
-	res, err := d.opts.Telegram.History(ctx, ref, rpc.HistoryQuery{
+	res, err := d.telegram(ctx).History(ctx, ref, rpc.HistoryQuery{
 		Limit: limit, Since: since, Until: until, Topic: p.Topic, Cursor: p.Cursor, MaxBytes: maxPageBytes,
 	})
 	if err != nil {
@@ -190,7 +190,7 @@ func (d *daemon) messageGet(ctx context.Context, params json.RawMessage) (any, e
 	if _, err := d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
-	message, err := d.opts.Telegram.Message(ctx, ref, p.ID)
+	message, err := d.telegram(ctx).Message(ctx, ref, p.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +217,7 @@ func (d *daemon) messagePinned(ctx context.Context, params json.RawMessage) (any
 	if _, err := d.requireAllowedChat(ctx, ref); err != nil {
 		return nil, err
 	}
-	res, err := d.opts.Telegram.Pinned(ctx, ref, limit)
+	res, err := d.telegram(ctx).Pinned(ctx, ref, limit)
 	if err != nil {
 		return nil, err
 	}
