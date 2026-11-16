@@ -217,7 +217,7 @@ The syntax of the rich modes is Telegram's own and is parsed by the server; the 
   With `--entities -` the standard input holds the JSON, so the text must come from `--text`. With a file path the text comes from `--text` or stdin as usual.
 - **UTF-16 offsets.** `offset` and `length` count UTF-16 units, as Telegram does: a character outside the Basic Multilingual Plane, an emoji for example, takes 2. In `😀 bold` the word `bold` starts at offset 3. A boundary inside such a pair, a zero length and a range outside the text are exit code 2.
 - **Mention by id.** `<a href="tg://user?id=N">name</a>`, `[name](tg://user?id=N)` and the `mention_name` entity need a user that the session knows: the Daemon resolves the id through the peer cache of the session, as it does for a numeric chat reference, and on a miss loads the dialog list once. The local database stores no access hashes and takes no part. Any other id is exit code 2 `unknown user id for this session`. A `--dry-run` with such a mention may read the user from Telegram; it still writes nothing.
-- **Length.** A plain text, an `--entities` text and the source of a rich mode are at most 4096 characters. For `html` and `markdown` the limit applies to the text left after parsing, and a text read from stdin is at most 64 KiB. The limit of a rich message has not been measured, so 4096 characters of its source is a guard of this tool, not a known limit.
+- **Length.** A plain text, an `--entities` text and the source of a rich mode are at most 4096 Unicode code points. For `html` and `markdown` the limit applies to the text left after parsing, and a text read from stdin is at most 64 KiB. The limit of a rich message has not been measured, so 4096 code points of its source is a guard of this tool, not a known limit.
 - **Errors.** Bad flags and input, HTML, Markdown and entity errors and an unknown mention id are exit code 2, raised before any Telegram write method is called (a mention lookup may read from Telegram). A refusal of a rich message by Telegram is exit code 5 `Telegram rejected rich message`. `FLOOD_WAIT` is exit code 6 and the write is not repeated.
 - **Dry run.** `--dry-run` parses the text without writing and adds the mode, the length of the text without markup, the number of entities and whether the message is rich:
 
@@ -266,7 +266,7 @@ tg message send <chat> [flags]
 
 **Preconditions.** A running Daemon, a login, and the chat in `write` (see above). No `--yes`.
 
-**Text.** `--text` gives the text. Without `--text` the text is read from stdin; with `--text` stdin is never read (an open pipe would block the command). A terminal or an empty stdin without `--text` (`message text is required: use --text or pipe it to stdin`), an empty text (`message text must not be empty`) and a text longer than 4096 characters (`message text must be at most 4096 characters`) are exit code 2, before the Daemon is called. Without `--parse` and `--entities` the text goes as it is. `--reply-to` replies to a message, `--topic` sends into a forum topic (a reply inside a forum topic goes as a direct request with `top_msg_id`), `--silent` sends without a notification.
+**Text.** `--text` gives the text. Without `--text` the text is read from stdin; with `--text` stdin is never read (an open pipe would block the command). A terminal or an empty stdin without `--text` (`message text is required: use --text or pipe it to stdin`), an empty text (`message text must not be empty`) and an unformatted text longer than 4096 Unicode code points (`message text must be at most 4096 characters`) are exit code 2 before the Daemon is called. `html` and `markdown` are checked after parsing and can resolve a mention while validating. Without `--parse` and `--entities` the text goes as it is. `--reply-to` replies to a message, `--topic` sends into a forum topic (a reply inside a forum topic goes as a direct request with `top_msg_id`), `--silent` sends without a notification.
 
 **Example.**
 
@@ -313,7 +313,7 @@ tg message edit <chat> <id> [flags]
 **Safety class:** `account_write`. Dangerous. **Output formats:** `json`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon, a login, and the chat in `write`. The command is dangerous: without `--yes` and without `--dry-run` it is exit code 2 (`add --yes to edit or --dry-run to preview`) and the Daemon is not called. The text is taken like in `send` (from `--text` or stdin, 4096 characters at most), formatted by `--parse` or `--entities`. The edit keeps the previous version of the text in the local database. The message can change kind, plain to rich and back.
+**Preconditions.** A running Daemon, a login, and the chat in `write`. The command is dangerous: without `--yes` and without `--dry-run` it is exit code 2 (`add --yes to edit or --dry-run to preview`) and the Daemon is not called. The text is taken like in `send` (from `--text` or stdin), formatted by `--parse` or `--entities`. The 4096-code-point limit applies to plain text, `--entities` text and rich-mode source; for HTML and Markdown it applies after parsing. The command does not read the target message before editing it. If the target is media and the replacement is a caption of 1025 to 4096 code points, Telegram decides whether to reject it; its error, such as `MEDIA_CAPTION_TOO_LONG`, is returned normally as exit code 5. `message edit-media` keeps the 1024-code-point caption limit before Telegram. The edit keeps the previous version of the text in the local database. The message can change kind, plain to rich and back.
 
 **Example.**
 
@@ -447,7 +447,7 @@ tg message send-media <chat> [flags]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--as` | string | `none` | required media type: photo, video, audio, voice or document |
-| `--caption` | string | `none` | caption for the first file (up to 1024 characters) |
+| `--caption` | string | `none` | caption for the first file (up to 1024 Unicode code points) |
 | `--dry-run` | bool | `false` | check files and describe the action without uploading |
 | `--duration` | int | `0` | media duration in seconds; overrides detected duration |
 | `--file` | stringArray | `[]` | file path; repeat for an album (1 to 10 files) |
@@ -487,7 +487,7 @@ A mismatch is exit code 2 with the hint `--as document`. WebP, GIF, MOV, WAV, FL
 
 With `--idempotency-key`, the result can contain `replayed: true`; with `--dry-run`, it can contain `replay_available: true`.
 
-**Limits.** 100 MiB per file and 100 MiB for all files of one call, over that is exit code 2 before any upload. One file goes as one message; 2 to 10 files go as one album of one type, and the caption goes with the first file. `voice` takes one file, two or more is exit code 2. The caption is at most 1024 characters (an empty one is fine); this is the limit of the project, the limit of your account was not read.
+**Limits.** 100 MiB per file and 100 MiB for all files of one call, over that is exit code 2 before any upload. One file goes as one message; 2 to 10 files go as one album of one type, and the caption goes with the first file. `voice` takes one file, two or more is exit code 2. The caption is at most 1024 Unicode code points (an empty one is fine); this is the fixed limit of the tool and applies to `--dry-run` too. The tool does not read whether the account has Premium.
 
 **Metadata flags.** For `video` the Daemon reads the duration and the size from the MP4 (`mvhd`, `tkhd`), for `voice` the duration from the last Ogg page. If that gives nothing, the command is exit code 2 and asks for `--duration --width --height` (video) or `--duration` (voice). The flags override what was read and apply to every file of an album. `audio` has no automatic duration: `--duration` sets it. `photo` and `document` ignore the flags.
 

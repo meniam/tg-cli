@@ -52,7 +52,7 @@ tg message history <chat> [flags]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--cursor` | string | `none` | continue after a previous page, the value of next_cursor |
-| `--limit` | int | `0` | messages per page, 1 to 100; 0 means 20 |
+| `--limit` | int | `20` | messages per page, 1 to 100 |
 | `--since` | string | `none` | only messages sent at this time or later (RFC 3339) |
 | `--topic` | int | `0` | read one topic of a forum chat, by the topic id |
 | `--until` | string | `none` | only messages sent at this time or earlier (RFC 3339) |
@@ -80,7 +80,7 @@ tg message history --limit 20 --topic 7 -- -1001234567890
 
 **Answer fields** (`data`): `messages` array, `messages.id` integer, `messages.chat_id` integer, `messages.date` string, `messages.sender` object (optional), `messages.sender.id` integer (optional), `messages.sender.name` string (optional, untrusted), `messages.sender.username` string (optional, untrusted), `messages.text` string (untrusted), `messages.out` boolean (optional), `messages.reply_to` integer (optional), `messages.topic_id` integer (optional), `messages.media_type` string (optional), `messages.edited` boolean (optional), `messages.pinned` boolean (optional), `messages.service` string (optional), `next_cursor` string (optional).
 
-**Exit codes.** 0; 2 `--limit` above 100 or negative, a time that is not RFC 3339, a malformed reference (`--limit 0` is not refused: the Daemon reads it as the default 20); 3, 4; 5 a Telegram error; 6 `FLOOD_WAIT`; 7 the chat does not exist or is closed.
+**Exit codes.** 0; 2 `--limit` outside 1 to 100, a time that is not RFC 3339, a malformed reference; 3, 4; 5 a Telegram error; 6 `FLOOD_WAIT`; 7 the chat does not exist or is closed.
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 4.1 and 4.8.
 
@@ -131,7 +131,7 @@ tg message pinned <chat> [flags]
 <!-- schema:flags tg message pinned -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--limit` | int | `0` | pinned messages per page, 1 to 100; 0 means 20 |
+| `--limit` | int | `20` | pinned messages per page, 1 to 100 |
 <!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
@@ -153,7 +153,7 @@ tg message pinned @release_team --limit 5
 
 **Answer fields** (`data`): `messages` array, `messages.id` integer, `messages.chat_id` integer, `messages.date` string, `messages.sender` object (optional), `messages.sender.id` integer (optional), `messages.sender.name` string (optional, untrusted), `messages.sender.username` string (optional, untrusted), `messages.text` string (untrusted), `messages.out` boolean (optional), `messages.reply_to` integer (optional), `messages.topic_id` integer (optional), `messages.media_type` string (optional), `messages.edited` boolean (optional), `messages.pinned` boolean (optional), `messages.service` string (optional), `next_cursor` string (optional).
 
-**Exit codes.** 0; 2 `--limit` above 100 or negative (`--limit 0` is not refused: the Daemon reads it as the default 20); 3, 4; 6; 7 the chat does not exist or is closed.
+**Exit codes.** 0; 2 `--limit` outside 1 to 100; 3, 4; 6; 7 the chat does not exist or is closed.
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 4.2.
 
@@ -350,7 +350,7 @@ tg message export <chat> [flags]
 | --- | --- | --- | --- |
 | `--after` | int | `0` | resume after this message id; 0 means from the beginning |
 | `--include-deleted` | bool | `false` | include locally marked deleted messages |
-| `--limit` | int | `0` | maximum number of output messages; 0 means no limit |
+| `--limit` | int | `0` | maximum number of output messages; unlimited when omitted |
 | `--local` | bool | `false` | read only messages already stored locally |
 | `--since` | string | `none` | messages sent at this time or later (RFC 3339) |
 | `--until` | string | `none` | messages sent at this time or earlier (RFC 3339) |
@@ -366,7 +366,7 @@ tg message export <chat> [flags]
 **Behavior.**
 
 - **Deleted messages** are hidden. `--include-deleted` adds them with `"deleted":true`; other lines have no `deleted` field. The mark follows `deleted_at` in the database: `message delete` sets it after a successful call, and the live stream sets it for channels and supergroups and, since plan 12, for private chats and basic groups too (the deletion event carries no chat there, so the Daemon finds the chats by the saved message ids in every access-list mode and, with the filter on, only for open chats). A deletion that never arrived as a stream event (for example a `gap` the updates manager did not close) leaves no mark, and saving a message again clears the mark, so a missing `deleted` field does not prove that the message is alive in Telegram.
-- **Filters.** `--since` and `--until` are inclusive RFC 3339 times, and a `--since` later than `--until` is exit code 2. `--limit N` stops after N lines, 0 is no limit. `--after N` continues with messages whose id is above N.
+- **Filters.** `--since` and `--until` are inclusive RFC 3339 times, and a `--since` later than `--until` is exit code 2. `--limit N` stops after N lines; omitting it leaves the export unlimited. `--after N` continues with messages whose id is above N.
 - **Closed and unknown chats** (also an `@username` the database has never seen) are exit code 7, checked on every page.
 - **Pages and resuming.** The Daemon answers in pages of up to 500 messages and 768 KiB, and the client prints them as they arrive. A message that does not fit into a page stops the export with exit code 1 and `message <id> does not fit into a response page`; it can be skipped only by `--after <id>`, and it does not reach the export. If the export stops after some lines (the Daemon stopped, the chat was closed), the exit code is not 0, the printed lines stay valid, the last line of stdout is the error envelope, and stderr says `last exported id: N; resume with --after N and the same filters`. The export is not a snapshot: a message saved, edited or deleted while pages are read may or may not be included.
 - **Completeness.** Only saved messages are exported, and a line holds the current text; earlier versions of an edited message stay in the database. When the export ends, stderr says ``exported N locally saved messages; check completeness with `tg chat sync status <chat>` `` (`--quiet` hides it). Run [`tg chat sync start`](chats.md#tg-chat-sync-start) first when the whole history is needed and read `complete` from `chat sync status`. Do not present an export as the whole history without that flag.
@@ -390,7 +390,7 @@ tg message export --local --after 4102 -- -1001234567890
 
 `deleted` is present only with `--include-deleted` on deleted messages. The schema also lists `next_after`, a field of the page that the Daemon answers; the printed lines do not carry it.
 
-**Exit codes.** 0 the export reached its end or `--limit` (zero lines is a success too); 1 a message that does not fit into a page, or the connection to the Daemon broke; 2 no `--local`, `json` or `toon`, a negative `--limit` or `--after`, a bad time, a `--since` later than `--until`; 3 no Daemon; 7 an unknown or closed chat. The code 4 does not occur: no login is needed.
+**Exit codes.** 0 the export reached its end or `--limit` (zero lines is a success too); 1 a message that does not fit into a page, or the connection to the Daemon broke; 2 no `--local`, `json` or `toon`, `--limit` below 1, a negative `--after`, a bad time, a `--since` later than `--until`; 3 no Daemon; 7 an unknown or closed chat. The code 4 does not occur: no login is needed.
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 10.4.
 

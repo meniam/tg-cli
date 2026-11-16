@@ -123,7 +123,7 @@ Exit codes: 0 success; 2 invalid or expired result; 3 no Daemon; 4 no login; 5 T
 
 ## tg message edit-media
 
-Replaces media in an existing message. The chat must be visible and in `write`, and the file must be inside an allowed file root. The Daemon checks that the message contains media before uploading. Omitting `--caption` leaves the caption unspecified; passing an empty caption requests its removal.
+Replaces media in an existing message. The chat must be visible and in `write`, and the file must be inside an allowed file root. The Daemon checks that the message contains media before uploading. Omitting `--caption` leaves the caption unspecified; passing an empty caption requests its removal. A supplied caption is limited to 1024 Unicode code points, including in `--dry-run`.
 
 ```text
 tg message edit-media <chat> <id> --as photo|video|audio|document --file PATH [flags]
