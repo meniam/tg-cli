@@ -54,7 +54,8 @@ tg chat list --limit 2 --format jsonl
 ### tg chat overview
 
 Summarises the chats the local database already knows, without asking Telegram.
-It answers while the account is offline and without a login, like [`search`](notes-and-search.md#tg-search). Each row is built from the [`chats_state`](../../docs/contracts.md) view: the chat fields, the saved dialog
+It answers while the account is offline and without a login, like [`search`](notes-and-search.md#tg-search); after a
+loss of authorization the Daemon refuses it with exit code 4, like every other account method. Each row is built from the [`chats_state`](../../docs/contracts.md) view: the chat fields, the saved dialog
 state, the number of stored messages, the first and the last stored message and whether the whole history of the chat
 is loaded. A chat the access lists close is absent, and it does not take a place of `--limit`.
 
@@ -71,7 +72,7 @@ tg chat overview [flags]
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
-**Preconditions.** A running Daemon. No login and no connection: the command never calls Telegram. Rows follow the most
+**Preconditions.** A running Daemon. No login and no connection: the command never calls Telegram. A lost login or a mismatched `--expect-user` is exit code 4. Rows follow the most
 recent stored message first; a chat without stored messages comes last.
 
 **Example.**
@@ -95,9 +96,9 @@ integers, `first_message` and `last_message` objects with `id`, `date` and `text
 dialog state has no `unread`, a chat without stored messages has no `first_message`, and `history_complete` is absent
 until the chat is loaded completely.
 
-**Exit codes.** 0; 2 `--limit` outside 1 to 500, or an unknown `--type`; 3 no Daemon.
+**Exit codes.** 0; 2 `--limit` outside 1 to 500, or an unknown `--type`; 3 no Daemon; 4 the login was lost (`auth_lost`), or `--expect-user` does not match or cannot be verified.
 
-**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.1.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.13.
 
 ### tg chat resolve
 
@@ -177,7 +178,7 @@ A restricted chat also carries the restriction:
 
 **Exit codes.** 0; 2 a malformed reference; 3, 4; 7 the chat does not exist or is not visible.
 
-**Verification.** The description, member count, forum flag, verified flag, creation date and the scam, fake and restriction flags are saved when read; the owner's archive, pin, sound and folder settings are not saved. See [FEATURES.md](../../FEATURES.md), item 7.2.
+**Verification.** The description, member count, forum flag, verified flag, creation date and the scam, fake and restriction flags are saved when read. `chat list` and `chat resolve` save `scam`, `fake` and `restricted` too, but only from a channel or a supergroup object: a basic group and a user have no such flags. A save that carries no flags leaves the stored ones alone. `chat overview` shows only `created_at` from these columns; the owner's archive, pin, sound and folder settings are not saved. See [FEATURES.md](../../FEATURES.md), item 7.2.
 
 ### tg chat invite-info
 
@@ -593,7 +594,7 @@ Verification and remaining work for history sync are tracked in [FEATURES.md](..
 
 ### tg chat full start
 
-Queues the background job that reads the full data of groups and channels: the description, the member count and the settings. It makes one Telegram request per chat, reads only, and runs behind the shared throttle of the account as background traffic, so ordinary commands go first. Without a chat the job takes every allowed group and channel without a complete read yet; with `--refresh` it reads every allowed group and channel again. A chat closed by the access lists is never requested.
+Queues the background job that reads the full data of groups and channels: the description, the member count and the settings. It makes one Telegram request per chat by chat id, without resolving a name (only a cache miss makes the client read the first 200 dialogs), reads only, and runs behind the shared throttle of the account as background traffic, so ordinary commands go first. Without a chat the job takes every allowed group and channel without a complete read yet; with `--refresh` it reads every allowed group and channel again. A chat closed by the access lists is never requested.
 
 ```text
 tg chat full start [<chat>] [flags]
@@ -625,9 +626,9 @@ tg chat full start --refresh
 
 **Answer fields** (`data`): `state` string, `total`, `done` and `failed` integers, `current_chat_id` integer (optional), `wait_seconds` integer (optional), `error` string (optional), `started_at` and `updated_at` strings (RFC 3339 UTC).
 
-**Exit codes.** 0; 2 a malformed reference; 3, 4; 7 an unknown or closed chat; 6 the account is paused by `FLOOD_WAIT` longer than the auto-wait.
+**Exit codes.** 0; 2 a malformed reference; 3 no Daemon; 4 the login was lost (`auth_lost`), or `--expect-user` does not match or cannot be verified; 7 an unknown or closed chat; 10 Telegram is offline. The job itself never fails the command: a chat that cannot be read is counted in `failed`, and a `FLOOD_WAIT` shows as the state `waiting_flood`.
 
-**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.5.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.14.
 
 ### tg chat full status
 
@@ -643,7 +644,7 @@ No command flags.
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon. The job lives in memory: after a Daemon restart `status` reports `idle`, and `start` continues from the chats without a complete read.
+**Preconditions.** A running Daemon. No connection needed: `status` never calls Telegram, and it answers while the client is offline, but a lost login or a mismatched `--expect-user` is exit code 4. The job lives in memory: after a Daemon restart `status` reports `idle`, and `start` continues from the chats without a complete read.
 
 **Example.**
 
@@ -659,9 +660,9 @@ tg chat full status
 
 **Answer fields** (`data`): the fields of `chat full start`; `wait_seconds` is set while the state is `waiting_flood` and `error` carries the reason of the last failure.
 
-**Exit codes.** 0; 3.
+**Exit codes.** 0; 3 no Daemon; 4 the login was lost (`auth_lost`), or `--expect-user` does not match or cannot be verified.
 
-**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.5.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.14.
 
 ### tg chat full cancel
 
@@ -677,7 +678,7 @@ No command flags.
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon. Cancelling a finished job changes nothing and reports the job as it is.
+**Preconditions.** A running Daemon. No connection needed: `cancel` changes the job state in memory only, so it works while the client is offline, but a lost login or a mismatched `--expect-user` is exit code 4. Cancelling a finished job changes nothing and reports the job as it is.
 
 **Example.**
 
@@ -693,9 +694,9 @@ tg chat full cancel
 
 **Answer fields** (`data`): the fields of `chat full start`.
 
-**Exit codes.** 0; 3.
+**Exit codes.** 0; 3 no Daemon; 4 the login was lost (`auth_lost`), or `--expect-user` does not match or cannot be verified.
 
-**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.5.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.14.
 
 ### tg chat sync start
 
