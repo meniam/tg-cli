@@ -17,6 +17,10 @@ import (
 	"tg-cli/internal/sessionstr"
 )
 
+// databaseFileContents stands for a database on disk. The import only checks that
+// the file exists, so the bytes never have to be a real database.
+const databaseFileContents = "SQLite format 3\x00"
+
 func TestSessionTransferOffline(t *testing.T) {
 	e := newEnv(t)
 	p, err := daemon.ResolvePaths(e.home, e.dbRoot(), "default", daemon.DefaultFileNames())
@@ -217,5 +221,47 @@ func TestSessionImportRejectsLockedAndCorruptProfile(t *testing.T) {
 	contents, err := os.ReadFile(p.Session)
 	if err != nil || string(contents) != "corrupt" {
 		t.Fatal("corrupt session was overwritten")
+	}
+}
+
+// TestSessionImportSeesTheLegacyDatabase keeps an import without --force from
+// overwriting a profile whose database still sits in the data directory: the
+// history belongs to the account the user is about to replace.
+func TestSessionImportSeesTheLegacyDatabase(t *testing.T) {
+	e := newEnv(t)
+	p, err := daemon.ResolvePaths(e.home, e.dbRoot(), "default", daemon.DefaultFileNames())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(p.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A database of the old layout only: the new one does not exist yet.
+	if err := os.WriteFile(p.LegacyDatabase, []byte(databaseFileContents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "session.txt")
+	key := make([]byte, 256)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	id := sha1.Sum(key)
+	raw, err := json.Marshal(map[string]any{"Version": 1, "Data": map[string]any{"DC": 2, "AuthKey": key, "AuthKeyID": id[12:], "UserID": 42}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, _, err := sessionstr.Encode(raw, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(out, []byte(value), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := e.run("session", "import", "--from", out, "--yes")
+	if r.code != exitcode.Usage || !strings.Contains(r.stdout, "profile is not empty") {
+		t.Fatalf("import over the old database: %d %q", r.code, r.stdout)
+	}
+	if _, err := os.Stat(p.Session); !os.IsNotExist(err) {
+		t.Fatalf("the session was written: %v", err)
 	}
 }

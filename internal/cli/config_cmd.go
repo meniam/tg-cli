@@ -36,7 +36,10 @@ type configProfileResult struct {
 	Proxy     string `json:"proxy"`
 }
 type configShowResult struct {
-	Home           string                         `json:"home"`
+	Home string `json:"home"`
+	// DBDir is the directory of the profile databases next to the configuration
+	// file. home no longer says where the history lives.
+	DBDir          string                         `json:"db_dir"`
 	DefaultProfile string                         `json:"default_profile"`
 	Files          configFilesResult              `json:"files"`
 	Behavior       configBehaviorResult           `json:"behavior"`
@@ -82,7 +85,7 @@ func (a *app) configShow(cmd *cobra.Command, _ []string) error {
 			return fail(exitcode.Usage, "%v", err)
 		}
 	}
-	result := configShowResult{Home: a.config.Home, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}, Behavior: configBehaviorResult{a.config.Behavior.ThrottlePercent, a.config.Behavior.FloodAutoWait, a.config.Behavior.ExpectUser}, Profiles: map[string]configProfileResult{}}
+	result := configShowResult{Home: a.config.Home, DBDir: dbRoot, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}, Behavior: configBehaviorResult{a.config.Behavior.ThrottlePercent, a.config.Behavior.FloodAutoWait, a.config.Behavior.ExpectUser}, Profiles: map[string]configProfileResult{}}
 	for name, p := range a.config.Profiles {
 		proxy, err := netconf.ParseProxy(p.Proxy)
 		if err != nil {

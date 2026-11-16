@@ -124,3 +124,24 @@ func TestSchemaConfigCommands(t *testing.T) {
 		}
 	}
 }
+
+// TestConfigShowNamesTheDatabaseDirectory covers Q5: home no longer says where
+// the history lives, so the answer names the database directory next to the
+// configuration file.
+func TestConfigShowNamesTheDatabaseDirectory(t *testing.T) {
+	e := newEnv(t)
+	r := e.run("config", "show")
+	if r.code != exitcode.OK {
+		t.Fatalf("show: %d %s", r.code, r.stdout)
+	}
+	var got configShowResult
+	if err := json.Unmarshal(parse(t, r).Data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.DBDir != e.dbRoot() {
+		t.Errorf("db_dir = %q, want %q", got.DBDir, e.dbRoot())
+	}
+	if strings.HasPrefix(got.DBDir, got.Home) {
+		t.Errorf("the database directory must not follow home: %q under %q", got.DBDir, got.Home)
+	}
+}

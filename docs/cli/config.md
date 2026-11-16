@@ -48,6 +48,13 @@ socket paths for the default profile and every named profile before returning a
 result. `TG_CLI_HOME`, when set, selects the home used for migration and socket
 path validation.
 
+`home` is the base directory of the profile data: session, socket, lock, journal
+and access list. It is not where the database lives. `db_dir` is the directory of
+the profile databases, the `db` directory next to `config.toml`; the database of a
+profile is `<db_dir>/<profile>/<files.database>`. The database directory follows
+the configuration file, therefore it does not change with `home` or
+`TG_CLI_HOME`.
+
 ```text
 tg config show [flags]
 ```
@@ -69,14 +76,14 @@ tg config show
 **Answer.**
 
 ```json
-{"ok":true,"data":{"home":"/Users/alice/Library/Application Support/tg-cli","default_profile":"default","files":{"database":"store.db","session":"session.json","log":"daemon.log","deletions":"deletions.jsonl","access":"access.json"},"behavior":{"throttle_percent":60,"flood_autowait":"10s","expect_user":""},"profiles":{"default":{"client":"desktop","device":"MacBook","transport":"tcp","proxy":"socks5://127.0.0.1:1080"}}}}
+{"ok":true,"data":{"home":"/Users/alice/Library/Application Support/tg-cli","db_dir":"/Users/alice/.config/tg-cli/db","default_profile":"default","files":{"database":"store.db","session":"session.json","log":"daemon.log","deletions":"deletions.jsonl","access":"access.json"},"behavior":{"throttle_percent":60,"flood_autowait":"10s","expect_user":""},"profiles":{"default":{"client":"desktop","device":"MacBook","transport":"tcp","proxy":"socks5://127.0.0.1:1080"}}}}
 ```
 
-**Answer fields** (`data`): `home` string, `default_profile` string, `files`
-object (`database`, `session`, `log`, `deletions`, `access` strings), `behavior`
-object (`throttle_percent` number, `flood_autowait` and `expect_user` strings),
-and `profiles` object keyed by profile name. Each profile contains `client`,
-`device`, `transport`, and redacted `proxy` strings.
+**Answer fields** (`data`): `home` and `db_dir` strings, `default_profile`
+string, `files` object (`database`, `session`, `log`, `deletions`, `access`
+strings), `behavior` object (`throttle_percent` number, `flood_autowait` and
+`expect_user` strings), and `profiles` object keyed by profile name. Each profile
+contains `client`, `device`, `transport`, and redacted `proxy` strings.
 
 **Exit codes.** 0 success, 2 invalid configuration or an invalid socket path,
 1 a local migration error.

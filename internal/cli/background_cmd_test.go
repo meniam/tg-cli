@@ -8,6 +8,7 @@ import (
 
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
+	"tg-cli/internal/store"
 )
 
 // The background start is tested with a fake launcher and a daemon running in
@@ -200,5 +201,89 @@ func TestProxySecretDoesNotReachBackgroundOutputs(t *testing.T) {
 	}
 	if !strings.Contains(e.savedProfile("default").Proxy, secret) {
 		t.Fatal("proxy was not persisted")
+	}
+}
+
+// TestBackgroundStartMovesTheDatabase is the rule of the decision: the parent
+// moves the old database before it launches the child, so a big move does not eat
+// the start timeout and a failure is an answer of this command. The child finds
+// the database in place and only opens it.
+func TestBackgroundStartMovesTheDatabase(t *testing.T) {
+	e, f := backgroundEnv(t)
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(paths.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A database of the old layout with a row, so the moved file can be read back.
+	db, err := store.Open(paths.LegacyDatabase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetAccountState(t.Context(), "move.test", json.RawMessage(`{"value":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	f.onLaunch = func() {
+		// The child never sees the old file: the parent has moved it already.
+		if _, err := os.Stat(paths.LegacyDatabase); !os.IsNotExist(err) {
+			t.Errorf("the child was launched before the move: %v", err)
+		}
+		if _, err := os.Stat(paths.Database); err != nil {
+			t.Errorf("the database is not in place at launch: %v", err)
+		}
+		e.startDaemon()
+	}
+	if r := e.run("daemon", "start"); r.code != exitcode.OK {
+		t.Fatalf("background start: exit %d, %q, stderr %q", r.code, r.stdout, r.stderr)
+	}
+	if _, err := os.Stat(paths.LegacyDatabase); !os.IsNotExist(err) {
+		t.Fatalf("the old database remains: %v", err)
+	}
+	moved, err := store.Open(paths.Database)
+	if err != nil {
+		t.Fatalf("open the moved database: %v", err)
+	}
+	defer moved.Close()
+	raw, found, err := moved.GetAccountState(t.Context(), "move.test")
+	if err != nil || !found || string(raw) != `{"value":1}` {
+		t.Fatalf("the moved row: %q %v %v", raw, found, err)
+	}
+}
+
+// TestBackgroundStartReportsAMoveConflict keeps a failed move an answer of the
+// command, not a journal line of a child that never started: the child is not
+// launched and the exit code is the configuration class.
+func TestBackgroundStartReportsAMoveConflict(t *testing.T) {
+	e, f := backgroundEnv(t)
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{paths.Dir, paths.DatabaseDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Two databases with the same name and different content: a conflict.
+	if err := os.WriteFile(paths.LegacyDatabase, []byte(databaseFileContents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Database, []byte(databaseFileContents+" newer"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := e.run("daemon", "start")
+	if r.code != exitcode.Usage || !strings.Contains(r.stdout, "both places") {
+		t.Fatalf("move conflict: exit %d, %q", r.code, r.stdout)
+	}
+	if f.calls != 0 {
+		t.Errorf("the child was launched after a failed move: %d calls", f.calls)
+	}
+	if _, err := os.Stat(paths.LegacyDatabase); err != nil {
+		t.Errorf("a refused move must leave the old database: %v", err)
 	}
 }

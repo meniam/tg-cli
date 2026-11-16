@@ -38,24 +38,27 @@ type configKeyDoc struct {
 	Default     string `json:"default"`
 	Environment string `json:"environment"`
 	Flag        string `json:"flag"`
+	// Description explains a key whose plain default does not say where its
+	// value lands. It is absent for a key that needs no explanation.
+	Description string `json:"description,omitempty"`
 }
 
 func configKeyDocs() []configKeyDoc {
 	return []configKeyDoc{
-		{"home", "string", "os.UserConfigDir()/tg-cli", "TG_CLI_HOME", ""},
-		{"default_profile", "string", "default", "", "--profile"},
-		{"files.database", "string", "store.db", "", ""},
-		{"files.session", "string", "session.json", "", ""},
-		{"files.log", "string", "daemon.log", "", ""},
-		{"files.deletions", "string", "deletions.jsonl", "", ""},
-		{"files.access", "string", "access.json", "", ""},
-		{"behavior.throttle_percent", "number", "60", "TG_CLI_THROTTLE_PERCENT", ""},
-		{"behavior.flood_autowait", "string", "10s", "TG_CLI_FLOOD_AUTOWAIT", ""},
-		{"behavior.expect_user", "string", "", "TG_CLI_EXPECT_USER", "--expect-user"},
-		{"profiles.<profile>.client", "string", "", "", "daemon start --client"},
-		{"profiles.<profile>.device", "string", "", "", "daemon start --device"},
-		{"profiles.<profile>.transport", "string", "tcp", "", "daemon start --transport"},
-		{"profiles.<profile>.proxy", "string", "none", "TG_CLI_PROXY", "daemon start --proxy"},
+		{"home", "string", "os.UserConfigDir()/tg-cli", "TG_CLI_HOME", "", ""},
+		{"default_profile", "string", "default", "", "--profile", ""},
+		{"files.database", "string", "store.db", "", "", "the file inside db/<profile>/ next to the configuration file"},
+		{"files.session", "string", "session.json", "", "", ""},
+		{"files.log", "string", "daemon.log", "", "", ""},
+		{"files.deletions", "string", "deletions.jsonl", "", "", ""},
+		{"files.access", "string", "access.json", "", "", ""},
+		{"behavior.throttle_percent", "number", "60", "TG_CLI_THROTTLE_PERCENT", "", ""},
+		{"behavior.flood_autowait", "string", "10s", "TG_CLI_FLOOD_AUTOWAIT", "", ""},
+		{"behavior.expect_user", "string", "", "TG_CLI_EXPECT_USER", "--expect-user", ""},
+		{"profiles.<profile>.client", "string", "", "", "daemon start --client", ""},
+		{"profiles.<profile>.device", "string", "", "", "daemon start --device", ""},
+		{"profiles.<profile>.transport", "string", "tcp", "", "daemon start --transport", ""},
+		{"profiles.<profile>.proxy", "string", "none", "TG_CLI_PROXY", "daemon start --proxy", ""},
 	}
 }
 

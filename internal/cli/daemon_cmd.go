@@ -235,13 +235,24 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		IdleTimeout:          idle,
 	})
 	if err != nil {
-		var conflict *daemon.FileConflictError
-		if errors.Is(err, daemon.ErrSessionInUse) || errors.As(err, &conflict) {
-			return fail(exitcode.Usage, "%v", err)
-		}
-		return fail(exitcode.Failure, "%v", err)
+		return a.daemonStartError(err)
 	}
 	return a.success(cmd, daemonStartedResult{Stopped: true})
+}
+
+// daemonStartError reports the exit class of a failed start. A configuration
+// problem of the profile keeps the usage class; every other failure, including a
+// broken move, is a plain failure. The error types carry their own code, so the
+// caller does not have to know each of them.
+func (a *app) daemonStartError(err error) error {
+	if errors.Is(err, daemon.ErrSessionInUse) {
+		return fail(exitcode.Usage, "%v", err)
+	}
+	var coded interface{ ExitCode() int }
+	if errors.As(err, &coded) && coded.ExitCode() == exitcode.Usage {
+		return fail(exitcode.Usage, "%v", err)
+	}
+	return fail(exitcode.Failure, "%v", err)
 }
 
 // startBackground launches the daemon as a separate process and waits for its
@@ -271,6 +282,23 @@ func (a *app) startBackground(cmd *cobra.Command, profile string, paths daemon.P
 	}
 	if _, err := a.deviceModel(cmd, paths); err != nil {
 		return err
+	}
+	// The database is prepared here, in the parent, before the child is launched:
+	// a big move must not eat the StartTimeout of the child, and a failure has to
+	// be an answer of this command rather than a line in a journal. The order is
+	// the order of Run: the record of the data directory is checked before the
+	// move, because a move deletes the old file. The child finds the database in
+	// place and does nothing.
+	if err := daemon.WithProfileLock(paths, func() error {
+		if err := daemon.CheckDatabaseBinding(paths); err != nil {
+			return err
+		}
+		if _, err := daemon.MoveLegacyDatabase(paths); err != nil {
+			return err
+		}
+		return daemon.BindDatabase(paths)
+	}); err != nil {
+		return a.daemonStartError(err)
 	}
 	args := []string{"daemon", "start", "--foreground", "--profile", profile}
 	args = append(args, "--journal", paths.Log)
