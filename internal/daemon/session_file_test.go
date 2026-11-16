@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"tg-cli/internal/sessionstr"
 )
 
 func TestSessionFileAndDuplicate(t *testing.T) {
@@ -185,5 +187,46 @@ func TestDuplicateKeyAcrossProcesses(t *testing.T) {
 	}
 	if !errors.Is(err, ErrSessionInUse) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestDuplicateProfilesSkipsTheDatabaseDirectory keeps the db directory next to
+// the config out of the profile walk: it is not a profile and has no session.
+func TestDuplicateProfilesSkipsTheDatabaseDirectory(t *testing.T) {
+	base := t.TempDir()
+	p := Paths{Dir: filepath.Join(base, "one")}
+	p.Lock = filepath.Join(p.Dir, "daemon.lock")
+	p.Session = filepath.Join(p.Dir, "session.json")
+	db := filepath.Join(base, ReservedProfile)
+	if err := os.MkdirAll(db, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A session of the same key inside the db directory must not be read: the
+	// walk would create a lock file there and report a false duplicate.
+	key := make([]byte, 256)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	id := sha1.Sum(key)
+	raw, err := json.Marshal(map[string]any{"Version": 1, "Data": map[string]any{"DC": 2, "AuthKey": key, "AuthKeyID": id[12:]}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(db, "session.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, keyID, err := sessionstr.Inspect(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches, err := DuplicateProfiles(p, keyID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("the db directory was read as a profile: %v", matches)
+	}
+	if _, err := os.Stat(filepath.Join(db, "daemon.lock")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a lock was created in the db directory: %v", err)
 	}
 }

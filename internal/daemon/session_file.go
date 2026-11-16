@@ -59,7 +59,7 @@ func DuplicateProfiles(p Paths, id string, runningOnly bool) ([]string, error) {
 	}
 	var matches []string
 	for _, entry := range entries {
-		if !entry.IsDir() || entry.Name() == filepath.Base(p.Dir) || !profileName.MatchString(entry.Name()) {
+		if !entry.IsDir() || entry.Name() == ReservedProfile || entry.Name() == filepath.Base(p.Dir) || !profileName.MatchString(entry.Name()) {
 			continue
 		}
 		dir := filepath.Join(filepath.Dir(p.Dir), entry.Name())

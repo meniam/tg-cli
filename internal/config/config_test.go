@@ -24,6 +24,11 @@ func TestLoad(t *testing.T) {
 		{name: "relative", content: `home = "relative"`, wantError: true},
 		{name: "duplicate files", content: "[files]\nsession = 'store.db'", wantError: true},
 		{name: "reserved file", content: "[files]\naccess = 'store.db-wal'", wantError: true},
+		{name: "reserved database record", content: "[files]\ndatabase = 'data-dir'", wantError: true},
+		{name: "reserved database lock", content: "[files]\ndatabase = 'db.lock'", wantError: true},
+		{name: "reserved session record", content: "[files]\nsession = 'data-dir'", wantError: true},
+		{name: "reserved profile", content: "[profiles.db]\nclient = 'desktop'", wantError: true},
+		{name: "reserved default profile", content: "default_profile = 'db'", wantError: true},
 		{name: "proxy invalid", content: "[profiles.default]\nproxy = 'socks5://user:secret@example:invalid'", wantError: true},
 		{name: "proxy malformed TOML", content: "[profiles.default]\nproxy = 'socks5://user:secret@example", wantError: true},
 		{name: "bad percent", content: "[behavior]\nthrottle_percent = 0", wantError: true},
@@ -84,5 +89,24 @@ func TestPermissions(t *testing.T) {
 		} else if (len(c.Warnings) > 0) != tc.warning {
 			t.Fatalf("mode %o: warnings %v", tc.mode, c.Warnings)
 		}
+	}
+}
+
+// TestReservedProfileName keeps "db" out of profiles: on Linux the profile
+// directory would coincide with the directory of profile databases.
+func TestReservedProfileName(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[profiles.db]\nclient = 'desktop'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	e, ok := err.(*Error)
+	if !ok || e.Code() != 2 || !strings.Contains(e.Message, "reserved") {
+		t.Fatalf("Load error = %v", err)
+	}
+	if _, err := UpdateProfile(filepath.Join(t.TempDir(), "config.toml"), reservedProfile, map[string]string{"client": "desktop"}, false); err == nil {
+		t.Fatal("UpdateProfile accepted the reserved name")
 	}
 }

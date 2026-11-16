@@ -38,3 +38,8 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-15 — [Остаток Could делится на три части: берём 14.2, 13.4, 18.1, 17.4, 19.1, не делаем 12 пунктов, откладываем 6](20261115_1800_remaining_could_features_are_split_into_take_wont_and_defer.md)
 - 2026-11-16 — [Пути, имена файлов, поведение и настройки профиля лежат в config.toml](20261116_0017_config_toml_holds_paths_file_names_behavior_and_profile_settings.md)
 - 2026-11-16 — [Настройки профиля пишутся только в отдельную таблицу [profiles.<имя>]](20261116_0123_profile_settings_are_written_only_into_a_separate_table.md)
+- 2026-11-16 — [Базы данных лежат в db рядом с конфигом](20261116_0136_databases_live_in_db_next_to_the_config.md)
+- 2026-11-16 — [База привязана к каталогу данных записью data-dir и замком db.lock](20261116_0327_database_is_bound_to_its_data_directory_and_locked.md)
+- 2026-11-16 — [Прерванный перенос базы доводится сам, если обе копии побайтно совпадают](20261116_0327_interrupted_database_move_is_finished_when_both_copies_are_identical.md)
+- 2026-11-16 — [Имя профиля db зарезервировано](20261116_0327_profile_name_db_is_reserved.md)
+- 2026-11-16 — [Корень баз это каталог конфига плюс db, без своего ключа и переменной](20261116_0327_database_root_is_the_config_directory_plus_db.md)

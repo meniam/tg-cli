@@ -69,6 +69,10 @@ type Profile struct {
 	Proxy string `toml:"proxy"`
 }
 
+// ErrConfigExists means `tg config init` found a configuration file. The command
+// never replaces it: it reports the path and leaves the file as it is.
+var ErrConfigExists = errors.New("the configuration file already exists")
+
 // Error identifies an invalid configuration as a usage error.
 type Error struct {
 	// Message describes the invalid configuration.
@@ -82,6 +86,25 @@ func invalid(format string, args ...any) error { return &Error{Message: fmt.Spri
 var fileName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 var profileName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 var clientName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+
+// reservedProfile is never a profile: its directory next to the configuration
+// file holds the databases of all profiles.
+const reservedProfile = "db"
+
+// validProfileName reports whether name may be a profile. The reserved name is
+// reported separately, so that the caller can explain it.
+func validProfileName(name string) bool {
+	return profileName.MatchString(name) && name != reservedProfile
+}
+
+// invalidProfileName names the reason a profile name is rejected: the reserved
+// word means something else than a broken name.
+func invalidProfileName(name, key string) error {
+	if name == reservedProfile {
+		return invalid("%s: the name %s is reserved for the directory of profile databases next to the config", key, reservedProfile)
+	}
+	return invalid("invalid %s", key)
+}
 
 // Load reads path; a missing file yields the defaults. It does not create files.
 func Load(path string) (Config, error) {
@@ -123,8 +146,8 @@ func Load(path string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	if !profileName.MatchString(c.DefaultProfile) {
-		return Config{}, invalid("invalid default_profile")
+	if !validProfileName(c.DefaultProfile) {
+		return Config{}, invalidProfileName(c.DefaultProfile, "default_profile")
 	}
 	if err := c.Files.validate(); err != nil {
 		return Config{}, err
@@ -173,8 +196,8 @@ func validateHome(path string) (string, error) {
 }
 
 func validateProfile(name string, p Profile) (*netconf.Proxy, error) {
-	if !profileName.MatchString(name) {
-		return nil, invalid("invalid profile name")
+	if !validProfileName(name) {
+		return nil, invalidProfileName(name, "profile name")
 	}
 	if p.Client != "" && !clientName.MatchString(p.Client) {
 		return nil, invalid("invalid profiles client")
@@ -206,7 +229,16 @@ func validateProfile(name string, p Profile) (*netconf.Proxy, error) {
 
 func (f Files) validate() error {
 	names := []string{f.Database, f.Session, f.Log, f.Deletions, f.Access}
-	reserved := map[string]bool{"daemon.sock": true, "daemon.lock": true, ".session-start.lock": true, "moderation.jsonl": true, "account.jsonl": true, f.Database + "-wal": true, f.Database + "-shm": true, f.Log + ".1": true, f.Log + ".2": true, f.Log + ".3": true}
+	reserved := map[string]bool{
+		// The data directory of the profile.
+		"daemon.sock": true, "daemon.lock": true, ".session-start.lock": true, "moderation.jsonl": true, "account.jsonl": true,
+		// The database directory next to the configuration file: the record of
+		// the data directory and the database lock are service files there.
+		"data-dir": true, "db.lock": true,
+		f.Database + "-wal": true, f.Database + "-shm": true, f.Log + ".1": true, f.Log + ".2": true, f.Log + ".3": true,
+	}
+	// The temporary copy of a move is .<name>.move-<pid>.tmp, and a file name
+	// cannot start with a dot, so no configured name can be mistaken for one.
 	seen := make(map[string]bool)
 	for _, name := range names {
 		if !fileName.MatchString(name) || strings.Contains(name, "..") || reserved[name] || seen[name] {

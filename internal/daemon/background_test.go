@@ -14,7 +14,7 @@ import (
 // answers only when the daemon accepts requests, and reports the socket, the
 // journal and the pid the daemon itself names.
 func TestStartWaitsForTheSocket(t *testing.T) {
-	paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
+	paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestStartWaitsForTheSocket(t *testing.T) {
 // TestStartLaunchesAndWaits checks the other branch: with nothing on the socket
 // Start launches the child and waits for it to answer.
 func TestStartLaunchesAndWaits(t *testing.T) {
-	paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
+	paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestStartLaunchesAndWaits(t *testing.T) {
 // process that dies before its socket answers produces an error with the tail of
 // its journal, not a silent success.
 func TestStartReportsAnEarlyExit(t *testing.T) {
-	paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
+	paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestStartReportsAnEarlyExit(t *testing.T) {
 // TestStartTimesOut checks the bound of the decision: a process that never
 // answers makes Start fail within the timeout instead of waiting for ever.
 func TestStartTimesOut(t *testing.T) {
-	paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
+	paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestStartTimesOut(t *testing.T) {
 // TestStopWaitsUntilTheDaemonIsGone checks that a stop confirms the daemon has
 // stopped instead of only asking it to.
 func TestStopWaitsUntilTheDaemonIsGone(t *testing.T) {
-	paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
+	paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func startBackgroundDaemon(t *testing.T, paths Paths) func() {
 // TestJournalIsTrimmedOnStart keeps the journal bounded, which the decision
 // requires: an old journal only explains an old failure.
 func TestJournalRotatesAndKeepsPrivatePermissions(t *testing.T) {
-	paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
+	paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}

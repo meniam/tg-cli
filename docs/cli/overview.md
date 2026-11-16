@@ -7,7 +7,7 @@ This page covers what every command shares: installation, profiles, the Daemon l
 | Page | Commands |
 | --- | --- |
 | [daemon-and-auth.md](daemon-and-auth.md) | `daemon start`, `status`, `stop`, `logs`; `auth login`, `status`, `resend`, `cancel` |
-| [config.md](config.md) | `config path`, `show`, `migrate` |
+| [config.md](config.md) | `config path`, `init`, `show`, `migrate` |
 | [chats.md](chats.md) | `chat` reads, unread, changes, state, drafts, typing, administration and `sync` |
 | [messages-read.md](messages-read.md) | `message history`, `get`, `pinned`, `search`, `context`, `comments`, `link`, `export`, `watch` |
 | [buttons-stickers-auto-delete.md](buttons-stickers-auto-delete.md) | `message buttons`, `press`, `inline-query`, `send-inline`, `edit-media`, `send-sticker`, `sticker search`, `set`, `installed`, `chat auto-delete` |
@@ -59,29 +59,54 @@ An explicitly supplied `--limit` must be at least 1; zero and negative values ar
 
 ## Profiles and the data directory
 
-`--profile <name>` selects an account. The name is 1 to 32 characters of `a-z`, `0-9`, `_` and `-`, starting with a letter or digit; anything else is exit code 2. The default profile is selected by `default_profile`, which defaults to `default`. Every profile has its own directory with its own session, database, Daemon and access lists.
+`--profile <name>` selects an account. The name is 1 to 32 characters of `a-z`, `0-9`, `_` and `-`, starting with a letter or digit; anything else is exit code 2. The name `db` is reserved: it is the database directory next to the configuration file, so it is refused with exit code 2 and never used as a profile. The default profile is selected by `default_profile`, which defaults to `default`. Every profile has its own session, database, Daemon and access lists, but the database does not live with the session.
 
-A profile lives in `<home>/<profile>/`, mode `0700`. The path of the socket (`<home>/<profile>/daemon.sock`) must not exceed 103 bytes, because Unix socket paths are short.
+The data of a profile is split in two directories:
+
+```text
+~/.config/tg-cli/                  the configuration directory
+  config.toml, config.lock
+  db/                              mode 0700, the database root
+    <profile>/                     mode 0700
+      store.db                     the SQLite database, mode 0600, plus -wal and -shm while the Daemon runs
+      data-dir                     mode 0600, the data directory recorded for this database
+      db.lock                      mode 0600, held while the Daemon runs
+<home>/<profile>/                  mode 0700, the data directory
+  session.json, daemon.sock, daemon.lock, daemon.log, access.json, deletions.jsonl, ...
+```
+
+The database root is the `db` directory next to `config.toml`: it follows the configuration file and does not depend on `home`, `TG_CLI_HOME` or `--profile`; `--profile` selects one directory inside that root. The path of the socket (`<home>/<profile>/daemon.sock`) must not exceed 103 bytes, because Unix socket paths are short.
+
+Do not put `~/.config/tg-cli/db` into a dotfiles repository, a file sync or a cloud backup: it holds the whole history of the account in plain text.
+
+`data-dir` records which data directory created the database. When the same profile name is used from another `home` or `TG_CLI_HOME`, the Daemon refuses to start with exit code 2 and names both directories; moving the data directory deliberately means removing the record file `data-dir` after the session and the journals have moved; the database file itself is never removed by the tool, and the error never asks to delete the database directory. Two Daemons never share one database: `db.lock` is held for the whole run, so the second start gets exit code 1 "the profile database is in use".
+
+A profile created before the database moved keeps `store.db` in the data directory. The Daemon moves it on the next start, before it opens the database: it folds the journal in, copies the file, compares size, `sha256`, `PRAGMA integrity_check` and `PRAGMA user_version`, then renames the copy and deletes the old file with its empty journals. The old file is deleted only after every check passes; on any failure the old file stays and the start fails with exit code 1. If both files exist and differ, the start fails with exit code 2 and names both paths. When both files are identical and the old journal is empty, the move only removes the old file. The journal gets a line `moved the database` with both paths.
 
 ## Configuration
 
-`~/.config/tg-cli/config.toml` holds the profile data directory and the default profile. `home` defaults to `tg-cli/` inside the user config directory (`os.UserConfigDir`, for example `~/Library/Application Support/tg-cli` on macOS); `default_profile` defaults to `default`. `TG_CLI_HOME` overrides `home` for one invocation, and `--profile` overrides `default_profile`. Set `home` in `config.toml` or `TG_CLI_HOME` to a shorter directory when the socket path is too long.
+`~/.config/tg-cli/config.toml` holds the profile data directory and the default profile. `home` defaults to `tg-cli/` inside the user config directory (`os.UserConfigDir`, for example `~/Library/Application Support/tg-cli` on macOS); `default_profile` defaults to `default`. `TG_CLI_HOME` overrides `home` for one invocation, and `--profile` overrides `default_profile`. Set `home` in `config.toml` or `TG_CLI_HOME` to a shorter directory when the socket path is too long. Neither `home` nor `TG_CLI_HOME` moves the database: it stays in the `db` directory next to the configuration file.
 
-`tg config path` prints the file, `tg config show` prints its values with defaults and proxy credentials redacted, and `tg config migrate` transfers settings from the former profile files. A created config file has mode `0600`; a file writable by group or others is rejected. A group- or world-readable config with proxy credentials produces a warning on stderr.
+`tg config path` prints the file, `tg config show` prints its values with defaults and proxy credentials redacted, `tg config init` writes the template with every key commented out, and `tg config migrate` transfers settings from the former profile files. `tg config show` names the database root in `db_dir`: the answer also carries `home`, which no longer says where the history lives. A created config file has mode `0600`; a file writable by group or others is rejected. A group- or world-readable config with proxy credentials produces a warning on stderr.
 
-| File in the profile directory | What it holds |
+| File in the data directory `<home>/<profile>/` | What it holds |
 | --- | --- |
 | `daemon.sock` | the JSON-RPC Unix socket, mode `0600` |
 | `daemon.lock` | held while a Daemon runs on the profile |
 | `session.json` | the Telegram session, mode `0600`, a secret |
-| `store.db` (with `-wal` and `-shm`) | the local SQLite database, mode `0600` |
 | `daemon.log`, `daemon.log.1` to `.3` | the journal of a background Daemon, mode `0600`, see [daemon logs](daemon-and-auth.md#tg-daemon-logs) |
 | `access.json` | the chat access lists, written only by a human, see [access.md](access.md) |
 | `deletions.jsonl` | the deletion journal, mode `0600`, see [message delete](messages-write.md#tg-message-delete) |
 | `moderation.jsonl` | the journal of chat-administration actions |
 | `account.jsonl` | the journal of account-profile and privacy actions |
 
-`[files]` may rename `store.db`, `session.json`, `daemon.log`, `deletions.jsonl`, and `access.json`; names are limited to safe base names and cannot collide. After a name change, a remaining old database, session, or access file stops the Daemon with exit code 2; an old journal produces a warning. The socket and lock names are fixed.
+| File in the database directory `<config dir>/db/<profile>/` | What it holds |
+| --- | --- |
+| `store.db` (with `-wal` and `-shm`) | the local SQLite database, mode `0600` |
+| `data-dir` | the absolute path of the data directory that owns this database, mode `0600` |
+| `db.lock` | held while a Daemon runs on the database, mode `0600` |
+
+`[files]` may rename `store.db`, `session.json`, `daemon.log`, `deletions.jsonl`, and `access.json`; names are limited to safe base names and cannot collide. After a name change, a remaining old database, session, or access file stops the Daemon with exit code 2; an old journal produces a warning. The socket and lock names are fixed, and the service names `daemon.sock`, `daemon.lock`, `.session-start.lock`, `moderation.jsonl`, `account.jsonl`, `data-dir` and `db.lock` are reserved: a `[files]` name equal to one of them is exit code 2, so no configured file can overwrite a file the Daemon owns.
 
 `[profiles.<name>]` stores `client`, `device`, `transport`, and `proxy`. `daemon start --client`, `--device`, `--transport`, and `--proxy` update the selected profile only when a value changes. The former `client`, `device`, `transport`, and `proxy` files are migrated automatically before `daemon start`, `session export`, `session import`, and `config show`; `tg config migrate` runs the same migration explicitly. Migration copies those files and the previous configuration to `<home>/.config-migration-<time>/`, then removes only transferred files. It never opens or copies the session, database, access list, or journals.
 
@@ -89,7 +114,7 @@ Secrets and risks:
 
 - Treat `session.json` and `api_hash` as passwords: keep them out of git, logs, screenshots and chat. The tool does not print keys or hashes itself; error texts from the Telegram library were not audited for leaks.
 - The database is plain text. It holds other people's messages without separate encryption, protected only by file mode `0600` and the disk encryption of your machine.
-- Telegram may log an account out when two processes share one session. Always go through the Daemon and never start a second client on its session. The profile lock prevents a second Daemon on a profile, and the CLI never talks to Telegram and never opens the database itself.
+- Telegram may log an account out when two processes share one session. Always go through the Daemon and never start a second client on its session. The profile lock prevents a second Daemon on a profile, `db.lock` prevents two data directories from opening one database, and the CLI never talks to Telegram and never opens the database itself.
 
 ## The Daemon lifecycle
 

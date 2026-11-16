@@ -264,11 +264,14 @@ func TestNoteRPCValidationSearchAndSecrets(t *testing.T) {
 }
 
 func TestRunDatabaseFailureBeforeSocket(t *testing.T) {
-	paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
+	paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(paths.Dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.Database), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(paths.Database, 0700); err != nil {
@@ -290,7 +293,7 @@ func TestRunStoreOwnershipBeforeListening(t *testing.T) {
 			name = "injected"
 		}
 		t.Run(name, func(t *testing.T) {
-			paths, err := ResolvePaths(shortTempDir(t), "test", DefaultFileNames())
+			paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -302,6 +305,11 @@ func TestRunStoreOwnershipBeforeListening(t *testing.T) {
 			}
 			opts := Options{Profile: "test", Paths: paths, Telegram: newFake()}
 			if injected {
+				// An injected store is opened by the test, so its directory has
+				// to exist: Run does not create it for an injected store.
+				if err := os.MkdirAll(paths.DatabaseDir, 0o700); err != nil {
+					t.Fatal(err)
+				}
 				opts.Store, err = store.Open(paths.Database)
 				if err != nil {
 					t.Fatal(err)

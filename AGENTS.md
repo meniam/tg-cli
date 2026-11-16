@@ -20,7 +20,7 @@ This file is an index: what every task needs. Details live in the documents link
 | Plans and their status | [.agents/plans/](.agents/plans/), format in [plans.md](.agents/rules/plans.md) |
 | Open questions | the "Open questions" tables of the plans and the open questions of `INTENT.md`; do not choose yourself, ask or record a decision |
 
-Foundations (each has a decision): MTProto personal account, no Bot API; Go and gotd/td; CLI and agents talk to the Daemon over JSON-RPC 2.0 on a Unix socket; one SQLite file per profile; login without an own `api_id` through an official client preset; multiple accounts and offline search are required; no MCP in the first stage.
+Foundations (each has a decision): MTProto personal account, no Bot API; Go and gotd/td; CLI and agents talk to the Daemon over JSON-RPC 2.0 on a Unix socket; one SQLite file per profile, in `db/<profile>/` next to the configuration file; login without an own `api_id` through an official client preset; multiple accounts and offline search are required; no MCP in the first stage.
 
 ## Layout
 
@@ -47,7 +47,7 @@ internal/             cli, daemon, rpc, tgclient, netconf, throttle, access, fil
 
 ## Running
 
-- Configuration is `~/.config/tg-cli/config.toml`; `tg config path`, `show` and `migrate` inspect it or migrate the former profile setting files. `home` selects the base directory of profiles; `TG_CLI_HOME` overrides it without changing the file.
+- Configuration is `~/.config/tg-cli/config.toml`; `tg config path`, `init`, `show` and `migrate` inspect it, write the template or migrate the former profile setting files. `home` selects the base directory of profile data; `TG_CLI_HOME` overrides it without changing the file. Neither moves the database: it is `<config dir>/db/<profile>/<files.database>`, and the Daemon moves a database left in the old place on start.
 - `daemon start` takes credentials from `--client <preset>` (official client preset, stored in the selected config profile) or from `TG_API_ID` and `TG_API_HASH` (your own application), never both. `daemon start --transport tcp|wss` and `--proxy` store the network path in that profile; `TG_CLI_PROXY` can supply the proxy without a command-line secret.
 - Start the Daemon before `auth login`. Login, session and the socket belong to the Daemon: never run a second client on its session.
 - Every command prints one JSON envelope on stdout; prompts and logs go to stderr. Exit codes are in `internal/exitcode` and in [docs/cli/overview.md](docs/cli/overview.md).

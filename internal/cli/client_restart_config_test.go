@@ -73,7 +73,7 @@ func TestRestartFactoryPreservesConfiguredProfile(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("factory calls = %d", len(calls))
 	}
-	if profile != "work" || cfg.SessionPath != filepath.Join(home, "work", "custom.session") || cfg.StatePath != filepath.Join(home, "work", "archive.db") || cfg.DeviceModel != "Test device" || throttleCfg.Percent != 35 || cfg.Throttle.FloodAutoWait() != 3*time.Second {
+	if profile != "work" || cfg.SessionPath != filepath.Join(home, "work", "custom.session") || cfg.StatePath != filepath.Join(filepath.Dir(path), "db", "work", "archive.db") || cfg.DeviceModel != "Test device" || throttleCfg.Percent != 35 || cfg.Throttle.FloodAutoWait() != 3*time.Second {
 		t.Fatal("profile settings were not applied")
 	}
 	initial := cfg

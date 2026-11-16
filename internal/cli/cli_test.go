@@ -404,6 +404,12 @@ type result struct {
 	stdout, stderr string
 }
 
+// dbRoot is the database root of the environment: the db directory next to the
+// configuration file, as the CLI builds it from Deps.ConfigPath.
+func (e *testEnv) dbRoot() string {
+	return filepath.Join(filepath.Dir(filepath.Join(e.home, ".config", "tg-cli", "config.toml")), "db")
+}
+
 func (e *testEnv) run(args ...string) result {
 	e.t.Helper()
 	var stdout, stderr safeBuffer
@@ -443,7 +449,7 @@ func (e *testEnv) startDaemon(extraArgs ...string) *daemonRun {
 		}
 	})
 
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -839,7 +845,7 @@ func TestInterruptEndsLoginWaitingForInput(t *testing.T) {
 func TestAuthCancel(t *testing.T) {
 	e := newEnv(t)
 	e.startDaemon()
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -925,7 +931,7 @@ func TestAuthResendFromAnotherTerminal(t *testing.T) {
 	// No login is waiting yet.
 	wantFailure(t, e.run("auth", "resend"), exitcode.Failure)
 
-	paths, err := daemon.ResolvePaths(e.home, daemon.DefaultProfile, daemon.DefaultFileNames())
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}

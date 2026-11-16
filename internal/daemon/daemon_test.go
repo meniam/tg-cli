@@ -334,6 +334,13 @@ func shortTempDir(t *testing.T) string {
 	return dir
 }
 
+// dbRoot returns the database root of a test, inside its own temporary
+// directory. It never points at a real configuration directory.
+func dbRoot(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "db")
+}
+
 type safeBuffer struct {
 	mu sync.Mutex
 	b  bytes.Buffer
@@ -363,7 +370,7 @@ type running struct {
 
 func start(t *testing.T, tg Telegram, home string) *running {
 	t.Helper()
-	paths, err := ResolvePaths(home, "test", DefaultFileNames())
+	paths, err := ResolvePaths(home, dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,27 +432,36 @@ func rpcCode(t *testing.T, err error) int {
 }
 
 func TestResolvePaths(t *testing.T) {
-	p, err := ResolvePaths("/h", "work", DefaultFileNames())
+	p, err := ResolvePaths("/h", "/c/db", "work", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Dir != "/h/work" || p.Socket != "/h/work/daemon.sock" || p.Lock != "/h/work/daemon.lock" || p.Session != "/h/work/session.json" || p.Database != "/h/work/store.db" || p.Deletions != "/h/work/deletions.jsonl" {
-		t.Errorf("unexpected paths %+v", p)
+	if p.Dir != "/h/work" || p.Socket != "/h/work/daemon.sock" || p.Lock != "/h/work/daemon.lock" || p.Session != "/h/work/session.json" || p.Access != "/h/work/access.json" || p.Deletions != "/h/work/deletions.jsonl" || p.Log != "/h/work/daemon.log" {
+		t.Errorf("unexpected data paths %+v", p)
+	}
+	if p.DatabaseDir != "/c/db/work" || p.Database != "/c/db/work/store.db" || p.LegacyDatabase != "/h/work/store.db" {
+		t.Errorf("unexpected database paths %+v", p)
 	}
 	for _, bad := range []string{"", "Work", "../x", "a/b", "-a", strings.Repeat("a", 33)} {
-		if _, err := ResolvePaths("/h", bad, DefaultFileNames()); err == nil {
+		if _, err := ResolvePaths("/h", "/c/db", bad, DefaultFileNames()); err == nil {
 			t.Errorf("profile %q must be rejected", bad)
 		}
 	}
-	if _, err := ResolvePaths("/"+strings.Repeat("d", MaxSocketPath), "p", DefaultFileNames()); err == nil || !strings.Contains(err.Error(), "set home in config.toml or TG_CLI_HOME to a shorter directory") {
+	if _, err := ResolvePaths("/h", "/c/db", ReservedProfile, DefaultFileNames()); err == nil || !strings.Contains(err.Error(), "is reserved") {
+		t.Errorf("the reserved profile name must be rejected with its own message: %v", err)
+	}
+	if _, err := ResolvePaths("/h", "", "work", DefaultFileNames()); err == nil || !strings.Contains(err.Error(), "database directory is empty") {
+		t.Errorf("an empty database root must be rejected: %v", err)
+	}
+	if _, err := ResolvePaths("/"+strings.Repeat("d", MaxSocketPath), "/c/db", "p", DefaultFileNames()); err == nil || !strings.Contains(err.Error(), "set home in config.toml or TG_CLI_HOME to a shorter directory") {
 		t.Errorf("unexpected socket path error: %v", err)
 	}
 	files := FileNames{Database: "tg.db", Session: "key.json", Log: "app.log", Deletions: "deleted.log", Access: "acl.json"}
-	p, err = ResolvePaths("/h", "work", files)
+	p, err = ResolvePaths("/h", "/c/db", "work", files)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Database != "/h/work/tg.db" || p.Session != "/h/work/key.json" || p.Log != "/h/work/app.log" || p.Deletions != "/h/work/deleted.log" || p.Access != "/h/work/acl.json" {
+	if p.Database != "/c/db/work/tg.db" || p.LegacyDatabase != "/h/work/tg.db" || p.Session != "/h/work/key.json" || p.Log != "/h/work/app.log" || p.Deletions != "/h/work/deleted.log" || p.Access != "/h/work/acl.json" {
 		t.Errorf("unexpected custom paths %+v", p)
 	}
 }
@@ -520,9 +536,73 @@ func TestSecondDaemonOnSameProfileIsRefused(t *testing.T) {
 	}
 }
 
+// runDaemon starts Run in its own goroutine on the profile paths and returns the
+// result channel. The caller stops it by cancelling ctx, so a test can build two
+// data directories that differ in home and not only in the profile directory.
+func runDaemon(ctx context.Context, t *testing.T, paths Paths) chan error {
+	t.Helper()
+	done := make(chan error, 1)
+	listening := make(chan struct{})
+	go func() {
+		done <- Run(ctx, Options{
+			Profile:     "test",
+			Paths:       paths,
+			Telegram:    newFake(),
+			Log:         slog.New(slog.NewTextHandler(&safeBuffer{}, &slog.HandlerOptions{Level: slog.LevelDebug})),
+			OnListening: func() { close(listening) },
+		})
+	}()
+	select {
+	case <-listening:
+	case err := <-done:
+		t.Fatalf("daemon exited early: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("daemon did not start")
+	}
+	return done
+}
+
+// TestSecondDataDirectoryIsRefused covers Q1 at the start path: two data
+// directories with one profile name share the database, so the second start must
+// not open it. The sockets differ, so the profile lock cannot help: the answer is
+// the database lock.
+func TestSecondDataDirectoryIsRefused(t *testing.T) {
+	root := dbRoot(t)
+	firstHome, secondHome := shortTempDir(t), shortTempDir(t)
+	first, err := ResolvePaths(firstHome, root, "test", DefaultFileNames())
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ResolvePaths(secondHome, root, "test", DefaultFileNames())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Database != second.Database || first.Socket == second.Socket {
+		t.Fatalf("the fixture must share the database and differ in the socket: %+v %+v", first, second)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := runDaemon(ctx, t, first)
+	err = Run(context.Background(), Options{Profile: "test", Paths: second, Telegram: newFake()})
+	if !errors.Is(err, ErrDatabaseInUse) {
+		t.Fatalf("the second data directory started: %v", err)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first daemon did not stop")
+	}
+}
+
+// TestSecondDataDirectoryIsRefused covers Q1 at the start path: two data
+// directories with one profile name share the database, so the second start must
+// not open it. The first daemon keeps the profile lock, which is the answer of a
+// start in this process; the data-directory record and the database lock are
+// covered by TestDatabaseBinding and TestDatabaseLock, which need no socket.
 func TestStaleSocketIsReplaced(t *testing.T) {
 	home := shortTempDir(t)
-	paths, err := ResolvePaths(home, "test", DefaultFileNames())
+	paths, err := ResolvePaths(home, dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,9 +621,13 @@ func TestStaleSocketIsReplaced(t *testing.T) {
 func TestFilePermissions(t *testing.T) {
 	r := start(t, newFake(), shortTempDir(t))
 	for path, want := range map[string]os.FileMode{
-		r.paths.Dir:    0o700,
-		r.paths.Socket: 0o600,
-		r.paths.Lock:   0o600,
+		r.paths.Dir:                  0o700,
+		r.paths.Socket:               0o600,
+		r.paths.Lock:                 0o600,
+		r.paths.DatabaseDir:          0o700,
+		r.paths.Database:             0o600,
+		DatabaseBindingFile(r.paths): 0o600,
+		DatabaseLockFile(r.paths):    0o600,
 	} {
 		info, err := os.Stat(path)
 		if err != nil {

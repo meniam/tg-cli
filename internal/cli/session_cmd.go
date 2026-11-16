@@ -138,11 +138,18 @@ func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
 		if e != nil && !errors.Is(e, os.ErrNotExist) {
 			return fail(exitcode.Failure, "cannot read profile session")
 		}
+		// A database of the old layout is not moved yet, and an import without
+		// --force must not pass over it either: the history it holds belongs to
+		// the account the user is about to replace.
 		_, dbErr := os.Stat(p.Database)
 		if dbErr != nil && !errors.Is(dbErr, os.ErrNotExist) {
 			return fail(exitcode.Failure, "cannot inspect profile")
 		}
-		result.Replaced = e == nil || dbErr == nil
+		_, legacyErr := os.Stat(p.LegacyDatabase)
+		if legacyErr != nil && !errors.Is(legacyErr, os.ErrNotExist) {
+			return fail(exitcode.Failure, "cannot inspect profile")
+		}
+		result.Replaced = e == nil || dbErr == nil || legacyErr == nil
 		if result.Replaced {
 			if !force {
 				return fail(exitcode.Usage, "profile is not empty; use --force for the same account")

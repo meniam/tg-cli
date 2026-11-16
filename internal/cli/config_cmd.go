@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 
 	"github.com/spf13/cobra"
@@ -35,11 +36,18 @@ type configProfileResult struct {
 	Proxy     string `json:"proxy"`
 }
 type configShowResult struct {
-	Home           string                         `json:"home"`
+	Home string `json:"home"`
+	// DBDir is the directory of the profile databases next to the configuration
+	// file. home no longer says where the history lives.
+	DBDir          string                         `json:"db_dir"`
 	DefaultProfile string                         `json:"default_profile"`
 	Files          configFilesResult              `json:"files"`
 	Behavior       configBehaviorResult           `json:"behavior"`
 	Profiles       map[string]configProfileResult `json:"profiles"`
+}
+type configInitResult struct {
+	Path    string `json:"path"`
+	Created bool   `json:"created"`
 }
 type configMigrateResult struct {
 	Migrated bool     `json:"migrated"`
@@ -53,9 +61,24 @@ func (a *app) configCommand() *cobra.Command {
 		return a.success(cmd, configPathResult{Path: a.deps.ConfigPath})
 	}}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[configPathResult]()}))
 	cmd.AddCommand(a.annotate(&cobra.Command{Use: "show", Short: "Show configuration with proxy credentials redacted", Args: cobra.NoArgs, RunE: a.configShow}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[configShowResult]()}))
+	cmd.AddCommand(a.annotate(&cobra.Command{Use: "init", Short: "Write the configuration template", Args: cobra.NoArgs, RunE: a.configInit}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[configInitResult]()}))
 	cmd.AddCommand(a.annotate(&cobra.Command{Use: "migrate", Short: "Migrate legacy profile settings into the configuration", Args: cobra.NoArgs, RunE: a.configMigrate}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[configMigrateResult]()}))
 	return cmd
 }
+
+// configInit writes the template to the configuration path. An existing file is
+// left alone: the template must not overwrite the edits of the owner.
+func (a *app) configInit(cmd *cobra.Command, _ []string) error {
+	err := config.Init(a.deps.ConfigPath)
+	if errors.Is(err, config.ErrConfigExists) {
+		return fail(exitcode.Usage, "%s already exists: edit it instead of writing a new template", a.deps.ConfigPath)
+	}
+	if err != nil {
+		return fail(exitcode.Failure, "%v", err)
+	}
+	return a.success(cmd, configInitResult{Path: a.deps.ConfigPath, Created: true})
+}
+
 func (a *app) configShow(cmd *cobra.Command, _ []string) error {
 	if err := a.migrateProfiles(); err != nil {
 		return err
@@ -74,12 +97,14 @@ func (a *app) configShow(cmd *cobra.Command, _ []string) error {
 	sort.Strings(names)
 	files := a.config.Files
 	fileNames := daemon.FileNames{Database: files.Database, Session: files.Session, Log: files.Log, Deletions: files.Deletions, Access: files.Access}
+	// The database root sits next to the configuration file.
+	dbRoot := filepath.Join(filepath.Dir(a.deps.ConfigPath), "db")
 	for _, name := range names {
-		if _, err := daemon.ResolvePaths(home, name, fileNames); err != nil {
+		if _, err := daemon.ResolvePaths(home, dbRoot, name, fileNames); err != nil {
 			return fail(exitcode.Usage, "%v", err)
 		}
 	}
-	result := configShowResult{Home: a.config.Home, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}, Behavior: configBehaviorResult{a.config.Behavior.ThrottlePercent, a.config.Behavior.FloodAutoWait, a.config.Behavior.ExpectUser}, Profiles: map[string]configProfileResult{}}
+	result := configShowResult{Home: a.config.Home, DBDir: dbRoot, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}, Behavior: configBehaviorResult{a.config.Behavior.ThrottlePercent, a.config.Behavior.FloodAutoWait, a.config.Behavior.ExpectUser}, Profiles: map[string]configProfileResult{}}
 	for name, p := range a.config.Profiles {
 		proxy, err := netconf.ParseProxy(p.Proxy)
 		if err != nil {

@@ -23,6 +23,10 @@ import (
 // ErrAlreadyRunning means another daemon holds the lock of the profile.
 var ErrAlreadyRunning = errors.New("a daemon is already running for this profile")
 
+// ErrDatabaseInUse means another process holds the database of the profile. It
+// happens when the same profile name is used with two data directories.
+var ErrDatabaseInUse = errors.New("the profile database is in use")
+
 const (
 	defaultChatLimit = 50
 	maxChatLimit     = 500
@@ -123,6 +127,28 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 	defer release()
+	// Everything about the database runs under two locks: the profile lock, which
+	// the old and the new binary share, and the database lock, which a second
+	// data directory with the same profile name cannot take.
+	//
+	// The record of the data directory is read before the old database is moved:
+	// a move deletes a file, so a start of the wrong data directory must stop
+	// before it.
+	releaseDatabase, err := LockDatabase(opts.Paths)
+	if err != nil {
+		return err
+	}
+	defer releaseDatabase()
+	if err := CheckDatabaseBinding(opts.Paths); err != nil {
+		return err
+	}
+	moved, err := MoveLegacyDatabase(opts.Paths)
+	if err != nil {
+		return err
+	}
+	if err := BindDatabase(opts.Paths); err != nil {
+		return err
+	}
 	if _, err := CheckFileNames(opts.Paths); err != nil {
 		return err
 	}
@@ -138,6 +164,9 @@ func Run(ctx context.Context, opts Options) error {
 			return fmt.Errorf("open database: %w", err)
 		}
 		defer ownedStore.Close()
+	}
+	if moved {
+		log.Info("moved the database", "from", opts.Paths.LegacyDatabase, "to", opts.Paths.Database)
 	}
 
 	// The lock is ours, so a socket file left here is stale.
