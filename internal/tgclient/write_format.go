@@ -42,7 +42,11 @@ func (c *Client) CheckText(ctx context.Context, p rpc.SendParams) (rpc.TextCheck
 	if mode == "" {
 		mode = "plain"
 	}
-	return rpc.TextCheck{Mode: mode, PlainLength: utf8.RuneCountInString(prepared.text), Entities: len(prepared.entities), Rich: prepared.rich != nil}, nil
+	check := rpc.TextCheck{Mode: mode, PlainLength: utf8.RuneCountInString(prepared.text), Entities: len(prepared.entities), Rich: prepared.rich != nil}
+	if customEmojiCount(prepared.entities) > 0 {
+		check.PremiumFeatures = []string{"custom_emoji"}
+	}
+	return check, nil
 }
 
 type userResolver func(int64) (tg.InputUserClass, error)

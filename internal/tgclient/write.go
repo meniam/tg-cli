@@ -227,7 +227,7 @@ func sendPreparedText(ctx context.Context, api *tg.Client, destination tg.InputP
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date}, nil
+	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, PremiumDropped: premiumDropped(updates, messages[0].ID, prepared.entities)}, nil
 }
 
 func editText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.EditParams) (rpc.SendResult, error) {
@@ -259,7 +259,7 @@ func editPreparedText(ctx context.Context, api *tg.Client, destination tg.InputP
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date}, nil
+	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, PremiumDropped: premiumDropped(updates, messages[0].ID, prepared.entities)}, nil
 }
 
 func writeFormatError(err error, rich bool) error {
@@ -267,7 +267,7 @@ func writeFormatError(err error, rich bool) error {
 	if rich {
 		var rpcErr *rpc.Error
 		if _, telegramError := tgerr.As(err); telegramError && errors.As(mapped, &rpcErr) && rpcErr.Code == rpc.CodeTelegram {
-			return rpc.NewError(rpc.CodeTelegram, "Telegram rejected rich message")
+			return &rpc.Error{Code: rpc.CodeTelegram, Message: "Telegram rejected rich message", Data: rpcErr.Data}
 		}
 	}
 	return mapped

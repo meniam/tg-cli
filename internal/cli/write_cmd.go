@@ -227,6 +227,9 @@ func (a *app) writeCall(cmd *cobra.Command, method string, p, result any) error 
 		}
 		return err
 	}
+	if sent, ok := result.(*rpc.SendResult); ok && len(sent.PremiumDropped) > 0 {
+		a.warn(cmd, "Telegram removed custom emoji from the message")
+	}
 	return a.success(cmd, result)
 }
 func (a *app) messageSend(cmd *cobra.Command, args []string) error {

@@ -495,6 +495,7 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodMessageGet, d.messageGet)
 	d.handle(rpc.MethodMessageReaders, d.messageReaders)
 	d.handle(rpc.MethodMessageTranscribe, d.messageTranscribe)
+	d.handle(rpc.MethodMessageTranslate, d.messageTranslate)
 	d.srv.SetMethodTimeout(rpc.MethodMessageTranscribe, 100*time.Second)
 	d.handle(rpc.MethodAccountProfile, d.accountProfile)
 	d.handle(rpc.MethodAccountPrivacyGet, d.accountPrivacyGet)

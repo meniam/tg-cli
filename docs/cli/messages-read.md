@@ -1,6 +1,6 @@
 # Reading messages
 
-Commands that read messages: a chat page by page, one message, the pinned messages, a search inside Telegram, the context of a message, the comments of a channel post, a message link, an export of the saved history, and a live event stream. None of them changes anything in Telegram. The shared rules (profiles, global flags, the envelope, exit codes) are in [overview.md](overview.md). All examples use fictional data.
+Commands that read messages: a chat page by page, one message, the pinned messages, a translation, a search inside Telegram, the context of a message, the comments of a channel post, a message link, an export of the saved history, and a live event stream. None of them changes anything in Telegram. The shared rules (profiles, global flags, the envelope, exit codes) are in [overview.md](overview.md). All examples use fictional data.
 
 ## Rules shared by message reads
 
@@ -637,6 +637,27 @@ The result has `chat_id`, `id`, `transcription_id`, `text`, `pending`, and `cach
 Only messages with `media_type` `voice` or `video_note` can be transcribed. Another message, a non-positive id, or a wait outside the range is exit code 2. A closed or unknown chat is exit code 7. Telegram refusals are exit code 5; a Premium or exhausted free-trial refusal has `error.reason: "premium_required"`, and another transcription refusal has `error.reason: "transcription_failed"`. `trial_remains` and `trial_resets_at` appear in a successful response when Telegram provides free-trial values.
 
 The `transcriptions` table is added by the database migration for this command. An older binary refuses to open a profile database that has this newer migration; restore a database backup or use a current binary before rolling back.
+
+### tg message translate
+
+Translates one to 20 messages with Telegram. It accepts a chat and one or more message ids, or one `t.me` message link. It sends Telegram only the peer and message ids: it does not send arbitrary text, change the account, or store translations locally.
+
+```text
+tg message translate <chat> <id>... --to <language>
+tg message translate <message-link> --to <language>
+```
+
+<!-- schema:flags tg message translate -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--to` | string | `none` | target language as two Latin letters (required) |
+<!-- /schema:flags -->
+
+`--to` is required and normalized to lower case. It must contain exactly two Latin letters. Each id is positive and unique; more than 20 ids, duplicate ids, and invalid language input are exit code 2 before Telegram is called. The command is class `read`; a closed chat is exit code 7 before Telegram is asked to translate messages. A non-numeric chat reference can first be resolved through Telegram.
+
+The result contains `chat_id`, `to_lang`, and `items`. Every item has the input `id` and untrusted `text`. The item order is the input id order. With `--format jsonl`, each item is one line. Translation entities are not returned.
+
+Telegram input errors for an id, an empty message, overly long text, or an unsupported target language are exit code 2. `TRANSLATIONS_DISABLED` is exit code 5 with `error.reason: "translations_disabled"`. Temporary translation failures and quotas are exit code 5 with `error.reason: "translation_unavailable"`; retry later rather than in a tight loop. A Premium refusal is exit code 5 with `error.reason: "premium_required"`. If Telegram returns a different number of translations than ids, the command returns exit code 5 and does not associate partial results with ids.
 
 ### tg message download
 

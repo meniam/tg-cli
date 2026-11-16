@@ -61,8 +61,11 @@ func validateMedia(p rpc.SendMediaParams, files []rpc.MediaFile) error {
 	default:
 		return rpc.NewError(rpc.CodeInvalidParams, "invalid media type")
 	}
-	if !utf8.ValidString(p.Caption) || utf8.RuneCountInString(p.Caption) > maxMediaCaptionRunes {
+	if !utf8.ValidString(p.Caption) {
 		return rpc.NewError(rpc.CodeInvalidParams, "caption must be at most 1024 characters")
+	}
+	if utf8.RuneCountInString(p.Caption) > maxMediaCaptionRunes {
+		return rpc.CaptionTooLong()
 	}
 	if p.ReplyTo < 0 || p.Topic < 0 || p.Duration < 0 || p.Width < 0 || p.Height < 0 {
 		return rpc.NewError(rpc.CodeInvalidParams, "reply, topic and media metadata must not be negative")
