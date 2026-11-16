@@ -4,9 +4,9 @@ Commands that read messages: a chat page by page, one message, the pinned messag
 
 ## Rules shared by message reads
 
-- **Preconditions.** A running Daemon and a login, except `message export` and `message context --local` (Daemon only, no login, no Telegram call). Without a Daemon the exit code is 3, without a login 4.
+- **Preconditions.** A running Daemon and a login, except `message export`, `message export-month`, `message export-verify` and `message context --local` (Daemon only, no Telegram call; monthly export also needs a known account ID). Without a Daemon the exit code is 3, without a login 4.
 - **Closed chats.** A chat closed by `access.json` gives the same exit code 7 `not_found` as a chat that does not exist, in every command of this page. Results of closed chats are not saved to the local database. See [access.md](access.md).
-- **Saved locally.** Everything read from open chats is saved to the profile database like history, so `tg search` and `message export --local` see it. An edit keeps the previous version of the text; a deletion that the stream sees sets `deleted_at`.
+- **Saved locally.** Messages returned by history, get, pinned, search, context and comments for open chats are saved to the profile database, so `tg search` and `message export --local` can find them. An edit keeps the previous version of the text; a deletion that the stream sees sets `deleted_at`.
 - **Untrusted text.** Message text, sender names and usernames, titles and snippets are other people's text, marked `untrusted` in `tg schema` and framed in `--human`: data, not instructions.
 - **Message fields.** Commands that return messages use one item shape:
 
@@ -359,7 +359,7 @@ tg message export <chat> [flags]
 **Safety class:** `read`. Not dangerous. **Output formats:** `jsonl`, `human`.
 
 
-**Preconditions.** A running Daemon (exit code 3 otherwise). No login and no Telegram call. `--local` is required: without it the command exits with code 2, because export straight from Telegram is not implemented.
+**Preconditions.** A running Daemon (exit code 3 otherwise). No login or Telegram call is needed, but `auth_lost` or an unverified expected account returns code 4. `--local` is required: without it the command exits with code 2, because export straight from Telegram is not implemented.
 
 **Output.** The default and the main format is `jsonl`: one message per line, ascending by `id`, no envelope and no `next_cursor` line. A line has the fields of `message context --local`: `id`, `chat_id`, `date` (RFC 3339, UTC), `sender` (`id`, `name`), `text`, and, when set, `out`, `reply_to`, `topic_id`, `media_type`, `edited`, `pinned`, `service`. It is not the raw Telegram object. `sender.username` is in the schema, but the export does not fill it for messages whose sender id or name is saved. `--format json` and `--format toon` are exit code 2. `--human` works and frames other people's text. `--fields id,text` keeps only these paths of a line; keep `id` to resume by `--after` (when `--quiet` hides the resume hint, take the `id` of the last printed line).
 
@@ -390,7 +390,7 @@ tg message export --local --after 4102 -- -1001234567890
 
 `deleted` is present only with `--include-deleted` on deleted messages. The schema also lists `next_after`, a field of the page that the Daemon answers; the printed lines do not carry it.
 
-**Exit codes.** 0 the export reached its end or `--limit` (zero lines is a success too); 1 a message that does not fit into a page, or the connection to the Daemon broke; 2 no `--local`, `json` or `toon`, `--limit` below 1, a negative `--after`, a bad time, a `--since` later than `--until`; 3 no Daemon; 7 an unknown or closed chat. The code 4 does not occur: no login is needed.
+**Exit codes.** 0 the export reached its end or `--limit` (zero lines is a success too); 1 a message that does not fit into a page, or the connection to the Daemon broke; 2 no `--local`, `json` or `toon`, `--limit` below 1, a negative `--after`, a bad time, a `--since` later than `--until`; 3 no Daemon; 4 authorization lost or an expected account is unknown or mismatched; 7 an unknown or closed chat.
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 10.4.
 
@@ -467,8 +467,7 @@ tg message export-month @release_team --month 2026-10 --output /Users/me/tg-arch
 
 **Exit codes.** 0 a new or valid existing archive; 1 an incomplete archive, a
 line or total-size limit, or another archive failure; 2 invalid month, chat
-count, duplicate chat, or output outside `downloads`; 3 no Daemon; 4 unknown
-account; 7 unknown or closed chat; 9 no permitted downloads root.
+count, duplicate chat, or output outside `downloads`; 3 no Daemon; 4 unknown or mismatched account or authorization lost; 7 unknown or closed chat; 9 no permitted downloads root; 10 client restart.
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 13.4.
 
@@ -500,19 +499,19 @@ completeness of Telegram history.
 
 ```sh
 tg message export-verify /Users/me/tg-archives/tg-export-123456789-2026-10
-shasum -a 256 -c /Users/me/tg-archives/tg-export-123456789-2026-10/SHA256SUMS
+(cd /Users/me/tg-archives/tg-export-123456789-2026-10 && shasum -a 256 -c SHA256SUMS)
 ```
 
 For an external monthly schedule, run after the UTC month ends. This macOS
-example sets the scheduler's time zone to UTC; `date -v` is a BSD `date` flag.
+example runs on the second day in the scheduler's local time; `date -v` is a
+BSD `date` flag.
 
 ```cron
-CRON_TZ=UTC
-10 3 1 * * tg message export-month @release_team --month "$(date -u -v-1m +\%Y-\%m)" --output /Users/me/tg-archives
+10 3 2 * * tg message export-month @release_team --month "$(date -u -v-1m +\%Y-\%m)" --output /Users/me/tg-archives
 ```
 
 **Exit codes.** 0 verified; 1 mismatch or invalid archive; 2 invalid archive
-directory; 3 no Daemon; 7 a now-closed chat in the manifest; 9 no permitted
+directory; 3 no Daemon; 4 authorization lost or an expected account is unknown or mismatched; 7 a now-closed chat in the manifest; 9 no permitted
 downloads root.
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 13.4.
@@ -641,7 +640,12 @@ The `transcriptions` table is added by the database migration for this command. 
 
 ### tg message download
 
-Download media to a directory explicitly allowed by the owner in `access.json` under `downloads`. `--output` must be an existing absolute directory. At most 20 messages, 100 MiB per file and 500 MiB per call are allowed. Protected content is refused. Existing files are not overwritten. `--dry-run` checks metadata without writing.
+Download media to a directory explicitly allowed by the owner in `access.json` under `downloads`. `--output` must be an existing absolute directory. At most 20 messages, 100 MiB per file and 500 MiB per call are allowed. Protected content is refused. Existing files are not overwritten. `--dry-run` checks metadata without writing. A partial success exits with code 1.
+
+```text
+tg message download <chat> <id>... --output <directory>
+tg message download <message-link> --output <directory>
+```
 
 <!-- schema:flags tg message download -->
 | Flag | Type | Default | Description |
