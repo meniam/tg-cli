@@ -175,9 +175,6 @@ What is not checked on a live account is listed only in [`FEATURES.md`](FEATURES
 
 Planned, not implemented. [`FEATURES.md`](FEATURES.md) is the source of truth.
 
-- **Media.** Downloading media.
-- **Sessions and access.** Export and import of a session string, login without a terminal, SOCKS and MTProxy, WSS transport.
-- **Reliability.** Recovery from a connection break and a DC migration.
 - **Local history.** Loading many chats with one command or on a schedule, export from Telegram, earlier versions of edits, writing an export to a file. Today the database holds what you read, what `chat sync` loaded on request one chat at a time, and the description, member count and settings that `chat full` read; `chat overview` summarises it offline and `message export --local` prints it.
 - And more: see the full list in `FEATURES.md`.
 

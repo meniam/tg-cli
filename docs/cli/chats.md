@@ -93,8 +93,7 @@ tg chat overview --limit 2 --format jsonl
 `pinned`, `unread`, `unread_mentions`, `unread_mark`, `state_synced_at` (optional), `messages` and `my_messages`
 integers, `first_message` and `last_message` objects with `id`, `date` and `text` (optional, text untrusted), and
 `history_complete` bool (optional). A field is absent when the database never learned it: a chat without a saved
-dialog state has no `unread`, a chat without stored messages has no `first_message`, and `history_complete` is absent
-until the chat is loaded completely.
+dialog state has no `unread`, a chat without stored messages has no `first_message`, and `history_complete` is absent when there is no saved sync state; it can be `false` while loading is incomplete.
 
 **Exit codes.** 0; 2 `--limit` outside 1 to 500, or an unknown `--type`; 3 no Daemon; 4 the login was lost (`auth_lost`), or `--expect-user` does not match or cannot be verified.
 
@@ -594,7 +593,7 @@ Verification and remaining work for history sync are tracked in [FEATURES.md](..
 
 ### tg chat full start
 
-Queues the background job that reads the full data of groups and channels: the description, the member count and the settings. It makes one Telegram request per chat by chat id, without resolving a name (only a cache miss makes the client read the first 200 dialogs), reads only, and runs behind the shared throttle of the account as background traffic, so ordinary commands go first. Without a chat the job takes every allowed group and channel without a complete read yet; with `--refresh` it reads every allowed group and channel again. A chat closed by the access lists is never requested.
+Queues the background job that reads the full data of groups and channels: the description, the member count and the settings. It makes one Telegram request per chat by chat id, without resolving a name (only a cache miss makes the client read the first 200 dialogs), reads only, and runs behind the shared throttle of the account as background traffic, so ordinary commands go first. Without a chat the job takes every allowed group and channel without a complete read yet; with `--refresh` it reads every allowed group and channel again. A chat closed by the access lists is excluded from selection and checked again before its initial request. A retry after `FLOOD_WAIT` does not recheck access.
 
 ```text
 tg chat full start [<chat>] [flags]
@@ -608,7 +607,7 @@ tg chat full start [<chat>] [flags]
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon and a login. Put `--` before a negative chat id. The job keeps its progress in `full_synced_at` and `full_error` of each chat, so a later `start` continues with the chats that have none. A chat whose last read failed is on that list again: the failure is recorded and the next `start` retries it. A job that is already active is reported unchanged.
+**Preconditions.** A running Daemon and a login. Put `--` before a negative chat id. The job keeps its progress in `full_synced_at` and `full_error` of each chat, so a later `start` continues with the chats that have none. A failed chat is on that list again only if it has no earlier successful full read; a failed refresh keeps the earlier timestamp. A job that is already active is reported unchanged.
 
 **Example.**
 
@@ -624,7 +623,7 @@ tg chat full start --refresh
 {"ok":true,"data":{"state":"queued","total":12,"done":0,"failed":0,"started_at":"2026-11-16T10:00:00Z","updated_at":"2026-11-16T10:00:00Z"}}
 ```
 
-**Answer fields** (`data`): `state` string, `total`, `done` and `failed` integers, `current_chat_id` integer (optional), `wait_seconds` integer (optional), `error` string (optional), `started_at` and `updated_at` strings (RFC 3339 UTC).
+**Answer fields** (`data`): `state` string, `total`, `done` and `failed` integers, `current_chat_id` integer (optional), `wait_seconds` integer (optional), `error` string (optional), `started_at` (optional) and `updated_at` strings (RFC 3339 UTC).
 
 **Exit codes.** 0; 2 a malformed reference; 3 no Daemon; 4 the login was lost (`auth_lost`), or `--expect-user` does not match or cannot be verified; 7 an unknown or closed chat; 10 Telegram is offline. The job itself never fails the command: a chat that cannot be read is counted in `failed`, and a `FLOOD_WAIT` shows as the state `waiting_flood`.
 
