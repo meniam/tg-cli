@@ -211,6 +211,17 @@ type Chat struct {
 	Title    string `json:"title" untrusted:"true"`
 	Username string `json:"username,omitempty" untrusted:"true"`
 	Unread   int    `json:"unread"`
+	// Scam, Fake and Restricted travel with the chat object of Telegram and are
+	// stored with the chat by the Daemon. They are not part of this answer: the
+	// fields of `chat info` are where an agent reads them, so a list and a resolve
+	// keep their old shape.
+	Scam       bool `json:"-"`
+	Fake       bool `json:"-"`
+	Restricted bool `json:"-"`
+	// FlagsKnown reports whether the source of this record read the flags above.
+	// A record that leaves them out must not clear what the database already
+	// knows: a move from a dialog, a peer or an event knows no flags.
+	FlagsKnown bool `json:"-"`
 }
 
 // ChatListResult is the result of MethodChatList.

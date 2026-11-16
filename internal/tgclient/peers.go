@@ -140,7 +140,18 @@ func toChatOf(p peers.Peer) rpc.Chat {
 	}
 	chat.Username, _ = p.Username()
 	chat.Type = peerType(p)
+	chat.Scam, chat.Fake, chat.Restricted, _ = restrictionFlags(p)
+	chat.FlagsKnown = flagsKnown(p)
 	return chat
+}
+
+// flagsKnown reports whether a peer object carries the scam, fake and restriction
+// flags: a channel does, a basic group and a user do not.
+func flagsKnown(p peers.Peer) bool {
+	if channel, ok := p.(peers.Channel); ok {
+		return channel.Raw() != nil
+	}
+	return false
 }
 
 func peerType(p peers.Peer) string {

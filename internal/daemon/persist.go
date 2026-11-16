@@ -44,7 +44,8 @@ func (d *daemon) saveChats(ctx context.Context, op string, chats []rpc.Chat, inc
 	stored := make([]store.Chat, 0, len(chats))
 	people := make([]store.Person, 0, len(chats))
 	for _, chat := range chats {
-		item := store.Chat{ID: chat.ID, Type: chat.Type, Title: chat.Title, Username: optionalText(chat.Username)}
+		item := store.Chat{ID: chat.ID, Type: chat.Type, Title: chat.Title, Username: optionalText(chat.Username),
+			Scam: chat.Scam, Fake: chat.Fake, Restricted: chat.Restricted, FlagsKnown: chat.FlagsKnown}
 		if includeUnread {
 			unread := int64(chat.Unread)
 			item.Unread = &unread
@@ -102,6 +103,9 @@ func (d *daemon) saveChatInfo(ctx context.Context, info rpc.ChatInfo) {
 	}
 	item.CreatedAt = positiveInt64Pointer(info.CreatedAt)
 	item.Scam, item.Fake, item.Restricted = info.Scam, info.Fake, info.Restricted
+	// A chat info always reads the chat object, so its flags are known even when
+	// all three are false: that is how a flag is cleared.
+	item.FlagsKnown = true
 	if len(info.RestrictionReason) > 0 {
 		if raw, err := json.Marshal(info.RestrictionReason); err == nil {
 			item.RestrictionReason = raw

@@ -808,7 +808,12 @@ func needsTelegram(method string) bool {
 	switch method {
 	case rpc.MethodSearch, rpc.MethodNoteList, rpc.MethodNoteDelete, rpc.MethodNoteDeleteByAuthor,
 		rpc.MethodMessageExportLocal, rpc.MethodMessageExportVerify,
+		// The status and the cancel of a background job read and change the job
+		// state in memory: they need no connection, and a client that lost
+		// Telegram must still be able to ask and to stop it. The same holds for
+		// the status and the cancel of the history load.
 		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel,
+		rpc.MethodChatFullStatus, rpc.MethodChatFullCancel,
 		// The local chat overview reads the database only.
 		rpc.MethodChatOverview:
 		return false

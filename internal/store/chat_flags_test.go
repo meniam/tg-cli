@@ -15,7 +15,7 @@ func TestSaveChatFlags(t *testing.T) {
 	ctx := context.Background()
 	created := int64(1700000000)
 	reason := json.RawMessage(`[{"platform":"ios","reason":"porno","text":"Not available"}]`)
-	chat := Chat{ID: 9, Type: "channel", Title: "Restricted", CreatedAt: &created, Scam: true, Fake: true, Restricted: true, RestrictionReason: reason}
+	chat := Chat{ID: 9, Type: "channel", Title: "Restricted", CreatedAt: &created, Scam: true, Fake: true, Restricted: true, FlagsKnown: true, RestrictionReason: reason}
 	if err := db.UpsertChats(ctx, []Chat{chat}); err != nil {
 		t.Fatal(err)
 	}
@@ -58,9 +58,24 @@ func TestSaveChatFlags(t *testing.T) {
 	if stored.CreatedAt != nil || stored.Scam || stored.Fake || stored.Restricted || stored.RestrictionReason != nil {
 		t.Errorf("a chat without flags stored %+v", stored)
 	}
-	// The flags are NOT NULL with a default of 0, so the latest read wins: a chat
-	// Telegram no longer marks as scam loses the flag.
+	// A source that did not read the flags must not clear them: a list, a resolve
+	// or an event carries no channel object of its own.
 	if err := db.UpsertChats(ctx, []Chat{{ID: 9, Type: "channel", Title: "Restricted"}}); err != nil {
+		t.Fatal(err)
+	}
+	kept, err := db.GetChat(ctx, 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !kept.Scam || !kept.Fake || !kept.Restricted {
+		t.Errorf("a record without flags cleared them: %+v", kept)
+	}
+	if kept.CreatedAt == nil || *kept.CreatedAt != created {
+		t.Errorf("the creation date must survive a read without it: %+v", kept.CreatedAt)
+	}
+	// A record with known flags does update them, and that is how a flag Telegram
+	// no longer sets goes away.
+	if err := db.UpsertChats(ctx, []Chat{{ID: 9, Type: "channel", Title: "Restricted", FlagsKnown: true}}); err != nil {
 		t.Fatal(err)
 	}
 	cleared, err := db.GetChat(ctx, 9)
@@ -68,9 +83,18 @@ func TestSaveChatFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cleared.Scam || cleared.Fake || cleared.Restricted {
-		t.Errorf("the flags were not refreshed: %+v", cleared)
+		t.Errorf("known flags did not clear the old ones: %+v", cleared)
 	}
-	if cleared.CreatedAt == nil || *cleared.CreatedAt != created {
-		t.Errorf("the creation date must survive a read without it: %+v", cleared.CreatedAt)
+	// The chat list and the resolve now carry the flags, so a save through the
+	// daemon helper keeps them.
+	if err := db.UpsertChats(ctx, []Chat{{ID: 9, Type: "channel", Title: "Restricted", Scam: true, FlagsKnown: true}}); err != nil {
+		t.Fatal(err)
+	}
+	partial, err := db.GetChat(ctx, 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !partial.Scam || partial.Fake {
+		t.Errorf("a partial known record: %+v", partial)
 	}
 }

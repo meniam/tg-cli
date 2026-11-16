@@ -63,8 +63,10 @@ func TestToChat(t *testing.T) {
 		{"user without name", &tg.PeerUser{UserID: 3}, rpc.Chat{ID: 3, Type: "user", Title: "only_username", Username: "only_username", Unread: 3}},
 		{"unknown user", &tg.PeerUser{UserID: 99}, rpc.Chat{ID: 99, Type: "user", Unread: 3}},
 		{"group", &tg.PeerChat{ChatID: 7}, rpc.Chat{ID: -7, Type: "group", Title: "Family", Unread: 3}},
-		{"channel", &tg.PeerChannel{ChannelID: 8}, rpc.Chat{ID: -1000000000008, Type: "channel", Title: "News", Username: "news", Unread: 3}},
-		{"supergroup", &tg.PeerChannel{ChannelID: 9}, rpc.Chat{ID: -1000000000009, Type: "supergroup", Title: "Chatty", Unread: 3}},
+		// A channel object carries the flags, so a dialog reads them; a basic group
+		// and a user have none, and their record says the flags are unknown.
+		{"channel", &tg.PeerChannel{ChannelID: 8}, rpc.Chat{ID: -1000000000008, Type: "channel", Title: "News", Username: "news", Unread: 3, FlagsKnown: true}},
+		{"supergroup", &tg.PeerChannel{ChannelID: 9}, rpc.Chat{ID: -1000000000009, Type: "supergroup", Title: "Chatty", Unread: 3, FlagsKnown: true}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

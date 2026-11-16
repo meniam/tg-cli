@@ -310,16 +310,26 @@ func (a *app) startBackground(cmd *cobra.Command, profile string, paths daemon.P
 	// the order of Run: the record of the data directory is checked before the
 	// move, because a move deletes the old file. The child finds the database in
 	// place and does nothing.
-	if err := daemon.WithProfileLock(paths, func() error {
+	var moved bool
+	err := daemon.WithProfileLock(paths, func() error {
 		if err := daemon.CheckDatabaseBinding(paths); err != nil {
 			return err
 		}
-		if _, err := daemon.MoveLegacyDatabase(paths); err != nil {
-			return err
+		var moveErr error
+		moved, moveErr = daemon.MoveLegacyDatabase(paths)
+		if moveErr != nil {
+			return moveErr
 		}
 		return daemon.BindDatabase(paths)
-	}); err != nil {
+	})
+	if err != nil {
 		return a.daemonStartError(err)
+	}
+	if moved {
+		// The child logs the line in its journal only when it runs in the
+		// foreground, so the parent reports the move it did itself. The answer of
+		// the command does not change: this is a hint, and --quiet silences it.
+		a.warn(cmd, "note: moved the database from %s to %s", paths.LegacyDatabase, paths.Database)
 	}
 	args := []string{"daemon", "start", "--foreground", "--profile", profile}
 	args = append(args, "--journal", paths.Log)

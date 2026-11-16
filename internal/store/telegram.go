@@ -33,11 +33,15 @@ type Chat struct {
 	// CreatedAt is the creation date of the chat in Unix seconds.
 	CreatedAt *int64
 	// Scam, Fake and Restricted are the flags Telegram sets on a chat. The
-	// columns are NOT NULL with a default of 0, so false means "no flag", and the
-	// latest read wins.
+	// columns are NOT NULL with a default of 0, so false means "no flag". They
+	// are written only when FlagsKnown is set: a source that reads no flags must
+	// not clear what a fuller read stored.
 	Scam       bool
 	Fake       bool
 	Restricted bool
+	// FlagsKnown reports whether the record read the flags from Telegram. It is an
+	// input of a save: a record read back from the database always has them.
+	FlagsKnown bool
 	// RestrictionReason explains a restriction as JSON: platform, reason, text.
 	RestrictionReason json.RawMessage
 	// FullSyncedAt and FullError belong to the full-data job of the chat.
@@ -291,6 +295,9 @@ func mergeChat(old, incoming Chat, exists bool, now int64) Chat {
 		c.Settings = mergeJSON(old.Settings, incoming.Settings)
 		c.CreatedAt = mergeInt(old.CreatedAt, incoming.CreatedAt)
 		c.RestrictionReason = mergeJSON(old.RestrictionReason, incoming.RestrictionReason)
+		if !incoming.FlagsKnown {
+			c.Scam, c.Fake, c.Restricted = old.Scam, old.Fake, old.Restricted
+		}
 		c.FullSyncedAt = mergeInt(old.FullSyncedAt, incoming.FullSyncedAt)
 		c.FullError = mergeText(old.FullError, incoming.FullError)
 		c.Raw = mergeJSON(old.Raw, incoming.Raw)
@@ -332,7 +339,10 @@ func (db *DB) UpsertChats(ctx context.Context, chats []Chat) error {
 			query += `,search_text=excluded.search_text`
 		}
 		_, err = tx.ExecContext(ctx, query, c.ID, c.Type, c.Title, c.Username, c.About, c.Members, boolInt(c.Forum), boolInt(c.Verified), c.Unread, jsonArg(c.Settings), jsonArg(c.Raw), c.SearchText,
-			c.CreatedAt, c.Scam, c.Fake, c.Restricted, jsonArg(c.RestrictionReason), c.FullSyncedAt, c.FullError, c.FirstSeenAt, c.LastSeenAt)
+			// mergeChat already decided the flags: an unknown record kept the stored
+			// ones, a known record replaced them.
+			c.CreatedAt, c.Scam, c.Fake, c.Restricted,
+			jsonArg(c.RestrictionReason), c.FullSyncedAt, c.FullError, c.FirstSeenAt, c.LastSeenAt)
 		if err != nil {
 			return fmt.Errorf("upsert chat %d: %w", c.ID, err)
 		}
