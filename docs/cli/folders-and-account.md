@@ -1,6 +1,6 @@
 # Folders and account state
 
-These read-only commands require a running Daemon. Without `--local` they also require a login, read Telegram and save the result. `--local` reads the saved snapshot without a login or Telegram connection. An empty local snapshot has an empty list and `synced_at: null`. Timestamps are Unix seconds. Closed chats are hidden by the access policy. See [overview.md](overview.md) for global flags and exit codes.
+These commands require a running Daemon. For the snapshot commands that support `--local`, the default reads Telegram and requires a login; `--local` reads the saved snapshot without a login or Telegram connection. Other reads and writes have their own conditions below. An empty local snapshot has an empty list and `synced_at: null`. Timestamps are Unix seconds. Closed chats are hidden by the access policy. See [overview.md](overview.md) for global flags and exit codes.
 
 ## tg folder list
 
@@ -145,7 +145,7 @@ Sets the folder order. Supply every existing folder ID exactly once. The owner m
 
 ## tg folder create
 
-Manages a chat folder. The owner must enable `dialogs` in `access.json`. Deletion requires `--yes` or `--dry-run` and is journaled. Concurrent edits can overwrite each other.
+Creates a folder with `tg folder create <title>`. Include at least one chat with `--include` or `--pin`, or select an inclusion rule with `--rules`. The owner must enable `dialogs` in `access.json`.
 
 <!-- schema:flags tg folder create -->
 | Flag | Type | Default | Description |
@@ -161,7 +161,7 @@ Manages a chat folder. The owner must enable `dialogs` in `access.json`. Deletio
 
 ## tg folder edit
 
-Manages a chat folder. The owner must enable `dialogs` in `access.json`. Deletion requires `--yes` or `--dry-run` and is journaled. Concurrent edits can overwrite each other.
+Edits a folder with `tg folder edit <id>`. The owner must enable `dialogs` in `access.json`. Existing hidden chats are preserved; concurrent edits can overwrite each other.
 
 <!-- schema:flags tg folder edit -->
 | Flag | Type | Default | Description |
@@ -181,7 +181,7 @@ Manages a chat folder. The owner must enable `dialogs` in `access.json`. Deletio
 
 ## tg folder delete
 
-Manages a chat folder. The owner must enable `dialogs` in `access.json`. Deletion requires `--yes` or `--dry-run` and is journaled. Concurrent edits can overwrite each other.
+Deletes a folder with `tg folder delete <id>`. The owner must enable `dialogs` in `access.json`. Deletion requires `--yes` or `--dry-run` and is journaled.
 
 <!-- schema:flags tg folder delete -->
 | Flag | Type | Default | Description |
