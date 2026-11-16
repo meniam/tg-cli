@@ -154,11 +154,6 @@ func TestStopWaitsUntilTheDaemonIsGone(t *testing.T) {
 // it and waits for the process.
 func startBackgroundDaemon(t *testing.T, paths Paths) func() {
 	t.Helper()
-	// Run does not create the database directory yet: the step that moves the
-	// database owns it. Create it here, as a start will find it.
-	if err := os.MkdirAll(paths.DatabaseDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	listening := make(chan struct{})
 	finished := make(chan error, 1)

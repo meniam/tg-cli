@@ -160,29 +160,27 @@ func TestFileNameGuardMoveTempIsNotADatabase(t *testing.T) {
 	}
 }
 
-// TestRunAcceptsAWaitingDatabase checks the move rule at the start path: a
-// database in the profile directory alone is not a conflict and is not deleted.
-func TestRunAcceptsAWaitingDatabase(t *testing.T) {
+// TestRunMovesAWaitingDatabase checks the move at the start path: a database in
+// the profile directory alone is not a conflict, and a start moves it before it
+// opens the database. The socket path is taken by a directory, so Run stops after
+// the move and the test needs no listener.
+func TestRunMovesAWaitingDatabase(t *testing.T) {
 	p := guardFixture(t)
-	writeFile(t, p.LegacyDatabase, databaseContents)
-	// Run fails later, when it opens the database that is not there yet, but it
-	// must not report a conflict before that.
-	// A directory on the database path stops Run after the checks: the database
-	// is not a regular file, so it is neither a conflict nor openable.
-	if err := os.MkdirAll(p.Database, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	newDatabase(t, p.LegacyDatabase)
+	// A non-empty directory on the socket path stops Run after the move: the
+	// stale socket step cannot remove it. The test needs no listener.
+	writeFile(t, filepath.Join(p.Socket, "keep"), "x")
 	err := Run(context.Background(), Options{Profile: "test", Paths: p, Telegram: newFake()})
 	var conflict *FileConflictError
 	if errors.As(err, &conflict) {
 		t.Fatalf("a waiting database must not be a conflict: %v", err)
 	}
-	if err == nil || !strings.Contains(err.Error(), "open database") {
+	if err == nil || !strings.Contains(err.Error(), "remove stale socket") {
 		t.Fatalf("Run error: %v", err)
 	}
-	raw, readErr := os.ReadFile(p.LegacyDatabase)
-	if readErr != nil || string(raw) != databaseContents {
-		t.Fatalf("the waiting database changed: %v", readErr)
+	checkGone(t, p.LegacyDatabase, "the old database")
+	if raw := readState(t, p.Database); raw != `{"value":1}` {
+		t.Errorf("the moved row = %s", raw)
 	}
 }
 

@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"log/slog"
-	"os"
 	"testing"
 	"time"
 
@@ -16,11 +15,6 @@ func runWithIdle(t *testing.T, idle time.Duration) (*running, chan error, func()
 	t.Helper()
 	paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 	if err != nil {
-		t.Fatal(err)
-	}
-	// Run does not create the database directory yet: the step that moves the
-	// database owns it. Create it here, as a start will find it.
-	if err := os.MkdirAll(paths.DatabaseDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	logs := &safeBuffer{}

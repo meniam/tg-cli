@@ -429,11 +429,6 @@ type daemonRun struct {
 // stderr of a running daemon is available through the stderr field.
 func (e *testEnv) startDaemon(extraArgs ...string) *daemonRun {
 	e.t.Helper()
-	// Run does not create the database directory yet: the step that moves the
-	// database owns it. Create it here, as a start will find it.
-	if err := os.MkdirAll(filepath.Join(e.dbRoot(), daemon.DefaultProfile), 0o700); err != nil {
-		e.t.Fatal(err)
-	}
 	d := &daemonRun{finished: make(chan struct{})}
 	ctx, cancel := context.WithCancel(context.Background())
 	var stdout, stderr safeBuffer
