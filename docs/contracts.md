@@ -89,3 +89,21 @@ file. The original file name and MIME type are untrusted. Dry runs do not write.
 ## Authorization loss
 
 When the client reports lost authorization, the Daemon retains the loss kind, rejects account requests with code 4, and remains available for status and shutdown even if the client exits. It does not delete the session file. Stop the Daemon before importing a replacement session. Reconnecting with an invalid key may fail; automatic key replacement is not implemented.
+
+## Local chat overview
+
+`chat overview` reads the table view `chats_state` and never calls Telegram, so it
+answers while the account is offline and without a login. The view is one row per
+chat of `chats`, joined to the saved dialog state, the stored messages that are not
+deleted and the sync state of the history. The access lists apply inside the
+query, before `--limit`, so a closed chat is absent and takes no place in the
+answer. Every message aggregate is a correlated subquery on the chat id, so the
+cost follows the number of chats in the answer and uses
+`messages(chat_id, out) WHERE deleted_at IS NULL` and `messages(chat_id, date)`.
+Rows follow the most recent stored message first. See [the command reference](cli/chats.md#tg-chat-overview).
+
+`chat info` reads the creation date, the scam, fake and restriction flags and the
+restriction reasons from the chat object Telegram returns and stores them in
+`chats`. The flags are written on every save of a chat, so the latest read wins,
+and they do not take part in the version trigger: versions keep what the owner sees
+as settings.

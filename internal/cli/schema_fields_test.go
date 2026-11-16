@@ -70,6 +70,7 @@ var realResponseCases = map[string][]string{
 	"chat boosts":            {"chat", "boosts", "@teamchat"},
 	"chat invite-info":       {"chat", "invite-info", "https://t.me/+AbCdEfGh1234"},
 	"chat list":              {"chat", "list"},
+	"chat overview":          {"chat", "overview"},
 	"chat members":           {"chat", "members", "@teamchat"},
 	"chat topics":            {"chat", "topics", "@teamchat"},
 	"chat common":            {"chat", "common", "@aliceuser"},

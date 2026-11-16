@@ -100,13 +100,28 @@ func (d *daemon) saveChatInfo(ctx context.Context, info rpc.ChatInfo) {
 		About: optionalText(info.About), Members: positiveIntPointer(info.Members), // 0 means unknown
 		Forum: boolPointer(info.Forum), Verified: boolPointer(info.Verified), Settings: info.Settings,
 	}
+	item.CreatedAt = positiveInt64Pointer(info.CreatedAt)
+	item.Scam, item.Fake, item.Restricted = info.Scam, info.Fake, info.Restricted
+	if len(info.RestrictionReason) > 0 {
+		if raw, err := json.Marshal(info.RestrictionReason); err == nil {
+			item.RestrictionReason = raw
+		}
+	}
 	d.save(ctx, rpc.MethodChatInfo, func(ctx context.Context) error {
 		return d.store.UpsertChats(ctx, []store.Chat{item})
 	})
 }
 
 func int64Pointer(value int64) *int64 { return &value }
-func boolPointer(value bool) *bool    { return &value }
+
+// positiveInt64Pointer drops a zero, which means "Telegram did not say".
+func positiveInt64Pointer(value int64) *int64 {
+	if value <= 0 {
+		return nil
+	}
+	return &value
+}
+func boolPointer(value bool) *bool { return &value }
 
 func (d *daemon) saveMessages(ctx context.Context, op string, messages []rpc.Message) {
 	if len(messages) == 0 {

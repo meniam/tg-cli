@@ -546,6 +546,7 @@ func (d *daemon) register() {
 	d.registerUsers()
 	d.registerChatAdmin()
 	d.registerUnread()
+	d.handle(rpc.MethodChatOverview, d.chatOverview)
 	d.registerMessageExtras()
 }
 
@@ -799,7 +800,9 @@ func needsTelegram(method string) bool {
 	switch method {
 	case rpc.MethodSearch, rpc.MethodNoteList, rpc.MethodNoteDelete, rpc.MethodNoteDeleteByAuthor,
 		rpc.MethodMessageExportLocal, rpc.MethodMessageExportVerify,
-		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel:
+		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel,
+		// The local chat overview reads the database only.
+		rpc.MethodChatOverview:
 		return false
 	}
 	return accountMethod(method) || method == rpc.MethodSessionExport

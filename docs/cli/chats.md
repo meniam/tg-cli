@@ -51,6 +51,54 @@ tg chat list --limit 2 --format jsonl
 
 **Verification.** Unread message counts are returned in `unread`. Read the messages with [`message unread`](messages-read.md#tg-message-unread), including a forum topic with `--topic`; list unread chats with [`chat unread`](#tg-chat-unread). See [FEATURES.md](../../FEATURES.md), item 7.1.
 
+### tg chat overview
+
+Summarises the chats the local database already knows, without asking Telegram.
+It answers while the account is offline and without a login, like [`search`](notes-and-search.md#tg-search). Each row is built from the [`chats_state`](../../docs/contracts.md) view: the chat fields, the saved dialog
+state, the number of stored messages, the first and the last stored message and whether the whole history of the chat
+is loaded. A chat the access lists close is absent, and it does not take a place of `--limit`.
+
+```text
+tg chat overview [flags]
+```
+
+<!-- schema:flags tg chat overview -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--limit` | int | `50` | maximum number of chats, 1 to 500 |
+| `--type` | string | `none` | chat type: user, bot, group, supergroup or channel |
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
+
+**Preconditions.** A running Daemon. No login and no connection: the command never calls Telegram. Rows follow the most
+recent stored message first; a chat without stored messages comes last.
+
+**Example.**
+
+```sh
+tg chat overview --limit 20 --type channel
+tg chat overview --limit 2 --format jsonl
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"chats":[{"chat_id":-1001234567890,"type":"channel","title":"Release team","username":"release_team","created_at":1700000000,"muted":false,"unread":3,"messages":420,"my_messages":12,"first_message":{"id":10,"date":1700000100,"text":"Hello"},"last_message":{"id":430,"date":1700009000,"text":"Bye"},"history_complete":true}]}}
+```
+
+**Answer fields** (`data`): `chats` array; each row has `chat_id` integer, `type` string, `title` string (untrusted),
+`username` string (optional, untrusted), `created_at` integer (optional), `muted` bool, `mute_until`, `archived`,
+`pinned`, `unread`, `unread_mentions`, `unread_mark`, `state_synced_at` (optional), `messages` and `my_messages`
+integers, `first_message` and `last_message` objects with `id`, `date` and `text` (optional, text untrusted), and
+`history_complete` bool (optional). A field is absent when the database never learned it: a chat without a saved
+dialog state has no `unread`, a chat without stored messages has no `first_message`, and `history_complete` is absent
+until the chat is loaded completely.
+
+**Exit codes.** 0; 2 `--limit` outside 1 to 500, or an unknown `--type`; 3 no Daemon.
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.1.
+
 ### tg chat resolve
 
 Finds a chat by `@username`, id, phone number of a contact or `t.me` link, and prints its basic data.
@@ -114,16 +162,22 @@ tg chat info @release_team
 **Answer.**
 
 ```json
-{"ok":true,"data":{"id":-1001234567890,"type":"supergroup","title":"Release team","username":"release_team","about":"Deploys and releases","members":42,"forum":false,"verified":false}}
+{"ok":true,"data":{"id":-1001234567890,"type":"supergroup","title":"Release team","username":"release_team","about":"Deploys and releases","members":42,"forum":false,"verified":false,"created_at":1700000000}}
 ```
 
-**Answer fields** (`data`): `id` integer, `type` string, `title` string (untrusted), `username` string (optional, untrusted), `about` string (optional, untrusted), `members` integer (optional), `forum` boolean (optional), `verified` boolean (optional).
+A restricted chat also carries the restriction:
+
+```json
+{"ok":true,"data":{"id":-1001234567890,"type":"channel","title":"Something","created_at":1700000000,"restricted":true,"restriction_reason":[{"platform":"ios","reason":"porno","text":"Not available"}]}}
+```
+
+**Answer fields** (`data`): `id` integer, `type` string, `title` string (untrusted), `username` string (optional, untrusted), `about` string (optional, untrusted), `members` integer (optional), `created_at` integer (optional, Unix seconds), `scam`, `fake` and `restricted` booleans (optional; a basic group has none of them), `restriction_reason` array (optional) with `platform`, `reason` and `text` (untrusted), `forum` boolean (optional), `verified` boolean (optional).
 
 `forum` tells whether the chat has topics, which `chat topics` needs.
 
 **Exit codes.** 0; 2 a malformed reference; 3, 4; 7 the chat does not exist or is not visible.
 
-**Verification.** The description, member count, forum flag and verified flag are saved when read; the owner's archive, pin, sound and folder settings are not saved. See [FEATURES.md](../../FEATURES.md), item 7.2.
+**Verification.** The description, member count, forum flag, verified flag, creation date and the scam, fake and restriction flags are saved when read; the owner's archive, pin, sound and folder settings are not saved. See [FEATURES.md](../../FEATURES.md), item 7.2.
 
 ### tg chat invite-info
 

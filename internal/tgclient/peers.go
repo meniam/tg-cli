@@ -177,6 +177,8 @@ func (c *Client) ChatInfo(ctx context.Context, ref chatref.Ref) (rpc.ChatInfo, e
 	}
 	base := toChatOf(p)
 	info := rpc.ChatInfo{ID: base.ID, Type: base.Type, Title: base.Title, Username: base.Username, Verified: p.Verified()}
+	info.CreatedAt = createdUnix(p)
+	info.Scam, info.Fake, info.Restricted, info.RestrictionReason = restrictionFlags(p)
 
 	switch v := p.(type) {
 	case peers.User:
@@ -208,6 +210,52 @@ func (c *Client) ChatInfo(ctx context.Context, ref chatref.Ref) (rpc.ChatInfo, e
 		}
 	}
 	return info, nil
+}
+
+// createdUnix returns the creation date of a chat in Unix seconds, or 0 when
+// Telegram did not supply one. A user is not a chat and has no such date here.
+func createdUnix(p peers.Peer) int64 {
+	var date int
+	switch v := p.(type) {
+	case peers.Chat:
+		date = v.Raw().Date
+	case peers.Channel:
+		date = v.Raw().Date
+	}
+	if date > 0 {
+		return int64(date)
+	}
+	return 0
+}
+
+// restrictionFlags reads the flags Telegram sets on a channel or a basic group. A
+// user has none of them: the flags belong to chats and channels.
+func restrictionFlags(p peers.Peer) (scam, fake, restricted bool, reasons []rpc.RestrictionReason) {
+	switch v := p.(type) {
+	case peers.Channel:
+		raw := v.Raw()
+		if raw == nil {
+			return false, false, false, nil
+		}
+		return raw.Scam, raw.Fake, raw.Restricted, convertRestrictionReasons(raw.RestrictionReason)
+	case peers.Chat:
+		// A basic group carries no scam, fake or restriction flags in Telegram.
+		return false, false, false, nil
+	}
+	return false, false, false, nil
+}
+
+// convertRestrictionReasons keeps the parts of a reason that a reader can act on:
+// the platform, the reason and the text Telegram shows.
+func convertRestrictionReasons(reasons []tg.RestrictionReason) []rpc.RestrictionReason {
+	if len(reasons) == 0 {
+		return nil
+	}
+	out := make([]rpc.RestrictionReason, 0, len(reasons))
+	for _, reason := range reasons {
+		out = append(out, rpc.RestrictionReason{Platform: reason.Platform, Reason: reason.Reason, Text: reason.Text})
+	}
+	return out
 }
 
 func mapInfoError(err error) error {
