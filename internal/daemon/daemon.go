@@ -79,6 +79,7 @@ type daemon struct {
 	login                *loginManager
 	store                *store.DB
 	sync                 *historySyncManager
+	full                 *chatFullSyncManager
 	cancel               context.CancelFunc
 	once                 sync.Once
 	eventMu              sync.Mutex
@@ -191,6 +192,7 @@ func Run(ctx context.Context, opts Options) error {
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore}
 	d.admission.unblock(opts.Telegram)
 	d.sync = newHistorySyncManager(runCtx, d, nil)
+	d.full = newChatFullSyncManager(runCtx, d, nil)
 	// A daemon that has just started is not idle: the clock runs from now.
 	d.lastActivity.Store(time.Now().UnixNano())
 	d.login = newLoginManager(runCtx, opts.Telegram)
@@ -380,6 +382,9 @@ func Run(ctx context.Context, opts Options) error {
 	log.Info("daemon stopping")
 	cancel()
 	d.sync.close()
+	if d.full != nil {
+		d.full.close()
+	}
 	// Join the idle monitor: a goroutine that outlived the shutdown would keep
 	// the process alive after Run returned.
 	<-idleDone
@@ -419,7 +424,7 @@ func watchIdle(ctx context.Context, cancel context.CancelFunc, log *slog.Logger,
 			return
 		case now := <-ticker.C:
 			// A request in flight is work that must finish, whatever its age.
-			if d.inFlight.Load() > 0 || d.hub.Subscribers() > 0 || d.sync != nil && d.sync.hasActive() {
+			if d.inFlight.Load() > 0 || d.hub.Subscribers() > 0 || d.sync != nil && d.sync.hasActive() || d.full != nil && d.full.hasActive() {
 				continue
 			}
 			last := time.Unix(0, d.lastActivity.Load())
@@ -547,6 +552,10 @@ func (d *daemon) register() {
 	d.registerUsers()
 	d.registerChatAdmin()
 	d.registerUnread()
+	d.handle(rpc.MethodChatOverview, d.chatOverview)
+	d.handle(rpc.MethodChatFullStart, d.chatFullStart)
+	d.handle(rpc.MethodChatFullStatus, d.chatFullStatus)
+	d.handle(rpc.MethodChatFullCancel, d.chatFullCancel)
 	d.registerMessageExtras()
 }
 
@@ -800,7 +809,14 @@ func needsTelegram(method string) bool {
 	switch method {
 	case rpc.MethodSearch, rpc.MethodNoteList, rpc.MethodNoteDelete, rpc.MethodNoteDeleteByAuthor,
 		rpc.MethodMessageExportLocal, rpc.MethodMessageExportVerify,
-		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel:
+		// The status and the cancel of a background job read and change the job
+		// state in memory: they need no connection, and a client that lost
+		// Telegram must still be able to ask and to stop it. The same holds for
+		// the status and the cancel of the history load.
+		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel,
+		rpc.MethodChatFullStatus, rpc.MethodChatFullCancel,
+		// The local chat overview reads the database only.
+		rpc.MethodChatOverview:
 		return false
 	}
 	return accountMethod(method) || method == rpc.MethodSessionExport
