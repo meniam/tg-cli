@@ -326,9 +326,9 @@ PR: нет
 - [x] **2.13** (кодер, песочница) Менеджер задачи в `internal/daemon` по образцу `history_sync.go`: очередь, один рабочий, пауза, отмена, состояния, проверка доступа перед чатом. Проверка: `go test ./internal/daemon -run TestChatFullSync` на структуре без Daemon и сокета, с поддельным Telegram: три чата, один `CHANNEL_PRIVATE`, один скрыт доступом; итог `done=1`, `failed=1`, скрытый не запрошен; отмена посреди останавливает после текущего чата.
 - [x] **2.14** (кодер, песочница) `FLOOD_WAIT` в задаче: `waiting_flood`, ожидание, продолжение. Проверка: тот же тест, случай с поддельной ошибкой `FLOOD_WAIT_3`.
 - [x] **2.15** (кодер) RPC `chat_full.start|status|cancel`, регистрация в `daemon.go`, команды `chat full ...` с аннотациями и разделом `docs/cli/`. Проверка песочницы: `go test ./internal/cli -run 'TestDocs|TestSchema|TestEveryCommand'`. Проверка менеджера: тест с `startDaemon`: `start`, `status` до `done`, перезапуск Daemon, `start` пропускает загруженные чаты.
-- [ ] **2.16** (`docwriter` и `glavred`) `docs/contracts.md` (VIEW, задача, флаги), `docs/cli/`, `docs/skill/tg-cli/` по-русски в ногу с `tg schema`, `FEATURES.md` (новые пункты, следующий свободный номер в разделе). Проверка: `go test ./internal/cli -run TestDocs`, `glavred` `pass`.
+- [x] **2.16** (`docwriter` и `glavred`) `docs/contracts.md` (VIEW, задача, флаги), `docs/cli/`, `docs/skill/tg-cli/` по-русски в ногу с `tg schema`, `FEATURES.md` (новые пункты, следующий свободный номер в разделе). Проверка: `go test ./internal/cli -run TestDocs`, `glavred` `pass`.
 - [x] **2.17** (менеджер) `just check` и `go test -race ./internal/daemon ./internal/store ./internal/tgclient`. Проверка: зелёные.
-- [ ] **2.18** (менеджер) Журналы: changelog (`Добавлено`: `chat overview`, `chat full`; `Изменено`: поля `chat info`), файлы решений для строк Decision log фазы 2 и ответов Q6–Q9, строки в `_TOC.md`. Проверка: `just changelog list`.
+- [x] **2.18** (менеджер) Журналы: changelog (`Добавлено`: `chat overview`, `chat full`; `Изменено`: поля `chat info`), файлы решений для строк Decision log фазы 2 и ответов Q6–Q9, строки в `_TOC.md`. Проверка: `just changelog list`.
 
 ## Verification
 

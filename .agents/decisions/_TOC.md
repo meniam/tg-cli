@@ -43,3 +43,6 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-16 — [Прерванный перенос базы доводится сам, если обе копии побайтно совпадают](20261116_0327_interrupted_database_move_is_finished_when_both_copies_are_identical.md)
 - 2026-11-16 — [Имя профиля db зарезервировано](20261116_0327_profile_name_db_is_reserved.md)
 - 2026-11-16 — [Корень баз это каталог конфига плюс db, без своего ключа и переменной](20261116_0327_database_root_is_the_config_directory_plus_db.md)
+- 2026-11-16 — [Сводка по сохранённым чатам это VIEW chats_state и команда chat overview через фильтр доступа](20261116_1158_chats_state_view_is_read_by_chat_overview_through_the_access_filter.md)
+- 2026-11-16 — [Полные данные чатов собирает фоновая задача chat full, прогресс лежит в chats](20261116_1158_full_chat_data_is_a_background_job_with_progress_in_the_chats_table.md)
+- 2026-11-16 — [Флаги чата пишутся в базу, только когда Telegram их вернул](20261116_1158_chat_flags_are_written_only_when_telegram_returned_them.md)
