@@ -47,3 +47,4 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-16 — [Сводка по сохранённым чатам это VIEW chats_state и команда chat overview через фильтр доступа](20261116_1158_chats_state_view_is_read_by_chat_overview_through_the_access_filter.md)
 - 2026-11-16 — [Полные данные чатов собирает фоновая задача chat full, прогресс лежит в chats](20261116_1158_full_chat_data_is_a_background_job_with_progress_in_the_chats_table.md)
 - 2026-11-16 — [Флаги чата пишутся в базу, только когда Telegram их вернул](20261116_1158_chat_flags_are_written_only_when_telegram_returned_them.md)
+- 2026-11-16 — [Каждая таблица с данными Telegram хранит полученный объект в raw как JSON](20261116_1336_every_telegram_table_keeps_the_received_object_in_raw_as_json.md)
