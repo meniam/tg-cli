@@ -229,7 +229,16 @@ func validateProfile(name string, p Profile) (*netconf.Proxy, error) {
 
 func (f Files) validate() error {
 	names := []string{f.Database, f.Session, f.Log, f.Deletions, f.Access}
-	reserved := map[string]bool{"daemon.sock": true, "daemon.lock": true, ".session-start.lock": true, "moderation.jsonl": true, "account.jsonl": true, f.Database + "-wal": true, f.Database + "-shm": true, f.Log + ".1": true, f.Log + ".2": true, f.Log + ".3": true}
+	reserved := map[string]bool{
+		// The data directory of the profile.
+		"daemon.sock": true, "daemon.lock": true, ".session-start.lock": true, "moderation.jsonl": true, "account.jsonl": true,
+		// The database directory next to the configuration file: the record of
+		// the data directory and the database lock are service files there.
+		"data-dir": true, "db.lock": true,
+		f.Database + "-wal": true, f.Database + "-shm": true, f.Log + ".1": true, f.Log + ".2": true, f.Log + ".3": true,
+	}
+	// The temporary copy of a move is .<name>.move-<pid>.tmp, and a file name
+	// cannot start with a dot, so no configured name can be mistaken for one.
 	seen := make(map[string]bool)
 	for _, name := range names {
 		if !fileName.MatchString(name) || strings.Contains(name, "..") || reserved[name] || seen[name] {

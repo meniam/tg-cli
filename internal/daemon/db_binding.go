@@ -18,11 +18,15 @@ type BindingError struct {
 	Recorded string
 	// Current is the data directory of this start.
 	Current string
+	// Record is the file that names the recorded data directory. Removing it is
+	// the deliberate act that adopts the database from another data directory;
+	// the database itself is never removed.
+	Record string
 }
 
 func (e *BindingError) Error() string {
-	return fmt.Sprintf("the database in %s belongs to the data directory %s, but this start uses %s: use the same home or TG_CLI_HOME, or remove %s after moving the data directory and the session to the new place",
-		e.DatabaseDir, e.Recorded, e.Current, e.DatabaseDir)
+	return fmt.Sprintf("the database in %s belongs to the data directory %s, but this start uses %s: use the home or TG_CLI_HOME of the recorded data directory, or, when you moved that data directory on purpose, remove the record %s and start again; the database in %s stays and is never deleted by the tool",
+		e.DatabaseDir, e.Recorded, e.Current, e.Record, e.DatabaseDir)
 }
 
 // ExitCode identifies a configuration error.
@@ -55,7 +59,7 @@ func CheckDatabaseBinding(p Paths) error {
 	if sameDir(value, p.Dir) {
 		return nil
 	}
-	return &BindingError{DatabaseDir: p.DatabaseDir, Recorded: value, Current: p.Dir}
+	return &BindingError{DatabaseDir: p.DatabaseDir, Recorded: value, Current: p.Dir, Record: DatabaseBindingFile(p)}
 }
 
 // BindDatabase writes the data directory next to the profile database, so that a

@@ -5,6 +5,15 @@ holds the profile data directory, file names, behaviour settings, and named
 profile settings. `tg config init` writes a template with every key; `tg schema`
 lists every key, its default, and its command-line or environment override.
 
+The configuration directory holds the database of every profile as well, in
+`db/<profile>/`: `~/.config/tg-cli/db/default/store.db` for the default profile.
+The root `db` depends on the configuration path alone: `home` and `TG_CLI_HOME`
+do not move it, and `--profile` only selects one directory inside it. Keeping
+that root out of a dotfiles repository, a file sync and a cloud backup is
+described in [overview.md](overview.md#profiles-and-the-data-directory). The
+`home` setting and `[files]` keep their meaning for the other files of the
+profile and for the database file name.
+
 ### tg config path
 
 Prints the configuration file path selected for this invocation. Before running,
@@ -129,8 +138,9 @@ contains `client`, `device`, `transport`, and redacted `proxy` strings.
 ### tg config migrate
 
 Explicitly migrates legacy `client`, `device`, `transport`, and `proxy` files
-from every profile under the current home directory. Before changing the
-configuration, it copies the migrated files and the prior configuration into a
+from every profile under the current home directory. The `db` directory under
+that home is not a profile and is skipped. Before changing the configuration, it
+copies the migrated files and the prior configuration into a
 `.config-migration-<time>` directory under that home. It never migrates a
 session, database, access list, or journal file.
 

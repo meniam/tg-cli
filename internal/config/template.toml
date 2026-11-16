@@ -40,7 +40,8 @@
 # to start (exit code 2) instead of silently creating an empty one.
 # Values for every name: letters, digits, ".", "_" and "-", up to 64 characters,
 # starting with a letter or digit; names must differ from each other and from
-# daemon.sock, daemon.lock, moderation.jsonl and account.jsonl.
+# daemon.sock, daemon.lock, .session-start.lock, moderation.jsonl, account.jsonl,
+# data-dir and db.lock.
 #
 # The database lives next to this file: db/<profile>/<database>. The other files
 # live in <home>/<profile>/. The db directory is not meant for a dotfiles

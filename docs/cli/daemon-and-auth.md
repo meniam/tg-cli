@@ -62,7 +62,7 @@ TG_API_ID=12345 TG_API_HASH=0123456789abcdef0123456789abcdef tg daemon start --i
 
 **Answer fields** (`data`): `running` boolean, `pid` integer (optional), `profile` string, `socket` string, `log` string.
 
-**Exit codes.** 0 started or already running; 2 no or two credential sources, a bad `TG_API_ID`, an unknown preset, a bad `--device` name, a negative `--idle-timeout`, a bad `TG_CLI_THROTTLE_PERCENT` or `TG_CLI_FLOOD_AUTOWAIT` (see [Request throttle](overview.md#request-throttle-and-flood_wait)); 1 the process exited early, the socket did not answer in 15 seconds, the preset could not be downloaded, or a `--foreground` Daemon was refused because one already runs.
+**Exit codes.** 0 started or already running; 2 no or two credential sources, a bad `TG_API_ID`, an unknown preset, a bad `--device` name, a negative `--idle-timeout`, a bad `TG_CLI_THROTTLE_PERCENT` or `TG_CLI_FLOOD_AUTOWAIT` (see [Request throttle](overview.md#request-throttle-and-flood_wait)), a database that belongs to another data directory, or a database that exists in two places (see [Profiles and the data directory](overview.md#profiles-and-the-data-directory)); 1 the process exited early, the socket did not answer in 15 seconds, the preset could not be downloaded, a `--foreground` Daemon was refused because one already runs, the database move failed (`the database is in use`, `data was written during the copy`, a failed checksum or integrity check), or another data directory already holds the database (`the profile database is in use`).
 
 **Verification.** The schema describes the background start result; `--foreground` returns `stopped`. See [FEATURES.md](../../FEATURES.md), item 2.12 and 3.8.
 

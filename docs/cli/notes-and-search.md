@@ -2,7 +2,7 @@
 
 Commands that work on the local database of the profile, and the two commands that describe the tool: `note add|list|delete`, `search`, `version` and `schema`. The shared rules (profiles, global flags, the envelope, exit codes) are in [overview.md](overview.md). All examples use fictional data.
 
-The local database is one SQLite file per profile (`<profile>/store.db`, mode `0600`, plain text). The Daemon saves every chat, person and message it reads from Telegram into it, and full-text search (FTS5) works on it without a Telegram connection. Search text is lower-cased and `ё` is folded into `е`, so case and `ё` do not matter. The driver is `modernc.org/sqlite` (pure Go, FTS5, no cgo). The database holds other people's conversations, protected only by the file mode and the disk encryption of your machine.
+The local database is one SQLite file per profile: `<config dir>/db/<profile>/store.db`, mode `0600`, plain text. It sits next to the configuration file and not in the data directory, so `home` and `TG_CLI_HOME` do not move it; see [profiles and the data directory](overview.md#profiles-and-the-data-directory) for the layout and for the rule that keeps `db` out of a file sync. The Daemon saves every chat, person and message it reads from Telegram into it, and full-text search (FTS5) works on it without a Telegram connection. Search text is lower-cased and `ё` is folded into `е`, so case and `ё` do not matter. The driver is `modernc.org/sqlite` (pure Go, FTS5, no cgo). The database holds other people's conversations, protected only by the file mode and the disk encryption of your machine.
 
 ## Notes
 

@@ -69,6 +69,18 @@ func TestDatabaseBinding(t *testing.T) {
 	if !strings.Contains(err.Error(), first.Dir) || !strings.Contains(err.Error(), second.Dir) {
 		t.Errorf("the message must name both data directories: %v", err)
 	}
+	// The record file is safe to remove on purpose: it is the act that adopts the
+	// database. The database directory holds the history and the message must
+	// never tell the reader to remove it.
+	record := DatabaseBindingFile(first)
+	if !strings.Contains(err.Error(), record) {
+		t.Errorf("the message must name the record %s: %v", record, err)
+	}
+	for _, wrong := range []string{"remove " + first.DatabaseDir, "remove the directory", "delete " + first.DatabaseDir} {
+		if strings.Contains(err.Error(), wrong) {
+			t.Errorf("the message must never advise removing the database directory: %v", err)
+		}
+	}
 	// Binding again never rewrites the record of the first data directory.
 	if err := BindDatabase(second); err != nil {
 		t.Fatalf("second bind: %v", err)
