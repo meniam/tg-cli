@@ -16,6 +16,8 @@ import (
 // classifyRequest selects the destination bucket without retaining request data.
 func classifyRequest(input bin.Encoder) (throttle.Class, string) {
 	switch request := input.(type) {
+	case *tg.UploadGetFileRequest, *tg.UploadGetCDNFileRequest, *tg.UploadSaveFilePartRequest, *tg.UploadSaveBigFilePartRequest, *tg.UploadGetFileHashesRequest:
+		return throttle.File, ""
 	case *tg.MessagesSendScheduledMessagesRequest:
 		if request != nil {
 			return classifyPeer(request.Peer)

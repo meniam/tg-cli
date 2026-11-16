@@ -13,6 +13,7 @@ type DownloadedFile struct {
 	MediaType string `json:"media_type"`
 	MIME      string `json:"mime" untrusted:"true"`
 	FileName  string `json:"file_name,omitempty" untrusted:"true"`
+	SHA256    string `json:"sha256,omitempty"`
 }
 type DownloadResult struct {
 	Batch

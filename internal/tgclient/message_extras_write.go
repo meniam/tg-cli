@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/gotd/td/telegram/query"
-	"github.com/gotd/td/telegram/uploader"
 
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
@@ -207,7 +206,7 @@ func (c *Client) EditMedia(ctx context.Context, ref chatref.Ref, p rpc.EditMedia
 	if _, err = file.File.Seek(0, 0); err != nil {
 		return rpc.SendResult{}, rpc.NewError(rpc.CodeInvalidParams, "media file cannot be read")
 	}
-	uploaded, err := uploader.NewUploader(c.tg.API()).WithThreads(1).FromFile(ctx, file.File)
+	uploaded, err := c.transfers.upload(ctx, c.tg, c.Connection().DC, c.transferAutoWait(), file.File)
 	if err != nil {
 		return rpc.SendResult{}, mapError(err)
 	}

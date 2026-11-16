@@ -674,3 +674,21 @@ tg message download <message-link> --output <directory>
 | `--dry-run` | bool | `false` | check media without writing files |
 | `--output` | string | `none` | required absolute output directory |
 <!-- /schema:flags -->
+
+**Transfer and integrity.** The Daemon transfers the parts of one file through a
+pool for its media DC. A download has five workers; its DC-wide adaptive window
+starts at four in-flight parts and can grow to eight. At most two media transfers
+(downloads and uploads together) run in one Daemon; another waits until a slot is
+free or the command is cancelled. Parts are written by offset to a mode-0600
+temporary file inside the opened `downloads` root. The final name is linked only
+after every byte is present at the expected size, so a failed or cancelled
+download leaves no temporary or partial final file.
+
+Documents are also verified against the hashes Telegram returns; photos are
+checked by their expected size. The result of a completed non-dry-run download
+adds `files[].sha256`, the lowercase SHA-256 of the published file. A hash or
+size mismatch removes the temporary file and is reported as a Telegram error.
+
+`FLOOD_WAIT` pauses the account-wide throttle. For a part, a wait no longer than
+`behavior.flood_autowait` is waited out and the part is retried; a longer wait is
+exit code 6. `--dry-run` makes no part request.

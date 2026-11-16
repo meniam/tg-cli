@@ -304,9 +304,11 @@ The frame stays with `--quiet`. `toon`, `json` and `jsonl` have no frame. The ma
 
 ## Request throttle and FLOOD_WAIT
 
-Every request of the Daemon to Telegram passes one throttle per account, so a burst of calls does not trigger `FLOOD_WAIT`. It holds the account to 60% of the reference limits of the Bot API: a general bucket of 18 requests per second with a burst of 5, sends at 0.6 messages per second to a private chat and 12 per minute to a group or channel (burst 1), and at most 2 requests at once. Requests wait in a FIFO queue. The background history load uses a second, lower queue, so ordinary requests go first.
+Every request of the Daemon to Telegram passes one throttle per account, so a burst of calls does not trigger `FLOOD_WAIT`. Requests outside the file-transfer lane use a general bucket of 18 requests per second with a burst of 5, sends at 0.6 messages per second to a private chat and 12 per minute to a group or channel (burst 1), and at most 2 requests at once. Requests wait in a FIFO queue. The background history load uses a second, lower queue, so ordinary requests go first.
 
-A `FLOOD_WAIT_X` from Telegram pauses the whole account for X seconds. A request that is not a write (send, send media, forward, edit, delete, mark read, reaction, pin, poll) and not a file upload part waits and repeats once when X is at most 10 seconds. A longer wait is exit code 6 at once. Writes and upload parts are never repeated: the agent decides what to do (the owner has not confirmed this rule yet). `SLOWMODE_WAIT` does not pause the account. While a history load waits out a `FLOOD_WAIT` longer than the auto-wait threshold, a normal command gets exit code 6 at once with the seconds left instead of waiting. Cancelling the load does not shorten the pause.
+Media parts (`upload.getFile`, `upload.getFileHashes`, `upload.saveFilePart` and `upload.saveBigFilePart`) use a separate file-transfer lane: up to 8 are in flight, with its own 18-requests-per-second bucket at the default 60% and a burst of 8. They do not consume the two ordinary slots or their tokens. An ordinary request is admitted first whenever it can use an ordinary slot. A `FLOOD_WAIT` still pauses both lanes for the account.
+
+A `FLOOD_WAIT_X` from Telegram pauses the whole account for X seconds. A request that is not a write (send, send media, forward, edit, delete, mark read, reaction, pin, poll) waits and repeats once when X is at most 10 seconds. Media parts also wait and retry at or below that threshold; a longer wait is exit code 6 at once. Telegram message writes are never repeated. `SLOWMODE_WAIT` does not pause the account. While a history load waits out a `FLOOD_WAIT` longer than the auto-wait threshold, a normal command gets exit code 6 at once with the seconds left instead of waiting. Cancelling the load does not shorten the pause.
 
 `[behavior]` tunes the throttle. Environment variables override the corresponding config values for one invocation; a bad value is exit code 2 before any connection:
 
@@ -315,7 +317,7 @@ A `FLOOD_WAIT_X` from Telegram pauses the whole account for X seconds. A request
 | `behavior.throttle_percent` | `TG_CLI_THROTTLE_PERCENT` | a decimal number from 1 to 100: the share of the reference limits | 60 |
 | `behavior.flood_autowait` | `TG_CLI_FLOOD_AUTOWAIT` | a Go duration such as `10s`; `0` turns the auto-wait off, and commands then queue during a pause | `10s` |
 
-Per-method buckets remain an open item: `getDialogs` can hit `FLOOD_WAIT` before the general bucket, so keep pauses between reads. CDN pools, downloads through a foreign invoker, the init call, ping and ack bypass the throttle; the Telegram library keeps its own retries after `FLOOD_WAIT` in the updates manager, downloader and `QR.Auth`. See [FEATURES.md](../../FEATURES.md), item 11.4.
+Per-method buckets remain an open item: `getDialogs` can hit `FLOOD_WAIT` before the general bucket, so keep pauses between reads. Media parts go through `FileDC`, which retains the same middleware and the file-transfer lane; CDN is not enabled for these downloads. The init call, ping and ack bypass the throttle; the Telegram library keeps its own retries after `FLOOD_WAIT` in the updates manager, downloader and `QR.Auth`. See [FEATURES.md](../../FEATURES.md), item 11.4.
 
 ## The tool describes itself
 
