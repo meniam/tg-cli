@@ -23,7 +23,7 @@ tg chat list [flags]
 <!-- schema:flags tg chat list -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--limit` | int | `50` | maximum number of chats, 1 to 500; 0 means 50 |
+| `--limit` | int | `50` | maximum number of chats, 1 to 500 |
 | `--type` | string | `none` | chat type: user, bot, group, supergroup or channel |
 <!-- /schema:flags -->
 
@@ -47,7 +47,7 @@ tg chat list --limit 2 --format jsonl
 
 **Answer fields** (`data`): `chats` array, `chats.id` integer, `chats.type` string, `chats.title` string (untrusted), `chats.username` string (optional, untrusted), `chats.unread` integer.
 
-**Exit codes.** 0; 2 `--limit` below 0 or above 500, or an unknown `--type`; 3 no Daemon; 4 no login; 6 `FLOOD_WAIT` longer than the auto-wait.
+**Exit codes.** 0; 2 `--limit` outside 1 to 500, or an unknown `--type`; 3 no Daemon; 4 no login; 6 `FLOOD_WAIT` longer than the auto-wait.
 
 **Verification.** Unread message counts are returned in `unread`. Read the messages with [`message unread`](messages-read.md#tg-message-unread), including a forum topic with `--topic`; list unread chats with [`chat unread`](#tg-chat-unread). See [FEATURES.md](../../FEATURES.md), item 7.1.
 
@@ -415,7 +415,7 @@ tg chat draft set <chat> [flags]
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-Text comes from `--text` or stdin as for `message send`. It is plain text: formatting flags are unavailable. Text must be non-empty and no more than 4096 characters; `--reply-to` selects a positive message id when present. The chat must be visible and in `write`.
+Text comes from `--text` or stdin as for `message send`. It is plain text: formatting flags are unavailable. Text must be non-empty and no more than 4096 Unicode code points; `--reply-to` selects a positive message id when present. The chat must be visible and in `write`.
 
 `--dry-run` performs the write checks without saving a draft. Its answer includes `replaces: true` when Telegram reports a non-empty current draft; resolving a non-numeric chat reference or reading that current draft may read Telegram.
 

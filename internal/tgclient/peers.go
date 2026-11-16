@@ -44,8 +44,10 @@ func notFound() error {
 
 // manager returns the peer manager, initialized on first use.
 func (c *Client) manager(ctx context.Context) (*peers.Manager, error) {
-	c.mgrMu.Lock()
-	defer c.mgrMu.Unlock()
+	if err := c.mgrMu.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer c.mgrMu.Release()
 	if !c.mgrReady {
 		if err := c.mgr.Init(ctx); err != nil {
 			return nil, mapError(err)

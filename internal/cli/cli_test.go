@@ -57,7 +57,8 @@ func (f *fakeTelegram) ChatBoosts(_ context.Context, _ chatref.Ref) (rpc.ChatBoo
 func (f *fakeTelegram) Transcribe(_ context.Context, _ chatref.Ref, id int) (rpc.Transcription, error) {
 	return rpc.Transcription{ChatID: 77, ID: id, TranscriptionID: 1, Text: "fixture"}, nil
 }
-func (f *fakeTelegram) FloodWaitRemaining() time.Duration { return 0 }
+func (f *fakeTelegram) FloodWaitRemaining() time.Duration   { return 0 }
+func (f *fakeTelegram) CheckTextLocal(rpc.SendParams) error { return nil }
 func (f *fakeTelegram) CheckText(_ context.Context, p rpc.SendParams) (rpc.TextCheck, error) {
 	return rpc.TextCheck{Mode: "plain", PlainLength: len([]rune(p.Text))}, nil
 }

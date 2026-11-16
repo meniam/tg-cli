@@ -42,7 +42,7 @@ Create the file with a mode that is not writable by group or others, for example
 
 ## How the lists combine
 
-- **No file, an empty file, or all lists empty:** the read filter is off and every chat is visible. Writing, administration, chat creation, profile changes, sending files and downloading files are off.
+- **No file or an empty file:** the read filter is off and every chat is visible. Writing, administration, chat creation, profile changes, sending files and downloading files are off. With all lists empty, the read filter is also off; boolean permissions may still be enabled.
 - **A nonempty `allow`:** only its chats are visible. Invitations (`chat invite-info`) are closed while `allow` is nonempty, because an invite has no known chat id before it is resolved.
 - **`block`:** blocked chats are closed, even when they are in `allow`. A `block` alone turns the read filter on for those chats.
 - **`write`:** a chat accepts writes only when it is in `write`, is visible by the read rules and is not in `block`. `write` alone does not turn the read filter on. A chat outside `write` gives exit code 9 `write_disabled` with a hint to add it; a chat closed for reading gives exit code 7 like an unknown chat.
@@ -56,7 +56,7 @@ Create the file with a mode that is not writable by group or others, for example
 
 The file is checked when it is read, and it fails closed:
 
-- An unknown field, a non-numeric or zero id, a duplicate id, a list field that is not an array, a non-boolean `create` or `profile`, a relative or empty `files` or `downloads` path, a duplicate path, or content that is not a JSON object makes the whole file invalid.
+- An unknown field, a non-numeric or zero id, a duplicate id, a list field that is not an array, a non-boolean `create`, `profile`, `dialogs` or `sessions`, a relative or empty `files` or `downloads` path, a duplicate path, or content that is not a JSON object makes the whole file invalid.
 - A file that is writable by group or others (any of the mode bits `0o022`; `0664` and `0666` count, `0644` and `0600` do not) is invalid.
 - A file that cannot be read is invalid, and so is a failed `stat` of it.
 - An invalid file closes **everything**: all chats are hidden from the agent; writing, profile changes, sending files and downloading files are off. The Daemon keeps running, and each request that checks access writes at least one Error record `access policy unavailable` to the journal, without the file content (see [daemon logs](daemon-and-auth.md#tg-daemon-logs)).

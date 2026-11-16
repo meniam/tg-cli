@@ -12,6 +12,7 @@ import (
 	"github.com/gotd/td/telegram/updates"
 	"github.com/gotd/td/tg"
 
+	"tg-cli/internal/ctxlock"
 	"tg-cli/internal/netconf"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/throttle"
@@ -68,7 +69,7 @@ type Client struct {
 	authLostSink      func(string)
 
 	mgr         *peers.Manager // resolves chat references to Telegram peers
-	mgrMu       sync.Mutex
+	mgrMu       ctxlock.Lock
 	mgrReady    bool
 	preloadMu   sync.Mutex
 	preloadDone chan struct{}

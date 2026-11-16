@@ -82,7 +82,7 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 		return nil, err
 	}
 	if p.SelfDestruct != "" {
-		chat, err := d.opts.Telegram.Resolve(ctx, ref)
+		chat, err := d.telegram(ctx).Resolve(ctx, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +169,7 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 		}
 		return result, nil
 	}
-	res, err := d.opts.Telegram.SendMedia(ctx, ref, p, files)
+	res, err := d.telegram(ctx).SendMedia(ctx, ref, p, files)
 	if err != nil {
 		var rpcErr *rpc.Error
 		if errors.As(err, &rpcErr) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

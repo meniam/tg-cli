@@ -82,7 +82,7 @@ func (a *app) messageCommand() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		RunE: a.messageHistory,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, ItemPath: "messages"})
-	history.Flags().Int("limit", 0, "messages per page, 1 to 100; 0 means 20")
+	history.Flags().Int("limit", 20, "messages per page, 1 to 100")
 	history.Flags().String("since", "", "only messages sent at this time or later (RFC 3339)")
 	history.Flags().String("until", "", "only messages sent at this time or earlier (RFC 3339)")
 	history.Flags().Int("topic", 0, "read one topic of a forum chat, by the topic id")
@@ -101,7 +101,7 @@ func (a *app) messageCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE:  a.messagePinned,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat", Required: true}}, ItemPath: "messages"})
-	pinned.Flags().Int("limit", 0, "pinned messages per page, 1 to 100; 0 means 20")
+	pinned.Flags().Int("limit", 20, "pinned messages per page, 1 to 100")
 
 	cmd.AddCommand(history, get, pinned, a.messageDownloadCommand(), a.watchCommand(), a.messageExportCommand(), a.messageExportMonthCommand(), a.messageExportVerifyCommand(), a.messageUnreadCommand())
 	cmd.AddCommand(a.messageDiscoveryCommands()...)

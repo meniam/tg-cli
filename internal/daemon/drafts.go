@@ -16,7 +16,7 @@ func (d *daemon) draftGet(ctx context.Context, raw json.RawMessage) (any, error)
 	if err != nil {
 		return nil, err
 	}
-	res, err := d.opts.Telegram.DraftGet(ctx, ref)
+	res, err := d.telegram(ctx).DraftGet(ctx, ref)
 	res.ChatID = id
 	return res, err
 }
@@ -24,7 +24,7 @@ func (d *daemon) draftList(ctx context.Context, raw json.RawMessage) (any, error
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	res, err := d.opts.Telegram.DraftList(ctx)
+	res, err := d.telegram(ctx).DraftList(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (d *daemon) draftWrite(ctx context.Context, raw json.RawMessage, clear bool
 	if p.DryRun {
 		out := rpc.DraftWriteResult{ChatID: id, DryRun: true, Cleared: clear, TextLength: utf8.RuneCountInString(p.Text)}
 		if !clear {
-			draft, err := d.opts.Telegram.DraftGet(ctx, ref)
+			draft, err := d.telegram(ctx).DraftGet(ctx, ref)
 			if err != nil {
 				return nil, err
 			}
@@ -72,7 +72,7 @@ func (d *daemon) draftWrite(ctx context.Context, raw json.RawMessage, clear bool
 		}
 		return out, nil
 	}
-	out, err := d.opts.Telegram.DraftSet(ctx, ref, p)
+	out, err := d.telegram(ctx).DraftSet(ctx, ref, p)
 	out.ChatID = id
 	return out, err
 }

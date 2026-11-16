@@ -62,7 +62,7 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 		return nil, err
 	}
 	defer release()
-	client, ok := d.opts.Telegram.(transcriptionTelegram)
+	client, ok := d.telegram(ctx).(transcriptionTelegram)
 	if !ok {
 		return nil, rpc.NewError(rpc.CodeInternal, "transcription unavailable")
 	}
@@ -102,7 +102,7 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 			}
 		}
 	} else if errors.Is(err, store.ErrNotFound) {
-		msg, e := d.opts.Telegram.Message(ctx, ref, p.ID)
+		msg, e := d.telegram(ctx).Message(ctx, ref, p.ID)
 		if e != nil {
 			return nil, e
 		}

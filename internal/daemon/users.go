@@ -68,7 +68,7 @@ func (d *daemon) resolvePerson(ctx context.Context, value string, allowPhone, wr
 	if err := d.requireAccount(ctx); err != nil {
 		return ref, rpc.Chat{}, err
 	}
-	chat, err := d.opts.Telegram.Resolve(ctx, ref)
+	chat, err := d.telegram(ctx).Resolve(ctx, ref)
 	if err != nil {
 		return ref, rpc.Chat{}, err
 	}
@@ -146,7 +146,7 @@ func (d *daemon) userProfile(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, err
 	}
-	v, err := d.opts.Telegram.UserProfile(ctx, ref)
+	v, err := d.telegram(ctx).UserProfile(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -156,8 +156,10 @@ func (d *daemon) userProfile(ctx context.Context, raw json.RawMessage) (any, err
 	if !d.policy().Allowed(v.ID) {
 		return nil, rpc.ErrChatNotFound()
 	}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer d.contactsMu.Release()
 	if !d.policy().Allowed(v.ID) {
 		return nil, rpc.ErrChatNotFound()
 	}
@@ -182,10 +184,10 @@ func (d *daemon) resolveProfilePerson(ctx context.Context, value string) (chatre
 	if err := d.requireAccount(ctx); err != nil {
 		return ref, rpc.Chat{}, err
 	}
-	chat, err := d.opts.Telegram.Resolve(ctx, ref)
+	chat, err := d.telegram(ctx).Resolve(ctx, ref)
 	var re *rpc.Error
 	if errors.As(err, &re) && re.Code == rpc.CodeNotFound {
-		client, ok := d.opts.Telegram.(phoneResolver)
+		client, ok := d.telegram(ctx).(phoneResolver)
 		if !ok {
 			return ref, chat, err
 		}
@@ -230,12 +232,12 @@ func (d *daemon) changeBlock(ctx context.Context, raw json.RawMessage, block boo
 		return nil, err
 	}
 	if block {
-		return d.opts.Telegram.Block(ctx, ref)
+		return d.telegram(ctx).Block(ctx, ref)
 	}
-	return d.opts.Telegram.Unblock(ctx, ref)
+	return d.telegram(ctx).Unblock(ctx, ref)
 }
 func (d *daemon) syncContacts(ctx context.Context) ([]rpc.Contact, error) {
-	items, err := d.opts.Telegram.Contacts(ctx)
+	items, err := d.telegram(ctx).Contacts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -255,9 +257,9 @@ func (d *daemon) syncContactsAfterLogin(ctx context.Context, authorized <-chan s
 	select {
 	case <-ctx.Done():
 		return
-	case <-d.opts.Telegram.Ready():
+	case <-d.telegram(ctx).Ready():
 	}
-	user, err := d.opts.Telegram.Self(ctx)
+	user, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		d.log.Warn("contact sync authorization check failed")
 		return
@@ -269,8 +271,10 @@ func (d *daemon) syncContactsAfterLogin(ctx context.Context, authorized <-chan s
 		case <-authorized:
 		}
 	}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return
+	}
+	defer d.contactsMu.Release()
 	if _, err = d.syncContacts(throttle.WithBackground(ctx)); err != nil && !errors.Is(err, context.Canceled) {
 		d.log.Warn("contact sync failed")
 	}
@@ -286,8 +290,10 @@ func (d *daemon) contactList(ctx context.Context, raw json.RawMessage) (any, err
 	if p.Limit == 0 {
 		p.Limit = 100
 	}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer d.contactsMu.Release()
 	var remote map[int64]rpc.Contact
 	if !p.Local {
 		if err := d.requireAccount(ctx); err != nil {
@@ -328,10 +334,12 @@ func (d *daemon) contactAdd(ctx context.Context, raw json.RawMessage) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer d.contactsMu.Release()
 	if p.FirstName == "" || p.LastName == "" {
-		profile, e := d.opts.Telegram.UserProfile(ctx, ref)
+		profile, e := d.telegram(ctx).UserProfile(ctx, ref)
 		if e != nil {
 			return nil, e
 		}
@@ -351,7 +359,7 @@ func (d *daemon) contactAdd(ctx context.Context, raw json.RawMessage) (any, erro
 	if p.DryRun {
 		return rpc.ContactAddResult{UserID: chat.ID, FirstName: p.FirstName, LastName: p.LastName, DryRun: true}, nil
 	}
-	res, err := d.opts.Telegram.AddContact(ctx, ref, p)
+	res, err := d.telegram(ctx).AddContact(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -379,15 +387,17 @@ func (d *daemon) contactDelete(ctx context.Context, raw json.RawMessage) (any, e
 	if err != nil {
 		return nil, err
 	}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer d.contactsMu.Release()
 	if err = d.checkPersonWrite(chat.ID); err != nil {
 		return nil, err
 	}
 	if p.DryRun {
 		return rpc.ContactDeleteResult{UserID: chat.ID, DryRun: true}, nil
 	}
-	res, err := d.opts.Telegram.DeleteContact(ctx, ref)
+	res, err := d.telegram(ctx).DeleteContact(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -408,8 +418,10 @@ func (d *daemon) contactSearch(ctx context.Context, raw json.RawMessage) (any, e
 		p.Limit = 20
 	}
 	result := rpc.ContactSearchResult{Contacts: []rpc.ContactHit{}}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer d.contactsMu.Release()
 	if p.Local {
 		items, err := d.store.SearchContacts(ctx, p.Query, p.Limit, chatFilter(d.policy()))
 		if err != nil {
@@ -426,7 +438,7 @@ func (d *daemon) contactSearch(ctx context.Context, raw json.RawMessage) (any, e
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	items, err := d.opts.Telegram.SearchContacts(ctx, p.Query, p.Limit)
+	items, err := d.telegram(ctx).SearchContacts(ctx, p.Query, p.Limit)
 	if err != nil {
 		return nil, err
 	}

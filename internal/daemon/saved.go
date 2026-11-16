@@ -19,7 +19,7 @@ func (d *daemon) savedOwner(ctx context.Context) (int64, error) {
 	if err := d.requireAccount(ctx); err != nil {
 		return 0, err
 	}
-	self, err := d.opts.Telegram.Self(ctx)
+	self, err := d.telegram(ctx).Self(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -49,7 +49,7 @@ func (d *daemon) savedTags(ctx context.Context, raw json.RawMessage) (any, error
 		r := chatref.Ref{Kind: chatref.ID, ID: id}
 		ref = &r
 	}
-	result, err := d.opts.Telegram.SavedTags(ctx, ref)
+	result, err := d.telegram(ctx).SavedTags(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (d *daemon) savedTagRename(ctx context.Context, raw json.RawMessage) (any, 
 	if !d.policy().WriteAllowed(id) {
 		return nil, rpc.ErrWriteDisabled()
 	}
-	if err := d.opts.Telegram.RenameSavedTag(ctx, p); err != nil {
+	if err := d.telegram(ctx).RenameSavedTag(ctx, p); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -113,7 +113,7 @@ func (d *daemon) savedMessages(ctx context.Context, raw json.RawMessage, search 
 		r := chatref.Ref{Kind: chatref.ID, ID: id}
 		ref = &r
 	}
-	result, err := d.opts.Telegram.SavedMessages(ctx, owner, ref, p, search)
+	result, err := d.telegram(ctx).SavedMessages(ctx, owner, ref, p, search)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (d *daemon) savedList(ctx context.Context, raw json.RawMessage) (any, error
 		return nil, err
 	}
 	for scanned := 0; scanned < 100; scanned++ {
-		out, err := d.opts.Telegram.SavedList(ctx, p)
+		out, err := d.telegram(ctx).SavedList(ctx, p)
 		if err != nil {
 			return nil, err
 		}

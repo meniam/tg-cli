@@ -169,7 +169,17 @@ func (m *historySyncManager) snapshot(chatID int64) *rpc.HistorySyncJob {
 	running := task == m.current && task.State == rpc.HistorySyncRunning
 	m.mu.Unlock()
 	if running {
-		if remaining := m.d.opts.Telegram.FloodWaitRemaining(); remaining > 0 {
+		client := m.d.opts.Telegram
+		release := func() {}
+		if m.d.opts.NewTelegram != nil {
+			var err error
+			_, client, release, err = m.d.acquireTelegram(context.Background())
+			if err != nil {
+				return &result
+			}
+		}
+		defer release()
+		if remaining := client.FloodWaitRemaining(); remaining > 0 {
 			result.State = rpc.HistorySyncWaitingFlood
 			result.WaitSeconds = int(remaining / time.Second)
 			if remaining%time.Second != 0 {
@@ -283,9 +293,28 @@ func (m *historySyncManager) recordPage(task *historySyncTask, progress *store.S
 }
 
 func (m *historySyncManager) runTask(task *historySyncTask) {
+	ctx := task.ctx
+	client := m.d.opts.Telegram
+	release := func() {}
+	if m.d.opts.NewTelegram != nil {
+		var err error
+		ctx, client, release, err = m.d.acquireTelegram(ctx)
+		if err != nil {
+			m.fail(task, err)
+			return
+		}
+	}
+	defer release()
+	fail := func(err error) {
+		if ctx.Err() != nil {
+			m.finish(task, rpc.HistorySyncCancelled, 0, "")
+			return
+		}
+		m.fail(task, err)
+	}
 	offset := task.offset
 	for {
-		if task.ctx.Err() != nil {
+		if ctx.Err() != nil {
 			m.finish(task, rpc.HistorySyncCancelled, 0, "")
 			return
 		}
@@ -293,12 +322,12 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 			m.finish(task, rpc.HistorySyncFailed, rpc.CodeNotFound, rpc.ErrChatNotFound().Message)
 			return
 		}
-		page, err := m.d.opts.Telegram.HistoryPage(task.ctx, task.ref, offset)
+		page, err := client.HistoryPage(ctx, task.ref, offset)
 		if err != nil {
-			m.fail(task, err)
+			fail(err)
 			return
 		}
-		if task.ctx.Err() != nil {
+		if ctx.Err() != nil {
 			m.finish(task, rpc.HistorySyncCancelled, 0, "")
 			return
 		}
@@ -307,9 +336,9 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 			return
 		}
 		if page.Empty {
-			progress, err := m.d.store.SaveHistoryPage(task.ctx, task.ChatID, nil, nil, true)
+			progress, err := m.d.store.SaveHistoryPage(ctx, task.ChatID, nil, nil, true)
 			if err != nil {
-				m.fail(task, err)
+				fail(err)
 				return
 			}
 			m.recordPage(task, &progress, 0)
@@ -323,12 +352,12 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 		if len(page.Messages) > 0 {
 			messages, people, _, err := convertStoredMessages(page.Messages, true)
 			if err != nil {
-				m.fail(task, err)
+				fail(err)
 				return
 			}
-			progress, err := m.d.store.SaveHistoryPage(task.ctx, task.ChatID, messages, people, false)
+			progress, err := m.d.store.SaveHistoryPage(ctx, task.ChatID, messages, people, false)
 			if err != nil {
-				m.fail(task, err)
+				fail(err)
 				return
 			}
 			m.recordPage(task, &progress, len(messages))
@@ -338,7 +367,7 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 		offset = page.RawNextOffsetID
 		timer := m.clock.NewTimer(historySyncPause)
 		select {
-		case <-task.ctx.Done():
+		case <-ctx.Done():
 			timer.Stop()
 			m.finish(task, rpc.HistorySyncCancelled, 0, "")
 			return
@@ -358,7 +387,7 @@ func (d *daemon) resolveHistorySyncChat(ctx context.Context, name string) (chatr
 		return chatref.Ref{}, 0, err
 	}
 	if chat == nil {
-		resolved, err := d.opts.Telegram.Resolve(ctx, ref)
+		resolved, err := d.telegram(ctx).Resolve(ctx, ref)
 		if err != nil {
 			return chatref.Ref{}, 0, err
 		}

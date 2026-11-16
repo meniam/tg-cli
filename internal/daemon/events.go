@@ -25,7 +25,17 @@ func eventCursor(id int64, pts, qts, date int) string {
 }
 
 func (d *daemon) cursor(ctx context.Context, id int64) string {
-	user, err := d.opts.Telegram.Self(ctx)
+	client := d.telegram(ctx)
+	release := func() {}
+	if d.opts.NewTelegram != nil {
+		var err error
+		ctx, client, release, err = d.acquireTelegram(ctx)
+		if err != nil {
+			return eventCursor(id, 0, 0, 0)
+		}
+	}
+	defer release()
+	user, err := client.Self(ctx)
 	if err != nil || user == nil {
 		return eventCursor(id, 0, 0, 0)
 	}

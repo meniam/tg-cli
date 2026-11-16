@@ -15,7 +15,7 @@ func (d *daemon) scheduledList(ctx context.Context, raw json.RawMessage) (any, e
 	if err != nil {
 		return nil, err
 	}
-	res, err := d.opts.Telegram.ScheduledList(ctx, ref)
+	res, err := d.telegram(ctx).ScheduledList(ctx, ref)
 	res.ChatID = id
 	return res, err
 }
@@ -53,9 +53,9 @@ func (d *daemon) scheduledWrite(ctx context.Context, raw json.RawMessage, send b
 		}
 		var part rpc.ScheduledResult
 		if send {
-			part, err = d.opts.Telegram.ScheduledSendNow(ctx, ref, ids)
+			part, err = d.telegram(ctx).ScheduledSendNow(ctx, ref, ids)
 		} else {
-			part, err = d.opts.Telegram.ScheduledDelete(ctx, ref, ids)
+			part, err = d.telegram(ctx).ScheduledDelete(ctx, ref, ids)
 		}
 		if err != nil {
 			if first == nil {

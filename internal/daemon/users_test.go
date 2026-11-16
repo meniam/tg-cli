@@ -198,3 +198,17 @@ func TestContactsAllowedWritesAndSearch(t *testing.T) {
 		t.Fatalf("deleted: %+v %v", p, err)
 	}
 }
+
+func TestContactListCanceledWhileLocked(t *testing.T) {
+	d := &daemon{}
+	if err := d.contactsMu.Acquire(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer d.contactsMu.Release()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := d.contactList(ctx, params(t, rpc.ContactListParams{Local: true}))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("contact list: %v", err)
+	}
+}

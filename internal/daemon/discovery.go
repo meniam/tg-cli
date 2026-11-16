@@ -44,7 +44,7 @@ func (d *daemon) messageSearch(ctx context.Context, raw json.RawMessage) (any, e
 	if err != nil {
 		return nil, err
 	}
-	result, err := d.opts.Telegram.SearchMessages(ctx, ref, p)
+	result, err := d.telegram(ctx).SearchMessages(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (d *daemon) messageSearchPublic(ctx context.Context, raw json.RawMessage) (
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	result, err := d.opts.Telegram.SearchPublic(ctx, p)
+	result, err := d.telegram(ctx).SearchPublic(ctx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func (d *daemon) messageContext(ctx context.Context, raw json.RawMessage) (any, 
 	if err != nil {
 		return nil, err
 	}
-	result, err := d.opts.Telegram.MessageContext(ctx, ref, p)
+	result, err := d.telegram(ctx).MessageContext(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +234,7 @@ func (d *daemon) messageComments(ctx context.Context, raw json.RawMessage) (any,
 	if err != nil {
 		return nil, err
 	}
-	result, err := d.opts.Telegram.Comments(ctx, ref, p)
+	result, err := d.telegram(ctx).Comments(ctx, ref, p)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (d *daemon) messageLink(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, err
 	}
-	return d.opts.Telegram.MessageLink(ctx, ref, p)
+	return d.telegram(ctx).MessageLink(ctx, ref, p)
 }
 func (d *daemon) chatMarkRead(ctx context.Context, raw json.RawMessage) (any, error) {
 	var p rpc.MarkReadParams
@@ -268,7 +268,7 @@ func (d *daemon) chatMarkRead(ctx context.Context, raw json.RawMessage) (any, er
 	if p.DryRun {
 		return rpc.MarkReadResult{ChatID: id, DryRun: true}, nil
 	}
-	result, err := d.opts.Telegram.MarkRead(ctx, ref)
+	result, err := d.telegram(ctx).MarkRead(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
