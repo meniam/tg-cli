@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -349,5 +350,49 @@ func TestChatInfoWithoutMemberCountKeepsTheStoredOne(t *testing.T) {
 	chat, err := db.GetChat(context.Background(), -1001234567890)
 	if err != nil || chat.Members == nil || *chat.Members != 12 {
 		t.Fatalf("stored members = %+v, %v", chat.Members, err)
+	}
+}
+
+// TestSaveChatsKeepsKnownFlags covers the rule that a partial save must not clear a
+// flag a fuller read stored: `chat list` and `chat resolve` save chats without a
+// channel object of their own, and `chat info` writes the flags.
+func TestSaveChatsKeepsKnownFlags(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "store.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	d := &daemon{store: db, log: slog.New(slog.DiscardHandler)}
+	ctx := context.Background()
+
+	// A full read knows the flags, including the false ones.
+	d.saveChats(ctx, rpc.MethodChatInfo, []rpc.Chat{{ID: 5, Type: "channel", Title: "News", Scam: true, Fake: true, Restricted: true, FlagsKnown: true}}, false)
+	chat, err := db.GetChat(ctx, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !chat.Scam || !chat.Fake || !chat.Restricted {
+		t.Fatalf("the full read did not store the flags: %+v", chat)
+	}
+
+	// A list entry knows no flags and must not clear them.
+	d.saveChats(ctx, rpc.MethodChatList, []rpc.Chat{{ID: 5, Type: "channel", Title: "News"}}, true)
+	chat, err = db.GetChat(ctx, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !chat.Scam || !chat.Fake || !chat.Restricted {
+		t.Errorf("a list entry cleared the flags: %+v", chat)
+	}
+
+	// A list entry that did read the channel object updates them, so a flag
+	// Telegram no longer sets goes away.
+	d.saveChats(ctx, rpc.MethodChatList, []rpc.Chat{{ID: 5, Type: "channel", Title: "News", FlagsKnown: true}}, true)
+	chat, err = db.GetChat(ctx, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if chat.Scam || chat.Fake || chat.Restricted {
+		t.Errorf("a known record did not clear the flags: %+v", chat)
 	}
 }

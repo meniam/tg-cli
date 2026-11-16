@@ -12,6 +12,7 @@ import (
 
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
+	"tg-cli/internal/throttle"
 )
 
 // preloadLimit is how many dialogs are read once to teach the peer cache the
@@ -139,7 +140,18 @@ func toChatOf(p peers.Peer) rpc.Chat {
 	}
 	chat.Username, _ = p.Username()
 	chat.Type = peerType(p)
+	chat.Scam, chat.Fake, chat.Restricted, _ = restrictionFlags(p)
+	chat.FlagsKnown = flagsKnown(p)
 	return chat
+}
+
+// flagsKnown reports whether a peer object carries the scam, fake and restriction
+// flags: a channel does, a basic group and a user do not.
+func flagsKnown(p peers.Peer) bool {
+	if channel, ok := p.(peers.Channel); ok {
+		return channel.Raw() != nil
+	}
+	return false
 }
 
 func peerType(p peers.Peer) string {
@@ -175,8 +187,34 @@ func (c *Client) ChatInfo(ctx context.Context, ref chatref.Ref) (rpc.ChatInfo, e
 	if err != nil {
 		return rpc.ChatInfo{}, err
 	}
+	return c.fullInfo(ctx, p)
+}
+
+// ChatFull returns the full data of one chat for the background job. It takes the
+// chat id and never resolves a name: the peer comes from the peer cache the
+// session already has, so the call makes exactly one Telegram request.
+//
+// The request runs as background traffic: it is marked for low-priority
+// admission, so ordinary commands of the agent go first.
+func (c *Client) ChatFull(ctx context.Context, chatID int64) (rpc.ChatInfo, error) {
+	// The mark goes on before the lookup, so a peer the cache does not know yet
+	// is fetched as background traffic too.
+	ctx = throttle.WithBackground(ctx)
+	p, err := c.resolve(ctx, chatref.Ref{Kind: chatref.ID, ID: chatID})
+	if err != nil {
+		return rpc.ChatInfo{}, err
+	}
+	return c.fullInfo(ctx, p)
+}
+
+// fullInfo reads the full object of a resolved peer. ChatInfo and ChatFull share
+// it, so the flags, the description, the member count and the settings of a chat
+// are parsed in exactly one place.
+func (c *Client) fullInfo(ctx context.Context, p peers.Peer) (rpc.ChatInfo, error) {
 	base := toChatOf(p)
 	info := rpc.ChatInfo{ID: base.ID, Type: base.Type, Title: base.Title, Username: base.Username, Verified: p.Verified()}
+	info.CreatedAt = createdUnix(p)
+	info.Scam, info.Fake, info.Restricted, info.RestrictionReason = restrictionFlags(p)
 
 	switch v := p.(type) {
 	case peers.User:
@@ -208,6 +246,52 @@ func (c *Client) ChatInfo(ctx context.Context, ref chatref.Ref) (rpc.ChatInfo, e
 		}
 	}
 	return info, nil
+}
+
+// createdUnix returns the creation date of a chat in Unix seconds, or 0 when
+// Telegram did not supply one. A user is not a chat and has no such date here.
+func createdUnix(p peers.Peer) int64 {
+	var date int
+	switch v := p.(type) {
+	case peers.Chat:
+		date = v.Raw().Date
+	case peers.Channel:
+		date = v.Raw().Date
+	}
+	if date > 0 {
+		return int64(date)
+	}
+	return 0
+}
+
+// restrictionFlags reads the flags Telegram sets on a channel or a basic group. A
+// user has none of them: the flags belong to chats and channels.
+func restrictionFlags(p peers.Peer) (scam, fake, restricted bool, reasons []rpc.RestrictionReason) {
+	switch v := p.(type) {
+	case peers.Channel:
+		raw := v.Raw()
+		if raw == nil {
+			return false, false, false, nil
+		}
+		return raw.Scam, raw.Fake, raw.Restricted, convertRestrictionReasons(raw.RestrictionReason)
+	case peers.Chat:
+		// A basic group carries no scam, fake or restriction flags in Telegram.
+		return false, false, false, nil
+	}
+	return false, false, false, nil
+}
+
+// convertRestrictionReasons keeps the parts of a reason that a reader can act on:
+// the platform, the reason and the text Telegram shows.
+func convertRestrictionReasons(reasons []tg.RestrictionReason) []rpc.RestrictionReason {
+	if len(reasons) == 0 {
+		return nil
+	}
+	out := make([]rpc.RestrictionReason, 0, len(reasons))
+	for _, reason := range reasons {
+		out = append(out, rpc.RestrictionReason{Platform: reason.Platform, Reason: reason.Reason, Text: reason.Text})
+	}
+	return out
 }
 
 func mapInfoError(err error) error {

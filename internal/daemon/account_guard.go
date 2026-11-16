@@ -57,6 +57,17 @@ func (c *accountCache) check(req rpc.Request) error {
 	}
 	return nil
 }
+
+// accountMethod reports whether a method needs the account: the loss of
+// authorization and the expected account are checked for it before the handler.
+// A method whose name has no dot after its group ("chat_full.") needs its own
+// prefix, or those checks would silently skip it.
 func accountMethod(method string) bool {
-	return method == rpc.MethodSearch || method == rpc.MethodSubscribe || method == rpc.MethodUnsubscribe || strings.HasPrefix(method, "chat.") || strings.HasPrefix(method, "message.") || strings.HasPrefix(method, "sticker.") || strings.HasPrefix(method, "note.") || strings.HasPrefix(method, "history_sync.") || strings.HasPrefix(method, "user.") || strings.HasPrefix(method, "contact.") || strings.HasPrefix(method, "folder.") || strings.HasPrefix(method, "account.") || strings.HasPrefix(method, "saved.")
+	return method == rpc.MethodSearch || method == rpc.MethodSubscribe || method == rpc.MethodUnsubscribe ||
+		strings.HasPrefix(method, "chat.") || strings.HasPrefix(method, "chat_full.") ||
+		strings.HasPrefix(method, "message.") || strings.HasPrefix(method, "sticker.") ||
+		strings.HasPrefix(method, "note.") || strings.HasPrefix(method, "history_sync.") ||
+		strings.HasPrefix(method, "user.") || strings.HasPrefix(method, "contact.") ||
+		strings.HasPrefix(method, "folder.") || strings.HasPrefix(method, "account.") ||
+		strings.HasPrefix(method, "saved.")
 }

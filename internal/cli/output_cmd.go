@@ -140,8 +140,8 @@ func (a *app) success(cmd *cobra.Command, data any) error {
 	return nil
 }
 
-// warn writes a hint or a progress line to stderr, unless --quiet asked for
-// silence. An error never goes through here: it reaches the agent as a failure
+// warn writes a hint, a note or a progress line to stderr, unless --quiet asked
+// for silence. An error never goes through here: it reaches the agent as a failure
 // envelope whatever the flags say.
 func (a *app) warn(cmd *cobra.Command, format string, args ...any) {
 	if a.settings(cmd).quiet {
