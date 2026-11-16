@@ -53,6 +53,7 @@ func applyTextCheck(result *rpc.SendResult, check rpc.TextCheck) {
 	result.PlainLength = &check.PlainLength
 	result.EntityCount = &check.Entities
 	result.RichMode = &check.Rich
+	result.PremiumFeatures = check.PremiumFeatures
 }
 func validWriteIDs(ids []int) error {
 	if len(ids) > 1000 {

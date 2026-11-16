@@ -66,3 +66,14 @@ func TestRequestJournalRecordsOutcomeWithoutParameters(t *testing.T) {
 		}
 	}
 }
+
+func TestTranslationJournalCountsWithoutText(t *testing.T) {
+	var journal bytes.Buffer
+	s := NewServer(slog.New(slog.NewTextHandler(&journal, nil)))
+	s.Handle(MethodMessageTranslate, func(context.Context, json.RawMessage) (any, error) { return nil, nil })
+	s.call(context.Background(), Request{Method: MethodMessageTranslate, Params: json.RawMessage(`{"ids":[7,9],"to_lang":"secret-language","chat":"secret-chat"}`)})
+	got := journal.String()
+	if !strings.Contains(got, "id_count=2") || strings.Contains(got, "secret-") {
+		t.Fatalf("journal: %s", got)
+	}
+}

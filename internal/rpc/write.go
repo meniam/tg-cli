@@ -145,28 +145,31 @@ type PollParams struct {
 }
 
 type SendResult struct {
-	ReplayAvailable *bool  `json:"replay_available,omitempty"`
-	Replayed        bool   `json:"replayed,omitempty"`
-	Scheduled       bool   `json:"scheduled,omitempty"`
-	ChatID          int64  `json:"chat_id"`
-	ID              int    `json:"id,omitempty"`
-	Date            string `json:"date,omitempty"`
-	DryRun          bool   `json:"dry_run,omitempty"`
-	Action          string `json:"action,omitempty"`
-	Count           int    `json:"count,omitempty"`
-	TextLength      int    `json:"text_length,omitempty"`
-	Mode            string `json:"mode,omitempty"`
-	PlainLength     *int   `json:"plain_length,omitempty"`
-	EntityCount     *int   `json:"entities,omitempty"`
-	RichMode        *bool  `json:"rich,omitempty"`
+	ReplayAvailable *bool    `json:"replay_available,omitempty"`
+	Replayed        bool     `json:"replayed,omitempty"`
+	Scheduled       bool     `json:"scheduled,omitempty"`
+	ChatID          int64    `json:"chat_id"`
+	ID              int      `json:"id,omitempty"`
+	Date            string   `json:"date,omitempty"`
+	DryRun          bool     `json:"dry_run,omitempty"`
+	Action          string   `json:"action,omitempty"`
+	Count           int      `json:"count,omitempty"`
+	TextLength      int      `json:"text_length,omitempty"`
+	Mode            string   `json:"mode,omitempty"`
+	PlainLength     *int     `json:"plain_length,omitempty"`
+	EntityCount     *int     `json:"entities,omitempty"`
+	RichMode        *bool    `json:"rich,omitempty"`
+	PremiumDropped  []string `json:"premium_dropped,omitempty"`
+	PremiumFeatures []string `json:"premium_features,omitempty"`
 }
 
 // TextCheck is a local formatting preview without a Telegram write.
 type TextCheck struct {
-	Mode        string
-	PlainLength int
-	Entities    int
-	Rich        bool
+	Mode            string
+	PlainLength     int
+	Entities        int
+	Rich            bool
+	PremiumFeatures []string
 }
 
 type ReactResult struct {
@@ -217,4 +220,9 @@ type ForwardResult struct {
 // ErrWriteDisabled tells the caller how the owner can enable this chat.
 func ErrWriteDisabled() *Error {
 	return NewError(CodeWriteDisabled, "writing to this chat is disabled: add the chat to the write list in the access file")
+}
+
+// CaptionTooLong reports the shared local caption limit.
+func CaptionTooLong() *Error {
+	return &Error{Code: CodeInvalidParams, Message: "caption must be at most 1024 characters", Data: map[string]any{"reason": "premium_required"}}
 }
