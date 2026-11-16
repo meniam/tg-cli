@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"tg-cli/internal/access"
+	"tg-cli/internal/ctxlock"
 	"tg-cli/internal/netconf"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
@@ -78,7 +79,7 @@ type daemon struct {
 	once                 sync.Once
 	eventMu              sync.Mutex
 	deletionsMu          sync.Mutex
-	contactsMu           sync.Mutex
+	contactsMu           ctxlock.Lock
 	inlineMu             sync.Mutex
 	transcriptionMu      sync.Mutex
 	transcriptionWaiters map[transcriptionKey]*transcriptionWaiter
@@ -317,8 +318,10 @@ func Run(ctx context.Context, opts Options) error {
 			defer release()
 			contactsCtx = context.WithValue(leaseCtx, telegramContextKey{}, client)
 		}
-		d.contactsMu.Lock()
-		defer d.contactsMu.Unlock()
+		if err := d.contactsMu.Acquire(contactsCtx); err != nil {
+			return
+		}
+		defer d.contactsMu.Release()
 		if _, err := d.syncContacts(throttle.WithBackground(contactsCtx)); err != nil && !errors.Is(err, context.Canceled) {
 			d.log.Warn("contact sync failed")
 		}

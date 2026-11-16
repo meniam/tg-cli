@@ -29,7 +29,7 @@ func (a *app) searchCommand() *cobra.Command {
 	cmd.Flags().StringSlice("scope", nil, "scopes: chats, people, messages, notes; repeat or separate with commas")
 	cmd.Flags().String("author", "", "filter note hits by owner or ai")
 	cmd.Flags().String("chat", "", "restrict message and note hits to this chat")
-	cmd.Flags().Int("limit", 0, "hits per scope, 1 to 100; 0 means 20")
+	cmd.Flags().Int("limit", 20, "hits per scope, 1 to 100")
 	cmd.Flags().Bool("prefix", false, "match the last query term as a prefix")
 	cmd.Flags().Bool("deleted", false, "include messages marked deleted")
 	return cmd

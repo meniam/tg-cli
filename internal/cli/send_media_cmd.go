@@ -27,7 +27,7 @@ func (a *app) messageSendMediaCommand() *cobra.Command {
 	cmd.Flags().String("idempotency-key", "", "idempotency key: 1 to 64 characters A-Za-z0-9._:-")
 	cmd.Flags().String("as", "", "required media type: photo, video, audio, voice or document")
 	cmd.Flags().StringArray("file", nil, "file path; repeat for an album (1 to 10 files)")
-	cmd.Flags().String("caption", "", "caption for the first file (up to 1024 characters)")
+	cmd.Flags().String("caption", "", "caption for the first file (up to 1024 Unicode code points)")
 	cmd.Flags().Int("reply-to", 0, "reply to this message id")
 	cmd.Flags().Int("topic", 0, "send in this forum topic")
 	cmd.Flags().Bool("silent", false, "send without a notification")
