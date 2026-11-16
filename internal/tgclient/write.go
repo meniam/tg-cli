@@ -250,6 +250,9 @@ func editPreparedText(ctx context.Context, api *tg.Client, destination tg.InputP
 		updates, err = message.NewSender(api).To(destination).Edit(p.ID).Text(ctx, p.Text)
 	}
 	if err != nil {
+		if tgerr.Is(err, "MEDIA_CAPTION_TOO_LONG", "MESSAGE_TOO_LONG") {
+			return rpc.SendResult{}, mapError(err)
+		}
 		return rpc.SendResult{}, writeFormatError(err, prepared.rich != nil)
 	}
 	messages, err := writtenMessages(updates)

@@ -115,13 +115,29 @@ func TestMigrationAcrossDC(t *testing.T) {
 	}
 }
 
+type notifyingStorage struct {
+	session.StorageMemory
+	saved chan struct{}
+	once  sync.Once
+}
+
+func (s *notifyingStorage) StoreSession(ctx context.Context, data []byte) error {
+	if err := s.StorageMemory.StoreSession(ctx, data); err != nil {
+		return err
+	}
+	if len(data) > 0 {
+		s.once.Do(func() { close(s.saved) })
+	}
+	return nil
+}
+
 func TestReconnectSameSession(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	options := []tg.DCOption{{ID: 2, IPAddress: "192.0.2.2", Port: 443}}
 	cl := cluster.NewCluster(cluster.Options{Config: tg.Config{DCOptions: options}})
 	server, d := cl.DC(2, "server")
-	d.Result(tg.AuthLogOutRequestTypeID, &tg.BoolTrue{})
+	d.Result(tg.HelpGetNearestDCRequestTypeID, &tg.NearestDC{})
 	listener := &memoryListener{incoming: make(chan net.Conn), closed: make(chan struct{})}
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(ctx, transport.Listen(listener)) }()
@@ -147,12 +163,17 @@ func TestReconnectSameSession(t *testing.T) {
 		return conn, err
 	}})
 	state := newConnection(netconf.Settings{})
-	storage := &session.StorageMemory{}
+	storage := &notifyingStorage{saved: make(chan struct{})}
 	client := telegram.NewClient(telegram.TestAppID, telegram.TestAppHash, telegram.Options{DC: 2, DCList: dcs.List{Options: options}, Resolver: resolver, PublicKeys: cl.Keys(), SessionStorage: storage, NoUpdates: true, OnConnectionStateEvent: state.update})
 	err := client.Run(ctx, func(ctx context.Context) error {
-		var result tg.BoolTrue
-		if err := client.Invoke(ctx, &tg.AuthLogOutRequest{}, &result); err != nil {
+		var result tg.NearestDC
+		if err := client.Invoke(ctx, &tg.HelpGetNearestDCRequest{}, &result); err != nil {
 			return err
+		}
+		select {
+		case <-storage.saved:
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 		before, err := (&session.Loader{Storage: storage}).Load(ctx)
 		if err != nil {
@@ -178,7 +199,7 @@ func TestReconnectSameSession(t *testing.T) {
 				return ctx.Err()
 			}
 		}
-		if err = client.Invoke(ctx, &tg.AuthLogOutRequest{}, &result); err != nil {
+		if err = client.Invoke(ctx, &tg.HelpGetNearestDCRequest{}, &result); err != nil {
 			return err
 		}
 		after, err := (&session.Loader{Storage: storage}).Load(ctx)

@@ -53,6 +53,10 @@ Put `--` before a negative id and keep the flags before `--`, after it everythin
 
 A chat that the access lists close looks the same as a chat that does not exist: exit code 7, same message. See [access.md](access.md).
 
+## Page limits
+
+An explicitly supplied `--limit` must be at least 1; zero and negative values are exit code 2. Omitting the flag uses the command's documented default. `message export` has no output limit when `--limit` is omitted.
+
 ## Profiles and the data directory
 
 `--profile <name>` selects an account. The name is 1 to 32 characters of `a-z`, `0-9`, `_` and `-`, starting with a letter or digit; anything else is exit code 2. The default profile is selected by `default_profile`, which defaults to `default`. Every profile has its own directory with its own session, database, Daemon and access lists.

@@ -21,6 +21,14 @@ import (
 	"tg-cli/internal/rpc"
 )
 
+// CheckTextLocal checks rendered text and entities without resolving users remotely.
+func (c *Client) CheckTextLocal(p rpc.SendParams) error {
+	_, err := prepareWriteText(p.Text, p.Parse, p.Entities, func(id int64) (tg.InputUserClass, error) {
+		return &tg.InputUser{UserID: id}, nil
+	})
+	return err
+}
+
 // CheckText validates formatting without sending a message to Telegram.
 func (c *Client) CheckText(ctx context.Context, p rpc.SendParams) (rpc.TextCheck, error) {
 	prepared, err := prepareWriteText(p.Text, p.Parse, p.Entities, c.mentionResolver(ctx))

@@ -116,6 +116,11 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	if err := validWriteSource(p); err != nil {
 		return nil, err
 	}
+	if formatRequested(p) {
+		if err := d.telegram(ctx).CheckTextLocal(p); err != nil {
+			return nil, err
+		}
+	}
 	if p.ReplyTo < 0 || p.Topic < 0 {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "reply and topic ids must not be negative")
 	}
@@ -210,6 +215,11 @@ func (d *daemon) messageEdit(ctx context.Context, raw json.RawMessage) (any, err
 	checkParams := rpc.SendParams{Text: p.Text, Parse: p.Parse, Entities: p.Entities}
 	if err := validWriteSource(checkParams); err != nil {
 		return nil, err
+	}
+	if formatRequested(checkParams) {
+		if err := d.telegram(ctx).CheckTextLocal(checkParams); err != nil {
+			return nil, err
+		}
 	}
 	if p.ID <= 0 {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "message id must be positive")

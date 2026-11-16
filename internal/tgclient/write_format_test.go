@@ -486,3 +486,44 @@ func TestCheckTextDoesNotWrite(t *testing.T) {
 		t.Fatal("invalid HTML accepted")
 	}
 }
+
+func TestCheckTextLocalLengthBeforeResolvingMentions(t *testing.T) {
+	c := &Client{}
+	for _, mode := range []string{"html", "markdown"} {
+		text := strings.Repeat("😀", 4097)
+		if mode == "html" {
+			text = "<b>" + text + "</b>"
+		} else {
+			text = "**" + text + "**"
+		}
+		if err := c.CheckTextLocal(rpc.SendParams{Text: text, Parse: mode}); err == nil || !strings.Contains(err.Error(), "4096") {
+			t.Fatalf("%s: %v", mode, err)
+		}
+	}
+}
+
+func TestEditCaptionLimitErrorIsPreserved(t *testing.T) {
+	for _, mode := range []string{"", "html", "rich-html"} {
+		t.Run(mode, func(t *testing.T) {
+			text := strings.Repeat("x", 1025)
+			p := rpc.EditParams{ID: 5, Text: text, Parse: mode}
+			prepared, err := prepareWriteText(text, mode, nil, knownUser)
+			if err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, _ bin.Decoder) error {
+				calls++
+				if _, ok := input.(*tg.MessagesEditMessageRequest); !ok {
+					t.Fatalf("unexpected request: %T", input)
+				}
+				return tgerr.New(400, "MEDIA_CAPTION_TOO_LONG")
+			}))
+			_, err = editPreparedText(context.Background(), api, &tg.InputPeerUser{UserID: 42}, 42, p, prepared)
+			formatErrorCode(t, err, rpc.CodeTelegram)
+			if calls != 1 || !strings.Contains(err.Error(), "MEDIA_CAPTION_TOO_LONG") {
+				t.Fatalf("calls=%d error=%v", calls, err)
+			}
+		})
+	}
+}

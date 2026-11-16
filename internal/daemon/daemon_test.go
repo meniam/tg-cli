@@ -60,9 +60,10 @@ func (f *fakeTelegram) Run(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (f *fakeTelegram) Ready() <-chan struct{}            { return f.ready }
-func (f *fakeTelegram) SetEventSink(func(rpc.Event))      {}
-func (f *fakeTelegram) FloodWaitRemaining() time.Duration { return 0 }
+func (f *fakeTelegram) Ready() <-chan struct{}              { return f.ready }
+func (f *fakeTelegram) SetEventSink(func(rpc.Event))        {}
+func (f *fakeTelegram) FloodWaitRemaining() time.Duration   { return 0 }
+func (f *fakeTelegram) CheckTextLocal(rpc.SendParams) error { return nil }
 func (f *fakeTelegram) CheckText(_ context.Context, p rpc.SendParams) (rpc.TextCheck, error) {
 	return rpc.TextCheck{Mode: "plain", PlainLength: len([]rune(p.Text))}, nil
 }

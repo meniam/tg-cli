@@ -156,8 +156,10 @@ func (d *daemon) userProfile(ctx context.Context, raw json.RawMessage) (any, err
 	if !d.policy().Allowed(v.ID) {
 		return nil, rpc.ErrChatNotFound()
 	}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer d.contactsMu.Release()
 	if !d.policy().Allowed(v.ID) {
 		return nil, rpc.ErrChatNotFound()
 	}
@@ -269,8 +271,10 @@ func (d *daemon) syncContactsAfterLogin(ctx context.Context, authorized <-chan s
 		case <-authorized:
 		}
 	}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return
+	}
+	defer d.contactsMu.Release()
 	if _, err = d.syncContacts(throttle.WithBackground(ctx)); err != nil && !errors.Is(err, context.Canceled) {
 		d.log.Warn("contact sync failed")
 	}
@@ -286,8 +290,10 @@ func (d *daemon) contactList(ctx context.Context, raw json.RawMessage) (any, err
 	if p.Limit == 0 {
 		p.Limit = 100
 	}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer d.contactsMu.Release()
 	var remote map[int64]rpc.Contact
 	if !p.Local {
 		if err := d.requireAccount(ctx); err != nil {
@@ -328,8 +334,10 @@ func (d *daemon) contactAdd(ctx context.Context, raw json.RawMessage) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer d.contactsMu.Release()
 	if p.FirstName == "" || p.LastName == "" {
 		profile, e := d.telegram(ctx).UserProfile(ctx, ref)
 		if e != nil {
@@ -379,8 +387,10 @@ func (d *daemon) contactDelete(ctx context.Context, raw json.RawMessage) (any, e
 	if err != nil {
 		return nil, err
 	}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer d.contactsMu.Release()
 	if err = d.checkPersonWrite(chat.ID); err != nil {
 		return nil, err
 	}
@@ -408,8 +418,10 @@ func (d *daemon) contactSearch(ctx context.Context, raw json.RawMessage) (any, e
 		p.Limit = 20
 	}
 	result := rpc.ContactSearchResult{Contacts: []rpc.ContactHit{}}
-	d.contactsMu.Lock()
-	defer d.contactsMu.Unlock()
+	if err := d.contactsMu.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer d.contactsMu.Release()
 	if p.Local {
 		items, err := d.store.SearchContacts(ctx, p.Query, p.Limit, chatFilter(d.policy()))
 		if err != nil {

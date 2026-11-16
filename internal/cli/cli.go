@@ -147,6 +147,12 @@ func (a *app) rootCommand() *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	// Reject output usage errors before any command can read, write or delete data.
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		if flag := cmd.Flags().Lookup("limit"); flag != nil && flag.Changed {
+			limit, err := cmd.Flags().GetInt("limit")
+			if err != nil || limit < 1 {
+				return fail(exitcode.Usage, "--limit must be at least 1")
+			}
+		}
 		if _, err := a.outputSettingsFor(cmd); err != nil {
 			return err
 		}
