@@ -10,7 +10,7 @@ PR: —
 
 ## Status
 
-- Current status: approved
+- Current status: done
 - Last update: 2026-11-16
 - Next safe step: менеджер принимает рекомендованные варианты Q1 до Q8 из «Open questions» (владелец делегировал решения), записывает их в Decision log, ставит `approved`; затем шаг 1 (аудит, Codex Terra в worktree `../tg-cli-translate_premium`).
 
@@ -161,36 +161,36 @@ PR: —
 
 ## Step 0. Fix decisions before changes
 
-- [ ] Ответы на Q1 до Q8 записаны в Decision log, контракт поправлен под ответы.
-- [ ] Если Q1 или Q8 приняты не по рекомендации, план возвращён планировщику: меняются инварианты 1 и 3.
-- [ ] Исполнитель Go-кода (Codex Terra) прочитал `expert-golang` и `.agents/rules/testing.md` и подтвердил это в отчёте аудита.
+- [x] Ответы на Q1 до Q8 записаны в Decision log, контракт поправлен под ответы.
+- [x] Если Q1 или Q8 приняты не по рекомендации, план возвращён планировщику: меняются инварианты 1 и 3.
+- [x] Исполнитель Go-кода (Codex Terra) прочитал `expert-golang` и `.agents/rules/testing.md` и подтвердил это в отчёте аудита.
 - [x] Ветка `feature/20261116_1139_translate_premium` создана от `main` (`0336dff`) в worktree `../tg-cli-translate_premium`.
 
 ## Step 1. Audit and baseline (исполнитель Codex Terra)
 
 Отчёт в `var/agents/plans/20261116_1139_translate_premium/audit.md` (в git не входит), итог в «Known facts».
 
-- [ ] `just check` и `just build` на чистом дереве ветки; результат в Known facts.
-- [ ] Подтвердить таблицу «Что уже есть»: нет перевода; `custom_emoji` в трёх способах; нет `reason` у ошибок записи; три места предела подписи; `Self()` получает `tg.User.Premium`.
-- [ ] `translateText` по исходникам gotd и документации Telegram: разбор `MessagesTranslateResult`, совпадение порядка результатов с `id`, поведение на сообщении без текста и на RichMessage (если документация молчит, записать как неизвестное), есть ли предел числа id.
-- [ ] Все места, где уже переводится `PREMIUM_ACCOUNT_REQUIRED` (`transcribe.go`, `channels_profile_write.go`, `saved_write.go` и другие): идут ли они до `mapError`; не изменит ли общая ветка их ответ.
-- [ ] Ответ `messages.sendMessage` и `messages.editMessage` в gotd: где лежат сущности итогового сообщения (`UpdateShortSentMessage.Entities`, `UpdateNewMessage`, `UpdateEditMessage`), как их достать в `writtenMessages` без нового запроса.
-- [ ] Признак Premium: стоимость `Auth().Status` (один `users.getUsers`), где хранить признак в памяти клиента и как его сбросить при переподключении (`client_restart`).
-- [ ] Тайм-аут метода по умолчанию (`internal/rpc/server.go:297`); нужен ли `SetMethodTimeout` для `message.translate`.
-- [ ] Где регистрируются `--dry-run` поля `send`, `edit`, `send-media`, `edit-media`; где поставить `premium_features`.
-- [ ] Записать итоги в Known facts, непокрытое в Risks и Open questions.
+- [x] `just check` и `just build` на чистом дереве ветки; результат в Known facts.
+- [x] Подтвердить таблицу «Что уже есть»: нет перевода; `custom_emoji` в трёх способах; нет `reason` у ошибок записи; три места предела подписи; `Self()` получает `tg.User.Premium`.
+- [x] `translateText` по исходникам gotd и документации Telegram: разбор `MessagesTranslateResult`, совпадение порядка результатов с `id`, поведение на сообщении без текста и на RichMessage (если документация молчит, записать как неизвестное), есть ли предел числа id.
+- [x] Все места, где уже переводится `PREMIUM_ACCOUNT_REQUIRED` (`transcribe.go`, `channels_profile_write.go`, `saved_write.go` и другие): идут ли они до `mapError`; не изменит ли общая ветка их ответ.
+- [x] Ответ `messages.sendMessage` и `messages.editMessage` в gotd: где лежат сущности итогового сообщения (`UpdateShortSentMessage.Entities`, `UpdateNewMessage`, `UpdateEditMessage`), как их достать в `writtenMessages` без нового запроса.
+- [x] Признак Premium: стоимость `Auth().Status` (один `users.getUsers`), где хранить признак в памяти клиента и как его сбросить при переподключении (`client_restart`).
+- [x] Тайм-аут метода по умолчанию (`internal/rpc/server.go:297`); нужен ли `SetMethodTimeout` для `message.translate`.
+- [x] Где регистрируются `--dry-run` поля `send`, `edit`, `send-media`, `edit-media`; где поставить `premium_features`.
+- [x] Записать итоги в Known facts, непокрытое в Risks и Open questions.
 
 ## Implementation steps
 
 Каждый шаг кода выполняет Codex Terra, проверяет Claude (тесты, дифф, `just check`), коммитит Claude.
 
-- [ ] 2. Перевод, слой `rpc` и `tgclient`: `rpc/translate.go`; `tgclient/translate.go`; `translate.go` в `readFiles`. Тесты на подмене invoker: запрос несёт `peer`, `id` в исходном порядке, `to_lang`, без `text` и `tone`; ответ из двух результатов ложится на два id; другое число результатов даёт код 5; `TO_LANG_INVALID`, `MSG_ID_INVALID`, `INPUT_TEXT_EMPTY`, `INPUT_TEXT_TOO_LONG` дают код 2; `TRANSLATIONS_DISABLED` и три временные ошибки дают код 5 с причиной; FLOOD_WAIT без повтора; проверка параметров: 0 и 21 id, повтор id, язык `EN` приводится к `en`, `english` и `e1` код 2.
-- [ ] 3. Перевод, Daemon и CLI: `translateTelegram` и строка в `Telegram`; `daemon/translate.go` (`listChat`, видимость, вызов клиента); регистрация в `daemon.go`; строка в `access_test.go`; заглушки в `translate_fake_test.go`; `cli/translate_cmd.go` (аргументы `<чат> <id>...` или ссылка, `--to` обязателен, `safetyRead`, `ItemPath: items`, `untrusted` у `text`); строка в `read_cmd.go`; заготовка раздела в `docs/cli/messages-read.md`, чтобы тест полноты был зелёным. Тесты без сокетов: закрытый чат `not_found` и ноль вызовов Telegram; без `--to` код 2; ссылка t.me разбирается в чат и id; форматы `json` и `jsonl`; запись в базу не происходит.
-- [ ] 4. Причина Premium: `tgclient/premium.go` (`premiumError`), строка в `mapError`, перенос причины в `writeFormatError`. Тесты: `PREMIUM_ACCOUNT_REQUIRED` на `sendMessage`, `sendMedia`, `editMessage` и rich-режиме даёт код 5, прежний текст и `reason: premium_required`; `PRIVACY_PREMIUM_REQUIRED` даёт `recipient_requires_premium`; таблица прежних ветвей `mapError` без изменений; отказы транскрипции и правки профиля прежние; CLI печатает `error.reason`.
-- [ ] 5. Custom emoji и `--dry-run`: подсчёт `custom_emoji` в запросе и в ответе, поле `premium_dropped`; `premium_features` в `TextCheck` и в ответе `--dry-run`. Тесты: ответ с сущностями и без одной `custom_emoji` даёт `premium_dropped`; ответ без сущностей поля не даёт; сообщение без custom emoji поля не даёт; запрос в Telegram прежний байт в байт; `--dry-run` с `<tg-emoji>`, Markdown `tg://emoji` и `--entities custom_emoji` перечисляет `custom_emoji`, без них поле пустое; `--dry-run` не вызывает Telegram.
-- [ ] 6. Длинная подпись Premium по Q8: `SelfPremium` в `premium.go` с памятью и сбросом; `daemon/premium_caption.go`; вставки в `send_media.go` и `message_extras.go` Daemon и в `tgclient/send_media.go`. Тесты: 1024 руны уходят без чтения Premium; 1025 без Premium код 2 с `reason: premium_required` и ноль вызовов отправки; 1025 с Premium уходит; 2049 код 2 без запросов; признак читается один раз на два вызова; `MEDIA_CAPTION_TOO_LONG` даёт код 2 и сбрасывает признак; переподключение сбрасывает признак; `--dry-run` с 1500 рунами показывает `long_caption` в `premium_features`.
-- [ ] 7. Документы через `docwriter` и `glavred` по `docs_chain.md`: `docs/cli/messages-read.md` (`message translate`, ошибки и причины, отсутствие хранения), `docs/cli/messages-write.md` (причины Premium, `premium_dropped` и его ограничение, предел подписи 1024 и 2048, `premium_features`), `docs/cli/overview.md` (список значений `error.reason`), `docs/contracts.md` (абзацы «Translation» и «Premium refusals»), таблицы пересобрать `go test ./internal/cli -run TestDocsGenerated -update-docs`; `FEATURES.md`: подпункты 18.2.1 (`message translate` по id, `--to`, до 20 id), 18.2.2 (причины отказа, без хранения), 18.3.1 (отказ `premium_required` и `recipient_requires_premium` при записи), 18.3.2 (`premium_dropped` и `premium_features`), 18.3.3 (подпись до 2048 рун для Premium), поправить 6.1.1.1 под Q8, строки статуса `[0] 18.2` и `[0] 18.3` (сделано, на живом аккаунте не проверено), убрать 18.2 и 18.3 из строки «Не начато, Could», дописать в список «не проверено на живом аккаунте» перечень ниже; `README.md` не меняется (документирует только проверенное вживую); `docs/skill/tg-cli/SKILL.md` (когда переводить через `tg`, а когда самому; `--to`; причины и что делать с `translation_unavailable`; `premium_dropped`; узнать Premium через `account profile`); решение в `.agents/decisions/` и строка в `_TOC.md`.
-- [ ] 8. Итоговая проверка Claude: `just check`, гонки по пакетам плана, `git diff --stat main -- internal/store/migrations` пуст, дифф общих файлов только вставками из таблицы «Файлы потока».
+- [x] 2. Перевод, слой `rpc` и `tgclient`: `rpc/translate.go`; `tgclient/translate.go`; `translate.go` в `readFiles`. Тесты на подмене invoker: запрос несёт `peer`, `id` в исходном порядке, `to_lang`, без `text` и `tone`; ответ из двух результатов ложится на два id; другое число результатов даёт код 5; `TO_LANG_INVALID`, `MSG_ID_INVALID`, `INPUT_TEXT_EMPTY`, `INPUT_TEXT_TOO_LONG` дают код 2; `TRANSLATIONS_DISABLED` и три временные ошибки дают код 5 с причиной; FLOOD_WAIT без повтора; проверка параметров: 0 и 21 id, повтор id, язык `EN` приводится к `en`, `english` и `e1` код 2.
+- [x] 3. Перевод, Daemon и CLI: `translateTelegram` и строка в `Telegram`; `daemon/translate.go` (`listChat`, видимость, вызов клиента); регистрация в `daemon.go`; строка в `access_test.go`; заглушки в `translate_fake_test.go`; `cli/translate_cmd.go` (аргументы `<чат> <id>...` или ссылка, `--to` обязателен, `safetyRead`, `ItemPath: items`, `untrusted` у `text`); строка в `read_cmd.go`; заготовка раздела в `docs/cli/messages-read.md`, чтобы тест полноты был зелёным. Тесты без сокетов: закрытый чат `not_found` и ноль вызовов Telegram; без `--to` код 2; ссылка t.me разбирается в чат и id; форматы `json` и `jsonl`; запись в базу не происходит.
+- [x] 4. Причина Premium: `tgclient/premium.go` (`premiumError`), строка в `mapError`, перенос причины в `writeFormatError`. Тесты: `PREMIUM_ACCOUNT_REQUIRED` на `sendMessage`, `sendMedia`, `editMessage` и rich-режиме даёт код 5, прежний текст и `reason: premium_required`; `PRIVACY_PREMIUM_REQUIRED` даёт `recipient_requires_premium`; таблица прежних ветвей `mapError` без изменений; отказы транскрипции и правки профиля прежние; CLI печатает `error.reason`.
+- [x] 5. Custom emoji и `--dry-run`: подсчёт `custom_emoji` в запросе и в ответе, поле `premium_dropped`; `premium_features` в `TextCheck` и в ответе `--dry-run`. Тесты: ответ с сущностями и без одной `custom_emoji` даёт `premium_dropped`; ответ без сущностей поля не даёт; сообщение без custom emoji поля не даёт; запрос в Telegram прежний байт в байт; `--dry-run` с `<tg-emoji>`, Markdown `tg://emoji` и `--entities custom_emoji` перечисляет `custom_emoji`, без них поле пустое; `--dry-run` не вызывает Telegram.
+- [x] 6. Длинная подпись Premium по Q8: `SelfPremium` в `premium.go` с памятью и сбросом; `daemon/premium_caption.go`; вставки в `send_media.go` и `message_extras.go` Daemon и в `tgclient/send_media.go`. Тесты: 1024 руны уходят без чтения Premium; 1025 без Premium код 2 с `reason: premium_required` и ноль вызовов отправки; 1025 с Premium уходит; 2049 код 2 без запросов; признак читается один раз на два вызова; `MEDIA_CAPTION_TOO_LONG` даёт код 2 и сбрасывает признак; переподключение сбрасывает признак; `--dry-run` с 1500 рунами показывает `long_caption` в `premium_features`.
+- [x] 7. Документы через `docwriter` и `glavred` по `docs_chain.md`: `docs/cli/messages-read.md` (`message translate`, ошибки и причины, отсутствие хранения), `docs/cli/messages-write.md` (причины Premium, `premium_dropped` и его ограничение, предел подписи 1024 и 2048, `premium_features`), `docs/cli/overview.md` (список значений `error.reason`), `docs/contracts.md` (абзацы «Translation» и «Premium refusals»), таблицы пересобрать `go test ./internal/cli -run TestDocsGenerated -update-docs`; `FEATURES.md`: подпункты 18.2.1 (`message translate` по id, `--to`, до 20 id), 18.2.2 (причины отказа, без хранения), 18.3.1 (отказ `premium_required` и `recipient_requires_premium` при записи), 18.3.2 (`premium_dropped` и `premium_features`), 18.3.3 (подпись до 2048 рун для Premium), поправить 6.1.1.1 под Q8, строки статуса `[0] 18.2` и `[0] 18.3` (сделано, на живом аккаунте не проверено), убрать 18.2 и 18.3 из строки «Не начато, Could», дописать в список «не проверено на живом аккаунте» перечень ниже; `README.md` не меняется (документирует только проверенное вживую); `docs/skill/tg-cli/SKILL.md` (когда переводить через `tg`, а когда самому; `--to`; причины и что делать с `translation_unavailable`; `premium_dropped`; узнать Premium через `account profile`); решение в `.agents/decisions/` и строка в `_TOC.md`.
+- [x] 8. Итоговая проверка Claude: `just check`, гонки по пакетам плана, `git diff --stat main -- internal/store/migrations` пуст, дифф общих файлов только вставками из таблицы «Файлы потока».
 
 Перечень для «не проверено на живом аккаунте» (шаг 7): `message translate` на тексте, на медиа без подписи, на службе, на RichMessage и на пачке из 20 id; предел числа id сервера; ошибки `TRANSLATIONS_DISABLED` и `TRANSLATE_REQ_QUOTA_EXCEEDED`; нужна ли Premium для перевода; FLOOD_WAIT на переводе; отправка не бесплатного custom emoji без Premium (ошибка, молчаливое удаление или пропуск) и срабатывание `premium_dropped`; RichMessage без Premium; подпись от 1025 до 2048 рун с Premium и без; настоящие `caption_length_limit_default` и `caption_length_limit_premium`; `PRIVACY_PREMIUM_REQUIRED` у собеседника с ограничением.
 
@@ -211,22 +211,22 @@ PR: —
 
 ## Deploy / rollback
 
-- [ ] Выкладки нет. После слияния перезапустить Daemon (`tg daemon stop`, `tg daemon start`).
-- [ ] Откат: откат ветки. Схема базы и `access.json` не меняются, данных, мешающих откату, нет.
+- [x] Выкладки нет. После слияния перезапустить Daemon (`tg daemon stop`, `tg daemon start`).
+- [x] Откат: откат ветки. Схема базы и `access.json` не меняются, данных, мешающих откату, нет.
 
 ## Cleanup
 
-- [ ] Временные файлы лежат в `var/agents/plans/20261116_1139_translate_premium/`.
-- [ ] Временные файлы не в git (`/var/` в `.gitignore`).
+- [x] Временные файлы лежат в `var/agents/plans/20261116_1139_translate_premium/`.
+- [x] Временные файлы не в git (`/var/` в `.gitignore`).
 
 ## Definition of done
 
-- [ ] Код изменён только в рамках плана и раздела «Файлы потока».
-- [ ] Главный инвариант выполняется.
-- [ ] Проверки зелёные или отклонения записаны.
-- [ ] Нет шагов `- [0]`.
-- [ ] Нет временных файлов в `.agents/plans`.
-- [ ] Решение записано в `.agents/decisions/` и `_TOC.md`; `FEATURES.md`, справочник, `docs/contracts.md` и навык обновлены; непроверенное вживую перечислено в `FEATURES.md`.
+- [x] Код изменён только в рамках плана и раздела «Файлы потока».
+- [x] Главный инвариант выполняется.
+- [x] Проверки зелёные или отклонения записаны.
+- [x] Нет шагов `- [0]`.
+- [x] Нет временных файлов в `.agents/plans`.
+- [x] Решение записано в `.agents/decisions/` и `_TOC.md`; `FEATURES.md`, справочник, `docs/contracts.md` и навык обновлены; непроверенное вживую перечислено в `FEATURES.md`.
 
 ## Known facts
 
