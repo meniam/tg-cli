@@ -55,7 +55,7 @@ A chat that the access lists close looks the same as a chat that does not exist:
 
 ## Profiles and the data directory
 
-`--profile <name>` selects an account. The name is 1 to 32 characters of `a-z`, `0-9`, `_` and `-`, starting with a letter or digit; anything else is exit code 2. The default profile is `default`. Every profile has its own directory with its own session, database, Daemon and access lists.
+`--profile <name>` selects an account. The name is 1 to 32 characters of `a-z`, `0-9`, `_` and `-`, starting with a letter or digit; anything else is exit code 2. The default profile is selected by `default_profile`, which defaults to `default`. Every profile has its own directory with its own session, database, Daemon and access lists.
 
 A profile lives in `<home>/<profile>/`, mode `0700`. The path of the socket (`<home>/<profile>/daemon.sock`) must not exceed 103 bytes, because Unix socket paths are short.
 
@@ -93,7 +93,7 @@ One Daemon runs per profile and holds the Telegram connection, the session, the 
 
 1. `tg daemon start` launches the Daemon as a detached background process and returns when its socket answers (up to 15 seconds). Credentials come from `TG_API_ID` and `TG_API_HASH` (your own application from https://my.telegram.org) or from `--client <preset>`, an official client preset, never both. The Daemon runs until `tg daemon stop` or a failure. With `--idle-timeout 30m` it stops itself after that long without a request; a running history load or an active `message watch` keeps it alive.
 2. `tg auth login` logs the profile in through the Daemon. The login is stored in the session and survives Daemon restarts.
-3. Every other command sends a request to the running Daemon. Without one the command exits with code 3 and the message ``the daemon is not running for profile "<name>": start it with `tg daemon start` ``.
+3. Most other commands send a request to the running Daemon. `config` commands and session import run locally; session export also works with a stopped Daemon. Without one the command exits with code 3 and the message ``the daemon is not running for profile "<name>": start it with `tg daemon start` ``.
 4. `tg daemon stop` asks the Daemon to stop and waits until the process is gone (it fails if the process is alive after 10 seconds).
 
 Starting again on a profile whose Daemon is running is not an error: the command reports the PID of the Daemon that is there and starts no second one. Details, flags and the journal are in [daemon-and-auth.md](daemon-and-auth.md).
@@ -101,22 +101,24 @@ Starting again on a profile whose Daemon is running is not an error: the command
 What each group of commands needs:
 
 | Commands | Running Daemon | Login |
-| --- | --- | --- | --- |
-| `schema`, `version`, `daemon logs` | no | no |
+| --- | --- | --- |
+| `schema`, `version`, `daemon logs`, `config *`, `session import` | no | no |
+| `session export` | no | an authorized saved session |
 | `daemon start` | no (it starts one) | no |
 | `daemon status`, `daemon stop`, `auth *` | yes | no |
 | `note add`, `note list`, `note delete`, `search`, `message export --local`, `message context --local`, `chat sync status` without a chat | yes | no |
+| `message export-month`, `message export-verify` | yes | no; monthly export requires a known account ID |
 | `chat sync status <chat>` | yes | the reference is resolved like in other commands: a check with a numeric id unknown to the session gave exit code 4 |
 | `note add` for an `@username` the database has not seen | yes | yes: it asks Telegram to resolve the name |
 | everything else | yes | yes |
 
-Without a login, a command that needs one exits with code 4 and the message ``not logged in: run `auth login` first``.
+Local account commands can also return code 4 when `auth_lost` is set or an expected account cannot be verified. Without a login, a command that needs one exits with code 4 and the message ``not logged in: run `auth login` first``.
 
 ## Global flags
 
 Global flags work in any position, before or after the command.
 
-`--expect-user <id|@username>` requires the selected profile to belong to that account. A numeric value matches the account ID; `@username` matches the username without regard to case. The flag wins over `TG_CLI_EXPECT_USER`; when the flag is absent, that variable supplies the value. An empty value disables the check. The Daemon applies it before handlers for `chat`, `message`, `note`, `user`, `contact`, `folder`, `account`, `search`, `chat sync` and `message watch`, including its subscription; `daemon`, `auth`, `schema` and `version` are excluded. A missing or different account is exit code 4 `not_authorized`; a mismatch names the expected value and the actual account ID and username, never a phone number.
+`--expect-user <id|@username>` requires the selected profile to belong to that account. A numeric value matches the account ID; `@username` matches the username without regard to case. The flag wins over `TG_CLI_EXPECT_USER`; when the flag is absent, that variable supplies the value. An empty value disables the check. The Daemon applies it before handlers for `chat`, `message`, `note`, `user`, `contact`, `folder`, `account`, `saved`, `sticker`, `search`, `chat sync` and `message watch`, including its subscription; `daemon`, `auth`, `schema` and `version` are excluded. A missing or different account is exit code 4 `not_authorized`; a mismatch names the expected value and the actual account ID and username, never a phone number.
 
 <!-- schema:global-flags -->
 | Flag | Type | Default | Description |
@@ -156,7 +158,7 @@ Every command, except the streams `message watch` and `message export`, prints o
 
 - `ok` is `true` on success and `false` on failure. Parse the envelope and the exit code, not the text.
 - `data` holds the result of the command. Its fields are listed per command in `tg schema` and on the command pages.
-- `error.code` is the name of the exit code (`usage`, `not_found`, `flood_wait` and so on, see the table below), `error.message` is for people. The wait time of `flood_wait` arrives inside `message`: there is no separate field. A transcription failure can also have `error.reason`: `premium_required` means Premium or free trial access is unavailable; `transcription_failed` is another Telegram refusal. When Telegram supplies them, `error.trial_remains` and `error.trial_resets_at` describe the remaining free transcriptions and their RFC 3339 reset time.
+- `error.code` is the name of the exit code (`usage`, `not_found`, `flood_wait` and so on, see the table below), `error.message` is for people. The wait time of `flood_wait` appears in `message`; when available, `error.retry_after_seconds` also carries it as a number. A transcription failure can also have `error.reason`: `premium_required` means Premium or free trial access is unavailable; `transcription_failed` is another Telegram refusal. When Telegram supplies them, `error.trial_remains` and `error.trial_resets_at` describe the remaining free transcriptions and their RFC 3339 reset time.
 - `throttled_ms` is an optional top-level number, next to `ok` and `data`. It appears when the request waited in the request throttle, in every format and as the closing line in `jsonl`. Without waiting the output is unchanged.
 
 For batch writes, a partial success has `ok: true`, `data.partial: true` and `data.errors` with an `id`, `code`, `message` and, for a flood wait, `retry_after_seconds`. It exits with code 1. If no item succeeds, the ordinary error envelope and the first error's exit code are returned. `--fields` always keeps `partial` and `errors` for a partial result. Check the exit code as well as `ok`.
