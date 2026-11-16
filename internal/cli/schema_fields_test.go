@@ -258,6 +258,9 @@ func TestSchemaFieldsMatchRealResponses(t *testing.T) {
 // command has to be either exercised or listed here with a reason.
 var uncoveredCommands = map[string]string{
 	"chat unread":                "access and persistence are covered by daemon tests",
+	"chat full start":            "the background job is covered by daemon tests on a fake Telegram",
+	"chat full status":           "the background job is covered by daemon tests on a fake Telegram",
+	"chat full cancel":           "the background job is covered by daemon tests on a fake Telegram",
 	"chat changes":               "local history is covered by daemon and store tests",
 	"message unread":             "access is covered by daemon tests",
 	"chat join":                  "account write is covered by net.Pipe CLI tests",

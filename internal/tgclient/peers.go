@@ -12,6 +12,7 @@ import (
 
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
+	"tg-cli/internal/throttle"
 )
 
 // preloadLimit is how many dialogs are read once to teach the peer cache the
@@ -175,6 +176,30 @@ func (c *Client) ChatInfo(ctx context.Context, ref chatref.Ref) (rpc.ChatInfo, e
 	if err != nil {
 		return rpc.ChatInfo{}, err
 	}
+	return c.fullInfo(ctx, p)
+}
+
+// ChatFull returns the full data of one chat for the background job. It takes the
+// chat id and never resolves a name: the peer comes from the peer cache the
+// session already has, so the call makes exactly one Telegram request.
+//
+// The request runs as background traffic: it is marked for low-priority
+// admission, so ordinary commands of the agent go first.
+func (c *Client) ChatFull(ctx context.Context, chatID int64) (rpc.ChatInfo, error) {
+	// The mark goes on before the lookup, so a peer the cache does not know yet
+	// is fetched as background traffic too.
+	ctx = throttle.WithBackground(ctx)
+	p, err := c.resolve(ctx, chatref.Ref{Kind: chatref.ID, ID: chatID})
+	if err != nil {
+		return rpc.ChatInfo{}, err
+	}
+	return c.fullInfo(ctx, p)
+}
+
+// fullInfo reads the full object of a resolved peer. ChatInfo and ChatFull share
+// it, so the flags, the description, the member count and the settings of a chat
+// are parsed in exactly one place.
+func (c *Client) fullInfo(ctx context.Context, p peers.Peer) (rpc.ChatInfo, error) {
 	base := toChatOf(p)
 	info := rpc.ChatInfo{ID: base.ID, Type: base.Type, Title: base.Title, Username: base.Username, Verified: p.Verified()}
 	info.CreatedAt = createdUnix(p)

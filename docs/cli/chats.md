@@ -591,6 +591,112 @@ Rules that hold for all three commands:
 
 Verification and remaining work for history sync are tracked in [FEATURES.md](../../FEATURES.md), item 10.12.
 
+### tg chat full start
+
+Queues the background job that reads the full data of groups and channels: the description, the member count and the settings. It makes one Telegram request per chat, reads only, and runs behind the shared throttle of the account as background traffic, so ordinary commands go first. Without a chat the job takes every allowed group and channel without a complete read yet; with `--refresh` it reads every allowed group and channel again. A chat closed by the access lists is never requested.
+
+```text
+tg chat full start [<chat>] [flags]
+```
+
+<!-- schema:flags tg chat full start -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--refresh` | bool | `false` | read every allowed group and channel again |
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon and a login. Put `--` before a negative chat id. The job keeps its progress in `full_synced_at` and `full_error` of each chat, so a later `start` continues with the chats that have none. A chat whose last read failed is on that list again: the failure is recorded and the next `start` retries it. A job that is already active is reported unchanged.
+
+**Example.**
+
+```sh
+tg chat full start
+tg chat full start @release_team
+tg chat full start --refresh
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"state":"queued","total":12,"done":0,"failed":0,"started_at":"2026-11-16T10:00:00Z","updated_at":"2026-11-16T10:00:00Z"}}
+```
+
+**Answer fields** (`data`): `state` string, `total`, `done` and `failed` integers, `current_chat_id` integer (optional), `wait_seconds` integer (optional), `error` string (optional), `started_at` and `updated_at` strings (RFC 3339 UTC).
+
+**Exit codes.** 0; 2 a malformed reference; 3, 4; 7 an unknown or closed chat; 6 the account is paused by `FLOOD_WAIT` longer than the auto-wait.
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.5.
+
+### tg chat full status
+
+Reports the job of this Daemon run: its state, how many chats it took, read and failed, and the chat it is reading. It reads the job state only and never calls Telegram.
+
+```text
+tg chat full status [flags]
+```
+
+<!-- schema:flags tg chat full status -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon. The job lives in memory: after a Daemon restart `status` reports `idle`, and `start` continues from the chats without a complete read.
+
+**Example.**
+
+```sh
+tg chat full status
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"state":"running","total":12,"done":5,"failed":1,"current_chat_id":-1001234567890,"started_at":"2026-11-16T10:00:00Z","updated_at":"2026-11-16T10:00:20Z"}}
+```
+
+**Answer fields** (`data`): the fields of `chat full start`; `wait_seconds` is set while the state is `waiting_flood` and `error` carries the reason of the last failure.
+
+**Exit codes.** 0; 3.
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.5.
+
+### tg chat full cancel
+
+Stops the job after the chat it is reading. What was already saved stays, and the next `start` continues with the chats that have no complete read.
+
+```text
+tg chat full cancel [flags]
+```
+
+<!-- schema:flags tg chat full cancel -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon. Cancelling a finished job changes nothing and reports the job as it is.
+
+**Example.**
+
+```sh
+tg chat full cancel
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"state":"cancelled","total":12,"done":5,"failed":1,"started_at":"2026-11-16T10:00:00Z","updated_at":"2026-11-16T10:01:00Z"}}
+```
+
+**Answer fields** (`data`): the fields of `chat full start`.
+
+**Exit codes.** 0; 3.
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.5.
+
 ### tg chat sync start
 
 Starts or resumes a background load of one chat's history. The command returns at once with the job. It reads Telegram in the background and writes only to the local database, hence the class `local_write`.
