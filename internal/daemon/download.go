@@ -70,15 +70,18 @@ func (d *daemon) messageDownload(ctx context.Context, raw json.RawMessage) (any,
 		name := fmt.Sprintf("%d_%d.%s", chat.ID, f.MessageID, ext)
 		f.Path = dir.Path(name)
 		if !p.DryRun {
-			size, e := dir.Write(name, min(fileroot.MaxFileSize, 500*1024*1024-total), fetch)
+			sum, e := dir.WriteParallel(ctx, name, min(fileroot.MaxFileSize, 500*1024*1024-total), f.Size, fetch)
 			if e != nil {
+				if errors.Is(e, fileroot.ErrDownloadSize) {
+					return rpc.NewError(rpc.CodeTelegram, "downloaded size does not match")
+				}
 				var re *rpc.Error
 				if errors.As(e, &re) || errors.Is(e, context.Canceled) || errors.Is(e, context.DeadlineExceeded) {
 					return e
 				}
 				return rpc.NewError(rpc.CodeInvalidParams, "cannot write downloaded file")
 			}
-			f.Size = size
+			f.SHA256 = sum
 		}
 		total += f.Size
 		res.Files = append(res.Files, f)

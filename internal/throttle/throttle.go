@@ -30,6 +30,7 @@ const (
 	General Class = iota
 	PrivateSend
 	GroupSend
+	File
 )
 
 // Config contains account limits. Use DefaultConfig and override needed fields.
@@ -133,6 +134,11 @@ type Limiter struct {
 	pausedUntil        time.Time
 	pausedByBackground bool
 	wake               chan struct{}
+	fileWake           chan struct{}
+	fileBucket         bucket
+	fileQueue          []*waiter
+	fileActive         int
+	fileRunning        bool
 	running            bool
 }
 
@@ -151,7 +157,8 @@ func New(cfg Config, clock Clock) (*Limiter, error) {
 		clock: clock, cfg: cfg,
 		general: bucket{tokens: float64(cfg.GeneralBurst), last: clock.Now()},
 		private: make(map[string]*bucket), group: make(map[string]*bucket),
-		wake: make(chan struct{}, 1),
+		wake: make(chan struct{}, 1), fileWake: make(chan struct{}, 1),
+		fileBucket: bucket{tokens: fileBurst, last: clock.Now()},
 	}, nil
 }
 
@@ -171,6 +178,7 @@ func (l *Limiter) PausedFor() time.Duration {
 type Permit struct {
 	limiter *Limiter
 	once    sync.Once
+	file    bool
 }
 
 // Release frees the concurrency slot. It is safe to call more than once.
@@ -181,7 +189,11 @@ func (p *Permit) Release() {
 	p.once.Do(func() {
 		l := p.limiter
 		l.mu.Lock()
-		l.active--
+		if p.file {
+			l.fileActive--
+		} else {
+			l.active--
+		}
 		l.signal()
 		l.mu.Unlock()
 	})
@@ -193,6 +205,9 @@ func (p *Permit) Release() {
 func (l *Limiter) Acquire(ctx context.Context, class Class, peer string, waited *Wait) (*Permit, error) {
 	if ctx == nil {
 		return nil, errors.New("nil context")
+	}
+	if class == File {
+		return l.acquireFile(ctx, waited)
 	}
 	if class > GroupSend || (class != General && peer == "") {
 		return nil, errors.New("invalid throttle request")
@@ -310,6 +325,10 @@ func (l *Limiter) pause(d time.Duration, background bool) {
 
 func (l *Limiter) signal() {
 	select {
+	case l.fileWake <- struct{}{}:
+	default:
+	}
+	select {
 	case l.wake <- struct{}{}:
 	default:
 	}
@@ -332,6 +351,7 @@ func (l *Limiter) run() {
 		w := (*queue)[0]
 		if w.ctx.Err() != nil {
 			*queue = (*queue)[1:]
+			l.signal()
 			l.mu.Unlock()
 			continue
 		}
@@ -339,6 +359,7 @@ func (l *Limiter) run() {
 		if !background {
 			if err := l.backgroundFloodError(now); err != nil {
 				*queue = (*queue)[1:]
+				l.signal()
 				w.err = err
 				close(w.ready)
 				l.mu.Unlock()
@@ -357,6 +378,7 @@ func (l *Limiter) run() {
 			l.active++
 			*queue = (*queue)[1:]
 			w.granted = true
+			l.signal()
 			close(w.ready)
 			l.mu.Unlock()
 			continue

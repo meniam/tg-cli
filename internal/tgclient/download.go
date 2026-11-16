@@ -2,7 +2,9 @@ package tgclient
 
 import (
 	"context"
+	"errors"
 	"io"
+	"time"
 
 	"github.com/gotd/td/telegram/downloader"
 	"github.com/gotd/td/telegram/peers"
@@ -11,6 +13,7 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 	"tg-cli/internal/chatref"
+	"tg-cli/internal/fileroot"
 	"tg-cli/internal/rpc"
 )
 
@@ -20,10 +23,14 @@ func (c *Client) Download(ctx context.Context, ref chatref.Ref, ids []int, visit
 	if err != nil {
 		return 0, nil, err
 	}
-	return downloadResolved(ctx, c.tg.API(), p, p.InputPeer(), toChatOf(p).ID, ids, visit)
+	return downloadResolvedWithTransfer(ctx, c.tg.API(), p, p.InputPeer(), toChatOf(p).ID, ids, visit, c.transfers, c.tg, c.transferAutoWait())
 }
 
 func downloadResolved(ctx context.Context, api *tg.Client, p peers.Peer, input tg.InputPeerClass, chatID int64, ids []int, visit func(rpc.DownloadedFile, func(io.Writer) error) error) (int64, []rpc.ItemError, error) {
+	return downloadResolvedWithTransfer(ctx, api, p, input, chatID, ids, visit, nil, nil, 0)
+}
+
+func downloadResolvedWithTransfer(ctx context.Context, api *tg.Client, p peers.Peer, input tg.InputPeerClass, chatID int64, ids []int, visit func(rpc.DownloadedFile, func(io.Writer) error) error, transfers *transfers, invokers fileInvokers, autoWait time.Duration) (int64, []rpc.ItemError, error) {
 	elems, err := query.Messages(api).GetMessagesWithEntities(ctx, input, ids...)
 	if err != nil {
 		return chatID, nil, mapError(err)
@@ -60,7 +67,7 @@ func downloadResolved(ctx context.Context, api *tg.Client, p peers.Peer, input t
 			e = er
 			if e == nil {
 				e = visit(file, func(w io.Writer) error {
-					_, err := downloader.NewDownloader().Download(downloadClient{api}, loc).WithRefresh(func(ctx context.Context) (tg.InputFileLocationClass, error) {
+					builderRefresh := func(ctx context.Context) (tg.InputFileLocationClass, error) {
 						fresh, err := query.Messages(api).GetMessagesWithEntities(ctx, input, id)
 						if err != nil {
 							return nil, mapError(err)
@@ -84,7 +91,44 @@ func downloadResolved(ctx context.Context, api *tg.Client, p peers.Peer, input t
 							return next, nil
 						}
 						return nil, rpc.NewError(rpc.CodeNotFound, "message not found")
-					}).Stream(ctx, w)
+					}
+					builder := downloader.NewDownloader().Download(downloadClient{api}, loc).WithRefresh(builderRefresh)
+					if transfers == nil {
+						_, err := builder.Stream(ctx, w)
+						return mapError(err)
+					}
+					release, err := transfers.acquire(ctx)
+					if err != nil {
+						return err
+					}
+					defer release()
+					var dc int
+					switch media := item.m.Media.(type) {
+					case *tg.MessageMediaDocument:
+						if doc, ok := media.Document.(*tg.Document); ok {
+							dc = doc.DCID
+						}
+					case *tg.MessageMediaPhoto:
+						if photo, ok := media.Photo.(*tg.Photo); ok {
+							dc = photo.DCID
+						}
+					}
+					partAPI, err := transfers.fileAPI(ctx, invokers, dc, autoWait)
+					if err != nil {
+						return mapError(err)
+					}
+					target, ok := w.(io.WriterAt)
+					if !ok {
+						return rpc.NewError(rpc.CodeTelegram, "download target does not support random writes")
+					}
+					builder = downloader.NewDownloader().WithPartSize(1<<20).Download(partAPI, loc).WithSize(file.Size).WithVerify(file.MediaType != "photo").WithThreads(downloadWorkers).WithScheduler(transfers.scheduler(dc)).WithRefresh(builderRefresh)
+					_, err = builder.Parallel(ctx, target)
+					if errors.Is(err, fileroot.ErrDownloadSize) {
+						return rpc.NewError(rpc.CodeTelegram, "downloaded size does not match")
+					}
+					if errors.Is(err, downloader.ErrHashMismatch) {
+						return rpc.NewError(rpc.CodeTelegram, "downloaded file does not match telegram hashes")
+					}
 					return mapError(err)
 				})
 			}

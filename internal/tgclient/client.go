@@ -62,6 +62,7 @@ type Client struct {
 	updates           *updates.Manager
 	stateKV           StateKV
 	throttle          *throttle.Limiter
+	transfers         *transfers
 	sinkMu            sync.RWMutex
 	sink              func(rpc.Event)
 	transcriptionSink func(rpc.Transcription)
@@ -89,9 +90,11 @@ func NewWithNetwork(cfg Config) (*Client, error) {
 		return nil, err
 	}
 	c := &Client{connection: connection, appID: cfg.AppID, appHash: cfg.AppHash, ready: make(chan struct{}), authReady: make(chan struct{}, 1), stateKV: cfg.StateKV, throttle: cfg.Throttle}
+	c.transfers = newTransfers()
 	c.sessionStorage = &telegram.FileSessionStorage{Path: cfg.SessionPath}
 	options := telegram.Options{
 		Resolver:               resolver,
+		FilePoolSize:           4,
 		OnConnectionStateEvent: c.connection.update,
 		SessionStorage:         c.sessionStorage,
 		OnAuthLost: func(_ context.Context, err error) error {

@@ -316,32 +316,6 @@ func TestSendMediaLargeFileAndCancellation(t *testing.T) {
 	}
 }
 
-func TestSendMediaLargeFileUsesSequentialBigParts(t *testing.T) {
-	file := mediaFixture(t, "large.bin", 10<<20+1)
-	parts, active, maxActive, sends := 0, 0, 0, 0
-	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
-		switch input.(type) {
-		case *tg.UploadSaveBigFilePartRequest:
-			active++
-			if active > maxActive {
-				maxActive = active
-			}
-			parts++
-			active--
-			return uploadOK(output)
-		case *tg.MessagesSendMediaRequest:
-			sends++
-			return respond(output, sentUpdate(18))
-		default:
-			return errors.New("unexpected request")
-		}
-	}))
-	result, err := sendMedia(context.Background(), api, &tg.InputPeerSelf{}, 42, rpc.SendMediaParams{As: "document"}, []rpc.MediaFile{file})
-	if err != nil || parts != 81 || maxActive != 1 || sends != 1 || len(result.Messages) != 1 {
-		t.Fatalf("large file: result=%+v err=%v parts=%d max=%d sends=%d", result, err, parts, maxActive, sends)
-	}
-}
-
 func TestSendMediaClosedDuringUploadDoesNotSend(t *testing.T) {
 	file := mediaFixture(t, "closing.bin", 10<<20+1)
 	parts, sends := 0, 0

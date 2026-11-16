@@ -4,6 +4,7 @@ import (
 	"context"
 	"mime"
 	"path/filepath"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gotd/td/telegram/message"
@@ -37,7 +38,7 @@ func (c *Client) SendMedia(ctx context.Context, ref chatref.Ref, p rpc.SendMedia
 			return rpc.SendMediaResult{}, rpc.NewError(rpc.CodeInvalidParams, "self-destruct requires a private user chat")
 		}
 	}
-	return sendMedia(ctx, c.tg.API(), resolved.InputPeer(), int64(resolved.TDLibPeerID()), p, files)
+	return sendMediaWithTransfers(ctx, c.tg.API(), resolved.InputPeer(), int64(resolved.TDLibPeerID()), p, files, c.transfers, c.tg, c.Connection().DC, c.transferAutoWait())
 }
 
 func validateMedia(p rpc.SendMediaParams, files []rpc.MediaFile) error {
@@ -100,6 +101,10 @@ type mediaSpec struct {
 }
 
 func sendMedia(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.SendMediaParams, files []rpc.MediaFile) (rpc.SendMediaResult, error) {
+	return sendMediaWithTransfers(ctx, api, destination, chatID, p, files, nil, nil, 0, 0)
+}
+
+func sendMediaWithTransfers(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.SendMediaParams, files []rpc.MediaFile, transfers *transfers, invokers fileInvokers, dc int, autoWait time.Duration) (rpc.SendMediaResult, error) {
 	wrappedAPI, wrapErr := idempotentAPI(api, p.AccountID, chatID, p.IdempotencyKey)
 	if wrapErr != nil {
 		return rpc.SendMediaResult{}, wrapErr
@@ -118,7 +123,13 @@ func sendMedia(ctx context.Context, api *tg.Client, destination tg.InputPeerClas
 		if _, err := file.File.Seek(0, 0); err != nil {
 			return rpc.SendMediaResult{}, rpc.NewError(rpc.CodeInvalidParams, "media file cannot be read")
 		}
-		uploaded, err := u.FromFile(ctx, file.File)
+		var uploaded tg.InputFileClass
+		var err error
+		if transfers == nil {
+			uploaded, err = u.FromFile(ctx, file.File)
+		} else {
+			uploaded, err = transfers.upload(ctx, invokers, dc, autoWait, file.File)
+		}
 		if err != nil {
 			return rpc.SendMediaResult{}, mapError(err)
 		}

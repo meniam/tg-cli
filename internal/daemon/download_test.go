@@ -69,9 +69,12 @@ func TestDownloadAccessAndDryRun(t *testing.T) {
 		t.Fatalf("dry-run wrote file: %v", err)
 	}
 	p.DryRun = false
-	_, err = d.messageDownload(context.Background(), params(t, p))
+	v, err = d.messageDownload(context.Background(), params(t, p))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if got := v.(rpc.DownloadResult).Files[0].SHA256; got != "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" {
+		t.Fatalf("sha256=%s", got)
 	}
 	b, err = os.ReadFile(filepath.Join(root, "42_1.jpg"))
 	if err != nil || string(b) != "test" {
