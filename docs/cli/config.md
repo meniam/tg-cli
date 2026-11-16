@@ -2,8 +2,8 @@
 
 `tg` reads its configuration from `~/.config/tg-cli/config.toml`. The file
 holds the profile data directory, file names, behaviour settings, and named
-profile settings. `tg schema` lists every key, its default, and its command-line
-or environment override.
+profile settings. `tg config init` writes a template with every key; `tg schema`
+lists every key, its default, and its command-line or environment override.
 
 ### tg config path
 
@@ -37,6 +37,44 @@ tg config path
 **Answer fields** (`data`): `path` string.
 
 **Exit codes.** 0 success, 2 invalid configuration, 1 a local read error.
+
+### tg config init
+
+Writes the configuration template to the configuration path. The template lists
+every key with what it does, its default, the values it accepts, and the flag or
+environment variable that overrides it; all of them are commented out, so the
+written file behaves like the defaults. The command runs under the configuration
+lock and creates the file exclusively with mode `0600`. It never replaces an
+existing file: the answer then names the file and the exit code is 2, so the
+owner keeps their edits.
+
+```text
+tg config init [flags]
+```
+
+<!-- schema:flags tg config init -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Preconditions.** The
+configuration file must not exist.
+
+**Example.**
+
+```sh
+tg config init
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"path":"/Users/alice/.config/tg-cli/config.toml","created":true}}
+```
+
+**Answer fields** (`data`): `path` and `created` (`true`).
+
+**Exit codes.** 0 the file was written, 2 the file already exists, 1 a local
+write error.
 
 ### tg config show
 

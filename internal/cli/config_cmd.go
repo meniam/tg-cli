@@ -45,6 +45,10 @@ type configShowResult struct {
 	Behavior       configBehaviorResult           `json:"behavior"`
 	Profiles       map[string]configProfileResult `json:"profiles"`
 }
+type configInitResult struct {
+	Path    string `json:"path"`
+	Created bool   `json:"created"`
+}
 type configMigrateResult struct {
 	Migrated bool     `json:"migrated"`
 	Backup   string   `json:"backup,omitempty"`
@@ -57,9 +61,24 @@ func (a *app) configCommand() *cobra.Command {
 		return a.success(cmd, configPathResult{Path: a.deps.ConfigPath})
 	}}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[configPathResult]()}))
 	cmd.AddCommand(a.annotate(&cobra.Command{Use: "show", Short: "Show configuration with proxy credentials redacted", Args: cobra.NoArgs, RunE: a.configShow}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[configShowResult]()}))
+	cmd.AddCommand(a.annotate(&cobra.Command{Use: "init", Short: "Write the configuration template", Args: cobra.NoArgs, RunE: a.configInit}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[configInitResult]()}))
 	cmd.AddCommand(a.annotate(&cobra.Command{Use: "migrate", Short: "Migrate legacy profile settings into the configuration", Args: cobra.NoArgs, RunE: a.configMigrate}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[configMigrateResult]()}))
 	return cmd
 }
+
+// configInit writes the template to the configuration path. An existing file is
+// left alone: the template must not overwrite the edits of the owner.
+func (a *app) configInit(cmd *cobra.Command, _ []string) error {
+	err := config.Init(a.deps.ConfigPath)
+	if errors.Is(err, config.ErrConfigExists) {
+		return fail(exitcode.Usage, "%s already exists: edit it instead of writing a new template", a.deps.ConfigPath)
+	}
+	if err != nil {
+		return fail(exitcode.Failure, "%v", err)
+	}
+	return a.success(cmd, configInitResult{Path: a.deps.ConfigPath, Created: true})
+}
+
 func (a *app) configShow(cmd *cobra.Command, _ []string) error {
 	if err := a.migrateProfiles(); err != nil {
 		return err

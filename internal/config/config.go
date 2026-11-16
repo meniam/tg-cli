@@ -69,6 +69,10 @@ type Profile struct {
 	Proxy string `toml:"proxy"`
 }
 
+// ErrConfigExists means `tg config init` found a configuration file. The command
+// never replaces it: it reports the path and leaves the file as it is.
+var ErrConfigExists = errors.New("the configuration file already exists")
+
 // Error identifies an invalid configuration as a usage error.
 type Error struct {
 	// Message describes the invalid configuration.

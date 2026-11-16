@@ -310,6 +310,7 @@ var fixtureResponseCases = map[string]bool{
 	"message export-month":  true,
 	"message export-verify": true,
 	"config path":           true,
+	"config init":           true,
 	"config show":           true,
 	"config migrate":        true,
 }
@@ -318,7 +319,7 @@ var fixtureResponseCases = map[string]bool{
 // command tree: a command that is neither exercised nor explained fails here.
 func TestEveryCommandResponseIsCompared(t *testing.T) {
 	t.Run("message download", TestDownloadResponseFixture)
-	for _, name := range []string{"config path", "config show", "config migrate"} {
+	for _, name := range []string{"config path", "config init", "config show", "config migrate"} {
 		t.Run(name, func(t *testing.T) { compareConfigResponse(t, name) })
 	}
 	t.Run("message export-month and verify", TestExportMonthCLI)

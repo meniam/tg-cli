@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"tg-cli/internal/config"
 	"tg-cli/internal/exitcode"
 )
 
@@ -143,5 +144,77 @@ func TestConfigShowNamesTheDatabaseDirectory(t *testing.T) {
 	}
 	if strings.HasPrefix(got.DBDir, got.Home) {
 		t.Errorf("the database directory must not follow home: %q under %q", got.DBDir, got.Home)
+	}
+}
+
+// TestConfigInit writes the template once and refuses to replace it: the owner
+// keeps their edits.
+func TestConfigInit(t *testing.T) {
+	e := newEnv(t)
+	path := filepath.Join(e.home, ".config", "tg-cli", "config.toml")
+	r := e.run("config", "init")
+	if r.code != exitcode.OK {
+		t.Fatalf("init: %d %s %s", r.code, r.stdout, r.stderr)
+	}
+	var got configInitResult
+	if err := json.Unmarshal(parse(t, r).Data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Created || got.Path != path {
+		t.Fatalf("init answer: %+v", got)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("the config file: mode %o, want 0600", info.Mode().Perm())
+	}
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(written) != config.Template() {
+		t.Error("the file is not the template")
+	}
+	if r := e.run("config", "init"); r.code != exitcode.Usage || !strings.Contains(r.stdout, "already exists") {
+		t.Fatalf("second init: %d %q", r.code, r.stdout)
+	}
+	again, err := os.ReadFile(path)
+	if err != nil || string(again) != string(written) {
+		t.Fatalf("the refused init changed the file: %v", err)
+	}
+}
+
+// TestConfigTemplateCoversSchema keeps the template and `tg schema` in step: a key
+// the tool understands must have its documented line in the template.
+func TestConfigTemplateCoversSchema(t *testing.T) {
+	e := newEnv(t)
+	r := e.run("schema")
+	if r.code != exitcode.OK {
+		t.Fatalf("schema: %d", r.code)
+	}
+	var doc schemaDoc
+	if err := json.Unmarshal(parse(t, r).Data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	template := config.Template()
+	for _, item := range doc.Config {
+		// The schema names a key by its full path, the template by the leaf
+		// inside its table: files.database is `# database = ` under [files],
+		// profiles.<profile>.device is `# device = ` under [profiles.default].
+		table, leaf := "", item.Key
+		if parent, rest, ok := strings.Cut(item.Key, "."); ok {
+			table, leaf = parent, rest
+			if parent == "profiles" {
+				table, leaf = "profiles.default", strings.TrimPrefix(rest, "<profile>.")
+			}
+		}
+		if table != "" && !strings.Contains(template, "["+table+"]") {
+			t.Errorf("the template has no [%s] table for the key %q", table, item.Key)
+		}
+		if !strings.Contains(template, "# "+leaf+" = ") {
+			t.Errorf("the template has no line for the key %q", item.Key)
+		}
 	}
 }

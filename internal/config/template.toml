@@ -1,0 +1,135 @@
+# tg-cli configuration: ~/.config/tg-cli/config.toml
+#
+# Every setting is listed below, commented out, with its default and the
+# values it accepts. Uncomment a line to change it. Format of each entry:
+#   what it does / Default / Values / Overrides (flag or environment variable)
+#
+# Priority for every setting: command-line flag, then environment variable,
+# then this file, then the default. `tg config show` prints what is read from
+# this file with defaults, `tg config path` prints the path of this file.
+# `tg` rewrites only the lines of [profiles.<name>] that it changes: your
+# comments and other tables stay as they are.
+#
+# The file must not be writable by group or others (chmod 600): the proxy
+# password lives here.
+#
+# `tg config init` writes this template without changing an existing file.
+
+# --- Where profile data lives ------------------------------------------------
+
+# Base directory of the profiles: the session, the daemon socket, the lock and
+# the journals live in <home>/<profile>/. The database does not: it lives next
+# to this file, in db/<profile>/. The socket path must stay within 103 bytes,
+# so keep this directory short.
+# Default: ~/Library/Application Support/tg-cli (macOS), ~/.config/tg-cli (Linux)
+# Values:  an absolute path; "~" at the start is expanded; "~user" is not allowed
+# Overrides: environment TG_CLI_HOME
+# home = "~/Library/Application Support/tg-cli"
+
+# Profile used when --profile is not given. One profile is one Telegram account
+# with its own session, daemon and database.
+# Default: "default"
+# Values:  1 to 32 characters: a-z, 0-9, _ and -, starting with a letter or digit;
+#          "db" is reserved for the database directory next to this file
+# Overrides: flag --profile
+# default_profile = "default"
+
+# --- File names --------------------------------------------------------------
+# Change a name only before the first run. If a file with the old name still
+# exists next to a renamed database, session or access list, the daemon refuses
+# to start (exit code 2) instead of silently creating an empty one.
+# Values for every name: letters, digits, ".", "_" and "-", up to 64 characters,
+# starting with a letter or digit; names must differ from each other and from
+# daemon.sock, daemon.lock, moderation.jsonl and account.jsonl.
+#
+# The database lives next to this file: db/<profile>/<database>. The other files
+# live in <home>/<profile>/. The db directory is not meant for a dotfiles
+# repository or a file sync: it holds the whole history of the account.
+
+# [files]
+# Local SQLite database: saved history and offline search. The file sits in
+# db/<profile>/ next to this file, so it does not move with home or TG_CLI_HOME.
+# Default: "store.db"
+# database = "store.db"
+#
+# Telegram session, in <home>/<profile>/. It is a SECRET: never copy it, a
+# second client on the same session can get the account logged out.
+# Default: "session.json"
+# session = "session.json"
+#
+# Journal of a daemon that runs in the background, in <home>/<profile>/.
+# Default: "daemon.log"
+# log = "daemon.log"
+#
+# Intent and outcome of every message deletion, in <home>/<profile>/.
+# Default: "deletions.jsonl"
+# deletions = "deletions.jsonl"
+#
+# Chat access lists (which chats may be read, written, sent files from), in
+# <home>/<profile>/. Only you edit this file; agents must not.
+# Default: "access.json"
+# access = "access.json"
+
+# --- Behaviour ---------------------------------------------------------------
+
+# [behavior]
+# Share of the usual Telegram request limits that the tool may use. Lower is
+# slower and safer for the account.
+# Default: 60
+# Values:  a number from 1 to 100
+# Overrides: environment TG_CLI_THROTTLE_PERCENT
+# throttle_percent = 60
+#
+# How long the tool waits on its own after Telegram answers FLOOD_WAIT. A longer
+# required wait is returned to the caller as an error (exit code 6).
+# Default: "10s"
+# Values:  a non-negative duration such as "0s", "5s", "10s", "1m", "2m30s"
+# Overrides: environment TG_CLI_FLOOD_AUTOWAIT
+# flood_autowait = "10s"
+#
+# Refuse to run unless the daemon is logged in as this account. Protects
+# against acting on the wrong account.
+# Default: "" (no check)
+# Values:  a numeric Telegram user id ("114954417") or a username ("@name")
+# Overrides: flag --expect-user, environment TG_CLI_EXPECT_USER
+# expect_user = "@your_username"
+
+# --- Per-profile settings ----------------------------------------------------
+# One table per profile: [profiles.<name>]. `tg daemon start` writes these
+# keys when you pass --client, --device, --transport or --proxy. Every key below
+# belongs to the table and is commented out, so the table itself changes nothing.
+
+[profiles.default]
+# Official client preset used to log in instead of your own api_id and api_hash.
+# Telegram watches accounts of unofficial clients closely; the risk is not
+# assessed. A preset cannot be combined with TG_API_ID and TG_API_HASH.
+# Default: "" (not chosen: set it here, pass --client, or use TG_API_ID and TG_API_HASH)
+# Values:  desktop, android, android-x, ios, macos, web-z, web-k, webogram
+# Overrides: flag daemon start --client
+# client = "desktop"
+
+# Device name that Telegram shows in the list of your sessions.
+# Default: "" (the Telegram client library uses its own name)
+# Values:  1 to 64 characters, no control characters
+# Overrides: flag daemon start --device
+# device = "MacBook Pro"
+
+# Network path to Telegram.
+# Default: "tcp"
+# Values:  "tcp"; "wss" (WebSocket over TLS); "auto" (TCP first, then WSS for
+#          the same data center after a connection or handshake error; it stays
+#          on WSS until the daemon restarts)
+# Overrides: flag daemon start --transport
+# transport = "tcp"
+
+# Proxy for Telegram traffic. The value may contain a password or an MTProxy
+# secret, so this file keeps mode 0600. Use the environment variable to keep
+# the proxy out of the shell history.
+# Default: "" (no proxy; "none" also means no proxy)
+# Values:  "socks5://[user:password@]host:port" (tcp, wss, auto);
+#          "http://[user:password@]host:port" (wss or auto only);
+#          "tg://proxy?server=HOST&port=PORT&secret=SECRET" or
+#          "https://t.me/proxy?server=HOST&port=PORT&secret=SECRET"
+#          (MTProxy, tcp only); "none" clears a saved proxy
+# Overrides: flag daemon start --proxy, environment TG_CLI_PROXY
+# proxy = "socks5://127.0.0.1:1080"

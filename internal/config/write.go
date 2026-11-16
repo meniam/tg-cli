@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -159,6 +160,36 @@ func updateProfileLocked(path, name string, changes map[string]string, onlyMissi
 	}
 	return cfg, nil
 }
+
+// Init writes the configuration template to path. It runs under the config lock
+// and never replaces an existing file: the template must not overwrite the edits
+// of the owner. An existing file is ErrConfigExists.
+func Init(path string) error {
+	return withConfigLock(path, func() error {
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, fs.ErrExist) {
+			return ErrConfigExists
+		}
+		if err != nil {
+			return fmt.Errorf("create config: %w", err)
+		}
+		_, err = f.WriteString(Template())
+		if err == nil {
+			err = f.Sync()
+		}
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			// A half-written file would be read as a broken configuration, so a
+			// failed write leaves nothing behind.
+			_ = os.Remove(path)
+			return fmt.Errorf("write config: %w", err)
+		}
+		return nil
+	})
+}
+
 func writeAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	f, err := os.CreateTemp(dir, ".config-*.tmp")
