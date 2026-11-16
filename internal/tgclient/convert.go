@@ -41,6 +41,10 @@ func toChat(e dialogs.Elem) (rpc.Chat, bool) {
 			if c.Megagroup {
 				chat.Type = "supergroup"
 			}
+			// The dialog list carries the channel object, so the flags are known
+			// here and must reach the database.
+			chat.Scam, chat.Fake, chat.Restricted = c.Scam, c.Fake, c.Restricted
+			chat.FlagsKnown = true
 		}
 	default:
 		return rpc.Chat{}, false

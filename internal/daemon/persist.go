@@ -44,7 +44,8 @@ func (d *daemon) saveChats(ctx context.Context, op string, chats []rpc.Chat, inc
 	stored := make([]store.Chat, 0, len(chats))
 	people := make([]store.Person, 0, len(chats))
 	for _, chat := range chats {
-		item := store.Chat{ID: chat.ID, Type: chat.Type, Title: chat.Title, Username: optionalText(chat.Username)}
+		item := store.Chat{ID: chat.ID, Type: chat.Type, Title: chat.Title, Username: optionalText(chat.Username),
+			Scam: chat.Scam, Fake: chat.Fake, Restricted: chat.Restricted, FlagsKnown: chat.FlagsKnown}
 		if includeUnread {
 			unread := int64(chat.Unread)
 			item.Unread = &unread
@@ -100,13 +101,31 @@ func (d *daemon) saveChatInfo(ctx context.Context, info rpc.ChatInfo) {
 		About: optionalText(info.About), Members: positiveIntPointer(info.Members), // 0 means unknown
 		Forum: boolPointer(info.Forum), Verified: boolPointer(info.Verified), Settings: info.Settings,
 	}
+	item.CreatedAt = positiveInt64Pointer(info.CreatedAt)
+	item.Scam, item.Fake, item.Restricted = info.Scam, info.Fake, info.Restricted
+	// A chat info always reads the chat object, so its flags are known even when
+	// all three are false: that is how a flag is cleared.
+	item.FlagsKnown = true
+	if len(info.RestrictionReason) > 0 {
+		if raw, err := json.Marshal(info.RestrictionReason); err == nil {
+			item.RestrictionReason = raw
+		}
+	}
 	d.save(ctx, rpc.MethodChatInfo, func(ctx context.Context) error {
 		return d.store.UpsertChats(ctx, []store.Chat{item})
 	})
 }
 
 func int64Pointer(value int64) *int64 { return &value }
-func boolPointer(value bool) *bool    { return &value }
+
+// positiveInt64Pointer drops a zero, which means "Telegram did not say".
+func positiveInt64Pointer(value int64) *int64 {
+	if value <= 0 {
+		return nil
+	}
+	return &value
+}
+func boolPointer(value bool) *bool { return &value }
 
 func (d *daemon) saveMessages(ctx context.Context, op string, messages []rpc.Message) {
 	if len(messages) == 0 {

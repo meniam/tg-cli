@@ -18,7 +18,7 @@ You choose which chats the agent sees and where it may write, with access lists 
 - **Answers it can parse.** One JSON envelope per command, stable exit codes, prompts and logs on stderr. `jsonl`, `toon`, `human` and `--fields` are opt-in.
 - **A contract it can read.** `tg schema` prints every command with its flags, response fields, safety class and exit codes, with no daemon and no network.
 - **The session stays between calls.** The daemon starts in the background with one command; each CLI call is a short JSON-RPC request.
-- **Memory that works offline.** Every chat, person and message the daemon reads lands in SQLite with full-text search.
+- **Memory that works offline.** Every chat, person and message the daemon reads lands in SQLite with full-text search, and `chat overview` summarises it without touching Telegram.
 - **Writes stay off until you say so.** Writing to Telegram needs the chat in the `write` list of `access.json`; every command that writes to a chat has `--dry-run`.
 - **Several accounts.** Each profile has its own session, database and daemon; the database sits next to the configuration file, in `db/<profile>/`.
 
@@ -134,6 +134,8 @@ Every command has its own section in the [command reference](docs/cli/overview.m
 | Chats | `chat list\|resolve\|info\|invite-info\|mark-read` | [chats.md](docs/cli/chats.md) |
 | Members, topics, common chats | `chat members\|topics\|common` | [chats.md](docs/cli/chats.md#members-topics-and-common-chats) |
 | Load a whole chat into the database | `chat sync start\|status\|cancel` | [chats.md](docs/cli/chats.md#loading-a-whole-chat) |
+| Summarise stored chats offline | `chat overview` | [chats.md](docs/cli/chats.md#tg-chat-overview) |
+| Read the full data of groups and channels | `chat full start\|status\|cancel` | [chats.md](docs/cli/chats.md#tg-chat-full-start) |
 | Read messages | `message history\|get\|pinned` | [messages-read.md](docs/cli/messages-read.md) |
 | Find messages, context, comments, links | `message search\|context\|comments\|link` | [messages-read.md](docs/cli/messages-read.md#finding-messages) |
 | Export saved messages as JSONL | `message export --local` | [messages-read.md](docs/cli/messages-read.md#exporting-saved-messages) |
@@ -176,7 +178,7 @@ Planned, not implemented. [`FEATURES.md`](FEATURES.md) is the source of truth.
 - **Media.** Downloading media.
 - **Sessions and access.** Export and import of a session string, login without a terminal, SOCKS and MTProxy, WSS transport.
 - **Reliability.** Recovery from a connection break and a DC migration.
-- **Local history.** Loading many chats with one command or on a schedule, export from Telegram, earlier versions of edits, writing an export to a file. Today the database holds what you read and what `chat sync` loaded on request, one chat at a time, and `message export --local` prints it.
+- **Local history.** Loading many chats with one command or on a schedule, export from Telegram, earlier versions of edits, writing an export to a file. Today the database holds what you read, what `chat sync` loaded on request one chat at a time, and the description, member count and settings that `chat full` read; `chat overview` summarises it offline and `message export --local` prints it.
 - And more: see the full list in `FEATURES.md`.
 
 Not goals: the Bot API and bots, a TUI client for humans, replacing the official apps, an MCP interface in the first stage (a decision for now, not forever), a generic `execute` method that runs any command as argv (the daemon serves typed methods, and `tg schema` lists the commands).

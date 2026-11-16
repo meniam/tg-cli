@@ -238,8 +238,19 @@ func TestBackgroundStartMovesTheDatabase(t *testing.T) {
 		}
 		e.startDaemon()
 	}
-	if r := e.run("daemon", "start"); r.code != exitcode.OK {
+	r := e.run("daemon", "start")
+	if r.code != exitcode.OK {
 		t.Fatalf("background start: exit %d, %q, stderr %q", r.code, r.stdout, r.stderr)
+	}
+	// The parent did the move, so it tells the caller: the child logs the line only
+	// in a foreground run.
+	want := "note: moved the database from " + paths.LegacyDatabase + " to " + paths.Database
+	if !strings.Contains(r.stderr, want) {
+		t.Errorf("the note about the move is missing: %q", r.stderr)
+	}
+	// The answer does not change: the note is not a field.
+	if strings.Contains(r.stdout, "moved the database") {
+		t.Errorf("the note reached the answer: %q", r.stdout)
 	}
 	if _, err := os.Stat(paths.LegacyDatabase); !os.IsNotExist(err) {
 		t.Fatalf("the old database remains: %v", err)
@@ -252,6 +263,40 @@ func TestBackgroundStartMovesTheDatabase(t *testing.T) {
 	raw, found, err := moved.GetAccountState(t.Context(), "move.test")
 	if err != nil || !found || string(raw) != `{"value":1}` {
 		t.Fatalf("the moved row: %q %v %v", raw, found, err)
+	}
+}
+
+// TestBackgroundStartMoveNoteStaysQuiet keeps --quiet silencing the note, like
+// every other hint of the command.
+func TestBackgroundStartMoveNoteStaysQuiet(t *testing.T) {
+	e, f := backgroundEnv(t)
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(paths.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths.LegacyDatabase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetAccountState(t.Context(), "move.test", json.RawMessage(`{"value":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	f.onLaunch = func() { e.startDaemon() }
+	r := e.run("daemon", "start", "--quiet")
+	if r.code != exitcode.OK {
+		t.Fatalf("background start: exit %d, %q, stderr %q", r.code, r.stdout, r.stderr)
+	}
+	if strings.Contains(r.stderr, "moved the database") {
+		t.Errorf("--quiet did not silence the note: %q", r.stderr)
+	}
+	if _, err := os.Stat(paths.Database); err != nil {
+		t.Errorf("the database was not moved: %v", err)
 	}
 }
 

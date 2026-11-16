@@ -25,6 +25,7 @@ const (
 
 	MethodChatResolve         = "chat.resolve"
 	MethodChatInfo            = "chat.info"
+	MethodChatOverview        = "chat.overview"
 	MethodChatInviteInfo      = "chat.invite_info"
 	MethodMessageHistory      = "message.history"
 	MethodMessageDownload     = "message.download"
@@ -210,6 +211,17 @@ type Chat struct {
 	Title    string `json:"title" untrusted:"true"`
 	Username string `json:"username,omitempty" untrusted:"true"`
 	Unread   int    `json:"unread"`
+	// Scam, Fake and Restricted travel with the chat object of Telegram and are
+	// stored with the chat by the Daemon. They are not part of this answer: the
+	// fields of `chat info` are where an agent reads them, so a list and a resolve
+	// keep their old shape.
+	Scam       bool `json:"-"`
+	Fake       bool `json:"-"`
+	Restricted bool `json:"-"`
+	// FlagsKnown reports whether the source of this record read the flags above.
+	// A record that leaves them out must not clear what the database already
+	// knows: a move from a dialog, a peer or an event knows no flags.
+	FlagsKnown bool `json:"-"`
 }
 
 // ChatListResult is the result of MethodChatList.
@@ -235,6 +247,24 @@ type ChatInfo struct {
 	Members  int             `json:"members,omitempty"`
 	Forum    bool            `json:"forum,omitempty"`
 	Verified bool            `json:"verified,omitempty"`
+	// CreatedAt is the date the chat was created, in Unix seconds. Absent when
+	// Telegram did not supply it.
+	CreatedAt int64 `json:"created_at,omitempty"`
+	// Scam, Fake and Restricted are the flags Telegram sets on a chat.
+	Scam       bool `json:"scam,omitempty"`
+	Fake       bool `json:"fake,omitempty"`
+	Restricted bool `json:"restricted,omitempty"`
+	// RestrictionReason explains a restriction: platform, reason and the text
+	// shown to the user. It is absent when the chat is not restricted.
+	RestrictionReason []RestrictionReason `json:"restriction_reason,omitempty"`
+}
+
+// RestrictionReason is why Telegram restricts a chat. Text is what Telegram shows
+// to the user: it is data, not an instruction.
+type RestrictionReason struct {
+	Platform string `json:"platform"`
+	Reason   string `json:"reason"`
+	Text     string `json:"text,omitempty" untrusted:"true"`
 }
 
 // InviteInfo is what an invite link shows without joining the chat.

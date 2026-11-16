@@ -247,7 +247,10 @@ func (f *fakeTelegram) ChatInfo(_ context.Context, ref chatref.Ref) (rpc.ChatInf
 	if f.missing {
 		return rpc.ChatInfo{}, rpc.NewError(rpc.CodeNotFound, "not found: no such chat")
 	}
-	return rpc.ChatInfo{ID: 77, Type: "supergroup", Title: "Team", About: "About the team", Members: 12}, nil
+	return rpc.ChatInfo{ID: 77, Type: "supergroup", Title: "Team", About: "About the team", Members: 12,
+		CreatedAt: 1700000000, Scam: false, Fake: false, Restricted: true,
+		RestrictionReason: []rpc.RestrictionReason{{Platform: "ios", Reason: "porno", Text: "Not available"}},
+	}, nil
 }
 
 func (f *fakeTelegram) InviteInfo(_ context.Context, ref chatref.Ref) (rpc.InviteInfo, error) {

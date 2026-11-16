@@ -95,3 +95,73 @@ are untrusted. Dry runs do not write or request file parts.
 ## Authorization loss
 
 When the client reports lost authorization, the Daemon retains the loss kind, rejects account requests with code 4, and remains available for status and shutdown even if the client exits. It does not delete the session file. Stop the Daemon before importing a replacement session. Reconnecting with an invalid key may fail; automatic key replacement is not implemented.
+
+## Local chat overview
+
+`chat overview` reads the table view `chats_state` and never calls Telegram, so it
+answers while the account is offline and without a login. After a loss of
+authorization the Daemon still rejects the request with code 4, like every other
+account method: offline is not the same as unauthorized. The view is one row per
+chat of `chats`, joined to the saved dialog state, the stored messages that are not
+deleted and the sync state of the history. The access lists apply inside the
+query, before `--limit`, so a closed chat is absent and takes no place in the
+answer. Every message aggregate is a correlated subquery on the chat id, so the
+cost follows the number of chats in the answer and uses
+`messages(chat_id, out) WHERE deleted_at IS NULL` and `messages(chat_id, date)`.
+Rows follow the most recent stored message first. See [the command reference](cli/chats.md#tg-chat-overview).
+
+`chat info` reads the creation date, the scam, fake and restriction flags and the
+restriction reasons from the chat object Telegram returns and stores them in
+`chats`. The flags are written by `chat info`, `chat list` and `chat resolve` when
+Telegram returned the chat object; a record that carries no flags, such as a chat
+taken from an event or a bare peer, leaves the stored ones alone, so a partial save
+never clears what a fuller read found. They do not take part in the version
+trigger: versions keep what the owner sees as settings.
+
+The local overview shows from these columns only `created_at`: the `chats_state`
+view has no `scam`, `fake` or `restricted`, so `chat overview` does not report
+them.
+
+## The full-data job
+
+`chat full start [<chat>] [--refresh]` queues a background job. One job is active
+at a time: while a job is queued, running or waiting, a second `start` reports it
+unchanged, and after `done` or `cancelled` a new job can be started (a job whose chats failed ends as `done` with a non-zero `failed` count). It
+reads only: for every allowed group and channel it takes the description, the
+member count and the settings through `channels.getFullChannel` or
+`messages.getFullChat`, one request per chat, then pauses two seconds. The peer comes
+from the peer cache by chat id, so the job resolves no name and makes no resolve
+call; only when the cache misses does the client read the first 200 dialogs to fill it
+(up to two requests, once per client after a successful read), which is the same
+extra call `chat info` makes. Every request is marked as background
+traffic of the account throttle, so ordinary commands of the agent go first.
+
+Without a chat the job takes every allowed group and channel whose `full_synced_at`
+is empty; with `--refresh` it takes every allowed one. A chat argument reads exactly
+that chat again, even when a full read already happened, so it works like `--refresh`
+for one chat; the type rules still hold (a group, a supergroup or a channel, anything
+else is `not_found`), a chat the access lists close is never selected, and a chat the
+database does not know is `not_found`. The access lists are checked again before and
+after every request.
+
+A successful read sets `full_synced_at` and clears `full_error`. A failure records
+the reason in `full_error`: for a Telegram error its type (`CHANNEL_PRIVATE`), for
+another failure the error text. A failure does not touch `full_synced_at`: a chat
+that was never read stays empty and comes back in the next `start` without
+`--refresh`, while a chat read earlier with `--refresh` keeps its old timestamp and
+stays out of that list. A `FLOOD_WAIT` moves the job to
+`waiting_flood` with the remaining seconds, waits that long and reads the chat once
+more. `chat full cancel` stops the job after the chat it is reading; what was saved
+stays. The job state is in memory, so after a Daemon restart `chat full status`
+reports `idle` and a new `start` continues from the chats without a complete read.
+`chat full` is a separate job from `chat sync`: each has its own state and its own
+commands, and both place their requests in the background queue of the account.
+
+The flags and the creation date of a chat travel with the chat object, not with the
+full read. `chat info` stores all five: `created_at`, `scam`, `fake`, `restricted` and
+`restriction_reason`. `chat list` and `chat resolve` store `scam`, `fake` and
+`restricted` too, because a dialog and a resolved peer carry the channel object, but
+only for a channel and a supergroup: a basic group and a user have no such flags. A
+record that knows no flags, such as a chat taken from an event, leaves the stored
+ones alone, so a partial save never clears what a fuller read found. The columns stay
+out of the version trigger.

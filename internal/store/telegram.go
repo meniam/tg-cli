@@ -18,20 +18,37 @@ var ErrNotFound = errors.New("not found")
 // Chat contains locally stored Telegram chat data. Nil optional fields mean
 // the source did not supply them; SearchText and timestamps are store-owned.
 type Chat struct {
-	ID          int64
-	Type        string
-	Title       string
-	Username    *string
-	About       *string
-	Members     *int64
-	Forum       *bool
-	Verified    *bool
-	Unread      *int64
-	Settings    json.RawMessage
-	Raw         json.RawMessage
-	SearchText  string
-	FirstSeenAt int64
-	LastSeenAt  int64
+	ID         int64
+	Type       string
+	Title      string
+	Username   *string
+	About      *string
+	Members    *int64
+	Forum      *bool
+	Verified   *bool
+	Unread     *int64
+	Settings   json.RawMessage
+	Raw        json.RawMessage
+	SearchText string
+	// CreatedAt is the creation date of the chat in Unix seconds.
+	CreatedAt *int64
+	// Scam, Fake and Restricted are the flags Telegram sets on a chat. The
+	// columns are NOT NULL with a default of 0, so false means "no flag". They
+	// are written only when FlagsKnown is set: a source that reads no flags must
+	// not clear what a fuller read stored.
+	Scam       bool
+	Fake       bool
+	Restricted bool
+	// FlagsKnown reports whether the record read the flags from Telegram. It is an
+	// input of a save: a record read back from the database always has them.
+	FlagsKnown bool
+	// RestrictionReason explains a restriction as JSON: platform, reason, text.
+	RestrictionReason json.RawMessage
+	// FullSyncedAt and FullError belong to the full-data job of the chat.
+	FullSyncedAt *int64
+	FullError    *string
+	FirstSeenAt  int64
+	LastSeenAt   int64
 }
 
 // Person contains locally stored Telegram person data. Nil optional fields mean
@@ -90,13 +107,17 @@ type rowScanner interface{ Scan(...any) error }
 
 func scanChat(row rowScanner) (Chat, error) {
 	var c Chat
-	var settings, raw sql.NullString
-	err := row.Scan(&c.ID, &c.Type, &c.Title, &c.Username, &c.About, &c.Members, &c.Forum, &c.Verified, &c.Unread, &settings, &raw, &c.SearchText, &c.FirstSeenAt, &c.LastSeenAt)
+	var settings, raw, restriction sql.NullString
+	err := row.Scan(&c.ID, &c.Type, &c.Title, &c.Username, &c.About, &c.Members, &c.Forum, &c.Verified, &c.Unread, &settings, &raw, &c.SearchText,
+		&c.CreatedAt, &c.Scam, &c.Fake, &c.Restricted, &restriction, &c.FullSyncedAt, &c.FullError, &c.FirstSeenAt, &c.LastSeenAt)
 	if settings.Valid {
 		c.Settings = json.RawMessage(settings.String)
 	}
 	if raw.Valid {
 		c.Raw = json.RawMessage(raw.String)
+	}
+	if restriction.Valid {
+		c.RestrictionReason = json.RawMessage(restriction.String)
 	}
 	return c, err
 }
@@ -119,7 +140,7 @@ func scanMessage(row rowScanner) (Message, error) {
 	return m, err
 }
 
-const chatColumns = `id,type,title,username,about,members,forum,verified,unread,settings,raw,search_text,first_seen_at,last_seen_at`
+const chatColumns = `id,type,title,username,about,members,forum,verified,unread,settings,raw,search_text,created_at,scam,fake,restricted,restriction_reason,full_synced_at,full_error,first_seen_at,last_seen_at`
 const personColumns = `id,username,first_name,last_name,phone,bio,is_bot,is_contact,raw,search_text,first_seen_at,last_seen_at`
 const messageColumns = `chat_id,id,date,sender_id,sender_name,text,out,reply_to,topic_id,media_type,edited_at,pinned,service,raw,search_text,deleted_at,first_seen_at,last_seen_at`
 
@@ -272,6 +293,13 @@ func mergeChat(old, incoming Chat, exists bool, now int64) Chat {
 		c.Verified = mergeBool(old.Verified, incoming.Verified)
 		c.Unread = mergeInt(old.Unread, incoming.Unread)
 		c.Settings = mergeJSON(old.Settings, incoming.Settings)
+		c.CreatedAt = mergeInt(old.CreatedAt, incoming.CreatedAt)
+		c.RestrictionReason = mergeJSON(old.RestrictionReason, incoming.RestrictionReason)
+		if !incoming.FlagsKnown {
+			c.Scam, c.Fake, c.Restricted = old.Scam, old.Fake, old.Restricted
+		}
+		c.FullSyncedAt = mergeInt(old.FullSyncedAt, incoming.FullSyncedAt)
+		c.FullError = mergeText(old.FullError, incoming.FullError)
 		c.Raw = mergeJSON(old.Raw, incoming.Raw)
 		c.FirstSeenAt = old.FirstSeenAt
 	} else {
@@ -298,7 +326,7 @@ func (db *DB) UpsertChats(ctx context.Context, chats []Chat) error {
 	}
 	defer tx.Rollback()
 	now := db.now().Unix()
-	const insert = `INSERT INTO chats (` + chatColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,username=excluded.username,about=excluded.about,members=excluded.members,forum=excluded.forum,verified=excluded.verified,unread=excluded.unread,settings=excluded.settings,raw=excluded.raw,last_seen_at=excluded.last_seen_at`
+	const insert = `INSERT INTO chats (` + chatColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET type=excluded.type,title=excluded.title,username=excluded.username,about=excluded.about,members=excluded.members,forum=excluded.forum,verified=excluded.verified,unread=excluded.unread,settings=excluded.settings,raw=excluded.raw,created_at=excluded.created_at,scam=excluded.scam,fake=excluded.fake,restricted=excluded.restricted,restriction_reason=excluded.restriction_reason,full_synced_at=excluded.full_synced_at,full_error=excluded.full_error,last_seen_at=excluded.last_seen_at`
 	for _, incoming := range chats {
 		old, err := scanChat(tx.QueryRowContext(ctx, `SELECT `+chatColumns+` FROM chats WHERE id=?`, incoming.ID))
 		exists := err == nil
@@ -310,7 +338,11 @@ func (db *DB) UpsertChats(ctx context.Context, chats []Chat) error {
 		if !exists || c.SearchText != old.SearchText {
 			query += `,search_text=excluded.search_text`
 		}
-		_, err = tx.ExecContext(ctx, query, c.ID, c.Type, c.Title, c.Username, c.About, c.Members, boolInt(c.Forum), boolInt(c.Verified), c.Unread, jsonArg(c.Settings), jsonArg(c.Raw), c.SearchText, c.FirstSeenAt, c.LastSeenAt)
+		_, err = tx.ExecContext(ctx, query, c.ID, c.Type, c.Title, c.Username, c.About, c.Members, boolInt(c.Forum), boolInt(c.Verified), c.Unread, jsonArg(c.Settings), jsonArg(c.Raw), c.SearchText,
+			// mergeChat already decided the flags: an unknown record kept the stored
+			// ones, a known record replaced them.
+			c.CreatedAt, c.Scam, c.Fake, c.Restricted,
+			jsonArg(c.RestrictionReason), c.FullSyncedAt, c.FullError, c.FirstSeenAt, c.LastSeenAt)
 		if err != nil {
 			return fmt.Errorf("upsert chat %d: %w", c.ID, err)
 		}

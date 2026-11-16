@@ -16,7 +16,7 @@ func TestEveryResponseStringHasTrustClassification(t *testing.T) {
 		fields map[string]bool
 	}{
 		{rpc.Chat{}, map[string]bool{"type": false, "title": true, "username": true}},
-		{rpc.ChatInfo{}, map[string]bool{"type": false, "title": true, "username": true, "about": true}},
+		{rpc.ChatInfo{}, map[string]bool{"type": false, "title": true, "username": true, "about": true, "restriction_reason.platform": false, "restriction_reason.reason": false, "restriction_reason.text": true}},
 		{rpc.InviteInfo{}, map[string]bool{"title": true, "type": false, "about": true}},
 		{rpc.Sender{}, map[string]bool{"name": true, "username": true}},
 		{rpc.Message{}, map[string]bool{"date": false, "sender.name": true, "sender.username": true, "text": true, "media_type": false, "service": false}},
