@@ -189,8 +189,11 @@ func (a *app) editMediaCommand() *cobra.Command {
 		p := rpc.EditMediaParams{Chat: chat, ID: id, As: as, File: file, Duration: duration, Width: width, Height: height, DryRun: dry}
 		if cmd.Flags().Changed("caption") {
 			caption, _ := cmd.Flags().GetString("caption")
-			if !utf8.ValidString(caption) || utf8.RuneCountInString(caption) > 1024 {
+			if !utf8.ValidString(caption) {
 				return fail(exitcode.Usage, "caption must be at most 1024 characters")
+			}
+			if utf8.RuneCountInString(caption) > 1024 {
+				return translate(rpc.CaptionTooLong())
 			}
 			p.Caption = &caption
 		}

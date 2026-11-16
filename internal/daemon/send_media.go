@@ -40,8 +40,11 @@ func validSendMediaParams(p rpc.SendMediaParams) error {
 			return rpc.NewError(rpc.CodeInvalidParams, mediaOutsideRoots)
 		}
 	}
-	if !utf8.ValidString(p.Caption) || utf8.RuneCountInString(p.Caption) > 1024 {
+	if !utf8.ValidString(p.Caption) {
 		return rpc.NewError(rpc.CodeInvalidParams, "caption must be at most 1024 characters")
+	}
+	if utf8.RuneCountInString(p.Caption) > 1024 {
+		return rpc.CaptionTooLong()
 	}
 	if p.Duration < 0 || p.Width < 0 || p.Height < 0 || p.ReplyTo < 0 || p.Topic < 0 {
 		return rpc.NewError(rpc.CodeInvalidParams, "reply, topic and media metadata must not be negative")

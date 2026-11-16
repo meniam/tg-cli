@@ -140,8 +140,11 @@ func (d *daemon) messageEditMedia(ctx context.Context, raw json.RawMessage) (any
 	if p.ID <= 0 || (p.As != "photo" && p.As != "video" && p.As != "audio" && p.As != "document") || !filepath.IsAbs(p.File) || p.Duration < 0 || p.Width < 0 || p.Height < 0 {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "invalid media edit parameters")
 	}
-	if p.Caption != nil && (!utf8.ValidString(*p.Caption) || utf8.RuneCountInString(*p.Caption) > 1024) {
+	if p.Caption != nil && !utf8.ValidString(*p.Caption) {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "caption must be at most 1024 characters")
+	}
+	if p.Caption != nil && utf8.RuneCountInString(*p.Caption) > 1024 {
+		return nil, rpc.CaptionTooLong()
 	}
 	ref, id, err := d.writeReference(ctx, p.Chat, true)
 	if err != nil {

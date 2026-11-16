@@ -79,6 +79,7 @@ var realResponseCases = map[string][]string{
 	"message get":            {"message", "get", "@teamchat", "30"},
 	"message readers":        {"message", "readers", "@teamchat", "30"},
 	"message transcribe":     {"message", "transcribe", "@teamchat", "40", "--wait", "0s"},
+	"message translate":      {"message", "translate", "@teamchat", "40", "--to", "en"},
 	"message history":        {"message", "history", "@teamchat"},
 	"message pinned":         {"message", "pinned", "@teamchat"},
 	"note add":               {"note", "add", "--chat", "77", "--author", "ai", "--tag", "t", "one more"},

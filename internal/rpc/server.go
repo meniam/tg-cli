@@ -314,6 +314,15 @@ func (s *Server) call(ctx context.Context, req Request) Response {
 		if response.Error != nil {
 			code = response.Error.Code
 		}
+		if method == MethodMessageTranslate {
+			var p struct {
+				IDs []json.RawMessage `json:"ids"`
+			}
+			if json.Unmarshal(req.Params, &p) == nil {
+				s.log.Info("request", "method", method, "duration_ms", time.Since(started).Milliseconds(), "code", code, "id_count", len(p.IDs))
+				return
+			}
+		}
 		s.log.Info("request", "method", method, "duration_ms", time.Since(started).Milliseconds(), "code", code)
 	}()
 

@@ -48,7 +48,7 @@ func sendScheduledText(ctx context.Context, api *tg.Client, peer tg.InputPeerCla
 	for _, change := range changes {
 		if u, ok := change.(*tg.UpdateNewScheduledMessage); ok {
 			if m, ok := u.Message.(*tg.Message); ok && m.ID > 0 && m.Date > 0 {
-				return rpc.SendResult{ChatID: chatID, ID: m.ID, Date: formatDate(m.Date), Scheduled: true}, nil
+				return rpc.SendResult{ChatID: chatID, ID: m.ID, Date: formatDate(m.Date), Scheduled: true, PremiumDropped: premiumDropped(updates, m.ID, text.entities)}, nil
 			}
 		}
 	}
