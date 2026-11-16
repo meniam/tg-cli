@@ -640,7 +640,7 @@ The `transcriptions` table is added by the database migration for this command. 
 
 ### tg message translate
 
-Translates one to 20 messages with Telegram. It accepts a chat and one or more message ids, or one `t.me` message link. It sends Telegram only the peer and message ids: it does not send arbitrary text, change the account, or store translations locally.
+Translates one to 20 messages with Telegram. It accepts a chat and one or more message ids, or one `t.me` message link. It sends Telegram the peer, message ids and target language: it does not send arbitrary text, change the account, or store translations locally.
 
 ```text
 tg message translate <chat> <id>... --to <language>
@@ -690,5 +690,4 @@ adds `files[].sha256`, the lowercase SHA-256 of the published file. A hash or
 size mismatch removes the temporary file and is reported as a Telegram error.
 
 `FLOOD_WAIT` pauses the account-wide throttle. For a part, a wait no longer than
-`behavior.flood_autowait` is waited out and the part is retried; a longer wait is
-exit code 6. `--dry-run` makes no part request.
+`behavior.flood_autowait` is waited out and the part is retried. For a longer wait, a call with no successful files returns the first error (code 6 if that error is `flood_wait`); a partial success returns code 1 and lists the failed item in `errors`. `--dry-run` makes no part request.

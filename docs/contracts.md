@@ -147,8 +147,7 @@ is empty; with `--refresh` it takes every allowed one. A chat argument reads exa
 that chat again, even when a full read already happened, so it works like `--refresh`
 for one chat; the type rules still hold (a group, a supergroup or a channel, anything
 else is `not_found`), a chat the access lists close is never selected, and a chat the
-database does not know is `not_found`. The access lists are checked again before and
-after every request.
+database does not know is `not_found`. The access lists are checked before the initial request and after its success. A retry after `FLOOD_WAIT` does not repeat those checks.
 
 A successful read sets `full_synced_at` and clears `full_error`. A failure records
 the reason in `full_error`: for a Telegram error its type (`CHANNEL_PRIVATE`), for
