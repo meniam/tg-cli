@@ -96,29 +96,18 @@ func (d *daemon) checkPersonWrite(id int64) error {
 	}
 	return nil
 }
-func (d *daemon) personFromContact(ctx context.Context, c rpc.Contact) store.Person {
-	raw := map[string]json.RawMessage{}
-	if old, err := d.store.GetPerson(ctx, c.ID); err == nil && len(old.Raw) > 0 {
-		_ = json.Unmarshal(old.Raw, &raw)
-		if raw == nil {
-			raw = map[string]json.RawMessage{}
-		}
-	}
-	raw["deleted"], _ = json.Marshal(c.Deleted)
-	encoded, _ := json.Marshal(raw)
-	bot := c.IsBot
-	return store.Person{ID: c.ID, FirstName: optionalText(c.FirstName), LastName: optionalText(c.LastName), Username: optionalText(c.Username), Phone: optionalText(c.Phone), IsBot: &bot, Raw: encoded}
+func (d *daemon) personFromContact(_ context.Context, c rpc.Contact) store.Person {
+	bot, deleted := c.IsBot, c.Deleted
+	return store.Person{ID: c.ID, FirstName: optionalText(c.FirstName), LastName: optionalText(c.LastName), Username: optionalText(c.Username), Phone: optionalText(c.Phone), IsBot: &bot, Deleted: &deleted}
 }
 func contactFromPerson(p store.Person) rpc.Contact {
 	c := rpc.Contact{ID: p.ID, FirstName: valueText(p.FirstName), LastName: valueText(p.LastName), Username: valueText(p.Username), Phone: valueText(p.Phone)}
 	if p.IsBot != nil {
 		c.IsBot = *p.IsBot
 	}
-	var raw struct {
-		Deleted bool `json:"deleted"`
+	if p.Deleted != nil {
+		c.Deleted = *p.Deleted
 	}
-	_ = json.Unmarshal(p.Raw, &raw)
-	c.Deleted = raw.Deleted
 	return c
 }
 func valueText(p *string) string {

@@ -63,6 +63,7 @@ type Person struct {
 	Bio         *string
 	IsBot       *bool
 	IsContact   *bool
+	Deleted     *bool
 	Raw         json.RawMessage
 	SearchText  string
 	FirstSeenAt int64
@@ -125,7 +126,7 @@ func scanChat(row rowScanner) (Chat, error) {
 func scanPerson(row rowScanner) (Person, error) {
 	var p Person
 	var raw sql.NullString
-	err := row.Scan(&p.ID, &p.Username, &p.FirstName, &p.LastName, &p.Phone, &p.Bio, &p.IsBot, &p.IsContact, &raw, &p.SearchText, &p.FirstSeenAt, &p.LastSeenAt)
+	err := row.Scan(&p.ID, &p.Username, &p.FirstName, &p.LastName, &p.Phone, &p.Bio, &p.IsBot, &p.IsContact, &p.Deleted, &raw, &p.SearchText, &p.FirstSeenAt, &p.LastSeenAt)
 	if raw.Valid {
 		p.Raw = json.RawMessage(raw.String)
 	}
@@ -141,7 +142,7 @@ func scanMessage(row rowScanner) (Message, error) {
 }
 
 const chatColumns = `id,type,title,username,about,members,forum,verified,unread,settings,raw,search_text,created_at,scam,fake,restricted,restriction_reason,full_synced_at,full_error,first_seen_at,last_seen_at`
-const personColumns = `id,username,first_name,last_name,phone,bio,is_bot,is_contact,raw,search_text,first_seen_at,last_seen_at`
+const personColumns = `id,username,first_name,last_name,phone,bio,is_bot,is_contact,deleted,raw,search_text,first_seen_at,last_seen_at`
 const messageColumns = `chat_id,id,date,sender_id,sender_name,text,out,reply_to,topic_id,media_type,edited_at,pinned,service,raw,search_text,deleted_at,first_seen_at,last_seen_at`
 
 // GetChat returns a chat or ErrNotFound.
@@ -375,6 +376,7 @@ func mergePerson(old, incoming Person, exists bool, now int64) Person {
 		p.Bio = mergeText(old.Bio, incoming.Bio)
 		p.IsBot = mergeBool(old.IsBot, incoming.IsBot)
 		p.IsContact = mergeBool(old.IsContact, incoming.IsContact)
+		p.Deleted = mergeBool(old.Deleted, incoming.Deleted)
 		p.Raw = mergeJSON(old.Raw, incoming.Raw)
 		p.FirstSeenAt = old.FirstSeenAt
 	} else {
@@ -413,7 +415,7 @@ func (db *DB) UpsertPeople(ctx context.Context, people []Person) error {
 }
 
 func upsertPeopleTx(ctx context.Context, tx *sql.Tx, people []Person, now int64) error {
-	const insert = `INSERT INTO people (` + personColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,first_name=excluded.first_name,last_name=excluded.last_name,phone=excluded.phone,bio=excluded.bio,is_bot=excluded.is_bot,is_contact=excluded.is_contact,raw=excluded.raw,last_seen_at=excluded.last_seen_at`
+	const insert = `INSERT INTO people (` + personColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,first_name=excluded.first_name,last_name=excluded.last_name,phone=excluded.phone,bio=excluded.bio,is_bot=excluded.is_bot,is_contact=excluded.is_contact,deleted=excluded.deleted,raw=excluded.raw,last_seen_at=excluded.last_seen_at`
 	for _, incoming := range people {
 		old, err := scanPerson(tx.QueryRowContext(ctx, `SELECT `+personColumns+` FROM people WHERE id=?`, incoming.ID))
 		exists := err == nil
@@ -425,7 +427,7 @@ func upsertPeopleTx(ctx context.Context, tx *sql.Tx, people []Person, now int64)
 		if !exists || p.SearchText != old.SearchText {
 			query += `,search_text=excluded.search_text`
 		}
-		_, err = tx.ExecContext(ctx, query, p.ID, p.Username, p.FirstName, p.LastName, p.Phone, p.Bio, boolInt(p.IsBot), boolInt(p.IsContact), jsonArg(p.Raw), p.SearchText, p.FirstSeenAt, p.LastSeenAt)
+		_, err = tx.ExecContext(ctx, query, p.ID, p.Username, p.FirstName, p.LastName, p.Phone, p.Bio, boolInt(p.IsBot), boolInt(p.IsContact), boolInt(p.Deleted), jsonArg(p.Raw), p.SearchText, p.FirstSeenAt, p.LastSeenAt)
 		if err != nil {
 			return fmt.Errorf("upsert person %d: %w", p.ID, err)
 		}

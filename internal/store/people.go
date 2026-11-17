@@ -134,7 +134,7 @@ func (db *DB) SearchContacts(ctx context.Context, query string, limit int, filte
 	condition, args := filter.condition("p.id", false)
 	args = append([]any{match}, args...)
 	args = append(args, limit)
-	rows, err := db.read.QueryContext(ctx, `SELECT p.id,p.username,p.first_name,p.last_name,p.phone,p.bio,p.is_bot,p.is_contact,p.raw,p.search_text,p.first_seen_at,p.last_seen_at FROM people_fts JOIN people p ON p.rowid=people_fts.rowid WHERE people_fts MATCH ? AND p.is_contact=1`+condition+` ORDER BY bm25(people_fts),p.id LIMIT ?`, args...)
+	rows, err := db.read.QueryContext(ctx, `SELECT p.id,p.username,p.first_name,p.last_name,p.phone,p.bio,p.is_bot,p.is_contact,p.deleted,p.raw,p.search_text,p.first_seen_at,p.last_seen_at FROM people_fts JOIN people p ON p.rowid=people_fts.rowid WHERE people_fts MATCH ? AND p.is_contact=1`+condition+` ORDER BY bm25(people_fts),p.id LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}

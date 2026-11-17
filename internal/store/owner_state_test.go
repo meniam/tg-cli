@@ -29,7 +29,7 @@ func TestOwnerStateSnapshots(t *testing.T) {
 		t.Fatalf("folders=%+v %v", got, err)
 	}
 	var raw string
-	if err = db.read.QueryRow(`SELECT raw FROM folders`).Scan(&raw); err != nil || strings.Contains(raw, "access_hash") || strings.Contains(raw, `"id":2`) {
+	if err = db.read.QueryRow(`SELECT data FROM folders`).Scan(&raw); err != nil || strings.Contains(raw, "access_hash") || strings.Contains(raw, `"id":2`) {
 		t.Fatalf("raw=%s %v", raw, err)
 	}
 	if err = db.ReplaceFolders(ctx, nil, filter); err != nil {

@@ -5,8 +5,38 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"tg-cli/internal/rpc"
 )
+
+// ChatVersion is a stored snapshot of a chat before a significant change.
+type ChatVersion struct {
+	ChatID                       int64
+	Version                      int
+	Type, Title, Username, About *string
+	Settings, Raw                json.RawMessage
+	ObservedAt                   int64
+}
+
+// GetChatVersion reads a stored snapshot, including its private raw data.
+func (db *DB) GetChatVersion(ctx context.Context, chatID int64, version int) (ChatVersion, error) {
+	var v ChatVersion
+	var settings, raw sql.NullString
+	err := db.read.QueryRowContext(ctx, `SELECT chat_id,version,type,title,username,about,settings,raw,observed_at FROM chat_versions WHERE chat_id=? AND version=?`, chatID, version).Scan(&v.ChatID, &v.Version, &v.Type, &v.Title, &v.Username, &v.About, &settings, &raw, &v.ObservedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ChatVersion{}, ErrNotFound
+	}
+	if err != nil {
+		return ChatVersion{}, fmt.Errorf("get chat version: %w", err)
+	}
+	if settings.Valid {
+		v.Settings = json.RawMessage(settings.String)
+	}
+	if raw.Valid {
+		v.Raw = json.RawMessage(raw.String)
+	}
+	return v, nil
+}
 
 func (db *DB) ChatVersions(ctx context.Context, id int64, limit int, filter ChatFilter) (rpc.ChatChangesResult, error) {
 	out := rpc.ChatChangesResult{ChatID: id, Versions: []rpc.ChatVersion{}}
