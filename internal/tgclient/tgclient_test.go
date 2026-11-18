@@ -3,6 +3,7 @@ package tgclient
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/gotd/td/telegram/message/peer"
@@ -71,7 +72,8 @@ func TestToChat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, ok := toChat(dialogs.Elem{Dialog: &tg.Dialog{Peer: tt.peer, UnreadCount: 3}, Entities: entities()})
-			if !ok || got != tt.want {
+			// rpc.Chat is not comparable since it carries json.RawMessage.
+			if !ok || !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %+v (ok=%v), want %+v", got, ok, tt.want)
 			}
 		})

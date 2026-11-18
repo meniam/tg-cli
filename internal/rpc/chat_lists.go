@@ -1,5 +1,7 @@
 package rpc
 
+import "encoding/json"
+
 // MembersParams selects a page of chat participants.
 type MembersParams struct {
 	Chat   string `json:"chat"`
@@ -16,6 +18,8 @@ type Member struct {
 	IsBot    bool   `json:"is_bot"`
 	Role     string `json:"role"`
 	Joined   string `json:"joined,omitempty"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 
 type MembersResult struct {

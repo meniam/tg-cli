@@ -1,5 +1,7 @@
 package rpc
 
+import "encoding/json"
+
 const MethodMessageTranscribe = "message.transcribe"
 
 // TranscribeParams identifies a message and the maximum wait in milliseconds.
@@ -19,4 +21,6 @@ type Transcription struct {
 	Cached          bool   `json:"cached"`
 	TrialRemains    *int   `json:"trial_remains,omitempty"`
 	TrialResetsAt   string `json:"trial_resets_at,omitempty"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }

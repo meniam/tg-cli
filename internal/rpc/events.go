@@ -30,6 +30,8 @@ type Event struct {
 	Data   json.RawMessage `json:"data,omitempty" untrusted:"true"`
 	// DedupKey is used by the Daemon's durable event store and never sent to clients.
 	DedupKey string `json:"-"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 
 // Message event data is the existing Message type.
