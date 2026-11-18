@@ -2,6 +2,7 @@ package tgclient
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -35,6 +36,12 @@ func TestTranscribeRequestAndPremiumError(t *testing.T) {
 		} else if err != nil || got.Text != "hello" || got.TrialRemains == nil || *got.TrialRemains != 0 {
 			t.Fatalf("result: %+v %v", got, err)
 		}
+		if !failure {
+			var keys map[string]json.RawMessage
+			if e := json.Unmarshal(got.Raw, &keys); e != nil || len(keys[rawTranscribe]) == 0 {
+				t.Fatalf("request raw=%s error=%v", got.Raw, e)
+			}
+		}
 	}
 }
 
@@ -47,5 +54,9 @@ func TestTranscriptionUpdateDispatch(t *testing.T) {
 	err := c.updateDispatcher().Handle(context.Background(), &tg.Updates{Updates: []tg.UpdateClass{&tg.UpdateTranscribedAudio{Peer: &tg.PeerChannel{ChannelID: 8}, MsgID: 7, TranscriptionID: 9, Text: "hello"}}})
 	if err != nil || got.ChatID != -1000000000008 || got.ID != 7 || got.TranscriptionID != 9 || got.Text != "hello" || events != 0 {
 		t.Fatalf("update: %+v events=%d error=%v", got, events, err)
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(got.Raw, &keys); err != nil || len(keys[rawTranscribed]) == 0 {
+		t.Fatalf("update raw=%s err=%v", got.Raw, err)
 	}
 }

@@ -413,7 +413,7 @@ func (m *chatFullSyncManager) stillWanted(runID int) bool {
 
 func (m *chatFullSyncManager) recordSuccess(chatID int64, runID int, info rpc.ChatInfo) {
 	synced := m.clock.Now().Unix()
-	full := store.ChatFull{Settings: info.Settings, SyncedAt: &synced}
+	full := store.ChatFull{Raw: info.Raw, Settings: info.Settings, SyncedAt: &synced}
 	if info.About != "" {
 		about := info.About
 		full.About = &about

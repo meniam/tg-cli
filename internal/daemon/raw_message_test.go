@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
@@ -84,5 +85,49 @@ func TestRawFormatsInLocalContextAndExport(t *testing.T) {
 	page := exportPage(t, d, rpc.ExportParams{Chat: "42"})
 	if len(page.Messages) != 2 || !page.Messages[0].Edited || !page.Messages[1].Edited || page.Messages[0].Text != "old" || page.Messages[1].Text != "new" {
 		t.Fatalf("export = %+v", page)
+	}
+}
+
+func TestMessageSenderDoesNotReceiveRaw(t *testing.T) {
+	_, people, _, err := convertStoredMessages([]rpc.Message{{ID: 1, ChatID: 1, Date: time.Unix(1, 0).UTC().Format(time.RFC3339), Sender: &rpc.Sender{ID: 7, Name: "person"}, Raw: json.RawMessage(`{"_":"message","from_id":{"_":"peerUser","user_id":7}}`)}}, false)
+	if err != nil || len(people) != 1 || len(people[0].Raw) != 0 {
+		t.Fatalf("people=%+v err=%v", people, err)
+	}
+}
+
+func TestPersonRawFromContactsProfileAndMembers(t *testing.T) {
+	d, _, db, _ := accessTestDaemon(t)
+	ctx := context.Background()
+	contact := rpc.Contact{ID: 7, FirstName: "user", Raw: json.RawMessage(`{"contacts.getContacts":{"_":"user","id":7}}`)}
+	if err := d.saveContactPeople(ctx, []rpc.Contact{contact}); err != nil {
+		t.Fatal(err)
+	}
+	profile := rpc.Contact{ID: 7, FirstName: "user", Raw: json.RawMessage(`{"users.getFullUser":{"_":"users.userFull","users":[{"_":"user","id":7}]}}`)}
+	if err := db.UpsertPeople(ctx, []store.Person{d.personFromContact(ctx, profile)}); err != nil {
+		t.Fatal(err)
+	}
+	d.saveMembers(ctx, []rpc.Member{{ID: 7, Name: "user", Raw: json.RawMessage(`{"channels.getParticipants":{"_":"user","id":7}}`)}})
+	person, err := db.GetPerson(ctx, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys map[string]json.RawMessage
+	if err = json.Unmarshal(person.Raw, &keys); err != nil || len(keys) != 3 {
+		t.Fatalf("person raw=%s err=%v", person.Raw, err)
+	}
+}
+
+func TestChatRawFromDialogsAndFullInfo(t *testing.T) {
+	d, _, db, _ := accessTestDaemon(t)
+	ctx := context.Background()
+	d.saveChats(ctx, "test", []rpc.Chat{{ID: -42, Type: "channel", Title: "News", Raw: json.RawMessage(`{"messages.getDialogs":{"_":"channel","id":42}}`)}}, false)
+	d.saveChatInfo(ctx, rpc.ChatInfo{ID: -42, Type: "channel", Title: "News", Raw: json.RawMessage(`{"channels.getFullChannel":{"_":"messages.chatFull","chats":[{"_":"channel","id":42}],"users":[{"_":"user","id":7}]}}`)})
+	chat, err := db.GetChat(ctx, -42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys map[string]json.RawMessage
+	if err = json.Unmarshal(chat.Raw, &keys); err != nil || len(keys["messages.getDialogs"]) == 0 || len(keys["channels.getFullChannel"]) == 0 {
+		t.Fatalf("chat raw=%s err=%v", chat.Raw, err)
 	}
 }

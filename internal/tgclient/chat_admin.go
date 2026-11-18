@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/gotd/td/tdp"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
@@ -12,25 +13,28 @@ import (
 )
 
 // chatFromUpdates extracts the chat included by Telegram in a write result.
-func chatFromUpdates(updates tg.UpdatesClass) (rpc.CommonChat, error) {
+func chatFromUpdates(updates tg.UpdatesClass, method string) (rpc.CommonChat, error) {
 	withChats, ok := updates.(interface{ GetChats() []tg.ChatClass })
 	if ok {
 		for _, raw := range withChats.GetChats() {
 			if chat, _, ok := commonChatOf(raw); ok {
+				if obj, ok := raw.(tdp.Object); ok {
+					chat.Raw = methodRaw(method, obj)
+				}
 				return chat, nil
 			}
 		}
 	}
 	return rpc.CommonChat{}, rpc.NewError(rpc.CodeTelegram, "Telegram returned no chat")
 }
-func joinResult(result tg.MessagesChatInviteJoinResultClass) (rpc.ChatJoinResult, error) {
+func joinResult(result tg.MessagesChatInviteJoinResultClass, method string) (rpc.ChatJoinResult, error) {
 	switch r := result.(type) {
 	case *tg.MessagesChatInviteJoinResultOk:
-		chat, err := chatFromUpdates(r.Updates)
+		chat, err := chatFromUpdates(r.Updates, method)
 		if err != nil {
 			return rpc.ChatJoinResult{}, err
 		}
-		return rpc.ChatJoinResult{ChatID: chat.ID, Type: chat.Type}, nil
+		return rpc.ChatJoinResult{Raw: chat.Raw, ChatID: chat.ID, Type: chat.Type}, nil
 	case *tg.MessagesChatInviteJoinResultWebView:
 		return rpc.ChatJoinResult{}, rpc.NewError(rpc.CodeTelegram, "joining needs a payment or a bot web view: not supported")
 	default:
@@ -77,7 +81,11 @@ func joinAdminChat(ctx context.Context, api *tg.Client, invite string, p peers.P
 	if err != nil {
 		return rpc.ChatJoinResult{}, mapChatAdminError(err)
 	}
-	return joinResult(result)
+	method := rawJoinChannel
+	if invite != "" {
+		method = rawImportInvite
+	}
+	return joinResult(result, method)
 }
 func (c *Client) Leave(ctx context.Context, ref chatref.Ref) (rpc.ChatLeaveResult, error) {
 	p, err := c.resolve(ctx, ref)
@@ -126,11 +134,11 @@ func createAdminChat(ctx context.Context, api *tg.Client, p rpc.ChatCreateParams
 	if err != nil {
 		return rpc.ChatCreateResult{}, mapChatAdminError(err)
 	}
-	chat, err := chatFromUpdates(u)
+	chat, err := chatFromUpdates(u, rawCreateChannel)
 	if err != nil {
 		return rpc.ChatCreateResult{}, err
 	}
-	return rpc.ChatCreateResult{ID: chat.ID, Type: chat.Type, Title: chat.Title}, nil
+	return rpc.ChatCreateResult{Raw: chat.Raw, ID: chat.ID, Type: chat.Type, Title: chat.Title}, nil
 }
 func (c *Client) EditChat(ctx context.Context, ref chatref.Ref, p rpc.ChatEditParams) (rpc.ChatEditResult, error) {
 	if p.DryRun {

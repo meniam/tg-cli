@@ -109,7 +109,7 @@ func NewWithNetwork(cfg Config) (*Client, error) {
 		options.Middlewares = append(options.Middlewares, throttleMiddleware(cfg.Throttle))
 	}
 	c.tg = telegram.NewClient(cfg.AppID, cfg.AppHash, options)
-	c.mgr = peers.Options{Storage: &peers.InmemoryStorage{}}.Build(c.tg.API())
+	c.mgr = peers.Options{Storage: &peers.InmemoryStorage{}}.Build(tg.NewClient(fullRawInvoker{next: c.tg.API().Invoker()}))
 	c.updates = updates.New(c.updateConfig())
 	return c, nil
 }

@@ -301,7 +301,7 @@ func mergeChat(old, incoming Chat, exists bool, now int64) Chat {
 		}
 		c.FullSyncedAt = mergeInt(old.FullSyncedAt, incoming.FullSyncedAt)
 		c.FullError = mergeText(old.FullError, incoming.FullError)
-		c.Raw = mergeJSON(old.Raw, incoming.Raw)
+		c.Raw = mergeRawKeys(old.Raw, incoming.Raw)
 		c.FirstSeenAt = old.FirstSeenAt
 	} else {
 		c.FirstSeenAt = now
@@ -377,7 +377,7 @@ func mergePerson(old, incoming Person, exists bool, now int64) Person {
 		p.IsBot = mergeBool(old.IsBot, incoming.IsBot)
 		p.IsContact = mergeBool(old.IsContact, incoming.IsContact)
 		p.Deleted = mergeBool(old.Deleted, incoming.Deleted)
-		p.Raw = mergeJSON(old.Raw, incoming.Raw)
+		p.Raw = mergeRawKeys(old.Raw, incoming.Raw)
 		p.FirstSeenAt = old.FirstSeenAt
 	} else {
 		p.FirstSeenAt = now

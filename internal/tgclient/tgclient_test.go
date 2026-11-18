@@ -72,7 +72,10 @@ func TestToChat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, ok := toChat(dialogs.Elem{Dialog: &tg.Dialog{Peer: tt.peer, UnreadCount: 3}, Entities: entities()})
-			// rpc.Chat is not comparable since it carries json.RawMessage.
+			if tt.name != "unknown user" && len(got.Raw) == 0 {
+				t.Error("missing dialog raw")
+			}
+			got.Raw = nil
 			if !ok || !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %+v (ok=%v), want %+v", got, ok, tt.want)
 			}

@@ -34,7 +34,7 @@ func chatPerson(chat rpc.Chat) (store.Person, bool) {
 		return store.Person{}, false
 	}
 	isBot := chat.Type == "bot"
-	return store.Person{ID: chat.ID, Username: optionalText(chat.Username), DisplayName: optionalText(chat.Title), IsBot: &isBot}, true
+	return store.Person{Raw: chat.Raw, ID: chat.ID, Username: optionalText(chat.Username), DisplayName: optionalText(chat.Title), IsBot: &isBot}, true
 }
 
 func (d *daemon) saveChats(ctx context.Context, op string, chats []rpc.Chat, includeUnread bool) {
@@ -44,7 +44,7 @@ func (d *daemon) saveChats(ctx context.Context, op string, chats []rpc.Chat, inc
 	stored := make([]store.Chat, 0, len(chats))
 	people := make([]store.Person, 0, len(chats))
 	for _, chat := range chats {
-		item := store.Chat{ID: chat.ID, Type: chat.Type, Title: chat.Title, Username: optionalText(chat.Username),
+		item := store.Chat{Raw: chat.Raw, ID: chat.ID, Type: chat.Type, Title: chat.Title, Username: optionalText(chat.Username),
 			Scam: chat.Scam, Fake: chat.Fake, Restricted: chat.Restricted, FlagsKnown: chat.FlagsKnown}
 		if includeUnread {
 			unread := int64(chat.Unread)
@@ -83,7 +83,7 @@ func (d *daemon) saveMembers(ctx context.Context, members []rpc.Member) {
 		}
 		isBot := member.IsBot
 		people = append(people, store.Person{
-			ID: member.ID, Username: optionalText(member.Username),
+			Raw: member.Raw, ID: member.ID, Username: optionalText(member.Username),
 			DisplayName: optionalText(member.Name), IsBot: &isBot,
 		})
 	}
@@ -97,7 +97,7 @@ func (d *daemon) saveMembers(ctx context.Context, members []rpc.Member) {
 
 func (d *daemon) saveChatInfo(ctx context.Context, info rpc.ChatInfo) {
 	item := store.Chat{
-		ID: info.ID, Type: info.Type, Title: info.Title, Username: optionalText(info.Username),
+		Raw: info.Raw, ID: info.ID, Type: info.Type, Title: info.Title, Username: optionalText(info.Username),
 		About: optionalText(info.About), Members: positiveIntPointer(info.Members), // 0 means unknown
 		Forum: boolPointer(info.Forum), Verified: boolPointer(info.Verified), Settings: info.Settings,
 	}

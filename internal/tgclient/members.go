@@ -148,6 +148,9 @@ func membersAPI(ctx context.Context, api *tg.Client, peer peers.Peer, p rpc.Memb
 		page := list.Participants[:min(len(list.Participants), limit)]
 		for _, raw := range page {
 			if m, ok := memberOfChannel(raw, users); ok && (p.Filter == "" || p.Search == "" || memberMatches(m, p.Search)) {
+				if u := users[m.ID]; u != nil {
+					m.Raw = methodRaw(rawChannelMembers, u)
+				}
 				result.Members = append(result.Members, m)
 			}
 		}
@@ -188,6 +191,9 @@ func membersAPI(ctx context.Context, api *tg.Client, peer peers.Peer, p rpc.Memb
 			}
 			if !memberMatches(m, p.Search) {
 				continue
+			}
+			if u := users[m.ID]; u != nil {
+				m.Raw = methodRaw(rawFullChat, u)
 			}
 			all = append(all, m)
 		}

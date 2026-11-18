@@ -10,7 +10,7 @@ import (
 
 func TestRawIsNeverEncoded(t *testing.T) {
 	values := []any{
-		&Message{}, &Chat{}, &ChatInfo{}, &Contact{}, &UserProfile{}, &Member{},
+		&Message{}, &Chat{}, &ChatInfo{}, &Contact{}, &UserProfile{}, &Member{}, &CommonChat{}, &ChatJoinResult{}, &ChatCreateResult{}, &ContactAddResult{}, &UnreadChat{},
 		&SendResult{}, &ForwardedMessage{}, &Folder{}, &ChatState{}, &Session{}, &BlockedPeer{}, &NotifyDefault{},
 		&Event{Data: json.RawMessage(`{"content":"preserved"}`)}, &Transcription{},
 	}

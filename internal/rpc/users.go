@@ -70,12 +70,14 @@ type ContactAddParams struct {
 	DryRun    bool   `json:"dry_run,omitempty"`
 }
 type ContactAddResult struct {
-	UserID    int64  `json:"user_id"`
-	FirstName string `json:"first_name" untrusted:"true"`
-	LastName  string `json:"last_name" untrusted:"true"`
-	IsContact bool   `json:"is_contact"`
-	Mutual    bool   `json:"mutual"`
-	DryRun    bool   `json:"dry_run,omitempty"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw       json.RawMessage `json:"-"`
+	UserID    int64           `json:"user_id"`
+	FirstName string          `json:"first_name" untrusted:"true"`
+	LastName  string          `json:"last_name" untrusted:"true"`
+	IsContact bool            `json:"is_contact"`
+	Mutual    bool            `json:"mutual"`
+	DryRun    bool            `json:"dry_run,omitempty"`
 }
 type ContactDeleteParams struct {
 	User   string `json:"user"`

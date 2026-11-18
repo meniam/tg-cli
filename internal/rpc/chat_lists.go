@@ -56,10 +56,12 @@ type CommonChatsParams struct {
 }
 
 type CommonChat struct {
-	ID       int64  `json:"id"`
-	Type     string `json:"type"`
-	Title    string `json:"title" untrusted:"true"`
-	Username string `json:"username,omitempty" untrusted:"true"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw      json.RawMessage `json:"-"`
+	ID       int64           `json:"id"`
+	Type     string          `json:"type"`
+	Title    string          `json:"title" untrusted:"true"`
+	Username string          `json:"username,omitempty" untrusted:"true"`
 }
 
 type CommonChatsResult struct {

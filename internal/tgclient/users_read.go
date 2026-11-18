@@ -75,7 +75,9 @@ func userProfileAPI(ctx context.Context, api *tg.Client, mgr *peers.Manager, use
 	}
 	for _, raw := range r.Users {
 		if u, ok := raw.(*tg.User); ok && u.ID == user.ID() {
-			return profileOf(u, r.FullUser), nil
+			profile := profileOf(u, r.FullUser)
+			profile.Raw = methodRaw(rawFullUser, r)
+			return profile, nil
 		}
 	}
 	return rpc.UserProfile{}, rpc.NewError(rpc.CodeTelegram, "Telegram returned no user")
@@ -112,6 +114,7 @@ func contactsAPI(ctx context.Context, api *tg.Client, mgr *peers.Manager) ([]rpc
 			return nil, rpc.NewError(rpc.CodeTelegram, "Telegram returned a contact without a user")
 		}
 		item := contactOf(u)
+		item.Raw = methodRaw(rawContacts, u)
 		mutual := v.Mutual
 		item.Mutual = &mutual
 		result = append(result, item)
@@ -161,7 +164,9 @@ func searchContactsAPI(ctx context.Context, api *tg.Client, mgr *peers.Manager, 
 				continue
 			}
 			seen[p.UserID] = true
-			result = append(result, rpc.ContactHit{Contact: contactOf(u), Source: group.source})
+			contact := contactOf(u)
+			contact.Raw = methodRaw(rawContactsSearch, u)
+			result = append(result, rpc.ContactHit{Contact: contact, Source: group.source})
 			if len(result) == limit {
 				return result, nil
 			}

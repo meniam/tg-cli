@@ -2,7 +2,9 @@ package tgclient
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -38,6 +40,7 @@ func TestChatFullOneBackgroundRequest(t *testing.T) {
 			return respond(output, &tg.MessagesChatFull{
 				FullChat: &tg.ChannelFull{ID: 9, About: "About the news", ParticipantsCount: 42, SlowmodeSeconds: 30, ChatPhoto: &tg.PhotoEmpty{}},
 				Chats:    []tg.ChatClass{channel},
+				Users:    []tg.UserClass{&tg.User{ID: 77, FirstName: "other", AccessHash: 123}},
 			})
 		}
 		return errors.New("unexpected request " + typeName(input))
@@ -53,6 +56,10 @@ func TestChatFullOneBackgroundRequest(t *testing.T) {
 	}
 	if info.About != "About the news" || info.Members != 42 || info.ID != -1000000000009 {
 		t.Errorf("info = %+v", info)
+	}
+	var keyed map[string]json.RawMessage
+	if err := json.Unmarshal(info.Raw, &keyed); err != nil || len(keyed[rawFullChannel]) == 0 || !strings.Contains(string(keyed[rawFullChannel]), `"chats"`) || !strings.Contains(string(keyed[rawFullChannel]), `"users"`) || strings.Contains(string(info.Raw), "access_hash") {
+		t.Fatalf("full raw=%s err=%v", info.Raw, err)
 	}
 	if !info.Restricted || len(info.RestrictionReason) != 1 || info.CreatedAt != 1700000000 {
 		t.Errorf("flags = %+v", info)
@@ -114,7 +121,7 @@ func chatFullClient(t *testing.T, next telegram.InvokeFunc, limiter *throttle.Li
 	c := New(Config{})
 	c.tg = telegram.NewClient(telegram.TestAppID, telegram.TestAppHash, telegram.Options{})
 	c.throttle = limiter
-	mgr := (peers.Options{Storage: &peers.InmemoryStorage{}}).Build(api)
+	mgr := (peers.Options{Storage: &peers.InmemoryStorage{}}).Build(tg.NewClient(fullRawInvoker{next: api.Invoker()}))
 	if err := mgr.Apply(context.Background(), nil, raw); err != nil {
 		t.Fatalf("fill the peer cache: %v", err)
 	}

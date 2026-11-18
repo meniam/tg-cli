@@ -2,6 +2,7 @@ package tgclient
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -69,21 +70,24 @@ func addContactAPI(ctx context.Context, api *tg.Client, mgr *peers.Manager, u pe
 		return rpc.ContactAddResult{}, mapError(err)
 	}
 	mutual := u.Raw().MutualContact
+	var resultRaw json.RawMessage
 	switch v := updates.(type) {
 	case *tg.Updates:
 		for _, raw := range v.Users {
 			if x, ok := raw.(*tg.User); ok && x.ID == u.ID() {
 				mutual = x.MutualContact
+				resultRaw = methodRaw(rawAddContact, x)
 			}
 		}
 	case *tg.UpdatesCombined:
 		for _, raw := range v.Users {
 			if x, ok := raw.(*tg.User); ok && x.ID == u.ID() {
 				mutual = x.MutualContact
+				resultRaw = methodRaw(rawAddContact, x)
 			}
 		}
 	}
-	return rpc.ContactAddResult{UserID: u.ID(), FirstName: first, LastName: last, IsContact: true, Mutual: mutual}, nil
+	return rpc.ContactAddResult{Raw: resultRaw, UserID: u.ID(), FirstName: first, LastName: last, IsContact: true, Mutual: mutual}, nil
 }
 func (c *Client) DeleteContact(ctx context.Context, ref chatref.Ref) (rpc.ContactDeleteResult, error) {
 	u, err := c.resolveUser(ctx, ref)

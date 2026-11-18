@@ -13,19 +13,21 @@ type ChatUnreadParams struct {
 	Archived bool `json:"archived,omitempty"`
 }
 type UnreadChat struct {
-	ID              int64  `json:"id"`
-	Type            string `json:"type"`
-	Title           string `json:"title" untrusted:"true"`
-	Username        string `json:"username,omitempty" untrusted:"true"`
-	Forum           bool   `json:"forum"`
-	Unread          int    `json:"unread"`
-	UnreadMentions  int    `json:"unread_mentions"`
-	UnreadReactions int    `json:"unread_reactions"`
-	UnreadMark      bool   `json:"unread_mark"`
-	Muted           bool   `json:"muted"`
-	Archived        bool   `json:"archived"`
-	ReadInboxMaxID  int    `json:"read_inbox_max_id"`
-	TopMessage      int    `json:"top_message"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw             json.RawMessage `json:"-"`
+	ID              int64           `json:"id"`
+	Type            string          `json:"type"`
+	Title           string          `json:"title" untrusted:"true"`
+	Username        string          `json:"username,omitempty" untrusted:"true"`
+	Forum           bool            `json:"forum"`
+	Unread          int             `json:"unread"`
+	UnreadMentions  int             `json:"unread_mentions"`
+	UnreadReactions int             `json:"unread_reactions"`
+	UnreadMark      bool            `json:"unread_mark"`
+	Muted           bool            `json:"muted"`
+	Archived        bool            `json:"archived"`
+	ReadInboxMaxID  int             `json:"read_inbox_max_id"`
+	TopMessage      int             `json:"top_message"`
 }
 type UnreadChatsResult struct {
 	Chats    []UnreadChat `json:"chats"`

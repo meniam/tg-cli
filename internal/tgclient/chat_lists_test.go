@@ -2,6 +2,7 @@ package tgclient
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -67,6 +68,12 @@ func TestMembersChannelFiltersAndPage(t *testing.T) {
 			if len(got.Members) != wantLen {
 				t.Fatalf("members %+v", got.Members)
 			}
+			for _, member := range got.Members {
+				var keys map[string]json.RawMessage
+				if err := json.Unmarshal(member.Raw, &keys); err != nil || len(keys[rawChannelMembers]) == 0 {
+					t.Fatalf("member raw=%s err=%v", member.Raw, err)
+				}
+			}
 			if got.Members[0].Name != "Ann Lee" || got.Members[0].Role != "admin" {
 				t.Errorf("member %+v", got.Members[0])
 			}
@@ -111,6 +118,10 @@ func TestMembersRolesAndGroup(t *testing.T) {
 	got, err := membersAPI(context.Background(), api, group, rpc.MembersParams{Filter: "admins", Search: "bo"}, 1)
 	if err != nil || len(got.Members) != 1 || got.Members[0].ID != 2 || got.NextOffset != 0 {
 		t.Fatalf("group %+v %v", got, err)
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(got.Members[0].Raw, &keys); err != nil || len(keys[rawFullChat]) == 0 {
+		t.Fatalf("group member raw=%s err=%v", got.Members[0].Raw, err)
 	}
 	got, err = membersAPI(context.Background(), api, group, rpc.MembersParams{Offset: 1}, 1)
 	if err != nil || len(got.Members) != 1 || got.Members[0].ID != 2 || got.NextOffset != 2 {

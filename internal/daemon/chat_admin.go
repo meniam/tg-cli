@@ -240,7 +240,7 @@ func (d *daemon) chatAdmin(ctx context.Context, action string, raw json.RawMessa
 			result.Title = ""
 			result.Closed = true
 		} else {
-			d.saveChats(ctx, rpc.MethodChatCreate, []rpc.Chat{{ID: result.ID, Type: result.Type, Title: result.Title}}, false)
+			d.saveChats(ctx, rpc.MethodChatCreate, []rpc.Chat{{Raw: result.Raw, ID: result.ID, Type: result.Type, Title: result.Title}}, false)
 		}
 		return result, nil
 	}
@@ -349,6 +349,10 @@ func (d *daemon) chatAdmin(ctx context.Context, action string, raw json.RawMessa
 	case "join":
 		var r rpc.ChatJoinResult
 		r, err = api.Join(ctx, ref)
+		chat.Raw = r.Raw
+		if chat.ID == 0 && r.ChatID != 0 {
+			chat.ID, chat.Type = r.ChatID, r.Type
+		}
 		if r.ChatID == 0 {
 			r.ChatID = chat.ID
 			r.Type = chat.Type

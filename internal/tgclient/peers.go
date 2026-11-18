@@ -211,6 +211,8 @@ func (c *Client) ChatFull(ctx context.Context, chatID int64) (rpc.ChatInfo, erro
 // it, so the flags, the description, the member count and the settings of a chat
 // are parsed in exactly one place.
 func (c *Client) fullInfo(ctx context.Context, p peers.Peer) (rpc.ChatInfo, error) {
+	capture := &fullRawCapture{}
+	ctx = context.WithValue(ctx, fullRawCaptureKey{}, capture)
 	base := toChatOf(p)
 	info := rpc.ChatInfo{ID: base.ID, Type: base.Type, Title: base.Title, Username: base.Username, Verified: p.Verified()}
 	info.CreatedAt = createdUnix(p)
@@ -245,6 +247,7 @@ func (c *Client) fullInfo(ctx context.Context, p peers.Peer) (rpc.ChatInfo, erro
 			}
 		}
 	}
+	info.Raw = capture.raw
 	return info, nil
 }
 

@@ -98,7 +98,7 @@ func (d *daemon) checkPersonWrite(id int64) error {
 }
 func (d *daemon) personFromContact(_ context.Context, c rpc.Contact) store.Person {
 	bot, deleted := c.IsBot, c.Deleted
-	return store.Person{ID: c.ID, FirstName: optionalText(c.FirstName), LastName: optionalText(c.LastName), Username: optionalText(c.Username), Phone: optionalText(c.Phone), IsBot: &bot, Deleted: &deleted}
+	return store.Person{Raw: c.Raw, ID: c.ID, FirstName: optionalText(c.FirstName), LastName: optionalText(c.LastName), Username: optionalText(c.Username), Phone: optionalText(c.Phone), IsBot: &bot, Deleted: &deleted}
 }
 func contactFromPerson(p store.Person) rpc.Contact {
 	c := rpc.Contact{ID: p.ID, FirstName: valueText(p.FirstName), LastName: valueText(p.LastName), Username: valueText(p.Username), Phone: valueText(p.Phone)}
@@ -152,7 +152,7 @@ func (d *daemon) userProfile(ctx context.Context, raw json.RawMessage) (any, err
 	if !d.policy().Allowed(v.ID) {
 		return nil, rpc.ErrChatNotFound()
 	}
-	c := rpc.Contact{ID: v.ID, FirstName: v.FirstName, LastName: v.LastName, Username: v.Username, Phone: v.Phone, Deleted: v.Deleted, IsBot: v.Type == "bot"}
+	c := rpc.Contact{Raw: v.Raw, ID: v.ID, FirstName: v.FirstName, LastName: v.LastName, Username: v.Username, Phone: v.Phone, Deleted: v.Deleted, IsBot: v.Type == "bot"}
 	person := d.personFromContact(ctx, c)
 	person.Bio = optionalText(v.Bio)
 	person.IsContact = &v.IsContact
@@ -352,7 +352,7 @@ func (d *daemon) contactAdd(ctx context.Context, raw json.RawMessage) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	c := rpc.Contact{ID: chat.ID, FirstName: res.FirstName, LastName: res.LastName, Username: chat.Username, Phone: p.Phone, IsBot: chat.Type == "bot"}
+	c := rpc.Contact{Raw: res.Raw, ID: chat.ID, FirstName: res.FirstName, LastName: res.LastName, Username: chat.Username, Phone: p.Phone, IsBot: chat.Type == "bot"}
 	if previous, err := d.store.GetPerson(ctx, chat.ID); err == nil {
 		c.Deleted = contactFromPerson(previous).Deleted
 	}
