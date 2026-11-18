@@ -13,6 +13,16 @@ import (
 	"tg-cli/internal/rpc"
 )
 
+func assertOwnerRaw(t *testing.T, raw json.RawMessage, kind string) {
+	t.Helper()
+	var object struct {
+		Type string `json:"_"`
+	}
+	if err := json.Unmarshal(raw, &object); err != nil || object.Type != kind {
+		t.Fatalf("raw=%s want=%s err=%v", raw, kind, err)
+	}
+}
+
 func TestOwnerFoldersConversion(t *testing.T) {
 	filters := []tg.DialogFilterClass{&tg.DialogFilter{ID: 2, Title: tg.TextWithEntities{Text: "A"}, PinnedPeers: []tg.InputPeerClass{&tg.InputPeerSelf{}, &tg.InputPeerChannel{ChannelID: 9, AccessHash: 42}}}, &tg.DialogFilterDefault{}, &tg.DialogFilterChatlist{ID: 3, Title: tg.TextWithEntities{Text: "Shared"}, IncludePeers: []tg.InputPeerClass{&tg.InputPeerUserFromMessage{UserID: 7}}}}
 	if !folderNeedsSelf(filters) {
@@ -21,6 +31,12 @@ func TestOwnerFoldersConversion(t *testing.T) {
 	got, err := convertFolders(filters, 5)
 	if err != nil || len(got.Folders) != 3 || got.Folders[1].Kind != "all" || got.Folders[1].Position != 1 || got.Folders[0].Pinned[0].ID != 5 || got.Folders[0].Pinned[1].ID != -1000000000009 || got.Folders[2].Include[0].ID != 7 {
 		t.Fatalf("folders %+v %v", got, err)
+	}
+	for i, kind := range []string{"dialogFilter", "dialogFilterDefault", "dialogFilterChatlist"} {
+		assertOwnerRaw(t, got.Folders[i].Raw, kind)
+	}
+	if strings.Contains(string(got.Folders[0].Raw), "access_hash") || !strings.Contains(string(got.Folders[0].Raw), `"channel_id":9`) {
+		t.Fatalf("folder raw=%s", got.Folders[0].Raw)
 	}
 	if _, err = convertFolders(filters, 0); err == nil {
 		t.Fatal("missing self accepted")
@@ -38,6 +54,7 @@ func TestOwnerBlockedPageAndErrors(t *testing.T) {
 	if err != nil || got.NextCursor != "3" || len(got.Peers) != 1 || got.Peers[0].Title != "Ann" {
 		t.Fatalf("result %+v %v", got, err)
 	}
+	assertOwnerRaw(t, got.Peers[0].Raw, "peerBlocked")
 	for _, e := range []struct {
 		err  error
 		code int
@@ -63,6 +80,9 @@ func TestOwnerNotifyReadOnly(t *testing.T) {
 	if err != nil || n != 3 || len(result.Defaults) != 3 || result.Defaults[0].Silent != nil || result.Defaults[0].MuteUntil != nil {
 		t.Fatalf("result %+v %v", result, err)
 	}
+	for _, item := range result.Defaults {
+		assertOwnerRaw(t, item.Raw, "peerNotifySettings")
+	}
 }
 
 func TestOwnerSessionsAndDialogState(t *testing.T) {
@@ -76,6 +96,14 @@ func TestOwnerSessionsAndDialogState(t *testing.T) {
 	if err != nil || len(got.Sessions) != 1 || got.Sessions[0].Hash != 42 || !got.Sessions[0].Current || got.AuthorizationTTLDays != 90 {
 		t.Fatalf("sessions %+v %v", got, err)
 	}
+	assertOwnerRaw(t, got.Sessions[0].Raw, "authorization")
+	var authorization map[string]any
+	if err := json.Unmarshal(got.Sessions[0].Raw, &authorization); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := authorization["hash"]; exists || authorization["ip"] != "secret" || authorization["country"] != "X" {
+		t.Fatalf("authorization raw=%s", got.Sessions[0].Raw)
+	}
 	data, err := json.Marshal(got)
 	if err != nil || strings.Contains(string(data), "secret") || strings.Contains(string(data), "42") {
 		t.Fatalf("session leaked private fields: %s %v", data, err)
@@ -88,6 +116,7 @@ func TestOwnerSessionsAndDialogState(t *testing.T) {
 	if !ok || s.ChatID != -1000000000001 || !s.Archived || s.Silent == nil || *s.Silent || s.MuteUntil == nil || *s.MuteUntil != 0 || s.ShowPreviews != nil || s.Unread != 5 {
 		t.Fatalf("dialog %+v", s)
 	}
+	assertOwnerRaw(t, s.Raw, "dialog")
 }
 
 func TestOwnerFolderAndSingleDialogRequests(t *testing.T) {

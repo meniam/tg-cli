@@ -2,7 +2,11 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
+	"path/filepath"
+	"strings"
 	"testing"
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
@@ -48,7 +52,7 @@ func (f *ownerFake) Blocked(context.Context, rpc.BlockedParams) (rpc.BlockedResu
 func TestOwnerStateAccessAndLocal(t *testing.T) {
 	d, base, db, path := accessTestDaemon(t)
 	ctx := context.Background()
-	f := &ownerFake{fakeTelegram: base, folders: rpc.FoldersResult{Folders: []rpc.Folder{{ID: 1, Kind: "filter", Pinned: []rpc.FolderPeer{{ID: 42}, {ID: 77}}}}}, states: rpc.ChatStatesResult{States: []rpc.ChatState{{ChatID: 42}, {ChatID: 77}}}, blocked: rpc.BlockedResult{Peers: []rpc.BlockedPeer{{PeerID: 42}, {PeerID: 77}}}}
+	f := &ownerFake{fakeTelegram: base, folders: rpc.FoldersResult{Folders: []rpc.Folder{{Raw: json.RawMessage(`{"_":"dialogFilter","pinned_peers":[{"_":"inputPeerUser","user_id":77}]}`), ID: 1, Kind: "filter", Pinned: []rpc.FolderPeer{{ID: 42}, {ID: 77}}}}}, states: rpc.ChatStatesResult{States: []rpc.ChatState{{ChatID: 42}, {ChatID: 77}}}, blocked: rpc.BlockedResult{Peers: []rpc.BlockedPeer{{PeerID: 42}, {PeerID: 77}}}}
 	d.opts.Telegram = f
 	writeAccess(t, path, `{"allow":[42],"block":[77]}`)
 	if _, err := d.chatState(ctx, params(t, rpc.ChatStateParams{Chat: "77"})); err == nil || f.calls != 0 {
@@ -60,6 +64,19 @@ func TestOwnerStateAccessAndLocal(t *testing.T) {
 	}
 	if got := v.(rpc.FoldersResult); len(got.Folders) != 1 || len(got.Folders[0].Pinned) != 1 || got.Folders[0].Pinned[0].ID != 42 {
 		t.Fatalf("folders %+v", got)
+	}
+	encoded, err := json.Marshal(v)
+	if err != nil || strings.Contains(string(encoded), `"user_id":77`) || strings.Contains(string(encoded), `"id":77`) {
+		t.Fatalf("folder response=%s err=%v", encoded, err)
+	}
+	connection, err := sql.Open("sqlite", filepath.Join(filepath.Dir(path), "store.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	var folderRaw, folderData string
+	if err := connection.QueryRowContext(ctx, `SELECT raw,data FROM folders WHERE id=1`).Scan(&folderRaw, &folderData); err != nil || !strings.Contains(folderRaw, `"user_id":77`) || strings.Contains(folderData, `"id":77`) {
+		t.Fatalf("folder raw=%s data=%s err=%v", folderRaw, folderData, err)
 	}
 	stored, err := db.Folders(ctx, store.ChatFilter{})
 	if err != nil || len(stored.Folders[0].Pinned) != 1 {

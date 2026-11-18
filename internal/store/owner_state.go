@@ -31,6 +31,13 @@ func (db *DB) snapshot(ctx context.Context, kind string) (*int64, *int, error) {
 }
 func marshal(v any) (string, error) { b, e := json.Marshal(v); return string(b), e }
 
+func ownerRaw(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return string(raw)
+}
+
 func (db *DB) UpsertDialogStates(ctx context.Context, states []rpc.ChatState, filter ChatFilter) error {
 	tx, err := db.write.BeginTx(ctx, nil)
 	if err != nil {
@@ -47,7 +54,7 @@ func (db *DB) UpsertDialogStates(ctx context.Context, states []rpc.ChatState, fi
 		if e != nil {
 			return e
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO dialog_state(chat_id,data,synced_at) VALUES(?,?,?) ON CONFLICT(chat_id) DO UPDATE SET data=excluded.data,synced_at=excluded.synced_at`, s.ChatID, raw, now); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO dialog_state(chat_id,data,synced_at,raw) VALUES(?,?,?,?) ON CONFLICT(chat_id) DO UPDATE SET data=excluded.data,synced_at=excluded.synced_at,raw=excluded.raw`, s.ChatID, raw, now, ownerRaw(s.Raw)); err != nil {
 			return err
 		}
 	}
@@ -114,7 +121,7 @@ func (db *DB) ReplaceSessions(ctx context.Context, result rpc.SessionsResult) er
 		if e != nil {
 			return e
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO account_sessions(hash,data,authorization_ttl_days,synced_at) VALUES(?,?,?,?)`, s.Hash, raw, result.AuthorizationTTLDays, now); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO account_sessions(hash,data,authorization_ttl_days,synced_at,raw) VALUES(?,?,?,?,?)`, s.Hash, raw, result.AuthorizationTTLDays, now, ownerRaw(s.Raw)); err != nil {
 			return err
 		}
 	}
@@ -174,7 +181,7 @@ func (db *DB) saveBlocked(ctx context.Context, peers []rpc.BlockedPeer, filter C
 		if e != nil {
 			return e
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO blocked_peers(peer_id,data,synced_at) VALUES(?,?,?) ON CONFLICT(peer_id) DO UPDATE SET data=excluded.data,synced_at=excluded.synced_at`, p.PeerID, raw, now); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO blocked_peers(peer_id,data,synced_at,raw) VALUES(?,?,?,?) ON CONFLICT(peer_id) DO UPDATE SET data=excluded.data,synced_at=excluded.synced_at,raw=excluded.raw`, p.PeerID, raw, now, ownerRaw(p.Raw)); err != nil {
 			return err
 		}
 	}
@@ -232,7 +239,7 @@ func (db *DB) ReplaceNotifyDefaults(ctx context.Context, items []rpc.NotifyDefau
 		if e != nil {
 			return e
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO notify_defaults(scope,data,synced_at) VALUES(?,?,?)`, item.Scope, raw, now); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO notify_defaults(scope,data,synced_at,raw) VALUES(?,?,?,?)`, item.Scope, raw, now, ownerRaw(item.Raw)); err != nil {
 			return err
 		}
 	}

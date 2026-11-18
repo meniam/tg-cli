@@ -77,7 +77,7 @@ func (db *DB) ReplaceFolders(ctx context.Context, folders []rpc.Folder, filter C
 			}
 			rules = string(b)
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO folders(id,title,data,first_seen_at,last_seen_at,kind,position,emoticon,color,rules,synced_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, f.ID, f.Title, string(raw), now, now, f.Kind, f.Position, f.Emoticon, f.Color, rules, now)
+		_, err = tx.ExecContext(ctx, `INSERT INTO folders(id,title,data,first_seen_at,last_seen_at,kind,position,emoticon,color,rules,synced_at,raw) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, f.ID, f.Title, string(raw), now, now, f.Kind, f.Position, f.Emoticon, f.Color, rules, now, ownerRaw(f.Raw))
 		if err != nil {
 			return fmt.Errorf("save folder: %w", err)
 		}
