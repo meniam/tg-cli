@@ -10,9 +10,9 @@ PR: —
 
 ## Status
 
-- Current status: in_progress
-- Last update: 2026-11-14
-- Next safe step: шаг 1 (аудит), исполнитель Codex во вкладке `S3` Herdr.
+- Current status: done (закрыт 2026-11-18 постфактум: ветка влита в main, `1873783` таблица идемпотентности и детерминированные random id, `0a2cd81` блокировка ключа; живая проверка записана в `457b103` и в FEATURES 1.7 и 2.9)
+- Last update: 2026-11-18
+- Next safe step: —
 
 ## Context and sources
 
