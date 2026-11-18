@@ -183,7 +183,13 @@ func (d *daemon) localChatID(ctx context.Context, value string) (int64, chatref.
 }
 func rpcStoredMessage(m store.Message) rpc.Message {
 	var out rpc.Message
-	_ = json.Unmarshal(m.Raw, &out)
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(m.Raw, &fields)
+	if _, telegram := fields["_"]; telegram {
+		_, out.Edited = fields["edit_date"]
+	} else {
+		_ = json.Unmarshal(m.Raw, &out)
+	}
 	out.ID, out.ChatID, out.Date, out.Text = m.ID, m.ChatID, time.Unix(m.Date, 0).UTC().Format(time.RFC3339), m.Text
 	if m.Out != nil {
 		out.Out = *m.Out

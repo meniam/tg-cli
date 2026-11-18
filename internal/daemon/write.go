@@ -200,7 +200,7 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	res.ChatID = id
 	if !res.Scheduled {
-		d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+		d.saveMessages(ctx, rpc.MethodMessageSend, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Raw: res.Raw, Text: p.Text, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
 	}
 	if err := session.complete(ctx, res); err != nil {
 		return nil, err
@@ -248,7 +248,7 @@ func (d *daemon) messageEdit(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, err
 	}
 	res.ChatID = id
-	d.saveMessages(ctx, rpc.MethodMessageEdit, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Text, Out: true}})
+	d.saveMessages(ctx, rpc.MethodMessageEdit, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Raw: res.Raw, Text: p.Text, Out: true}})
 	return res, nil
 }
 
@@ -464,7 +464,7 @@ func (d *daemon) messagePoll(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, err
 	}
 	res.ChatID = id
-	d.saveMessages(ctx, rpc.MethodMessagePoll, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Text: p.Question, MediaType: "poll", Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+	d.saveMessages(ctx, rpc.MethodMessagePoll, []rpc.Message{{ChatID: id, ID: res.ID, Date: res.Date, Raw: res.Raw, Text: p.Question, MediaType: "poll", Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
 	if err := session.complete(ctx, res); err != nil {
 		return nil, err
 	}

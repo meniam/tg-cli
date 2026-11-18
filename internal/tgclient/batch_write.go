@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/gotd/td/tdp"
 	"github.com/gotd/td/tg"
 
 	"tg-cli/internal/rpc"
@@ -91,6 +92,7 @@ func forwardBatches(ctx context.Context, api *tg.Client, source, destination tg.
 			continue
 		}
 		dates := make(map[int]int)
+		raws := make(map[int]tg.MessageClass)
 		fallback := 0
 		switch u := updates.(type) {
 		case *tg.Updates:
@@ -104,12 +106,16 @@ func forwardBatches(ctx context.Context, api *tg.Client, source, destination tg.
 			switch v := change.(type) {
 			case *tg.UpdateNewMessage:
 				dates[v.Message.GetID()] = messageDate(v.Message)
+				raws[v.Message.GetID()] = v.Message
 			case *tg.UpdateNewChannelMessage:
 				dates[v.Message.GetID()] = messageDate(v.Message)
+				raws[v.Message.GetID()] = v.Message
 			case *tg.UpdateEditMessage:
 				dates[v.Message.GetID()] = messageDate(v.Message)
+				raws[v.Message.GetID()] = v.Message
 			case *tg.UpdateEditChannelMessage:
 				dates[v.Message.GetID()] = messageDate(v.Message)
+				raws[v.Message.GetID()] = v.Message
 			}
 		}
 		for i, id := range ids {
@@ -121,6 +127,9 @@ func forwardBatches(ctx context.Context, api *tg.Client, source, destination tg.
 				if target > 0 {
 					m := datedMessage(target, date)
 					m.SourceID = id
+					if object, ok := raws[target].(tdp.Object); ok {
+						m.Raw = messageRaw(object)
+					}
 					result.Messages = append(result.Messages, m)
 					continue
 				}

@@ -194,7 +194,7 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 		if i == 0 {
 			text = p.Caption
 		}
-		stored = append(stored, rpc.Message{ChatID: chatID, ID: item.ID, Date: item.Date, Text: text, MediaType: p.As, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic})
+		stored = append(stored, rpc.Message{ChatID: chatID, ID: item.ID, Date: item.Date, Raw: item.Raw, Text: text, MediaType: p.As, Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic})
 	}
 	d.saveMessages(ctx, rpc.MethodMessageSendMedia, stored)
 	if err := session.complete(ctx, res); err != nil {

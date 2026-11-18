@@ -160,7 +160,7 @@ func sendInline(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, cha
 	if err != nil {
 		return rpc.SendResult{}, nil, err
 	}
-	result := rpc.SendResult{ChatID: chatID, ID: refs[0].ID, Date: refs[0].Date}
+	result := rpc.SendResult{ChatID: chatID, ID: refs[0].ID, Date: refs[0].Date, Raw: refs[0].Raw}
 	var changes []tg.UpdateClass
 	switch u := updates.(type) {
 	case *tg.Updates:
@@ -180,7 +180,7 @@ func sendInline(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, cha
 			raw = v.Message
 		}
 		if m, ok := raw.(*tg.Message); ok && m.ID == result.ID {
-			stored = &rpc.Message{ChatID: chatID, ID: m.ID, Date: formatDate(m.Date), Text: m.Message, MediaType: mediaType(m.Media), Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}
+			stored = &rpc.Message{Raw: refs[0].Raw, ChatID: chatID, ID: m.ID, Date: formatDate(m.Date), Text: m.Message, MediaType: mediaType(m.Media), Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}
 			break
 		}
 	}
@@ -223,7 +223,7 @@ func (c *Client) EditMedia(ctx context.Context, ref chatref.Ref, p rpc.EditMedia
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	return rpc.SendResult{ChatID: int64(peer.TDLibPeerID()), ID: refs[0].ID, Date: refs[0].Date}, nil
+	return rpc.SendResult{ChatID: int64(peer.TDLibPeerID()), ID: refs[0].ID, Date: refs[0].Date, Raw: refs[0].Raw}, nil
 }
 
 func editMediaRequest(peer tg.InputPeerClass, id int, media tg.InputMediaClass, caption *string) *tg.MessagesEditMessageRequest {
@@ -285,7 +285,7 @@ func (c *Client) SendSticker(ctx context.Context, ref chatref.Ref, p rpc.SendSti
 	if err != nil {
 		return rpc.SendStickerResult{}, err
 	}
-	return rpc.SendStickerResult{SendResult: rpc.SendResult{ChatID: int64(peer.TDLibPeerID()), ID: refs[0].ID, Date: refs[0].Date}}, nil
+	return rpc.SendStickerResult{SendResult: rpc.SendResult{ChatID: int64(peer.TDLibPeerID()), ID: refs[0].ID, Date: refs[0].Date, Raw: refs[0].Raw}}, nil
 }
 
 func selectSticker(set *tg.MessagesStickerSet, p rpc.SendStickerParams) (*tg.Document, int, error) {

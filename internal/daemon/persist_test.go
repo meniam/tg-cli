@@ -161,12 +161,13 @@ func TestMessageAnswersPersistVersionsSendersAndSearch(t *testing.T) {
 	tg.resolved = &rpc.Chat{ID: -10, Type: "group", Title: "Ёлка Group"}
 	tg.info = &rpc.ChatInfo{ID: -10, Type: "group", Title: "Ёлка Group", About: "Green"}
 	tg.messages = []rpc.Message{
-		{ID: 1, ChatID: -10, Date: "2026-11-13T10:00:00Z", Sender: &rpc.Sender{ID: 42, Name: "Alice", Username: "alice"}, Text: "Ёлка first", Out: false, Pinned: true, ReplyTo: 4, TopicID: 5, MediaType: "photo", Edited: true},
+		{Raw: json.RawMessage(`{"_":"message","id":1,"edit_date":1}`), ID: 1, ChatID: -10, Date: "2026-11-13T10:00:00Z", Sender: &rpc.Sender{ID: 42, Name: "Alice", Username: "alice"}, Text: "Ёлка first", Out: false, Pinned: true, ReplyTo: 4, TopicID: 5, MediaType: "photo", Edited: true},
 		{ID: 2, ChatID: -10, Date: "2026-11-13T10:01:00Z", Sender: &rpc.Sender{ID: 42, Name: "Alice"}, Text: "Second message"},
 		{ID: 3, ChatID: -10, Date: "2026-11-13T10:02:00Z", Sender: &rpc.Sender{ID: -1000000000099, Name: "Channel"}, Text: "Channel post"},
 		{ID: 4, ChatID: -10, Date: "bad date", Sender: &rpc.Sender{ID: 99, Name: "Skipped"}, Text: "Skipped message"},
 	}
 	wantHistory := append([]rpc.Message(nil), tg.messages...)
+	wantHistory[0].Raw = nil
 	tg.mu.Unlock()
 	var chats rpc.ChatListResult
 	if err := noteCall(t, client, rpc.MethodChatList, rpc.ChatListParams{}, &chats); err != nil {
@@ -187,7 +188,7 @@ func TestMessageAnswersPersistVersionsSendersAndSearch(t *testing.T) {
 	if err != nil || first.Text != "Ёлка first" || first.Date != firstDate.Unix() || first.Out == nil || *first.Out || first.Pinned == nil || !*first.Pinned || first.ReplyTo == nil || *first.ReplyTo != 4 || first.TopicID == nil || *first.TopicID != 5 || first.MediaType == nil || *first.MediaType != "photo" || first.EditedAt != nil {
 		t.Fatalf("stored first message = %+v, %v", first, err)
 	}
-	wantRaw, _ := json.Marshal(wantHistory[0])
+	wantRaw := json.RawMessage(`{"_":"message","id":1,"edit_date":1}`)
 	if !bytes.Equal(first.Raw, wantRaw) {
 		t.Errorf("raw message = %s, want %s", first.Raw, wantRaw)
 	}
@@ -226,7 +227,7 @@ func TestMessageAnswersPersistVersionsSendersAndSearch(t *testing.T) {
 		t.Fatalf("changed message = %+v, %v", changed, err)
 	}
 	versions, err := db.MessageVersions(ctx, -10, 1)
-	if err != nil || len(versions) != 1 || versions[0].Text != "Ёлка first" {
+	if err != nil || len(versions) != 1 || versions[0].Text != "Ёлка first" || !bytes.Equal(versions[0].Raw, wantRaw) {
 		t.Fatalf("versions = %+v, %v", versions, err)
 	}
 	tg.mu.Lock()

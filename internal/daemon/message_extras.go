@@ -125,7 +125,7 @@ func (d *daemon) messageSendSticker(ctx context.Context, raw json.RawMessage) (a
 		}
 		return result, nil
 	}
-	d.saveMessages(ctx, rpc.MethodMessageSendSticker, []rpc.Message{{ChatID: id, ID: result.ID, Date: result.Date, MediaType: "sticker", Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
+	d.saveMessages(ctx, rpc.MethodMessageSendSticker, []rpc.Message{{ChatID: id, ID: result.ID, Date: result.Date, Raw: result.Raw, MediaType: "sticker", Out: true, ReplyTo: p.ReplyTo, TopicID: p.Topic}})
 	if err := session.complete(ctx, result); err != nil {
 		return nil, err
 	}
@@ -192,6 +192,7 @@ func (d *daemon) messageEditMedia(ctx context.Context, raw json.RawMessage) (any
 	old.ChatID = id
 	old.ID = response.ID
 	old.Date = response.Date
+	old.Raw = response.Raw
 	old.MediaType = p.As
 	old.Edited = true
 	if p.Caption != nil {

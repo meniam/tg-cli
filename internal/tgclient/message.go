@@ -26,6 +26,7 @@ func toMessage(chatID int64, msg tg.NotEmptyMessage, ent peer.Entities, fallback
 			}
 		}
 		out := rpc.Message{
+			Raw:       messageRaw(m),
 			ID:        m.ID,
 			ChatID:    chatID,
 			Date:      formatDate(m.Date),
@@ -42,6 +43,7 @@ func toMessage(chatID int64, msg tg.NotEmptyMessage, ent peer.Entities, fallback
 		return out, true
 	case *tg.MessageService:
 		out := rpc.Message{
+			Raw:     messageRaw(m),
 			ID:      m.ID,
 			ChatID:  chatID,
 			Date:    formatDate(m.Date),

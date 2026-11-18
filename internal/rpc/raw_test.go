@@ -11,7 +11,7 @@ import (
 func TestRawIsNeverEncoded(t *testing.T) {
 	values := []any{
 		&Message{}, &Chat{}, &ChatInfo{}, &Contact{}, &UserProfile{}, &Member{},
-		&Folder{}, &ChatState{}, &Session{}, &BlockedPeer{}, &NotifyDefault{},
+		&SendResult{}, &ForwardedMessage{}, &Folder{}, &ChatState{}, &Session{}, &BlockedPeer{}, &NotifyDefault{},
 		&Event{Data: json.RawMessage(`{"content":"preserved"}`)}, &Transcription{},
 	}
 	for _, value := range values {

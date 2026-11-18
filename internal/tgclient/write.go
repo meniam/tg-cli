@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gotd/td/constant"
+	"github.com/gotd/td/tdp"
 	"github.com/gotd/td/telegram/message"
 	"github.com/gotd/td/telegram/message/peer"
 	"github.com/gotd/td/telegram/peers"
@@ -227,7 +228,7 @@ func sendPreparedText(ctx context.Context, api *tg.Client, destination tg.InputP
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, PremiumDropped: premiumDropped(updates, messages[0].ID, prepared.entities)}, nil
+	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, Raw: messages[0].Raw, PremiumDropped: premiumDropped(updates, messages[0].ID, prepared.entities)}, nil
 }
 
 func editText(ctx context.Context, api *tg.Client, destination tg.InputPeerClass, chatID int64, p rpc.EditParams) (rpc.SendResult, error) {
@@ -259,7 +260,7 @@ func editPreparedText(ctx context.Context, api *tg.Client, destination tg.InputP
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, PremiumDropped: premiumDropped(updates, messages[0].ID, prepared.entities)}, nil
+	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, Raw: messages[0].Raw, PremiumDropped: premiumDropped(updates, messages[0].ID, prepared.entities)}, nil
 }
 
 func writeFormatError(err error, rich bool) error {
@@ -334,18 +335,23 @@ func writtenMessages(updates tg.UpdatesClass) ([]rpc.ForwardedMessage, error) {
 	if len(changes) > 0 {
 		ids := make([]int, 0)
 		dates := make(map[int]int)
+		raws := make(map[int]tg.MessageClass)
 		for _, change := range changes {
 			switch v := change.(type) {
 			case *tg.UpdateMessageID:
 				ids = append(ids, v.ID)
 			case *tg.UpdateNewMessage:
 				dates[v.Message.GetID()] = messageDate(v.Message)
+				raws[v.Message.GetID()] = v.Message
 			case *tg.UpdateNewChannelMessage:
 				dates[v.Message.GetID()] = messageDate(v.Message)
+				raws[v.Message.GetID()] = v.Message
 			case *tg.UpdateEditMessage:
 				dates[v.Message.GetID()] = messageDate(v.Message)
+				raws[v.Message.GetID()] = v.Message
 			case *tg.UpdateEditChannelMessage:
 				dates[v.Message.GetID()] = messageDate(v.Message)
+				raws[v.Message.GetID()] = v.Message
 			}
 		}
 		if len(ids) == 0 {
@@ -367,7 +373,11 @@ func writtenMessages(updates tg.UpdatesClass) ([]rpc.ForwardedMessage, error) {
 			if date == 0 {
 				date = fallback
 			}
-			items = append(items, datedMessage(id, date))
+			item := datedMessage(id, date)
+			if object, ok := raws[id].(tdp.Object); ok {
+				item.Raw = messageRaw(object)
+			}
+			items = append(items, item)
 		}
 	}
 	if len(items) == 0 {

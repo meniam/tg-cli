@@ -37,6 +37,9 @@ func TestHistoryPageOneRequestAndCursors(t *testing.T) {
 				return respond(output, &tg.MessagesMessages{Messages: tc.raw})
 			}))
 			page, err := historyPageAPI(context.Background(), api, &tg.InputPeerChat{ChatID: 42}, rpc.Chat{ID: -42, Type: "group", Title: "Group"}, 13)
+			for _, m := range page.Messages {
+				assertMessageRaw(t, m.Raw)
+			}
 			if err != nil || calls != 1 || page.Empty != tc.wantEmpty || page.OldestID != tc.wantOldest || page.RawNextOffsetID != tc.wantRaw || len(page.Messages) != tc.wantCount {
 				t.Fatalf("page=%+v calls=%d err=%v", page, calls, err)
 			}

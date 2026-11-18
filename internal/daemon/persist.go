@@ -171,9 +171,12 @@ func convertStoredMessages(messages []rpc.Message, strict bool) ([]store.Message
 			skipped++
 			continue
 		}
-		raw, err := json.Marshal(message)
-		if err != nil {
-			return nil, nil, 0, err
+		raw := message.Raw
+		if len(raw) == 0 {
+			raw, err = json.Marshal(message)
+			if err != nil {
+				return nil, nil, 0, err
+			}
 		}
 		item := store.Message{
 			ChatID: message.ChatID, ID: message.ID, Date: date.Unix(),

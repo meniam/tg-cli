@@ -62,6 +62,7 @@ func TestUnreadMessagesReadMarkerAndFilterOutgoing(t *testing.T) {
 	if err != nil || len(calls) != 2 || len(out.Messages) != 1 || out.Messages[0].ID != 12 || out.NextCursor == "" || state == nil || state.ReadInboxMaxID != 9 {
 		t.Fatalf("result %+v state %+v calls %v error %v", out, state, calls, err)
 	}
+	assertMessageRaw(t, out.Messages[0].Raw)
 }
 
 func TestUnreadForumTopic(t *testing.T) {
