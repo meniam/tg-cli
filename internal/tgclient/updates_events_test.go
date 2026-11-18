@@ -1,8 +1,10 @@
 package tgclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"strings"
 	"sync"
 	"testing"
@@ -40,12 +42,12 @@ func TestGotdUpdatesBecomeEvents(t *testing.T) {
 		key    string
 		field  string
 	}{
-		{"new private", &tg.UpdateNewMessage{Message: newMessage}, rpc.EventMessageNew, int64p(1), "new:1:11", "hello"},
+		{"new private", &tg.UpdateNewMessage{Message: newMessage, Pts: 321, PtsCount: 2}, rpc.EventMessageNew, int64p(1), "new:1:11", "hello"},
 		{"new channel", &tg.UpdateNewChannelMessage{Message: channelMessage}, rpc.EventMessageNew, int64p(-1000000000008), "new:-1000000000008:12", "channel"},
 		{"new group", &tg.UpdateNewMessage{Message: groupMessage}, rpc.EventMessageNew, int64p(-7), "new:-7:13", "group"},
 		{"edit channel", &tg.UpdateEditChannelMessage{Message: edit}, rpc.EventMessageEdit, int64p(-1000000000008), "edit:-1000000000008:14:1700000010", "edited"},
 		{"edit private", &tg.UpdateEditMessage{Message: newMessage}, rpc.EventMessageEdit, int64p(1), "edit:1:11:1700000000", "hello"},
-		{"delete private", &tg.UpdateDeleteMessages{Messages: []int{9, 2}}, rpc.EventMessageDelete, nil, "del:0:2,9", `"ids":[2,9]`},
+		{"delete private", &tg.UpdateDeleteMessages{Messages: []int{9, 2}, Pts: 322}, rpc.EventMessageDelete, nil, "del:0:2,9", `"ids":[2,9]`},
 		{"delete channel", &tg.UpdateDeleteChannelMessages{ChannelID: 8, Messages: []int{12}}, rpc.EventMessageDelete, int64p(-1000000000008), "del:-1000000000008:12", `"ids":[12]`},
 		{"reaction", &tg.UpdateMessageReactions{Peer: &tg.PeerChat{ChatID: 7}, MsgID: 13, Reactions: tg.MessageReactions{Results: []tg.ReactionCount{{Reaction: &tg.ReactionEmoji{Emoticon: "👍"}, Count: 2}}}}, rpc.EventReaction, int64p(-7), "react:-7:13:", `"emoji":"👍"`},
 		{"read inbox", &tg.UpdateReadHistoryInbox{Peer: &tg.PeerUser{UserID: 1}, MaxID: 11}, rpc.EventRead, int64p(1), "", `"outbox":false`},
@@ -67,6 +69,28 @@ func TestGotdUpdatesBecomeEvents(t *testing.T) {
 			event := events[0]
 			if event.Type != tc.typ || !sameID(event.ChatID, tc.chat) || !strings.HasPrefix(event.DedupKey, tc.key) || !strings.Contains(string(event.Data), tc.field) {
 				t.Errorf("event=%+v data=%s", event, event.Data)
+			}
+			switch tc.typ {
+			case rpc.EventMessageNew, rpc.EventMessageEdit, rpc.EventMessageDelete, rpc.EventReaction:
+				var object struct {
+					Type     string          `json:"_"`
+					Pts      int             `json:"pts"`
+					Message  json.RawMessage `json:"message"`
+					Messages []int           `json:"messages"`
+				}
+				if err := json.Unmarshal(event.Raw, &object); err != nil || object.Type != tc.update.TypeName() {
+					t.Fatalf("raw=%s want=%s err=%v", event.Raw, tc.update.TypeName(), err)
+				}
+				if tc.name == "new private" && (object.Pts != 321 || !strings.Contains(string(object.Message), `"_":"message"`)) {
+					t.Fatalf("new raw=%s", event.Raw)
+				}
+				if tc.name == "delete private" && (object.Pts != 322 || len(object.Messages) != 2 || object.Messages[0] != 9 || object.Messages[1] != 2) {
+					t.Fatalf("delete raw=%s", event.Raw)
+				}
+			default:
+				if len(event.Raw) != 0 {
+					t.Fatalf("unexpected raw=%s", event.Raw)
+				}
 			}
 			if event.ID != "" {
 				t.Errorf("unexpected cursor %q", event.ID)
@@ -126,7 +150,7 @@ func TestGapCallbacksAndSlowSink(t *testing.T) {
 	}
 	finished := make(chan struct{})
 	c.SetEventSink(func(rpc.Event) { c.SetEventSink(nil); time.Sleep(time.Millisecond); close(finished) })
-	go func() { _ = c.deleteEvent(0, []int{1}) }()
+	go func() { _ = c.deleteEvent(0, []int{1}, nil) }()
 	select {
 	case <-finished:
 	case <-time.After(time.Second):
@@ -240,5 +264,21 @@ func TestAccessHashesSurviveHasherReplacement(t *testing.T) {
 	}
 	if hash, found, err := second.GetUserAccessHash(ctx, 42, 1); err != nil || !found || hash != 456 {
 		t.Errorf("user hash=%d found=%v err=%v", hash, found, err)
+	}
+}
+
+func TestEventSerializationFailureDoesNotDropEvent(t *testing.T) {
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previous)
+	msg := &tg.Message{ID: 19, PeerID: &tg.PeerUser{UserID: 1}, Date: 1700000000, Message: "PRIVATE-EVENT-TEXT"}
+	msg.SetEntities([]tg.MessageEntityClass{nil})
+	events := syntheticEvents(t, &tg.UpdateNewMessage{Message: msg})
+	if len(events) != 1 || len(events[0].Raw) != 0 || !strings.Contains(string(events[0].Data), "PRIVATE-EVENT-TEXT") {
+		t.Fatalf("events=%+v", events)
+	}
+	if !strings.Contains(logs.String(), "*tg.UpdateNewMessage") || strings.Contains(logs.String(), "PRIVATE-EVENT-TEXT") {
+		t.Fatalf("serialization log=%s", logs.String())
 	}
 }

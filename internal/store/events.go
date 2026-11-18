@@ -17,6 +17,7 @@ type Event struct {
 	ChatID    *int64
 	CreatedAt time.Time
 	Payload   json.RawMessage
+	Raw       json.RawMessage
 	DedupKey  string
 }
 
@@ -39,7 +40,11 @@ func (db *DB) AddEvent(ctx context.Context, event Event) (id int64, inserted boo
 	if event.DedupKey != "" {
 		key = event.DedupKey
 	}
-	result, err := db.write.ExecContext(ctx, `INSERT INTO events(type,chat_id,created_at,payload,dedup_key) VALUES(?,?,?,?,?) ON CONFLICT(dedup_key) DO NOTHING`, event.Type, event.ChatID, event.CreatedAt.Unix(), string(event.Payload), key)
+	var raw any
+	if len(event.Raw) > 0 {
+		raw = string(event.Raw)
+	}
+	result, err := db.write.ExecContext(ctx, `INSERT INTO events(type,chat_id,created_at,payload,dedup_key,raw) VALUES(?,?,?,?,?,?) ON CONFLICT(dedup_key) DO NOTHING`, event.Type, event.ChatID, event.CreatedAt.Unix(), string(event.Payload), key, raw)
 	if err != nil {
 		return 0, false, fmt.Errorf("add event: %w", err)
 	}

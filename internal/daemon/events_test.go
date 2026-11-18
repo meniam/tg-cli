@@ -423,3 +423,37 @@ func TestSubscriberPreventsIdleStop(t *testing.T) {
 		t.Fatal("idle stop did not resume")
 	}
 }
+
+func TestEventRawPersistsMessageWithoutChangingPayload(t *testing.T) {
+	d, _, db, _ := accessTestDaemon(t)
+	sub := d.hub.Subscribe()
+	defer sub.Close()
+	ctx := context.Background()
+	chat := int64(1)
+	event := testEvent(t, rpc.EventMessageNew, &chat, testMessage(7, chat, "visible"), "new:1:7")
+	event.Raw = json.RawMessage(`{"_":"updateNewMessage","pts":17,"message":{"_":"message","id":7,"message":"visible","edit_date":18}}`)
+	d.handleEvent(event)
+	delivered := nextEvent(t, sub)
+	if !bytes.Equal(delivered.Data, event.Data) {
+		t.Fatalf("payload changed: %s != %s", delivered.Data, event.Data)
+	}
+	wire, err := json.Marshal(delivered)
+	if err != nil || bytes.Contains(wire, []byte(`"pts"`)) || bytes.Contains(wire, []byte(`"raw"`)) {
+		t.Fatalf("wire=%s err=%v", wire, err)
+	}
+	stored, err := db.GetMessage(ctx, chat, 7)
+	if err != nil || string(stored.Raw) != `{"_":"message","id":7,"message":"visible","edit_date":18}` {
+		t.Fatalf("stored=%s err=%v", stored.Raw, err)
+	}
+	if !rpcStoredMessage(stored).Edited {
+		t.Fatalf("edited missing: %+v", rpcStoredMessage(stored))
+	}
+	entries, err := db.EventsAfter(ctx, 0, store.EventFilter{}, 10)
+	if err != nil || len(entries) != 1 || !bytes.Equal(entries[0].Payload, event.Data) {
+		t.Fatalf("entries=%+v err=%v", entries, err)
+	}
+	duplicate := event
+	duplicate.Raw = json.RawMessage(`{"_":"updateNewMessage","pts":19,"message":{"_":"message","id":7,"message":"visible"}}`)
+	d.handleEvent(duplicate)
+	noEvent(t, sub)
+}

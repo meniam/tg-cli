@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gotd/td/constant"
+	"github.com/gotd/td/tdp"
 	"github.com/gotd/td/telegram/message/peer"
 	"github.com/gotd/td/telegram/updates"
 	"github.com/gotd/td/tg"
@@ -41,6 +42,10 @@ func botPeerID(value tg.PeerClass) int64 {
 func eventTime() string { return time.Now().UTC().Format(time.RFC3339) }
 
 func (c *Client) event(typ string, chatID *int64, data any, key string, when string) error {
+	return c.eventRaw(typ, chatID, data, key, when, nil)
+}
+
+func (c *Client) eventRaw(typ string, chatID *int64, data any, key string, when string, object tdp.Object) error {
 	raw, err := json.Marshal(data)
 	if err != nil {
 		return err
@@ -48,11 +53,15 @@ func (c *Client) event(typ string, chatID *int64, data any, key string, when str
 	if when == "" {
 		when = eventTime()
 	}
-	c.emit(rpc.Event{Type: typ, ChatID: chatID, Time: when, Data: raw, DedupKey: key})
+	event := rpc.Event{Type: typ, ChatID: chatID, Time: when, Data: raw, DedupKey: key}
+	if object != nil {
+		event.Raw = messageRaw(object)
+	}
+	c.emit(event)
 	return nil
 }
 
-func (c *Client) messageEvent(typ string, entities tg.Entities, input tg.MessageClass) error {
+func (c *Client) messageEvent(typ string, entities tg.Entities, input tg.MessageClass, update tdp.Object) error {
 	msg, ok := input.(tg.NotEmptyMessage)
 	if !ok {
 		return nil
@@ -89,10 +98,10 @@ func (c *Client) messageEvent(typ string, entities tg.Entities, input tg.Message
 		key = fmt.Sprintf("edit:%d:%d:%d", chatID, converted.ID, date)
 		when = formatDate(date)
 	}
-	return c.event(typ, &chatID, converted, key, when)
+	return c.eventRaw(typ, &chatID, converted, key, when, update)
 }
 
-func (c *Client) deleteEvent(channelID int64, ids []int) error {
+func (c *Client) deleteEvent(channelID int64, ids []int, update tdp.Object) error {
 	ids = slices.Clone(ids)
 	slices.Sort(ids)
 	var chatID *int64
@@ -108,7 +117,7 @@ func (c *Client) deleteEvent(channelID int64, ids []int) error {
 		parts[i] = strconv.Itoa(id)
 	}
 	key := fmt.Sprintf("del:%d:%s", value, strings.Join(parts, ","))
-	return c.event(rpc.EventMessageDelete, chatID, rpc.MessageDeleteData{ChatID: chatID, IDs: ids}, key, "")
+	return c.eventRaw(rpc.EventMessageDelete, chatID, rpc.MessageDeleteData{ChatID: chatID, IDs: ids}, key, "", update)
 }
 
 func reactionLabel(value tg.ReactionClass) string {
@@ -142,7 +151,7 @@ func (c *Client) reactionEvent(update *tg.UpdateMessageReactions) error {
 	}
 	hash := sha256.Sum256(raw)
 	key := fmt.Sprintf("react:%d:%d:%s", chatID, update.MsgID, hex.EncodeToString(hash[:]))
-	return c.event(rpc.EventReaction, &chatID, rpc.ReactionData{ChatID: chatID, MessageID: update.MsgID, Reactions: counts}, key, "")
+	return c.eventRaw(rpc.EventReaction, &chatID, rpc.ReactionData{ChatID: chatID, MessageID: update.MsgID, Reactions: counts}, key, "", update)
 }
 
 func (c *Client) gapEvent(channelID int64, reason string) {
@@ -162,14 +171,23 @@ func (c *Client) updateDispatcher() tg.UpdateDispatcher {
 		c.transcribedAudio(u)
 		return nil
 	})
-	d.OnAnyNewMessage(func(_ context.Context, e tg.Entities, m tg.MessageClass) error {
-		return c.messageEvent(rpc.EventMessageNew, e, m)
+	d.OnNewMessage(func(_ context.Context, e tg.Entities, u *tg.UpdateNewMessage) error {
+		return c.messageEvent(rpc.EventMessageNew, e, u.Message, u)
 	})
-	d.OnAnyEditMessage(func(_ context.Context, e tg.Entities, m tg.MessageClass) error {
-		return c.messageEvent(rpc.EventMessageEdit, e, m)
+	d.OnNewChannelMessage(func(_ context.Context, e tg.Entities, u *tg.UpdateNewChannelMessage) error {
+		return c.messageEvent(rpc.EventMessageNew, e, u.Message, u)
 	})
-	d.OnAnyDeleteMessages(func(_ context.Context, _ tg.Entities, channelID int64, ids []int) error {
-		return c.deleteEvent(channelID, ids)
+	d.OnEditMessage(func(_ context.Context, e tg.Entities, u *tg.UpdateEditMessage) error {
+		return c.messageEvent(rpc.EventMessageEdit, e, u.Message, u)
+	})
+	d.OnEditChannelMessage(func(_ context.Context, e tg.Entities, u *tg.UpdateEditChannelMessage) error {
+		return c.messageEvent(rpc.EventMessageEdit, e, u.Message, u)
+	})
+	d.OnDeleteMessages(func(_ context.Context, _ tg.Entities, u *tg.UpdateDeleteMessages) error {
+		return c.deleteEvent(0, u.Messages, u)
+	})
+	d.OnDeleteChannelMessages(func(_ context.Context, _ tg.Entities, u *tg.UpdateDeleteChannelMessages) error {
+		return c.deleteEvent(u.ChannelID, u.Messages, u)
 	})
 	d.OnMessageReactions(func(_ context.Context, _ tg.Entities, u *tg.UpdateMessageReactions) error { return c.reactionEvent(u) })
 	d.OnAnyReadInbox(func(_ context.Context, _ tg.Entities, r tg.AnyRead) error {

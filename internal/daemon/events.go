@@ -138,7 +138,7 @@ func (d *daemon) handleEvent(event rpc.Event) {
 		add = d.store.AddEvent
 	}
 	for attempt := 0; attempt < eventSaveAttempts; attempt++ {
-		id, inserted, err = add(ctx, store.Event{Type: event.Type, ChatID: event.ChatID, CreatedAt: when, Payload: event.Data, DedupKey: event.DedupKey})
+		id, inserted, err = add(ctx, store.Event{Type: event.Type, ChatID: event.ChatID, CreatedAt: when, Payload: event.Data, Raw: event.Raw, DedupKey: event.DedupKey})
 		if err == nil {
 			break
 		}
@@ -154,6 +154,12 @@ func (d *daemon) handleEvent(event rpc.Event) {
 	case rpc.EventMessageNew, rpc.EventMessageEdit:
 		var message rpc.Message
 		if json.Unmarshal(event.Data, &message) == nil {
+			var update struct {
+				Message json.RawMessage `json:"message"`
+			}
+			if json.Unmarshal(event.Raw, &update) == nil {
+				message.Raw = update.Message
+			}
 			if !d.retryEventWrite(ctx, func() error { return d.persistMessages(ctx, event.Type, []rpc.Message{message}) }) {
 				return
 			}
