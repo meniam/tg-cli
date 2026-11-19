@@ -13,17 +13,28 @@ import (
 type draftsScheduledFake struct {
 	*fakeTelegram
 	calls int
+	// emptyDraft makes DraftGet answer a chat without a draft.
+	emptyDraft bool
+	// lastSet is what the last DraftSet received.
+	lastSet rpc.DraftParams
 }
 
 func (f *draftsScheduledFake) DraftGet(context.Context, chatref.Ref) (rpc.Draft, error) {
+	if f.emptyDraft {
+		return rpc.Draft{Empty: true}, nil
+	}
 	return rpc.Draft{Text: "existing"}, nil
 }
 func (f *draftsScheduledFake) DraftList(context.Context) (rpc.DraftList, error) {
 	return rpc.DraftList{Drafts: []rpc.Draft{{ChatID: 42}, {ChatID: 77}}}, nil
 }
-func (f *draftsScheduledFake) DraftSet(context.Context, chatref.Ref, rpc.DraftParams) (rpc.DraftWriteResult, error) {
+func (f *draftsScheduledFake) DraftSet(_ context.Context, _ chatref.Ref, p rpc.DraftParams) (rpc.DraftWriteResult, error) {
 	f.calls++
+	f.lastSet = p
 	return rpc.DraftWriteResult{}, nil
+}
+func (f *draftsScheduledFake) ScheduledList(context.Context, chatref.Ref) (rpc.ScheduledResult, error) {
+	return rpc.ScheduledResult{Messages: []rpc.Message{{ID: 5, Text: "later"}}}, nil
 }
 func (f *draftsScheduledFake) ScheduledDelete(context.Context, chatref.Ref, []int) (rpc.ScheduledResult, error) {
 	f.calls++
@@ -45,9 +56,16 @@ func TestDraftAndScheduledAccess(t *testing.T) {
 	}
 	writeAccess(t, path, `{"allow":[42],"write":[42]}`)
 	out, err := d.draftSet(ctx, params(t, rpc.DraftParams{Chat: "42", Text: "new", DryRun: true}))
-	if err != nil || !out.(rpc.DraftWriteResult).Replaces || f.calls != 0 {
+	if res, _ := out.(rpc.DraftWriteResult); err != nil || !res.Replaces || !res.DryRun || res.TextLength != 3 || res.ChatID != 42 || f.calls != 0 {
 		t.Fatalf("dry-run %v %v", out, err)
 	}
+	// A chat without a draft is not replaced.
+	f.emptyDraft = true
+	out, err = d.draftSet(ctx, params(t, rpc.DraftParams{Chat: "42", Text: "new", DryRun: true}))
+	if res, _ := out.(rpc.DraftWriteResult); err != nil || res.Replaces || !res.DryRun || f.calls != 0 {
+		t.Fatalf("dry-run over an empty draft: %v %v", out, err)
+	}
+	f.emptyDraft = false
 	out, err = d.draftList(ctx, []byte(`{}`))
 	if err != nil || len(out.(rpc.DraftList).Drafts) != 1 || out.(rpc.DraftList).Drafts[0].ChatID != 42 {
 		t.Fatalf("list %v %v", out, err)

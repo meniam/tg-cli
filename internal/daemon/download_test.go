@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,6 +19,12 @@ type downloadFake struct {
 	fetches   int
 	fetchErr  error
 	size      int64
+	// chatID is the chat Download reports; zero means 42, the chat of the tests.
+	chatID int64
+	// payload is what a fetch writes; empty means "test".
+	payload string
+	// failID makes the fetch of one message fail with its error.
+	failID map[int]error
 }
 
 func (f *downloadFake) Download(_ context.Context, _ chatref.Ref, ids []int, visit func(rpc.DownloadedFile, func(io.Writer) error) error) (int64, []rpc.ItemError, error) {
@@ -29,8 +37,14 @@ func (f *downloadFake) Download(_ context.Context, _ chatref.Ref, ids []int, vis
 	for _, id := range ids {
 		err := visit(rpc.DownloadedFile{MessageID: id, Size: size, MediaType: "photo", MIME: "image/jpeg"}, func(w io.Writer) error {
 			f.fetches++
-			_, err := io.WriteString(w, "test")
-			if err != nil {
+			payload := f.payload
+			if payload == "" {
+				payload = "test"
+			}
+			if _, err := io.WriteString(w, payload); err != nil {
+				return err
+			}
+			if err := f.failID[id]; err != nil {
 				return err
 			}
 			return f.fetchErr
@@ -39,7 +53,11 @@ func (f *downloadFake) Download(_ context.Context, _ chatref.Ref, ids []int, vis
 			failures = append(failures, rpc.ItemErrorFrom(id, err))
 		}
 	}
-	return 42, failures, nil
+	chatID := f.chatID
+	if chatID == 0 {
+		chatID = 42
+	}
+	return chatID, failures, nil
 }
 func TestDownloadAccessAndDryRun(t *testing.T) {
 	d, base, _, path := writeDaemon(t)
@@ -80,9 +98,14 @@ func TestDownloadAccessAndDryRun(t *testing.T) {
 	if err != nil || string(b) != "test" {
 		t.Fatalf("file %q: %v", b, err)
 	}
+	// A second download into the same file is refused and keeps the first copy.
 	_, err = d.messageDownload(context.Background(), params(t, p))
-	if err == nil {
-		t.Fatal("overwrite accepted")
+	if err == nil || writeCode(t, err) != rpc.CodeInvalidParams {
+		t.Fatalf("overwrite: %v, want an invalid_params refusal", err)
+	}
+	b, err = os.ReadFile(filepath.Join(root, "42_1.jpg"))
+	if err != nil || string(b) != "test" {
+		t.Fatalf("the refused overwrite changed the file: %q %v", b, err)
 	}
 }
 
@@ -140,6 +163,14 @@ func TestDownloadFloodRemovesPartial(t *testing.T) {
 	_, err := d.messageDownload(context.Background(), params(t, rpc.DownloadParams{Chat: "42", IDs: []int{1}, Output: root}))
 	if writeCode(t, err) != rpc.CodeFloodWait || f.fetches != 1 {
 		t.Fatalf("error=%v fetches=%d", err, f.fetches)
+	}
+	var floodErr *rpc.Error
+	if !errors.As(err, &floodErr) {
+		t.Fatalf("want an *rpc.Error, got %v", err)
+	}
+	data, _ := floodErr.Data.(map[string]any)
+	if fmt.Sprint(data["retry_after_seconds"]) != "30" {
+		t.Fatalf("the flood answer lost its delay: %+v", floodErr.Data)
 	}
 	entries, err := os.ReadDir(root)
 	if err != nil || len(entries) != 0 {
