@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 )
@@ -22,6 +23,19 @@ func audit05Recv[T any](t testing.TB, ch <-chan T, what string) T {
 		t.Fatalf("timed out waiting for %s", what)
 		panic("unreachable")
 	}
+}
+
+// audit05SignalContext closes waiting the first time its Done channel is
+// requested, which clientRestarter.do does only when it is about to block.
+type audit05SignalContext struct {
+	context.Context
+	waiting chan struct{}
+	once    sync.Once
+}
+
+func (c *audit05SignalContext) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.waiting) })
+	return c.Context.Done()
 }
 
 // audit05ReadyProbe reports the moment Ready is consulted, which for the

@@ -97,14 +97,18 @@ func TestRestarterCoalescesAndWaiterCancels(t *testing.T) {
 	// canceled while it waits.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	// The context reports the moment the joined caller starts waiting on it.
+	waitCtx := &audit05SignalContext{Context: ctx, waiting: make(chan struct{})}
 	waiter := make(chan error, 1)
+	secondStarted := make(chan struct{}, 1)
 	go func() {
-		waiter <- r.do(ctx, func() error { calls.Add(1); return nil })
+		waiter <- r.do(waitCtx, func() error { calls.Add(1); secondStarted <- struct{}{}; return nil })
 	}()
+	audit05Recv(t, waitCtx.waiting, "the second caller to wait for the running restart")
 	select {
 	case err := <-waiter:
 		t.Fatalf("joining caller returned before the restart finished: %v", err)
-	case <-time.After(20 * time.Millisecond):
+	default:
 	}
 	cancel()
 	if err := audit05Recv(t, waiter, "canceled waiter"); !errors.Is(err, context.Canceled) {
@@ -113,7 +117,9 @@ func TestRestarterCoalescesAndWaiterCancels(t *testing.T) {
 	select {
 	case err := <-finished:
 		t.Fatalf("waiter cancellation ended the running restart: %v", err)
-	default:
+	case <-secondStarted:
+		t.Fatal("the second caller started its own restart instead of joining")
+	case <-time.After(50 * time.Millisecond):
 	}
 	close(unblock)
 	if err := audit05Recv(t, finished, "first restart result"); err != nil {
@@ -124,7 +130,7 @@ func TestRestarterCoalescesAndWaiterCancels(t *testing.T) {
 	}
 }
 
-func TestRestarterCanceledCallerDoesNotStartRestart(t *testing.T) {
+func TestAudit05_RestarterCanceledCallerDoesNotStartRestart(t *testing.T) {
 	var r clientRestarter
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

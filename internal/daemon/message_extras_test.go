@@ -109,7 +109,7 @@ func TestSelfDestructRejectsAlbumsAndNonPhotoVideo(t *testing.T) {
 }
 
 // The TTL itself is a range the parser owns: out of range is refused by code.
-func TestSelfDestructRejectsOutOfRangeTTL(t *testing.T) {
+func TestAudit05_SelfDestructRejectsOutOfRangeTTL(t *testing.T) {
 	err := validSendMediaParams(rpc.SendMediaParams{As: "video", Files: []string{"/a"}, SelfDestruct: "61"})
 	if err == nil || audit05GuardCode(t, err) != rpc.CodeInvalidParams {
 		t.Fatalf("out of range TTL: %v", err)
