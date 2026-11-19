@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"bufio"
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/json"
@@ -9,9 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"tg-cli/internal/sessionstr"
@@ -50,11 +47,11 @@ func TestSessionFileAndDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer release()
-	if _, err = guardSessionStart(q); err == nil {
-		t.Fatal("running duplicate accepted")
+	if _, err = guardSessionStart(q); !errors.Is(err, ErrSessionInUse) {
+		t.Fatalf("running duplicate: %v, want ErrSessionInUse", err)
 	}
-	if err = WithProfileLock(p, func() error { return nil }); err == nil {
-		t.Fatal("running profile accepted")
+	if err = WithProfileLock(p, func() error { return nil }); !errors.Is(err, ErrAlreadyRunning) {
+		t.Fatalf("running profile: %v, want ErrAlreadyRunning", err)
 	}
 	files, err := filepath.Glob(filepath.Join(q.Dir, ".session-*"))
 	if err != nil || len(files) != 0 {
@@ -113,34 +110,14 @@ func TestProfileLockAcrossProcesses(t *testing.T) {
 		return
 	}
 	dir = t.TempDir()
-	cmd := exec.Command(os.Args[0], "-test.run=^TestProfileLockAcrossProcesses$")
-	cmd.Env = append(os.Environ(), "TG_TEST_LOCK_DIR="+dir)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
-	line, err := bufio.NewReader(stdout).ReadString('\n')
-	if err != nil || strings.TrimSpace(line) != "locked" {
-		t.Fatalf("child did not lock profile: %v", err)
-	}
+	auditStartLockHolder(t, dir)
 	p := Paths{Dir: dir, Lock: filepath.Join(dir, "daemon.lock")}
-	if err = WithProfileLock(p, func() error { return nil }); !errors.Is(err, ErrAlreadyRunning) {
+	if err := WithProfileLock(p, func() error { return nil }); !errors.Is(err, ErrAlreadyRunning) {
 		t.Fatalf("second process acquired lock: %v", err)
 	}
 }
 
 func TestDuplicateKeyAcrossProcesses(t *testing.T) {
-	if os.Getenv("TG_TEST_LOCK_DIR") != "" {
-		return
-	}
 	base := t.TempDir()
 	first := Paths{Dir: filepath.Join(base, "first")}
 	first.Lock = filepath.Join(first.Dir, "daemon.lock")
@@ -162,24 +139,7 @@ func TestDuplicateKeyAcrossProcesses(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cmd := exec.Command(os.Args[0], "-test.run=^TestProfileLockAcrossProcesses$")
-	cmd.Env = append(os.Environ(), "TG_TEST_LOCK_DIR="+first.Dir)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = stdin.Close(); _ = cmd.Wait() }()
-	line, err := bufio.NewReader(stdout).ReadString('\n')
-	if err != nil || strings.TrimSpace(line) != "locked" {
-		t.Fatal("child did not acquire lock")
-	}
+	auditStartLockHolder(t, first.Dir)
 	release, err := guardSessionStart(second)
 	if err == nil {
 		release()
