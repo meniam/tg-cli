@@ -41,20 +41,18 @@ func TestWriteParallelIntegrityAndCleanup(t *testing.T) {
 		ctx      context.Context
 		expected int64
 		write    func(io.Writer) error
+		want     error
 	}{
-		{"overflow", context.Background(), 1, func(w io.Writer) error { _, err := w.(io.WriterAt).WriteAt([]byte("x"), 10); return err }},
-		{"short", context.Background(), 2, func(w io.Writer) error { _, err := w.Write([]byte("x")); return err }},
-		{"hole", context.Background(), 2, func(w io.Writer) error { _, err := w.(io.WriterAt).WriteAt([]byte("x"), 1); return err }},
-		{"canceled", ctx, 1, func(w io.Writer) error { _, err := w.Write([]byte("x")); return err }},
-		{"ok", context.Background(), 1, func(w io.Writer) error { _, err := w.Write([]byte("x")); return err }},
+		{"overflow", context.Background(), 1, func(w io.Writer) error { _, err := w.(io.WriterAt).WriteAt([]byte("x"), 10); return err }, ErrDownloadSize},
+		{"short", context.Background(), 2, func(w io.Writer) error { _, err := w.Write([]byte("x")); return err }, ErrDownloadSize},
+		{"hole", context.Background(), 2, func(w io.Writer) error { _, err := w.(io.WriterAt).WriteAt([]byte("x"), 1); return err }, ErrDownloadSize},
+		{"canceled", ctx, 1, func(w io.Writer) error { _, err := w.Write([]byte("x")); return err }, context.Canceled},
+		{"ok", context.Background(), 1, func(w io.Writer) error { _, err := w.Write([]byte("x")); return err }, os.ErrExist},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := d.WriteParallel(tc.ctx, tc.name, 10, tc.expected, tc.write)
-			if err == nil {
-				t.Fatal("expected failure")
-			}
-			if tc.name == "canceled" && !errors.Is(err, context.Canceled) {
-				t.Fatal(err)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("error = %v, want %v", err, tc.want)
 			}
 			if _, err := os.Stat(filepath.Join(root, "."+tc.name+".part")); !os.IsNotExist(err) {
 				t.Fatalf("temporary file remains: %v", err)
