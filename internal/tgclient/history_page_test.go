@@ -8,6 +8,7 @@ import (
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/tg"
 
+	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
 )
 
@@ -67,7 +68,28 @@ func TestHistoryPageKeepsAllHundredMessages(t *testing.T) {
 
 func TestHistoryPageFailure(t *testing.T) {
 	api := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { return errors.New("offline") }))
-	if _, err := historyPageAPI(context.Background(), api, &tg.InputPeerChat{ChatID: 42}, rpc.Chat{ID: -42}, 0); err == nil {
-		t.Fatal("Telegram error lost")
+	_, err := historyPageAPI(context.Background(), api, &tg.InputPeerChat{ChatID: 42}, rpc.Chat{ID: -42}, 0)
+	if err == nil || rpcErrorCode(t, err) != rpc.CodeTelegram {
+		t.Fatalf("Telegram error lost or wrong code: %v", err)
+	}
+}
+
+func TestAudit09_HistoryPageNotModifiedReply(t *testing.T) {
+	api := tg.NewClient(writeInvoker(func(_ context.Context, _ bin.Encoder, output bin.Decoder) error {
+		return respond(output, &tg.MessagesMessagesNotModified{Count: 1})
+	}))
+	_, err := historyPageAPI(context.Background(), api, &tg.InputPeerChat{ChatID: 42}, rpc.Chat{ID: -42}, 0)
+	var re *rpc.Error
+	if !errors.As(err, &re) || re.Code != rpc.CodeTelegram || re.Message != "Telegram returned no message list" {
+		t.Fatalf("error %v", err)
+	}
+}
+
+func TestAudit09_HistoryPageRejectsNegativeOffset(t *testing.T) {
+	// The offset is checked before the chat is resolved, so a zero Client is enough.
+	_, err := (&Client{}).HistoryPage(context.Background(), chatref.Ref{}, -1)
+	var re *rpc.Error
+	if !errors.As(err, &re) || re.Code != rpc.CodeInvalidParams || re.Message != "offset id must not be negative" {
+		t.Fatalf("error %v", err)
 	}
 }

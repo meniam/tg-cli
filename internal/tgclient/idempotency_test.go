@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/tg"
@@ -63,7 +64,7 @@ func TestIdempotentInvokerDoesNotRetryPermanent(t *testing.T) {
 	}
 }
 
-func TestIdempotentAPIUnkeyedRequestIsNotRetried(t *testing.T) {
+func TestAudit09_IdempotentAPIUnkeyedRequestIsNotRetried(t *testing.T) {
 	calls := 0
 	base := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { calls++; return io.EOF }))
 	api, err := idempotentAPI(base, 0, 2, "")
@@ -73,6 +74,53 @@ func TestIdempotentAPIUnkeyedRequestIsNotRetried(t *testing.T) {
 	// io.EOF is retryable for keyed writes; without a key the request must run exactly once.
 	if err := api.Invoker().Invoke(context.Background(), &tg.MessagesSendMessageRequest{}, nil); !errors.Is(err, io.EOF) || calls != 1 {
 		t.Fatalf("unkeyed request: err=%v calls=%d", err, calls)
+	}
+}
+
+func TestAudit09_IdempotentAPIRequiresAccountForKey(t *testing.T) {
+	api := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { return nil }))
+	for _, id := range []int64{0, -1} {
+		got, err := idempotentAPI(api, id, 2, "key")
+		if err == nil || got != nil || err.Error() != "account id is required for idempotent writes" {
+			t.Fatalf("account %d: client=%v err=%v", id, got, err)
+		}
+	}
+}
+
+// audit09AfterFirstCheckContext reports no error on the first Err call and context.Canceled
+// afterwards, with Done already closed. This reproduces cancellation that arrives
+// while the invoker waits to retry, without a real one-second wait or a race.
+type audit09AfterFirstCheckContext struct {
+	context.Context
+	done  chan struct{}
+	calls int
+}
+
+func (c *audit09AfterFirstCheckContext) Done() <-chan struct{} { return c.done }
+func (c *audit09AfterFirstCheckContext) Err() error {
+	c.calls++
+	if c.calls == 1 {
+		return nil
+	}
+	return context.Canceled
+}
+
+func TestAudit09_IdempotentInvokerCancelledWhileWaitingToRetry(t *testing.T) {
+	calls := 0
+	base := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { calls++; return io.EOF }))
+	api, err := idempotentAPI(base, 1, 2, "key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := &audit09AfterFirstCheckContext{Context: context.Background(), done: make(chan struct{})}
+	close(ctx.done)
+	start := time.Now()
+	err = api.Invoker().Invoke(ctx, &tg.MessagesSendMessageRequest{}, nil)
+	if !errors.Is(err, context.Canceled) || calls != 1 {
+		t.Fatalf("err=%v calls=%d, want context.Canceled and one call", err, calls)
+	}
+	if time.Since(start) >= time.Second {
+		t.Fatal("cancellation waited for the retry delay")
 	}
 }
 
