@@ -51,7 +51,7 @@ func TestOwnerStateAccessAndLocal(t *testing.T) {
 	f := &ownerFake{fakeTelegram: base, folders: rpc.FoldersResult{Folders: []rpc.Folder{{ID: 1, Kind: "filter", Pinned: []rpc.FolderPeer{{ID: 42}, {ID: 77}}}}}, states: rpc.ChatStatesResult{States: []rpc.ChatState{{ChatID: 42}, {ChatID: 77}}}, blocked: rpc.BlockedResult{Peers: []rpc.BlockedPeer{{PeerID: 42}, {PeerID: 77}}}}
 	d.opts.Telegram = f
 	writeAccess(t, path, `{"allow":[42],"block":[77]}`)
-	if _, err := d.chatState(ctx, params(t, rpc.ChatStateParams{Chat: "77"})); err == nil || f.calls != 0 {
+	if _, err := d.chatState(ctx, params(t, rpc.ChatStateParams{Chat: "77"})); writeCode(t, err) != rpc.CodeNotFound || f.calls != 0 {
 		t.Fatalf("closed request: %v, calls %d", err, f.calls)
 	}
 	v, err := d.folderList(ctx, params(t, rpc.LocalParams{}))
@@ -62,7 +62,7 @@ func TestOwnerStateAccessAndLocal(t *testing.T) {
 		t.Fatalf("folders %+v", got)
 	}
 	stored, err := db.Folders(ctx, store.ChatFilter{})
-	if err != nil || len(stored.Folders[0].Pinned) != 1 {
+	if err != nil || len(stored.Folders) != 1 || len(stored.Folders[0].Pinned) != 1 {
 		t.Fatalf("stored %+v %v", stored, err)
 	}
 	v, err = d.chatState(ctx, params(t, rpc.ChatStateParams{}))
