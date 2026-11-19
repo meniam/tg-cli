@@ -9,20 +9,27 @@ import (
 	"time"
 )
 
-// audit03Ctx is a context whose Err stays nil until trip is called. It lets a
-// test choose which branch of Acquire sees the cancellation.
+// audit03Ctx is a context whose Err stays nil until trip is called, and which
+// reports on entered the moment Acquire asks for Done: that call happens only
+// after the early Err check passed, so it marks a waiter that is blocked in
+// the select.
 type audit03Ctx struct {
 	context.Context
-	done chan struct{}
-	mu   sync.Mutex
-	err  error
+	done    chan struct{}
+	entered chan struct{}
+	once    sync.Once
+	mu      sync.Mutex
+	err     error
 }
 
-func newAudit03Ctx() *audit03Ctx {
-	return &audit03Ctx{Context: context.Background(), done: make(chan struct{})}
+func audit03NewCtx() *audit03Ctx {
+	return &audit03Ctx{Context: context.Background(), done: make(chan struct{}), entered: make(chan struct{})}
 }
 
-func (c *audit03Ctx) Done() <-chan struct{} { return c.done }
+func (c *audit03Ctx) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.entered) })
+	return c.done
+}
 
 func (c *audit03Ctx) Err() error {
 	c.mu.Lock()
@@ -37,16 +44,26 @@ func (c *audit03Ctx) trip() {
 	close(c.done)
 }
 
-// With the lock held, Acquire passes the early check and can only leave the
-// wait through the cancellation.
+func audit03WaitEntered(t *testing.T, ctx *audit03Ctx) {
+	t.Helper()
+	select {
+	case <-ctx.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the waiter never started waiting")
+	}
+}
+
+// With the lock held, the waiter is blocked in the select; the cancellation
+// arrives only after it got there.
 func TestAudit03CancellationWhileWaiting(t *testing.T) {
 	var lock Lock
 	if err := lock.Acquire(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	ctx := newAudit03Ctx()
+	ctx := audit03NewCtx()
 	done := make(chan error, 1)
 	go func() { done <- lock.Acquire(ctx) }()
+	audit03WaitEntered(t, ctx)
 	ctx.trip()
 	select {
 	case err := <-done:
@@ -95,17 +112,19 @@ func TestAudit03TokenIsReturnedWhenCanceledAfterTheWait(t *testing.T) {
 	}
 }
 
-// Release hands the lock to a waiter.
+// Release hands the lock to a waiter that is already blocked on it.
 func TestAudit03ReleaseHandsTheLockToAWaiter(t *testing.T) {
 	var lock Lock
 	if err := lock.Acquire(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	waiter := audit03NewCtx()
 	acquired := make(chan error, 1)
-	go func() { acquired <- lock.Acquire(context.Background()) }()
+	go func() { acquired <- lock.Acquire(waiter) }()
+	audit03WaitEntered(t, waiter)
 	select {
 	case err := <-acquired:
-		t.Fatalf("a second holder got the lock: %v", err)
+		t.Fatalf("a second holder got the lock while it was held: %v", err)
 	default:
 	}
 	lock.Release()

@@ -42,39 +42,49 @@ func TestAuthorizationLossKeepsDaemonAvailable(t *testing.T) {
 			if err = d.guardRequest(rpc.Request{Method: rpc.MethodAuthStart}); err != nil {
 				t.Fatalf("auth is blocked: %v", err)
 			}
+			// tgDone is unbuffered: the send returns only after waitForShutdown
+			// has taken the client failure. A value pushed into serveDone right
+			// after it is read only if the loop is still running, so it is
+			// still queued when the loop returned early. No timer is involved.
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			// tgDone is unbuffered: the send below returns only after
-			// waitForShutdown has taken the client failure.
 			tgDone := make(chan error)
 			serveDone := make(chan error, 1)
-			done := make(chan struct{})
-			var stoppedBeforeCancel bool
+			type outcome struct {
+				err        error
+				tgFinished bool
+			}
+			done := make(chan outcome, 1)
 			go func() {
-				_, _ = d.waitForShutdown(ctx, tgDone, serveDone)
-				stoppedBeforeCancel = ctx.Err() == nil
-				close(done)
+				err, finished := d.waitForShutdown(ctx, tgDone, serveDone)
+				done <- outcome{err, finished}
 			}()
 			tgDone <- errors.New("client stopped")
-			// Negative check: the window only has to be long enough for an
-			// early return to show up. stoppedBeforeCancel catches one that
-			// the window misses.
+			serveDone <- nil
 			select {
-			case <-done:
-				t.Fatal("daemon stopped after authorization loss")
-			case <-time.After(50 * time.Millisecond):
+			case got := <-done:
+				if len(serveDone) != 0 {
+					t.Fatal("daemon stopped after authorization loss")
+				}
+				if got.err != nil || !got.tgFinished {
+					t.Fatalf("shutdown = %+v, want a clean stop after the serve loop ended", got)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("daemon did not stop")
 			}
 			if d.getAuthLost() != kind {
 				t.Fatalf("authorization state = %q, want %q", d.getAuthLost(), kind)
 			}
+			// The context ends the wait after the loss as well.
+			tgDone = make(chan error)
+			stopped := make(chan struct{})
+			go func() { _, _ = d.waitForShutdown(ctx, tgDone, make(chan error)); close(stopped) }()
+			tgDone <- errors.New("client stopped again")
 			cancel()
 			select {
-			case <-done:
+			case <-stopped:
 			case <-time.After(5 * time.Second):
-				t.Fatal("daemon did not stop")
-			}
-			if stoppedBeforeCancel {
-				t.Fatal("daemon stopped before the context was canceled")
+				t.Fatal("daemon did not stop on cancellation")
 			}
 			got, err := os.ReadFile(path)
 			if err != nil || string(got) != string(original) {

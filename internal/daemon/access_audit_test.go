@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"tg-cli/internal/rpc"
+	"tg-cli/internal/store"
 )
 
 // audit03NoChatMethods take no chat reference, so the closed-chat rule does not apply.
@@ -73,5 +74,29 @@ func TestAudit03ChatMethodsRefuseAClosedChat(t *testing.T) {
 	}
 	if checked < 40 {
 		t.Fatalf("only %d methods were probed; the sweep lost its coverage", checked)
+	}
+}
+
+// A subscription answers a closed chat exactly as a chat the session never
+// saw, and an open stored chat is accepted (positive control). The policy is
+// the real one, read from access.json.
+func TestAudit03SubscribeClosedAndUnknownChatLookIdentical(t *testing.T) {
+	d, _, db, path := accessTestDaemon(t)
+	ctx := context.Background()
+	if err := db.UpsertChats(ctx, []store.Chat{{ID: 1, Type: "group", Title: "Closed"}, {ID: 2, Type: "group", Title: "Open"}}); err != nil {
+		t.Fatal(err)
+	}
+	writeAccess(t, path, `{"block":[1]}`)
+	_, closed := d.replayEvents(ctx, rpc.SubscribeParams{Chats: []string{"1"}})
+	_, unknown := d.replayEvents(ctx, rpc.SubscribeParams{Chats: []string{"999"}})
+	sameRPCError(t, closed, rpc.ErrChatNotFound())
+	sameRPCError(t, unknown, rpc.ErrChatNotFound())
+	sameRPCError(t, closed, unknown)
+	plan, err := d.replayEvents(ctx, rpc.SubscribeParams{Chats: []string{"2"}})
+	if err != nil {
+		t.Fatalf("the open chat was refused: %v", err)
+	}
+	if len(plan.Filter.ChatIDs) != 1 || plan.Filter.ChatIDs[0] != 2 {
+		t.Fatalf("filter = %+v, want chat 2 only", plan.Filter)
 	}
 }

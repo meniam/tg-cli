@@ -3,8 +3,8 @@ package daemon
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -76,32 +76,29 @@ func TestTelegramAdmissionDrainWaitsAfterCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	type drainResult struct {
-		err          error
-		afterRelease bool
-	}
-	var released atomic.Bool
-	done := make(chan drainResult, 1)
-	go func() {
-		err := g.drain(context.Background(), 0)
-		done <- drainResult{err, released.Load()}
-	}()
+	done := make(chan error, 1)
+	go func() { done <- g.drain(context.Background(), 0) }()
 	select {
 	case <-ctx.Done():
 	case <-time.After(5 * time.Second):
 		t.Fatal("operation was not canceled")
 	}
-	// The lease is canceled but still held: drain must stay blocked until
-	// release. Setting the flag first makes the order visible to the result.
-	released.Store(true)
+	// The lease is canceled but still held. Yield the processor many times so
+	// that a drain which returns too early has every chance to do it before the
+	// release; the loop counts scheduler turns, not wall-clock time.
+	for i := 0; i < 1000; i++ {
+		select {
+		case err := <-done:
+			t.Fatalf("drain returned before release: %v", err)
+		default:
+			runtime.Gosched()
+		}
+	}
 	release()
 	select {
-	case got := <-done:
-		if got.err != nil {
-			t.Fatal(got.err)
-		}
-		if !got.afterRelease {
-			t.Fatal("drain returned before release")
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("drain did not complete")
