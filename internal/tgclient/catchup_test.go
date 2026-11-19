@@ -78,8 +78,17 @@ func TestCatchupCoalescesUntilManagerFinishes(t *testing.T) {
 	if got := api.calls.Load(); got != 2 {
 		t.Fatalf("difference calls while blocked: %d", got)
 	}
+	// Events are applied synchronously, and catchupPending stays set until the
+	// worker finishes, so no extra catch-up marker may be queued behind the
+	// running one.
+	if n := len(c.connection.catchup); n != 0 {
+		t.Fatalf("%d extra catch-up markers queued while difference is blocked", n)
+	}
 	close(api.release)
 	audit08WaitFor(t, "catch-up barrier not processed", func() bool { return !audit08CatchupPending(c) })
+	if n := len(c.connection.catchup); n != 0 {
+		t.Fatalf("%d catch-up markers left queued after the barrier", n)
+	}
 	if got := api.calls.Load(); got != 2 {
 		t.Fatalf("duplicate difference: %d", got)
 	}
