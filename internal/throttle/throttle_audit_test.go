@@ -134,17 +134,19 @@ func TestAudit10_PauseBackgroundBoundaryAndRounding(t *testing.T) {
 }
 
 // audit10ArmedContext reports no error until armed. Once armed it reports
-// context.Canceled to every caller except the limiter's scheduler goroutine, and
-// its Done channel never closes. Acquire can therefore see the cancellation only
-// through its own Err call after the scheduler has already granted the request,
-// which is the refund path of Acquire. The scheduler is recognised by its stack.
+// context.Canceled only to calls made from audit10AcquireBackground, the
+// goroutine that runs Acquire, and never to the limiter's scheduler. Its Done
+// channel never closes, so Acquire sees the cancellation only through its own
+// Err call after the scheduler has already granted the request, which is the
+// refund path of Acquire. The caller is recognised by the name of the test's
+// own function, not by a method of the limiter.
 type audit10ArmedContext struct {
 	context.Context
 	armed atomic.Bool
 }
 
 func (c *audit10ArmedContext) Err() error {
-	if !c.armed.Load() || audit10CalledFromScheduler() {
+	if !c.armed.Load() || !audit10CalledFromAcquireGoroutine() {
 		return nil
 	}
 	return context.Canceled
@@ -152,18 +154,23 @@ func (c *audit10ArmedContext) Err() error {
 
 func (c *audit10ArmedContext) Done() <-chan struct{} { return nil }
 
-func audit10CalledFromScheduler() bool {
-	pcs := make([]uintptr, 16)
+func audit10CalledFromAcquireGoroutine() bool {
+	pcs := make([]uintptr, 32)
 	frames := runtime.CallersFrames(pcs[:runtime.Callers(2, pcs)])
 	for {
 		frame, more := frames.Next()
-		if strings.HasSuffix(frame.Function, "(*Limiter).run") {
+		if strings.Contains(frame.Function, "audit10AcquireBackground") {
 			return true
 		}
 		if !more {
 			return false
 		}
 	}
+}
+
+func audit10AcquireBackground(l *Limiter, ctx context.Context, result chan<- acquireResult) {
+	p, err := l.Acquire(ctx, General, "", nil)
+	result <- acquireResult{p, err}
 }
 
 // TestAudit10_CanceledAfterGrantSpendsNoToken grants a queued request and only
@@ -183,7 +190,8 @@ func TestAudit10_CanceledAfterGrantSpendsNoToken(t *testing.T) {
 		}
 		first.Release()
 		ctx := &audit10ArmedContext{Context: context.Background()}
-		queued := acquireAsync(l, ctx, General, "", nil)
+		queued := make(chan acquireResult, 1)
+		go audit10AcquireBackground(l, ctx, queued)
 		awaitQueue(t, l, 1)
 		ctx.armed.Store(true)
 		clock.Advance(time.Second)
