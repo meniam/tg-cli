@@ -106,9 +106,9 @@ func TestDeleteWithoutChatPolicy(t *testing.T) {
 	writeAccess(t, path, `{"allow":[2]}`)
 	d.handleEvent(event)
 	noEvent(t, sub)
-	last, _ := db.LastEventID(ctx)
-	if last != 0 {
-		t.Fatal("closed delete stored")
+	last, err := db.LastEventID(ctx)
+	if err != nil || last != 0 {
+		t.Fatalf("closed delete stored: last=%d err=%v", last, err)
 	}
 	writeAccess(t, path, `{"allow":[1]}`)
 	d.handleEvent(event)
@@ -298,29 +298,67 @@ func TestEventSubscriptionNeedsLogin(t *testing.T) {
 	}
 }
 
+// TestEventPruningStopsWithContext covers the pruner: the first pass runs at once,
+// the ticker repeats it, the retention count keeps the newest events and the
+// pruner stops with its context. The test waits for the database state and never
+// for a fixed time.
 func TestEventPruningStopsWithContext(t *testing.T) {
 	d, _, db, _ := accessTestDaemon(t)
 	ctx := context.Background()
-	old := time.Now().Add(-8 * 24 * time.Hour)
+	addOld := func(i int) {
+		t.Helper()
+		old := time.Now().Add(-8 * 24 * time.Hour)
+		if _, _, err := db.AddEvent(ctx, store.Event{Type: rpc.EventReaction, CreatedAt: old.Add(time.Duration(i) * time.Hour), Payload: json.RawMessage(`{}`)}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for i := 0; i < 3; i++ {
-		_, _, err := db.AddEvent(ctx, store.Event{Type: rpc.EventReaction, CreatedAt: old.Add(time.Duration(i) * time.Hour), Payload: json.RawMessage(`{}`)})
-		if err != nil {
+		addOld(i)
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan struct{})
+	go func() { d.pruneEvents(runCtx, 10*time.Millisecond, 7*24*time.Hour, 2); close(done) }()
+	audit04Eventually(t, "the first pass removes the expired events", func() bool {
+		last, err := db.LastEventID(ctx)
+		return err == nil && last == 0
+	})
+	// Events that expire later are removed by the ticker, not by the first pass.
+	addOld(4)
+	audit04Eventually(t, "the ticker removes the event added after the first pass", func() bool {
+		last, err := db.LastEventID(ctx)
+		return err == nil && last == 0
+	})
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pruner did not stop")
+	}
+}
+
+// TestEventPruningKeepsTheNewest covers the retention count: events inside the
+// retention period survive, except the oldest ones beyond the count.
+func TestEventPruningKeepsTheNewest(t *testing.T) {
+	d, _, db, _ := accessTestDaemon(t)
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		if _, _, err := db.AddEvent(ctx, store.Event{Type: rpc.EventReaction, CreatedAt: time.Now(), Payload: json.RawMessage(`{}`)}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	done := make(chan struct{})
-	go func() { d.pruneEvents(runCtx, 10*time.Millisecond, 7*24*time.Hour, 2); close(done) }()
-	time.Sleep(30 * time.Millisecond)
+	go func() { d.pruneEvents(runCtx, time.Hour, 7*24*time.Hour, 2); close(done) }()
+	audit04Eventually(t, "the first pass keeps the newest two events", func() bool {
+		first, err := db.FirstEventID(ctx)
+		return err == nil && first == 2
+	})
 	cancel()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("pruner did not stop")
-	}
-	last, err := db.LastEventID(ctx)
-	if err != nil || last != 0 {
-		t.Fatalf("prune: %d %v", last, err)
+	<-done
+	if last, err := db.LastEventID(ctx); err != nil || last != 3 {
+		t.Fatalf("last event = %d %v, want 3", last, err)
 	}
 }
 
@@ -343,8 +381,11 @@ func TestEventStoreFailureProducesGap(t *testing.T) {
 	if gap.Type != rpc.EventGap || gap.ChatID != nil || gap.ID != "" || string(gap.Data) != `{"reason":"store"}` {
 		t.Fatalf("gap = %+v", gap)
 	}
-	encoded, _ := json.Marshal(gap)
-	if string(encoded) == "" || jsonContainsField(encoded, "id") {
+	encoded, err := json.Marshal(gap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jsonContainsField(encoded, "id") {
 		t.Fatalf("live gap has id: %s", encoded)
 	}
 	last, err := db.LastEventID(context.Background())
@@ -410,16 +451,17 @@ func TestSubscriberPreventsIdleStop(t *testing.T) {
 	defer cancel()
 	stopped := make(chan struct{})
 	go watchIdle(ctx, func() { close(stopped) }, slog.New(slog.DiscardHandler), d, 10*time.Millisecond)
-	time.Sleep(150 * time.Millisecond)
+	// "Does not stop" cannot be awaited, so the test waits for several checks of
+	// the watcher: a missing subscriber condition stops the daemon at the first one.
 	select {
 	case <-stopped:
 		t.Fatal("active subscriber did not prevent idle stop")
-	default:
+	case <-time.After(5 * idleCheckEvery):
 	}
 	sub.Close()
 	select {
 	case <-stopped:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("idle stop did not resume")
 	}
 }
