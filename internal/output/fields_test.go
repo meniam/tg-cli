@@ -49,11 +49,12 @@ func TestSelectKeepsOnlyTheChosenPaths(t *testing.T) {
 			name: "a path the result does not have adds nothing",
 			envelope: SuccessData(map[string]any{"chats": []map[string]any{
 				{"id": 1, "username": "ann"},
+				{"id": 2},
 			}}),
 			// username is optional and absent from the second chat: the schema
 			// has it, this response does not.
 			paths: []string{"chats.id", "chats.username", "chats.nope"},
-			want:  `{"ok":true,"data":{"chats":[{"id":1,"username":"ann"}]}}` + "\n",
+			want:  `{"ok":true,"data":{"chats":[{"id":1,"username":"ann"},{"id":2}]}}` + "\n",
 		},
 		{
 			name:     "the error envelope is not filtered",
