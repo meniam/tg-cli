@@ -110,7 +110,7 @@ func TestMessageExportRejectsOptionsBeforeConnecting(t *testing.T) {
 		{"missing local", []string{"message", "export", "42"}, "--local"},
 		{"json", []string{"message", "export", "42", "--local", "--format", "json"}, "jsonl"},
 		{"toon", []string{"message", "export", "42", "--local", "--format", "toon"}, "stream"},
-		{"negative limit", []string{"message", "export", "42", "--local", "--limit=-1"}, "--limit"},
+		{"negative limit", []string{"message", "export", "42", "--local", "--limit=-1"}, "--limit must be at least 1"},
 		{"negative after", []string{"message", "export", "42", "--local", "--after=-1"}, "--after"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

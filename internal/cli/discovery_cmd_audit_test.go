@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"tg-cli/internal/rpc"
 	"time"
@@ -40,4 +42,17 @@ func audit02Reject(t *testing.T, format string, args ...any) (any, error) {
 	t.Helper()
 	t.Errorf(format, args...)
 	return nil, rpc.NewError(rpc.CodeInvalidParams, "unexpected request")
+}
+
+// audit02Params decodes the params a fake handler received into a T and fails
+// unless they equal want. Fields the command must not send stay zero in want.
+func audit02Params[T any](t *testing.T, raw json.RawMessage, want T) {
+	t.Helper()
+	var got T
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("params %s: %v", raw, err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("params %s decode to %+v, want %+v", raw, got, want)
+	}
 }
