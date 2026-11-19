@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"testing"
-	"time"
 
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
@@ -33,8 +32,9 @@ func TestTranscribeCachesAndWaits(t *testing.T) {
 	d.opts.Telegram = f
 	p := rpc.TranscribeParams{Chat: "77", ID: 1, WaitMS: 1000}
 	f.onCall = func() {
+		// The update arrives from another goroutine, before or while the request
+		// waits. Either order must give the text, so no sleep is needed.
 		go func() {
-			time.Sleep(20 * time.Millisecond)
 			d.handleTranscription(rpc.Transcription{ChatID: 77, ID: 1, TranscriptionID: 4, Text: "hello"})
 		}()
 	}
