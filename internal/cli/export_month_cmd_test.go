@@ -105,7 +105,9 @@ func TestAudit02_ExportVerifyCLI(t *testing.T) {
 	if r.code != exitcode.OK {
 		t.Fatalf("intact archive: %+v", r)
 	}
-	if ok, data = audit02Envelope(t, r.stdout); !ok || !strings.Contains(string(data), `"ok":true`) {
-		t.Fatalf("intact archive data: %s", r.stdout)
+	ok, data = audit02Envelope(t, r.stdout)
+	var intact rpc.ExportVerifyResult
+	if err := json.Unmarshal(data, &intact); err != nil || !ok || !intact.OK {
+		t.Fatalf("intact archive: envelope ok %v, data %s, err %v", ok, data, err)
 	}
 }

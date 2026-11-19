@@ -254,12 +254,8 @@ func TestSchemaFieldsMatchRealResponses(t *testing.T) {
 		}
 		// A command that prints a list is compared on a filled list: with an
 		// empty one the fields of the items are never looked at.
-		if cmd.Item != nil && !audit02HasPathUnder(paths, cmd.Item.Path) {
-			if reason, empty := audit02EmptyItemResponses[path]; empty {
-				t.Logf("%s: the list %q is empty in the fixture: %s", path, cmd.Item.Path, reason)
-			} else {
-				t.Errorf("%s: the response has no field inside the list %q, so the fields of its items are not compared (paths %v)", path, cmd.Item.Path, paths)
-			}
+		if cmd.Item != nil && !audit02ListHasItems(data, cmd.Item.Path) {
+			t.Errorf("%s: the list %q of the response is empty, so the fields of its items are not compared: %s", path, cmd.Item.Path, data)
 		}
 		checked++
 	}
@@ -463,20 +459,21 @@ func TestSchemaListItemsMatchJSONL(t *testing.T) {
 	}
 }
 
-// audit02EmptyItemResponses lists the commands with a list whose fixture response
-// is empty, and why that is accepted. Every other command with a list must
-// return at least one item, so the fields of the items are compared.
-var audit02EmptyItemResponses = map[string]string{
-	"daemon logs": "the in-process daemon of the fixture writes no log lines",
-}
-
-// audit02HasPathUnder reports whether a path of the response lies inside the
-// list at prefix.
-func audit02HasPathUnder(paths []string, prefix string) bool {
-	for _, path := range paths {
-		if strings.HasPrefix(path, prefix+".") {
-			return true
-		}
+// audit02ListHasItems reports whether the list at the dotted path of data has
+// at least one item. It counts items, not paths below the list, so a list of
+// scalars (lines of a log) is judged the same way as a list of objects.
+func audit02ListHasItems(data []byte, path string) bool {
+	var node any
+	if err := json.Unmarshal(data, &node); err != nil {
+		return false
 	}
-	return false
+	for _, key := range strings.Split(path, ".") {
+		object, ok := node.(map[string]any)
+		if !ok {
+			return false
+		}
+		node = object[key]
+	}
+	list, ok := node.([]any)
+	return ok && len(list) > 0
 }

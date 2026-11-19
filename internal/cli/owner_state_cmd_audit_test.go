@@ -8,8 +8,9 @@ import (
 )
 
 // Fake Telegram methods for sessions, dialogs, folders, notifications and saved
-// messages. They lived at the end of owner_state_cmd_test.go, which tests only
-// the owner-state commands.
+// messages, used by many command tests. They sit here, not in owner_state_cmd_test.go,
+// because they are not about the owner-state commands; cli_test.go next to the
+// other fakeTelegram methods is their natural home.
 
 func (f *fakeTelegram) TerminateSession(context.Context, int64) error { return nil }
 
