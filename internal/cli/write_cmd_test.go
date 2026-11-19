@@ -28,11 +28,7 @@ type writeCLIResult struct {
 
 func runWriteCLI(t *testing.T, args []string, stdin string, reply func(string, json.RawMessage) (any, error), dialErr error) writeCLIResult {
 	t.Helper()
-	home, err := os.MkdirTemp("/tmp", "tgw")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	home := audit03ShortDir(t)
 	serverSide, clientSide := net.Pipe()
 	srv := rpc.NewServer(nil)
 	called := make(chan struct {
@@ -58,7 +54,7 @@ func runWriteCLI(t *testing.T, args []string, stdin string, reply func(string, j
 	done := make(chan struct{})
 	go func() { srv.ServeConn(serverSide); close(done) }()
 	var out, errOut bytes.Buffer
-	deps := Deps{Stdout: &out, Stderr: &errOut, Stdin: strings.NewReader(stdin), Getenv: func(name string) string {
+	deps := Deps{Stdout: &out, Stderr: &errOut, ConfigPath: audit03ConfigPath(t), Stdin: strings.NewReader(stdin), Getenv: func(name string) string {
 		if name == "TG_CLI_HOME" {
 			return home
 		}
@@ -89,7 +85,9 @@ func runWriteCLI(t *testing.T, args []string, stdin string, reply func(string, j
 func TestMessageWriteCLIFlagsAndInput(t *testing.T) {
 	send := runWriteCLI(t, []string{"message", "send", "42", "--reply-to", "7", "--topic", "8", "--silent", "--dry-run"}, "from stdin", func(_ string, raw json.RawMessage) (any, error) {
 		var p rpc.SendParams
-		json.Unmarshal(raw, &p)
+		if err := json.Unmarshal(raw, &p); err != nil {
+			t.Errorf("send params: %v", err)
+		}
 		return rpc.SendResult{ChatID: 42, DryRun: p.DryRun, Action: "send", TextLength: len(p.Text)}, nil
 	}, nil)
 	if send.code != 0 || send.method != rpc.MethodMessageSend || !strings.Contains(send.stdout, `"dry_run":true`) {
@@ -101,7 +99,9 @@ func TestMessageWriteCLIFlagsAndInput(t *testing.T) {
 	}
 	edit := runWriteCLI(t, []string{"message", "edit", "42", "11", "--yes", "--text", "replaced"}, "", nil, nil)
 	var e rpc.EditParams
-	json.Unmarshal(edit.params, &e)
+	if err := json.Unmarshal(edit.params, &e); err != nil {
+		t.Fatalf("edit params: %v", err)
+	}
 	if edit.code != 0 || edit.method != rpc.MethodMessageEdit || e.ID != 11 || e.Text != "replaced" || e.DryRun {
 		t.Fatalf("edit: %+v %+v", edit, e)
 	}
@@ -115,7 +115,9 @@ func TestMessageWriteCLIFlagsAndInput(t *testing.T) {
 		return rpc.DeleteResult{ChatID: 42, Deleted: []int{11, 12}}, nil
 	}, nil)
 	var d rpc.DeleteParams
-	json.Unmarshal(del.params, &d)
+	if err := json.Unmarshal(del.params, &d); err != nil {
+		t.Fatalf("delete params: %v", err)
+	}
 	if del.code != 0 || del.method != rpc.MethodMessageDelete || d.Revoke || !d.ForMe || !reflect.DeepEqual(d.IDs, []int{11, 12}) {
 		t.Fatalf("delete: %+v %+v", del, d)
 	}
@@ -129,36 +131,43 @@ func TestMessageWriteCLIFlagsAndInput(t *testing.T) {
 		return rpc.ForwardResult{ChatID: 77, DryRun: true, Action: "forward", Count: 1}, nil
 	}, nil)
 	var f rpc.ForwardParams
-	json.Unmarshal(forward.params, &f)
+	if err := json.Unmarshal(forward.params, &f); err != nil {
+		t.Fatalf("forward params: %v", err)
+	}
 	if forward.code != 0 || forward.method != rpc.MethodMessageForward || f.From != "42" || f.To != "77" || len(f.IDs) != 1 || !f.Silent || !f.DryRun {
 		t.Fatalf("forward: %+v %+v", forward, f)
 	}
 	negative := runWriteCLI(t, []string{"message", "send", "--text", "hi", "--", "-1001234567890"}, "", nil, nil)
 	var n rpc.SendParams
-	json.Unmarshal(negative.params, &n)
+	if err := json.Unmarshal(negative.params, &n); err != nil {
+		t.Fatalf("negative chat params: %v", err)
+	}
 	if negative.code != 0 || n.Chat != "-1001234567890" {
 		t.Fatalf("negative chat: %+v %+v", negative, n)
 	}
 }
 
 func TestMessageWriteCLIValidationBeforeDaemon(t *testing.T) {
-	cases := [][]string{
-		{"message", "send", "42"},
-		{"message", "send", "42", "--text", "   "},
-		{"message", "send", "42", "--text", strings.Repeat("x", 4097)},
-		{"message", "send", "42", "--text", "hi", "--reply-to", "-1"},
-		{"message", "edit", "42", "11", "--text", "hi"},
-		{"message", "edit", "42", "0", "--yes", "--text", "hi"},
-		{"message", "delete", "42", "11", "--revoke"},
-		{"message", "delete", "42", "11", "--yes"},
-		{"message", "delete", "42", "11", "--revoke", "--for-me", "--yes"},
-		{"message", "forward", "42", "77", "0"},
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"message", "send", "42"}, "message text must not be empty"},
+		{[]string{"message", "send", "42", "--text", "   "}, "message text must not be empty"},
+		{[]string{"message", "send", "42", "--text", strings.Repeat("x", 4097)}, "message text must be at most 4096 characters"},
+		{[]string{"message", "send", "42", "--text", "hi", "--reply-to", "-1"}, "reply and topic ids must not be negative"},
+		{[]string{"message", "edit", "42", "11", "--text", "hi"}, "add --yes to edit or --dry-run to preview"},
+		{[]string{"message", "edit", "42", "0", "--yes", "--text", "hi"}, "message id must be positive"},
+		{[]string{"message", "delete", "42", "11", "--revoke"}, "add --yes to delete or --dry-run to preview"},
+		{[]string{"message", "delete", "42", "11", "--yes"}, "choose exactly one of --revoke or --for-me"},
+		{[]string{"message", "delete", "42", "11", "--revoke", "--for-me", "--yes"}, "choose exactly one of --revoke or --for-me"},
+		{[]string{"message", "forward", "42", "77", "0"}, "message id must be positive"},
 	}
-	for i, args := range cases {
+	for i, tc := range cases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			r := runWriteCLI(t, args, "", nil, nil)
-			if r.code != exitcode.Usage || r.method != "" {
-				t.Fatalf("validation: %+v", r)
+			r := runWriteCLI(t, tc.args, "", nil, nil)
+			if r.code != exitcode.Usage || r.method != "" || !strings.Contains(r.stdout+r.stderr, tc.want) {
+				t.Fatalf("want usage error %q: %+v", tc.want, r)
 			}
 		})
 	}
@@ -238,7 +247,7 @@ func TestWriteTextIgnoresStdinWhenTextIsGiven(t *testing.T) {
 
 func TestForwardCopyCLI(t *testing.T) {
 	invalid := runWriteCLI(t, []string{"message", "forward", "42", "77", "11", "--no-captions"}, "", nil, nil)
-	if invalid.code != 2 || invalid.method != "" {
+	if invalid.code != 2 || invalid.method != "" || !strings.Contains(invalid.stdout, "--no-captions requires --copy") {
 		t.Fatalf("invalid: %+v", invalid)
 	}
 	result := runWriteCLI(t, []string{"message", "forward", "42", "77", "11", "--copy", "--no-captions"}, "", nil, nil)

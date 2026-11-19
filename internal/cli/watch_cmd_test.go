@@ -25,11 +25,13 @@ type watchRun struct {
 
 func runWatchScript(t *testing.T, ctx context.Context, args []string, events []rpc.Event, rpcErr *rpc.Error, closeAfter bool, stdout io.Writer) watchRun {
 	t.Helper()
-	home, err := os.MkdirTemp("/tmp", "tgw")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	return audit03RunWatch(t, ctx, args, events, rpcErr, closeAfter, stdout, nil)
+}
+
+// audit03RunWatch is runWatchScript with an optional writer for stderr.
+func audit03RunWatch(t *testing.T, ctx context.Context, args []string, events []rpc.Event, rpcErr *rpc.Error, closeAfter bool, stdout, stderr io.Writer) watchRun {
+	t.Helper()
+	home := audit03ShortDir(t)
 	serverSide, clientSide := net.Pipe()
 	defer serverSide.Close()
 	params := make(chan rpc.SubscribeParams, 1)
@@ -76,7 +78,10 @@ func runWatchScript(t *testing.T, ctx context.Context, args []string, events []r
 	if stdout == nil {
 		stdout = &out
 	}
-	deps := Deps{Stdout: stdout, Stderr: &errOut, Getenv: func(name string) string {
+	if stderr == nil {
+		stderr = &errOut
+	}
+	deps := Deps{Stdout: stdout, Stderr: stderr, ConfigPath: audit03ConfigPath(t), Getenv: func(name string) string {
 		if name == "TG_CLI_HOME" {
 			return home
 		}
@@ -154,8 +159,7 @@ func TestWatchExitCodes(t *testing.T) {
 		{"lagged", []string{"message", "watch"}, []rpc.Event{{ID: "5.0.0.0", Type: rpc.EventLagged, Time: event.Time}}, nil, false, exitcode.Failure, "resume with --after 5.0.0.0"},
 		{"closed", []string{"message", "watch"}, nil, nil, true, exitcode.DaemonNotRunning, "watching from cursor"},
 		{"expired", []string{"message", "watch", "--after", "1.0.0.0"}, nil, rpc.NewError(rpc.CodeCursorExpired, "event cursor expired"), true, exitcode.CursorExpired, "without --after"},
-		{"unknown chat", []string{"message", "watch", "--chat", "42"}, nil, rpc.ErrChatNotFound(), true, exitcode.NotFound, ""},
-		{"closed chat", []string{"message", "watch", "--chat", "99"}, nil, rpc.ErrChatNotFound(), true, exitcode.NotFound, ""},
+		{"chat not found", []string{"message", "watch", "--chat", "42"}, nil, rpc.ErrChatNotFound(), true, exitcode.NotFound, ""},
 		{"no login", []string{"message", "watch"}, nil, rpc.NewError(rpc.CodeNotAuthorized, "not logged in"), true, exitcode.NotAuthorized, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -167,28 +171,25 @@ func TestWatchExitCodes(t *testing.T) {
 	}
 }
 
-func TestWatchClosedAndUnknownChatLookIdentical(t *testing.T) {
-	unknown := runWatchScript(t, context.Background(), []string{"message", "watch", "--chat", "42"}, nil, rpc.ErrChatNotFound(), true, nil)
-	closed := runWatchScript(t, context.Background(), []string{"message", "watch", "--chat", "99"}, nil, rpc.ErrChatNotFound(), true, nil)
-	if unknown.code != exitcode.NotFound || closed.code != exitcode.NotFound || unknown.stdout != closed.stdout {
-		t.Fatalf("chat responses differ: unknown=%+v closed=%+v", unknown, closed)
-	}
-}
-
 func TestWatchRejectsInvalidOptionsBeforeDial(t *testing.T) {
-	for _, args := range [][]string{
-		{"message", "watch", "--format", "json"}, {"message", "watch", "--format", "toon"},
-		{"message", "watch", "--types", "unknown"}, {"message", "watch", "--max-events", "0"},
-		{"message", "watch", "--topic", "-1"},
-		{"message", "watch", "--after", "broken"},
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"message", "watch", "--format", "json"}, "--format json requires --max-events"},
+		{[]string{"message", "watch", "--format", "toon"}, "--format toon is not supported for a stream"},
+		{[]string{"message", "watch", "--types", "unknown"}, "unknown event type"},
+		{[]string{"message", "watch", "--max-events", "0"}, "--max-events must be positive"},
+		{[]string{"message", "watch", "--topic", "-1"}, "--topic must not be negative"},
+		{[]string{"message", "watch", "--after", "broken"}, "invalid event cursor"},
 	} {
 		var out, stderr bytes.Buffer
-		code := Execute(context.Background(), args, Deps{Stdout: &out, Stderr: &stderr, Getenv: func(string) string { return t.TempDir() }, DialRPC: func(context.Context, string, string) (*rpc.Client, error) {
+		code := Execute(context.Background(), tc.args, Deps{Stdout: &out, Stderr: &stderr, ConfigPath: audit03ConfigPath(t), Getenv: audit03HomeEnv(audit03ShortDir(t)), DialRPC: func(context.Context, string, string) (*rpc.Client, error) {
 			t.Error("dialed on invalid option")
 			return nil, os.ErrNotExist
 		}})
-		if code != exitcode.Usage {
-			t.Errorf("%v: code=%d output=%q", args, code, out.String())
+		if code != exitcode.Usage || !strings.Contains(out.String()+stderr.String(), tc.want) {
+			t.Errorf("%v: code=%d want message %q, output=%q stderr=%q", tc.args, code, tc.want, out.String(), stderr.String())
 		}
 	}
 }
@@ -218,12 +219,8 @@ func TestWatchSchemaAndMissingDaemon(t *testing.T) {
 		t.Fatalf("event data not marked: %+v", command.Item.Fields)
 	}
 	var out, stderr bytes.Buffer
-	home, err := os.MkdirTemp("/tmp", "tgw")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(home)
-	code := Execute(context.Background(), []string{"message", "watch"}, Deps{Stdout: &out, Stderr: &stderr, Getenv: func(string) string { return home }, DialRPC: func(context.Context, string, string) (*rpc.Client, error) { return nil, os.ErrNotExist }})
+	home := audit03ShortDir(t)
+	code := Execute(context.Background(), []string{"message", "watch"}, Deps{Stdout: &out, Stderr: &stderr, ConfigPath: audit03ConfigPath(t), Getenv: func(string) string { return home }, DialRPC: func(context.Context, string, string) (*rpc.Client, error) { return nil, os.ErrNotExist }})
 	if code != exitcode.DaemonNotRunning {
 		t.Fatalf("missing daemon: code=%d output=%q", code, out.String())
 	}
