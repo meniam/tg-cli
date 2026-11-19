@@ -16,4 +16,9 @@ func TestOwnerStateValidation(t *testing.T) {
 			t.Errorf("accepted %+v", p)
 		}
 	}
+	for _, p := range []ChatStateParams{{}, {Limit: 1}, {Limit: 500}, {Chat: "x"}} {
+		if err := ValidateChatStateParams(p); err != nil {
+			t.Errorf("refused %+v: %v", p, err)
+		}
+	}
 }
