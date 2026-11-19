@@ -3,6 +3,7 @@ package tgclient
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -114,20 +115,28 @@ func TestSendMediaTypesAndCaption(t *testing.T) {
 
 func TestSendMediaValidation(t *testing.T) {
 	one := mediaFixture(t, "a.jpg", 1)
+	eleven := make([]rpc.MediaFile, 11)
+	for i := range eleven {
+		eleven[i] = mediaFixture(t, fmt.Sprintf("f%d.jpg", i), 1)
+	}
+	const albumSize = "media requires one file, or an album of 2 to 10 files"
 	for _, tc := range []struct {
 		name  string
 		p     rpc.SendMediaParams
 		files []rpc.MediaFile
+		want  string
 	}{
-		{"caption 1025", rpc.SendMediaParams{As: "photo", Caption: strings.Repeat("я", 1025)}, []rpc.MediaFile{one}},
-		{"voice album", rpc.SendMediaParams{As: "voice"}, []rpc.MediaFile{one, one}},
-		{"eleven", rpc.SendMediaParams{As: "photo"}, make([]rpc.MediaFile, 11)},
-		{"missing video metadata", rpc.SendMediaParams{As: "video"}, []rpc.MediaFile{one}},
-		{"dry run", rpc.SendMediaParams{As: "photo", DryRun: true}, []rpc.MediaFile{one}},
+		{"caption 1025", rpc.SendMediaParams{As: "photo", Caption: strings.Repeat("я", 1025)}, []rpc.MediaFile{one}, rpc.CaptionTooLong().Message},
+		{"voice album", rpc.SendMediaParams{As: "voice", Duration: 5}, []rpc.MediaFile{one, one}, albumSize},
+		{"eleven", rpc.SendMediaParams{As: "photo"}, eleven, albumSize},
+		{"missing video metadata", rpc.SendMediaParams{As: "video"}, []rpc.MediaFile{one}, "media duration or dimensions are missing"},
+		{"dry run", rpc.SendMediaParams{As: "photo", DryRun: true}, []rpc.MediaFile{one}, "dry-run must be handled by the daemon"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := validateMedia(tc.p, tc.files); err == nil {
-				t.Fatal("invalid media accepted")
+			err := validateMedia(tc.p, tc.files)
+			var re *rpc.Error
+			if !errors.As(err, &re) || re.Code != rpc.CodeInvalidParams || re.Message != tc.want {
+				t.Fatalf("error %v, want invalid params %q", err, tc.want)
 			}
 		})
 	}

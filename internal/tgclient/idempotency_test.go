@@ -50,7 +50,7 @@ func TestIdempotentInvokerIDsAndRetry(t *testing.T) {
 	}
 }
 
-func TestIdempotentInvokerDoesNotRetryPermanentOrUnkeyed(t *testing.T) {
+func TestIdempotentInvokerDoesNotRetryPermanent(t *testing.T) {
 	calls := 0
 	sentinel := errors.New("permanent")
 	base := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { calls++; return sentinel }))
@@ -61,13 +61,18 @@ func TestIdempotentInvokerDoesNotRetryPermanentOrUnkeyed(t *testing.T) {
 	if !errors.Is(api.Invoker().Invoke(context.Background(), &tg.MessagesSendMessageRequest{}, nil), sentinel) || calls != 1 {
 		t.Fatal("permanent error retried")
 	}
-	api, err = idempotentAPI(base, 0, 2, "")
+}
+
+func TestIdempotentAPIUnkeyedRequestIsNotRetried(t *testing.T) {
+	calls := 0
+	base := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { calls++; return io.EOF }))
+	api, err := idempotentAPI(base, 0, 2, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = api.Invoker().Invoke(context.Background(), &tg.MessagesSendMessageRequest{}, nil)
-	if calls != 2 {
-		t.Fatal("unkeyed request retried")
+	// io.EOF is retryable for keyed writes; without a key the request must run exactly once.
+	if err := api.Invoker().Invoke(context.Background(), &tg.MessagesSendMessageRequest{}, nil); !errors.Is(err, io.EOF) || calls != 1 {
+		t.Fatalf("unkeyed request: err=%v calls=%d", err, calls)
 	}
 }
 
