@@ -29,6 +29,10 @@ func TestStableValues(t *testing.T) {
 	want := map[int]string{
 		0: "ok", 1: "failure", 2: "usage", 3: "daemon_not_running",
 		4: "not_authorized", 5: "telegram_error", 6: "flood_wait", 7: "not_found", 8: "cursor_expired", 9: "write_disabled",
+		10: "offline",
+	}
+	if len(want) != len(All()) {
+		t.Errorf("the table pins %d codes, All() has %d: pin the new code too", len(want), len(All()))
 	}
 	for code, name := range want {
 		if got := Name(code); got != name {
