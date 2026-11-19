@@ -6,9 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -28,20 +28,6 @@ func audit07Wait(t *testing.T, ch <-chan struct{}, what string) {
 	case <-ch:
 	case <-time.After(audit07WaitLimit):
 		t.Fatalf("timed out waiting for %s", what)
-	}
-}
-
-// audit07Eventually polls a condition that has no signal of its own, such as
-// a counter updated by a deferred function. The limit is a safety net only.
-func audit07Eventually(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(audit07WaitLimit)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		runtime.Gosched()
-		time.Sleep(time.Millisecond)
 	}
 }
 
@@ -221,30 +207,30 @@ func TestAudit07_ShutdownWithExpiredContextClosesEverything(t *testing.T) {
 	}
 }
 
+// TestAudit07_SubscribeNotificationIsIgnored feeds the read loop a subscribe
+// without an id. The loop is driven directly, so the end of wg.Wait is a real
+// synchronization point: every handler the loop started has finished by then.
 func TestAudit07_SubscribeNotificationIsIgnored(t *testing.T) {
-	hub := NewHub()
+	var replays atomic.Int32
 	srv := NewServer(nil)
-	srv.Handle("ping", func(context.Context, json.RawMessage) (any, error) { return "pong", nil })
-	srv.SetEventSource(hub, func(context.Context, SubscribeParams) (ReplayPlan, error) { return ReplayPlan{}, nil })
-	conn, reader, _ := pipeSubscriptionServer(t, srv)
-	if _, err := conn.Write([]byte(`{"jsonrpc":"2.0","method":"subscribe"}` + "\n")); err != nil {
-		t.Fatal(err)
+	srv.SetEventSource(NewHub(), func(context.Context, SubscribeParams) (ReplayPlan, error) {
+		replays.Add(1)
+		return ReplayPlan{}, nil
+	})
+	serverSide, clientSide := net.Pipe()
+	t.Cleanup(func() { _ = serverSide.Close(); _ = clientSide.Close() })
+	sc := &serverConn{c: serverSide}
+	input := `{"jsonrpc":"2.0","method":"subscribe"}` + "\n"
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	srv.readLoop(ctx, sc, newFrameReader(strings.NewReader(input)), &frameWriter{w: io.Discard}, &wg)
+	cancel()
+	wg.Wait()
+	if n := replays.Load(); n != 0 {
+		t.Fatalf("a subscribe notification started %d replays, want none", n)
 	}
-	// A round trip of an ordinary request gives a subscription made by the
-	// notification the time to finish: the server reads frames in order.
-	sendPipeRequest(t, conn, 6, "ping", nil)
-	if response := audit07ReadResponse(t, conn, reader); string(response.ID) != "6" || response.Error != nil {
-		t.Fatalf("ping: %+v", response)
-	}
-	// If the notification had created a subscription, this request is refused
-	// as busy.
-	sendPipeRequest(t, conn, 7, MethodSubscribe, nil)
-	response := audit07ReadResponse(t, conn, reader)
-	if string(response.ID) != "7" || response.Error != nil {
-		t.Fatalf("subscribe after a notification: %+v", response)
-	}
-	if n := hub.Subscribers(); n != 1 {
-		t.Fatalf("subscribers = %d, want 1", n)
+	if sc.sub != nil || sc.pending {
+		t.Fatal("a subscribe notification registered a subscription")
 	}
 }
 

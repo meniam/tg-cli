@@ -12,12 +12,20 @@ import (
 
 func pipeClient(t *testing.T, s *Server) *Client {
 	t.Helper()
+	c, _ := audit07PipeClient(t, s)
+	return c
+}
+
+// audit07PipeClient also returns a channel that closes when ServeConn of the
+// connection has returned.
+func audit07PipeClient(t *testing.T, s *Server) (*Client, <-chan struct{}) {
+	t.Helper()
 	a, b := net.Pipe()
 	done := make(chan struct{})
 	go func() { s.ServeConn(b); close(done) }()
 	c := NewClient(a)
 	t.Cleanup(func() { _ = c.Close(); <-done })
-	return c
+	return c, done
 }
 
 func TestConnLifecycleLimitsAndCancellation(t *testing.T) {
@@ -36,7 +44,7 @@ func TestConnLifecycleLimitsAndCancellation(t *testing.T) {
 		}
 	})
 	s.Handle("ping", func(context.Context, json.RawMessage) (any, error) { return true, nil })
-	first := pipeClient(t, s)
+	first, firstDone := audit07PipeClient(t, s)
 	second := pipeClient(t, s)
 	var wg sync.WaitGroup
 	hold := func(c *Client) {
@@ -68,7 +76,12 @@ func TestConnLifecycleLimitsAndCancellation(t *testing.T) {
 	for range MaxConcurrentPerConn {
 		audit07Wait(t, canceled, "a handler to be canceled")
 	}
-	audit07Eventually(t, "the closed connection to release its requests", func() bool { return s.Active() == MaxConcurrentPerConn })
+	// ServeConn returns after its handlers have finished, so the counter is
+	// settled once the closed connection is done.
+	audit07Wait(t, firstDone, "the closed connection to finish")
+	if got := s.Active(); got != MaxConcurrentPerConn {
+		t.Fatalf("closed connection retained active requests: %d, want %d", got, MaxConcurrentPerConn)
+	}
 	if err := third.Call(ctxTimeout(t), "ping", nil, nil); err != nil {
 		t.Fatalf("third connection after close: %v", err)
 	}
