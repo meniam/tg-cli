@@ -8,26 +8,26 @@ import (
 	"tg-cli/internal/rpc"
 )
 
-type auditSavedFake struct {
+type audit06SavedFake struct {
 	*fakeTelegram
 	renames  []rpc.SavedTagRenameParams
 	messages []rpc.Message
 }
 
-func (f *auditSavedFake) RenameSavedTag(_ context.Context, p rpc.SavedTagRenameParams) error {
+func (f *audit06SavedFake) RenameSavedTag(_ context.Context, p rpc.SavedTagRenameParams) error {
 	f.renames = append(f.renames, p)
 	return nil
 }
 
-func (f *auditSavedFake) SavedMessages(context.Context, int64, *chatref.Ref, rpc.SavedMessagesParams, bool) (rpc.MessagesResult, error) {
+func (f *audit06SavedFake) SavedMessages(context.Context, int64, *chatref.Ref, rpc.SavedMessagesParams, bool) (rpc.MessagesResult, error) {
 	return rpc.MessagesResult{Messages: f.messages}, nil
 }
 
-func (f *auditSavedFake) SavedList(context.Context, rpc.SavedListParams) (rpc.SavedListResult, error) {
+func (f *audit06SavedFake) SavedList(context.Context, rpc.SavedListParams) (rpc.SavedListResult, error) {
 	return rpc.SavedListResult{Dialogs: []rpc.SavedDialog{}}, nil
 }
 
-func TestAudit06SavedTagRenameParams(t *testing.T) {
+func TestAudit06_SavedTagRenameParams(t *testing.T) {
 	blank, title := "  ", "tag"
 	cases := []struct {
 		name string
@@ -42,7 +42,7 @@ func TestAudit06SavedTagRenameParams(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			d, base, _, path := accessTestDaemon(t)
-			f := &auditSavedFake{fakeTelegram: base}
+			f := &audit06SavedFake{fakeTelegram: base}
 			d.opts.Telegram = f
 			writeAccess(t, path, `{"write":[42]}`)
 			_, err := d.savedTagRename(context.Background(), params(t, tc.p))
@@ -53,7 +53,7 @@ func TestAudit06SavedTagRenameParams(t *testing.T) {
 	}
 }
 
-func TestAudit06SavedTagRenameWrites(t *testing.T) {
+func TestAudit06_SavedTagRenameWrites(t *testing.T) {
 	title := "tag"
 	cases := []struct {
 		name  string
@@ -66,7 +66,7 @@ func TestAudit06SavedTagRenameWrites(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			d, base, _, path := accessTestDaemon(t)
-			f := &auditSavedFake{fakeTelegram: base}
+			f := &audit06SavedFake{fakeTelegram: base}
 			d.opts.Telegram = f
 			writeAccess(t, path, `{"write":[42]}`)
 			got, err := d.savedTagRename(context.Background(), params(t, tc.p))
@@ -84,7 +84,7 @@ func TestAudit06SavedTagRenameWrites(t *testing.T) {
 	}
 	t.Run("write permission is checked before the call", func(t *testing.T) {
 		d, base, _, path := accessTestDaemon(t)
-		f := &auditSavedFake{fakeTelegram: base}
+		f := &audit06SavedFake{fakeTelegram: base}
 		d.opts.Telegram = f
 		writeAccess(t, path, `{}`)
 		_, err := d.savedTagRename(context.Background(), params(t, rpc.SavedTagRenameParams{Emoji: "👍", Title: &title}))
@@ -94,7 +94,7 @@ func TestAudit06SavedTagRenameWrites(t *testing.T) {
 	})
 }
 
-func TestAudit06SavedHidesUnknownSourceUnderAFilter(t *testing.T) {
+func TestAudit06_SavedHidesUnknownSourceUnderAFilter(t *testing.T) {
 	messages := []rpc.Message{
 		{ID: 1, ChatID: 42, Date: "2026-01-01T00:00:00Z", Text: "known", SavedSourceID: 77},
 		{ID: 2, ChatID: 42, Date: "2026-01-01T00:00:00Z", Text: "unknown", SavedSourceUnknown: true},
@@ -110,7 +110,7 @@ func TestAudit06SavedHidesUnknownSourceUnderAFilter(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			d, base, _, path := accessTestDaemon(t)
-			d.opts.Telegram = &auditSavedFake{fakeTelegram: base, messages: messages}
+			d.opts.Telegram = &audit06SavedFake{fakeTelegram: base, messages: messages}
 			writeAccess(t, path, tc.access)
 			got, err := d.savedMessages(context.Background(), params(t, rpc.SavedMessagesParams{Query: "x"}), true)
 			if err != nil {
@@ -132,10 +132,10 @@ func TestAudit06SavedHidesUnknownSourceUnderAFilter(t *testing.T) {
 	}
 }
 
-func TestAudit06SavedLimitBounds(t *testing.T) {
+func TestAudit06_SavedLimitBounds(t *testing.T) {
 	for _, limit := range []int{-1, 101, 1000} {
 		d, base, _, _ := accessTestDaemon(t)
-		d.opts.Telegram = &auditSavedFake{fakeTelegram: base}
+		d.opts.Telegram = &audit06SavedFake{fakeTelegram: base}
 		if _, err := d.savedList(context.Background(), params(t, rpc.SavedListParams{Limit: limit})); err == nil || writeCode(t, err) != rpc.CodeInvalidParams {
 			t.Errorf("list limit %d: %v", limit, err)
 		}
@@ -145,7 +145,7 @@ func TestAudit06SavedLimitBounds(t *testing.T) {
 	}
 	for _, limit := range []int{0, 1, 100} {
 		d, base, _, _ := accessTestDaemon(t)
-		d.opts.Telegram = &auditSavedFake{fakeTelegram: base}
+		d.opts.Telegram = &audit06SavedFake{fakeTelegram: base}
 		if _, err := d.savedList(context.Background(), params(t, rpc.SavedListParams{Limit: limit})); err != nil {
 			t.Errorf("list limit %d: %v", limit, err)
 		}

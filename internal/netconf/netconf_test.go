@@ -48,12 +48,12 @@ func TestProxyParsingAndRedaction(t *testing.T) {
 	}
 }
 
-type auditNetconfHolder struct {
+type audit06NetconfHolder struct {
 	Name  string
 	Proxy Proxy
 }
 
-func TestAudit06ProxyValueHidesSecrets(t *testing.T) {
+func TestAudit06_ProxyValueHidesSecrets(t *testing.T) {
 	for _, input := range []string{
 		"socks5://alice:marker@proxy.example:1080",
 		"http://alice:marker@proxy.example:8080",
@@ -63,7 +63,7 @@ func TestAudit06ProxyValueHidesSecrets(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		holder := auditNetconfHolder{Name: "x", Proxy: *p}
+		holder := audit06NetconfHolder{Name: "x", Proxy: *p}
 		for _, v := range []string{
 			fmt.Sprintf("%v", *p), fmt.Sprintf("%+v", *p), fmt.Sprintf("%#v", *p), fmt.Sprintf("%s", *p),
 			fmt.Sprintf("%v", holder), fmt.Sprintf("%+v", holder), fmt.Sprintf("%#v", holder),
@@ -78,7 +78,7 @@ func TestAudit06ProxyValueHidesSecrets(t *testing.T) {
 	}
 }
 
-func TestAudit06ParseTransport(t *testing.T) {
+func TestAudit06_ParseTransport(t *testing.T) {
 	for _, in := range []Transport{TCP, WSS, Auto} {
 		got, err := ParseTransport(string(in))
 		if err != nil || got != in {
@@ -92,7 +92,7 @@ func TestAudit06ParseTransport(t *testing.T) {
 	}
 }
 
-func TestAudit06ParseProxyEmptyAndNone(t *testing.T) {
+func TestAudit06_ParseProxyEmptyAndNone(t *testing.T) {
 	for _, in := range []string{"", "none"} {
 		p, err := ParseProxy(in)
 		if p != nil || err != nil {
@@ -116,7 +116,7 @@ func TestAudit06ParseProxyEmptyAndNone(t *testing.T) {
 	}
 }
 
-func TestAudit06EncodeRoundTrip(t *testing.T) {
+func TestAudit06_EncodeRoundTrip(t *testing.T) {
 	for _, in := range []string{
 		"socks5://alice:marker@proxy.example:1080",
 		"http://proxy.example:8080",
@@ -147,7 +147,7 @@ func TestAudit06EncodeRoundTrip(t *testing.T) {
 	}
 }
 
-func TestAudit06ValidateMatrix(t *testing.T) {
+func TestAudit06_ValidateMatrix(t *testing.T) {
 	mt, err := ParseProxy("tg://proxy?server=x&port=443&secret=dddddddddddddddddddddddddddddddddd")
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +194,7 @@ func TestAudit06ValidateMatrix(t *testing.T) {
 	}
 }
 
-func TestAudit06NilProxy(t *testing.T) {
+func TestAudit06_NilProxy(t *testing.T) {
 	var p *Proxy
 	if p.Address() != "" || p.Redacted() != "" {
 		t.Fatalf("nil proxy: address %q, redacted %q", p.Address(), p.Redacted())

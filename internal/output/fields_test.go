@@ -110,7 +110,7 @@ func TestSelectKeepsANumberExact(t *testing.T) {
 	}
 }
 
-func TestAudit06ItemPaths(t *testing.T) {
+func TestAudit06_ItemPaths(t *testing.T) {
 	cases := []struct {
 		name  string
 		paths []string
@@ -133,9 +133,9 @@ func TestAudit06ItemPaths(t *testing.T) {
 	}
 }
 
-// TestAudit06JSONLWholeItem: --fields chats on a list result names the whole
+// TestAudit06_JSONLWholeItem: --fields chats on a list result names the whole
 // element, so a JSONL line must keep every field of it.
-func TestAudit06JSONLWholeItem(t *testing.T) {
+func TestAudit06_JSONLWholeItem(t *testing.T) {
 	type chat struct {
 		ID    int    `json:"id"`
 		Title string `json:"title"`
@@ -164,7 +164,7 @@ func TestAudit06JSONLWholeItem(t *testing.T) {
 	}
 }
 
-func TestAudit06ParseFields(t *testing.T) {
+func TestAudit06_ParseFields(t *testing.T) {
 	good := []struct {
 		in   string
 		want []string
@@ -204,7 +204,7 @@ func TestAudit06ParseFields(t *testing.T) {
 	}
 }
 
-func TestAudit06FilterData(t *testing.T) {
+func TestAudit06_FilterData(t *testing.T) {
 	value := map[string]any{"id": 1, "title": "Ann", "tags": []string{"x", "y"}}
 	cases := []struct {
 		name  string

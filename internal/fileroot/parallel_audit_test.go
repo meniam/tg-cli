@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func TestAudit06WriteParallelRejectsBadArguments(t *testing.T) {
+func TestAudit06_WriteParallelRejectsBadArguments(t *testing.T) {
 	root := t.TempDir()
 	d, err := OpenDownloadDir([]string{root}, root)
 	if err != nil {
@@ -47,10 +47,10 @@ func TestAudit06WriteParallelRejectsBadArguments(t *testing.T) {
 	}
 }
 
-// TestAudit06WriteParallelConcurrentWriteAt writes disjoint ranges from many
+// TestAudit06_WriteParallelConcurrentWriteAt writes disjoint ranges from many
 // goroutines, the way a parallel download does. Run under -race it fails when
 // the range bookkeeping is not guarded by the mutex.
-func TestAudit06WriteParallelConcurrentWriteAt(t *testing.T) {
+func TestAudit06_WriteParallelConcurrentWriteAt(t *testing.T) {
 	const chunk, chunks = 64, 256
 	root := t.TempDir()
 	d, err := OpenDownloadDir([]string{root}, root)

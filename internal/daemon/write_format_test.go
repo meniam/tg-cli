@@ -128,9 +128,9 @@ func TestFormattedMessageStorage(t *testing.T) {
 				var journal string
 				var err error
 				if edit {
-					journal, err = auditServeJournal(t, d, rpc.MethodMessageEdit, rpc.EditParams{Chat: "42", ID: 11, Text: tc.source, Parse: tc.parse, Entities: tc.entities})
+					journal, err = audit06ServeJournal(t, d, rpc.MethodMessageEdit, rpc.EditParams{Chat: "42", ID: 11, Text: tc.source, Parse: tc.parse, Entities: tc.entities})
 				} else {
-					journal, err = auditServeJournal(t, d, rpc.MethodMessageSend, rpc.SendParams{Chat: "42", Text: tc.source, Parse: tc.parse, Entities: tc.entities})
+					journal, err = audit06ServeJournal(t, d, rpc.MethodMessageSend, rpc.SendParams{Chat: "42", Text: tc.source, Parse: tc.parse, Entities: tc.entities})
 				}
 				if err != nil || len(fake.calls) != 1 {
 					t.Fatalf("write=%v calls=%v", err, fake.calls)

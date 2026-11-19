@@ -12,10 +12,10 @@ import (
 	"tg-cli/internal/rpc"
 )
 
-// auditServeJournal routes one call through a real rpc.Server on a pipe, so the
+// audit06ServeJournal routes one call through a real rpc.Server on a pipe, so the
 // request journal of the server and the daemon takes part, and returns what
 // that journal wrote.
-func auditServeJournal(t *testing.T, d *daemon, method string, p any) (string, error) {
+func audit06ServeJournal(t *testing.T, d *daemon, method string, p any) (string, error) {
 	t.Helper()
 	var journal bytes.Buffer
 	d.log = slog.New(slog.NewTextHandler(&journal, nil))
@@ -36,7 +36,7 @@ func auditServeJournal(t *testing.T, d *daemon, method string, p any) (string, e
 
 // A failing local store is the one place a successful write logs anything, so
 // the text must stay out of that line too.
-func TestAudit06WriteStorageFailureKeepsTextOutOfJournal(t *testing.T) {
+func TestAudit06_WriteStorageFailureKeepsTextOutOfJournal(t *testing.T) {
 	const source = "private <b>text</b>"
 	for _, edit := range []bool{false, true} {
 		name := map[bool]string{false: "send", true: "edit"}[edit]
@@ -55,9 +55,9 @@ func TestAudit06WriteStorageFailureKeepsTextOutOfJournal(t *testing.T) {
 			var journal string
 			var err error
 			if edit {
-				journal, err = auditServeJournal(t, d, rpc.MethodMessageEdit, rpc.EditParams{Chat: "42", ID: 11, Text: source, Parse: "html"})
+				journal, err = audit06ServeJournal(t, d, rpc.MethodMessageEdit, rpc.EditParams{Chat: "42", ID: 11, Text: source, Parse: "html"})
 			} else {
-				journal, err = auditServeJournal(t, d, rpc.MethodMessageSend, rpc.SendParams{Chat: "42", Text: source, Parse: "html"})
+				journal, err = audit06ServeJournal(t, d, rpc.MethodMessageSend, rpc.SendParams{Chat: "42", Text: source, Parse: "html"})
 			}
 			if err != nil {
 				t.Fatalf("a storage failure must not change the Telegram result: %v", err)

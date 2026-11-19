@@ -402,7 +402,7 @@ func TestSendMediaSelfDestructRejectsGroupBeforeOpening(t *testing.T) {
 	}
 }
 
-func TestAudit06SendMediaTelegramAnswerChecks(t *testing.T) {
+func TestAudit06_SendMediaTelegramAnswerChecks(t *testing.T) {
 	cases := []struct {
 		name    string
 		change  func(*mediaCase)

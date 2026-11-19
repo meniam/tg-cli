@@ -87,11 +87,11 @@ func TestUnreadListDoesNotPersistClosedChats(t *testing.T) {
 	}
 }
 
-// auditUnreadLeakyFake ignores the allowed filter and returns every chat and
+// audit06UnreadLeakyFake ignores the allowed filter and returns every chat and
 // state, so the daemon's own filters are the only barrier for a closed chat.
-type auditUnreadLeakyFake struct{ *fakeTelegram }
+type audit06UnreadLeakyFake struct{ *fakeTelegram }
 
-func (f *auditUnreadLeakyFake) UnreadChats(context.Context, int, bool, func(int64) bool) (rpc.UnreadChatsResult, []rpc.ChatState, error) {
+func (f *audit06UnreadLeakyFake) UnreadChats(context.Context, int, bool, func(int64) bool) (rpc.UnreadChatsResult, []rpc.ChatState, error) {
 	out := rpc.UnreadChatsResult{
 		Chats:    []rpc.UnreadChat{{ID: 42, Type: "user", Title: "visible", Unread: 1}, {ID: 77, Type: "user", Title: "hidden", Unread: 1}},
 		Scanned:  2,
@@ -100,9 +100,9 @@ func (f *auditUnreadLeakyFake) UnreadChats(context.Context, int, bool, func(int6
 	return out, []rpc.ChatState{{ChatID: 42, Unread: 1}, {ChatID: 77, Unread: 1}}, nil
 }
 
-func TestAudit06UnreadListFiltersWhatTelegramReturns(t *testing.T) {
+func TestAudit06_UnreadListFiltersWhatTelegramReturns(t *testing.T) {
 	d, base, db, path := accessTestDaemon(t)
-	d.opts.Telegram = &auditUnreadLeakyFake{base}
+	d.opts.Telegram = &audit06UnreadLeakyFake{base}
 	writeAccess(t, path, `{"block":[77]}`)
 	ctx := context.Background()
 	v, err := d.chatUnread(ctx, params(t, rpc.ChatUnreadParams{}))

@@ -47,8 +47,8 @@ func TestAudit06_GuardDetector(t *testing.T) {
 			}
 			fn := file.Decls[len(file.Decls)-1].(*ast.FuncDecl)
 			last := fn.Body.List[len(fn.Body.List)-1].(*ast.AssignStmt)
-			if got := guardEmbedsError(info, last.Rhs[0], fn.Body); got != tc.want {
-				t.Fatalf("guardEmbedsError = %v, want %v", got, tc.want)
+			if got := audit06GuardEmbedsError(info, last.Rhs[0], fn.Body); got != tc.want {
+				t.Fatalf("audit06GuardEmbedsError = %v, want %v", got, tc.want)
 			}
 		})
 	}

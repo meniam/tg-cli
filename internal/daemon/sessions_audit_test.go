@@ -13,7 +13,7 @@ import (
 	"tg-cli/internal/rpc"
 )
 
-func TestAudit06TerminateSessionAmbiguousID(t *testing.T) {
+func TestAudit06_TerminateSessionAmbiguousID(t *testing.T) {
 	d, base, _, path := accessTestDaemon(t)
 	f := &sessionFake{fakeTelegram: base, list: rpc.SessionsResult{Sessions: []rpc.Session{{Hash: 2}, {Hash: 2}, {Hash: 3}}}}
 	d.opts.Telegram = f
@@ -25,7 +25,7 @@ func TestAudit06TerminateSessionAmbiguousID(t *testing.T) {
 	}
 }
 
-func TestAudit06TerminateSessionTelegramFailureIsJournaled(t *testing.T) {
+func TestAudit06_TerminateSessionTelegramFailureIsJournaled(t *testing.T) {
 	d, base, _, path := accessTestDaemon(t)
 	failure := errors.New("telegram refused")
 	f := &sessionFake{fakeTelegram: base, list: rpc.SessionsResult{Sessions: []rpc.Session{{Hash: 2, DeviceModel: "device"}}}, err: failure}

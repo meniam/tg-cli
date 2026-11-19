@@ -11,9 +11,9 @@ import (
 	"testing"
 )
 
-// auditCorpus returns valid files of every format, the starting points for the
+// audit06Corpus returns valid files of every format, the starting points for the
 // mutation and fuzz tests below.
-func auditCorpus(t testing.TB) (images, videos, voices [][]byte) {
+func audit06Corpus(t testing.TB) (images, videos, voices [][]byte) {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 4, 5))
 	var p, j bytes.Buffer
@@ -41,9 +41,9 @@ func auditCorpus(t testing.TB) (images, videos, voices [][]byte) {
 	return images, videos, voices
 }
 
-// auditParseAll runs every parser on data and fails when one returns an error
+// audit06ParseAll runs every parser on data and fails when one returns an error
 // outside the package's own set, or a value that breaks its contract.
-func auditParseAll(t testing.TB, data []byte) {
+func audit06ParseAll(t testing.TB, data []byte) {
 	t.Helper()
 	r, n := bytes.NewReader(data), int64(len(data))
 	if w, h, err := Image(r, n); err != nil {
@@ -72,33 +72,33 @@ func auditParseAll(t testing.TB, data []byte) {
 	}
 }
 
-// TestAudit06MutatedFilesTerminateWithPackageErrors damages valid files of every
+// TestAudit06_MutatedFilesTerminateWithPackageErrors damages valid files of every
 // format at every length and byte, so the atom, page and image parsers do run
 // past their signature checks. Random bytes never reached them.
-func TestAudit06MutatedFilesTerminateWithPackageErrors(t *testing.T) {
-	images, videos, voices := auditCorpus(t)
+func TestAudit06_MutatedFilesTerminateWithPackageErrors(t *testing.T) {
+	images, videos, voices := audit06Corpus(t)
 	var corpus [][]byte
 	corpus = append(append(append(corpus, images...), videos...), voices...)
 	for _, file := range corpus {
-		auditParseAll(t, file)
+		audit06ParseAll(t, file)
 		for n := range file { // every truncation
-			auditParseAll(t, file[:n])
+			audit06ParseAll(t, file[:n])
 		}
 		for i := range file { // every byte damaged in three ways
 			for _, v := range []byte{0x00, 0x7f, 0xff} {
 				mutated := append([]byte(nil), file...)
 				mutated[i] = v
-				auditParseAll(t, mutated)
+				audit06ParseAll(t, mutated)
 			}
 		}
 	}
 }
 
-// TestAudit06MutationsReachTheParsers guards the test above against drifting
+// TestAudit06_MutationsReachTheParsers guards the test above against drifting
 // back into inputs that fail the first signature check: damage that keeps the
 // signature must still give the parser-level error.
-func TestAudit06MutationsReachTheParsers(t *testing.T) {
-	_, videos, voices := auditCorpus(t)
+func TestAudit06_MutationsReachTheParsers(t *testing.T) {
+	_, videos, voices := audit06Corpus(t)
 	for n := len(videos[0]) - 1; n > 28; n-- {
 		if _, _, _, err := Video(bytes.NewReader(videos[0][:n]), int64(n)); !errors.Is(err, ErrInvalidVideo) {
 			t.Fatalf("a truncated MP4 of %d bytes: %v, want ErrInvalidVideo", n, err)
@@ -111,39 +111,39 @@ func TestAudit06MutationsReachTheParsers(t *testing.T) {
 	}
 }
 
-func FuzzAudit06Video(f *testing.F) {
-	_, videos, _ := auditCorpus(f)
+func FuzzAudit06_Video(f *testing.F) {
+	_, videos, _ := audit06Corpus(f)
 	for _, v := range videos {
 		f.Add(v)
 	}
-	f.Fuzz(func(t *testing.T, data []byte) { auditParseAll(t, data) })
+	f.Fuzz(func(t *testing.T, data []byte) { audit06ParseAll(t, data) })
 }
 
-func FuzzAudit06Voice(f *testing.F) {
-	_, _, voices := auditCorpus(f)
+func FuzzAudit06_Voice(f *testing.F) {
+	_, _, voices := audit06Corpus(f)
 	for _, v := range voices {
 		f.Add(v)
 	}
-	f.Fuzz(func(t *testing.T, data []byte) { auditParseAll(t, data) })
+	f.Fuzz(func(t *testing.T, data []byte) { audit06ParseAll(t, data) })
 }
 
-func FuzzAudit06Image(f *testing.F) {
-	images, _, _ := auditCorpus(f)
+func FuzzAudit06_Image(f *testing.F) {
+	images, _, _ := audit06Corpus(f)
 	for _, v := range images {
 		f.Add(v)
 	}
-	f.Fuzz(func(t *testing.T, data []byte) { auditParseAll(t, data) })
+	f.Fuzz(func(t *testing.T, data []byte) { audit06ParseAll(t, data) })
 }
 
-func FuzzAudit06Audio(f *testing.F) {
+func FuzzAudit06_Audio(f *testing.F) {
 	f.Add([]byte("ID3\x04\x00\x00"))
 	f.Add([]byte{0xff, 0xfb, 0x90, 0x00})
 	f.Add([]byte{0xff, 0xf1, 0x50, 0x80})
 	f.Add(box("ftyp", []byte("M4A \x00\x00\x00\x00isom")))
-	f.Fuzz(func(t *testing.T, data []byte) { auditParseAll(t, data) })
+	f.Fuzz(func(t *testing.T, data []byte) { audit06ParseAll(t, data) })
 }
 
-func auditMP4(ftypPayload []byte, moov ...[]byte) []byte {
+func audit06MP4(ftypPayload []byte, moov ...[]byte) []byte {
 	out := box("ftyp", ftypPayload)
 	for _, m := range moov {
 		out = append(out, m...)
@@ -151,7 +151,7 @@ func auditMP4(ftypPayload []byte, moov ...[]byte) []byte {
 	return out
 }
 
-func auditMovie(parts ...[]byte) []byte {
+func audit06Movie(parts ...[]byte) []byte {
 	var payload []byte
 	for _, p := range parts {
 		payload = append(payload, p...)
@@ -159,8 +159,8 @@ func auditMovie(parts ...[]byte) []byte {
 	return box("moov", payload)
 }
 
-func TestAudit06VideoBrands(t *testing.T) {
-	movie := auditMovie(movieHeader(0), trackBox("vide", 0))
+func TestAudit06_VideoBrands(t *testing.T) {
+	movie := audit06Movie(movieHeader(0), trackBox("vide", 0))
 	zero := []byte{0, 0, 0, 0}
 	accepted := [][]byte{}
 	for _, brand := range []string{"isom", "iso2", "iso3", "iso4", "iso5", "iso6", "mp41", "mp42", "avc1", "M4V "} {
@@ -168,7 +168,7 @@ func TestAudit06VideoBrands(t *testing.T) {
 	}
 	accepted = append(accepted, append(append([]byte("zzzz"), zero...), "avc1"...)) // compatible brand
 	for _, payload := range accepted {
-		data := auditMP4(payload, movie)
+		data := audit06MP4(payload, movie)
 		if d, w, h, err := Video(bytes.NewReader(data), int64(len(data))); err != nil || d != 2 || w != 640 || h != 360 {
 			t.Errorf("brand %q: Video() = %d, %d, %d, %v", payload, d, w, h, err)
 		}
@@ -181,16 +181,16 @@ func TestAudit06VideoBrands(t *testing.T) {
 		[]byte("isom"), // no minor version: too short
 	}
 	for _, payload := range rejected {
-		data := auditMP4(payload, movie)
+		data := audit06MP4(payload, movie)
 		if _, _, _, err := Video(bytes.NewReader(data), int64(len(data))); !errors.Is(err, ErrNotVideo) {
 			t.Errorf("brand %q: Video() error = %v, want ErrNotVideo", payload, err)
 		}
 	}
 }
 
-func TestAudit06VideoStructureFailures(t *testing.T) {
+func TestAudit06_VideoStructureFailures(t *testing.T) {
 	ftyp := []byte("isom\x00\x00\x00\x00avc1")
-	movie := auditMovie(movieHeader(0), trackBox("vide", 0))
+	movie := audit06Movie(movieHeader(0), trackBox("vide", 0))
 	overrun := trackBox("vide", 0)
 	binary.BigEndian.PutUint32(overrun[:4], uint32(len(overrun)+8))
 	badVersion := movieHeader(1)
@@ -200,11 +200,11 @@ func TestAudit06VideoStructureFailures(t *testing.T) {
 		data []byte
 	}{
 		// The second moov is valid on its own, so only the one-movie rule refuses it.
-		{"second moov", auditMP4(ftyp, movie, auditMovie())},
-		{"child atom overruns its parent", auditMP4(ftyp, auditMovie(movieHeader(0), overrun), box("free", nil))},
-		{"mvhd version above one", auditMP4(ftyp, auditMovie(badVersion, trackBox("vide", 0)))},
-		{"no video track", auditMP4(ftyp, auditMovie(movieHeader(0), trackBox("soun", 0)))},
-		{"no tracks at all", auditMP4(ftyp, auditMovie(movieHeader(0)))},
+		{"second moov", audit06MP4(ftyp, movie, audit06Movie())},
+		{"child atom overruns its parent", audit06MP4(ftyp, audit06Movie(movieHeader(0), overrun), box("free", nil))},
+		{"mvhd version above one", audit06MP4(ftyp, audit06Movie(badVersion, trackBox("vide", 0)))},
+		{"no video track", audit06MP4(ftyp, audit06Movie(movieHeader(0), trackBox("soun", 0)))},
+		{"no tracks at all", audit06MP4(ftyp, audit06Movie(movieHeader(0)))},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -215,7 +215,7 @@ func TestAudit06VideoStructureFailures(t *testing.T) {
 	}
 }
 
-func TestAudit06VoiceGranuleAndSerial(t *testing.T) {
+func TestAudit06_VoiceGranuleAndSerial(t *testing.T) {
 	head := make([]byte, 19)
 	copy(head, "OpusHead")
 	head[8] = 1

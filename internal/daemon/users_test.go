@@ -213,15 +213,15 @@ func TestContactListCanceledWhileLocked(t *testing.T) {
 	}
 }
 
-// auditSelfProbe reports when the background sync asks who is logged in and
+// audit06SelfProbe reports when the background sync asks who is logged in and
 // when it starts reading contacts.
-type auditSelfProbe struct {
+type audit06SelfProbe struct {
 	*usersFake
 	selfCalled     chan struct{}
 	contactsCalled chan struct{}
 }
 
-func (f *auditSelfProbe) Self(ctx context.Context) (*rpc.User, error) {
+func (f *audit06SelfProbe) Self(ctx context.Context) (*rpc.User, error) {
 	user, err := f.usersFake.Self(ctx)
 	select {
 	case f.selfCalled <- struct{}{}:
@@ -230,7 +230,7 @@ func (f *auditSelfProbe) Self(ctx context.Context) (*rpc.User, error) {
 	return user, err
 }
 
-func (f *auditSelfProbe) Contacts(ctx context.Context) ([]rpc.Contact, error) {
+func (f *audit06SelfProbe) Contacts(ctx context.Context) ([]rpc.Contact, error) {
 	select {
 	case f.contactsCalled <- struct{}{}:
 	default:
@@ -238,10 +238,10 @@ func (f *auditSelfProbe) Contacts(ctx context.Context) ([]rpc.Contact, error) {
 	return f.usersFake.Contacts(ctx)
 }
 
-func TestAudit06ContactSyncWaitsForLogin(t *testing.T) {
+func TestAudit06_ContactSyncWaitsForLogin(t *testing.T) {
 	d, base, db, _ := accessTestDaemon(t)
 	base.user = nil
-	f := &auditSelfProbe{
+	f := &audit06SelfProbe{
 		usersFake:      &usersFake{fakeTelegram: base, contacts: []rpc.Contact{{ID: 7, FirstName: "Ann"}}},
 		selfCalled:     make(chan struct{}, 1),
 		contactsCalled: make(chan struct{}, 1),

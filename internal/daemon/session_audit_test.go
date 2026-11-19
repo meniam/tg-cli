@@ -14,7 +14,7 @@ import (
 	"tg-cli/internal/sessionstr"
 )
 
-func auditSessionRaw(t *testing.T, userID int64) []byte {
+func audit06SessionRaw(t *testing.T, userID int64) []byte {
 	t.Helper()
 	key := make([]byte, 256)
 	if _, err := rand.Read(key); err != nil {
@@ -32,7 +32,7 @@ func auditSessionRaw(t *testing.T, userID int64) []byte {
 	return raw
 }
 
-func TestAudit06SessionExportUserID(t *testing.T) {
+func TestAudit06_SessionExportUserID(t *testing.T) {
 	cases := []struct {
 		name     string
 		stored   int64
@@ -46,7 +46,7 @@ func TestAudit06SessionExportUserID(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			d, tg, _, _ := accessTestDaemon(t)
-			d.opts.Telegram = exportSessionFake{Telegram: tg, data: auditSessionRaw(t, tc.stored)}
+			d.opts.Telegram = exportSessionFake{Telegram: tg, data: audit06SessionRaw(t, tc.stored)}
 			out := filepath.Join(t.TempDir(), "session")
 			answer, err := d.sessionExport(context.Background(), params(t, rpc.SessionExportParams{Path: out, Yes: true}))
 			if tc.wantCode != 0 {

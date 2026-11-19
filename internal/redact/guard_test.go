@@ -12,18 +12,18 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// guardException allows a function to embed error text in an RPC message. The
+// audit06GuardException allows a function to embed error text in an RPC message. The
 // key is the package directory and the function ("daemon:parseChat"),
 // not a line number, so edits above it do not move or hide an exception. The
 // count is the number of messages it covers: a new unsafe message in the same
 // function is a failure, and so is an exception that nothing uses any more.
-type guardException struct {
+type audit06GuardException struct {
 	reason string
 	count  int
 }
 
 // Existing validation messages pass through the RPC redaction boundary.
-var guardExceptions = map[string]guardException{
+var guardExceptions = map[string]audit06GuardException{
 	"daemon:parseChat":                        {"chat reference validation", 1},
 	"daemon:storeError":                       {"note validation", 1},
 	"daemon:(*daemon).resolveStoredReference": {"note validation", 1},
@@ -34,10 +34,10 @@ var guardExceptions = map[string]guardException{
 
 var errorVerb = regexp.MustCompile(`%[-+# 0]*[0-9]*(?:\.[0-9]+)?[vw]`)
 
-// guardEmbedsError reports whether the message expression can carry the text of
+// audit06GuardEmbedsError reports whether the message expression can carry the text of
 // an error: err.Error(), fmt.Sprint*(..., err) or a message built in a variable
 // above, in the body of the same function.
-func guardEmbedsError(info *types.Info, message ast.Expr, body *ast.BlockStmt) bool {
+func audit06GuardEmbedsError(info *types.Info, message ast.Expr, body *ast.BlockStmt) bool {
 	errorType := types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
 	isError := func(e ast.Expr) bool {
 		typ := info.TypeOf(e)
@@ -115,9 +115,9 @@ func guardEmbedsError(info *types.Info, message ast.Expr, body *ast.BlockStmt) b
 	return embeds(message, map[types.Object]bool{})
 }
 
-// guardFuncName names a function the way guardExceptions keys do: "name" or
+// audit06GuardFuncName names a function the way guardExceptions keys do: "name" or
 // "(*Type).name".
-func guardFuncName(fd *ast.FuncDecl) string {
+func audit06GuardFuncName(fd *ast.FuncDecl) string {
 	if fd.Recv == nil || len(fd.Recv.List) == 0 {
 		return fd.Name.Name
 	}
@@ -132,9 +132,9 @@ func guardFuncName(fd *ast.FuncDecl) string {
 	return fd.Name.Name
 }
 
-// guardMessage returns the message expression of an rpc.NewError call or an
+// audit06GuardMessage returns the message expression of an rpc.NewError call or an
 // rpc.Error literal, or nil for any other node.
-func guardMessage(info *types.Info, n ast.Node) ast.Expr {
+func audit06GuardMessage(info *types.Info, n ast.Node) ast.Expr {
 	rpcPkg := func(x ast.Expr) bool {
 		id, ok := x.(*ast.Ident)
 		if !ok {
@@ -191,10 +191,10 @@ func TestRPCErrorMessagesDoNotEmbedErrors(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				key := filepath.ToSlash(rel) + ":" + guardFuncName(fd)
+				key := filepath.ToSlash(rel) + ":" + audit06GuardFuncName(fd)
 				ast.Inspect(fd.Body, func(n ast.Node) bool {
-					message := guardMessage(pkg.TypesInfo, n)
-					if message == nil || !guardEmbedsError(pkg.TypesInfo, message, fd.Body) {
+					message := audit06GuardMessage(pkg.TypesInfo, n)
+					if message == nil || !audit06GuardEmbedsError(pkg.TypesInfo, message, fd.Body) {
 						return true
 					}
 					used[key]++

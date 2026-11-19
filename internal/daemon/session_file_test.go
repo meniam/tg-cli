@@ -110,7 +110,7 @@ func TestProfileLockAcrossProcesses(t *testing.T) {
 		return
 	}
 	dir = t.TempDir()
-	auditStartLockHolder(t, dir)
+	audit06StartLockHolder(t, dir)
 	p := Paths{Dir: dir, Lock: filepath.Join(dir, "daemon.lock")}
 	if err := WithProfileLock(p, func() error { return nil }); !errors.Is(err, ErrAlreadyRunning) {
 		t.Fatalf("second process acquired lock: %v", err)
@@ -139,7 +139,7 @@ func TestDuplicateKeyAcrossProcesses(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	auditStartLockHolder(t, first.Dir)
+	audit06StartLockHolder(t, first.Dir)
 	release, err := guardSessionStart(second)
 	if err == nil {
 		release()

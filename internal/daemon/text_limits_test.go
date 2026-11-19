@@ -57,10 +57,10 @@ type textLimitFake struct{ *fakeTelegram }
 
 func (*textLimitFake) CheckTextLocal(rpc.SendParams) error { return audit06LocalCheckSentinel }
 
-// TestFormattedLocalCheckRunsBeforeChatLookup: a formatted write asks Telegram's
+// TestAudit06_FormattedLocalCheckRunsBeforeChatLookup: a formatted write asks Telegram's
 // local check about the text before it resolves the chat. The daemon here has no
 // store and no chat, so a lookup first would fail with another error.
-func TestFormattedLocalCheckRunsBeforeChatLookup(t *testing.T) {
+func TestAudit06_FormattedLocalCheckRunsBeforeChatLookup(t *testing.T) {
 	d := &daemon{}
 	d.opts.Telegram = &textLimitFake{}
 	for _, dry := range []bool{false, true} {

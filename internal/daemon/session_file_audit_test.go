@@ -10,11 +10,11 @@ import (
 	"time"
 )
 
-// auditStartLockHolder starts a child test process that holds the profile lock
+// audit06StartLockHolder starts a child test process that holds the profile lock
 // of dir until the test ends. The child is killed after a safety timeout, so a
 // hung child cannot hold the test until the go test deadline, and the child's
 // exit status is checked at the end.
-func auditStartLockHolder(t *testing.T, dir string) {
+func audit06StartLockHolder(t *testing.T, dir string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestProfileLockAcrossProcesses$")
