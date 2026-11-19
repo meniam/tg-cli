@@ -16,6 +16,7 @@ func TestParseMessageLinkForms(t *testing.T) {
 		{"t.me/telegram/7/9?thread=7", Ref{Kind: Username, Username: "telegram"}, 7, 9},
 		{"https://t.me/c/12345/67?comment=4", Ref{Kind: ID, ID: -1000000012345}, 0, 67},
 		{"t.me/c/12345/7/9#x", Ref{Kind: ID, ID: -1000000012345}, 7, 9},
+		{"t.me/telegram/1/", Ref{Kind: Username, Username: "telegram"}, 0, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
@@ -27,7 +28,7 @@ func TestParseMessageLinkForms(t *testing.T) {
 	}
 }
 func TestParseMessageLinkRejectsGarbage(t *testing.T) {
-	cases := []string{"", "telegram/1", "https://evil.test/telegram/1", "https://t.me/telegram", "t.me/telegram/0", "t.me/telegram/-2", "t.me/telegram/nope", "t.me/telegram/1/2/3", "t.me/c/0/1", "t.me/c/nope/1", "t.me/c/1/0", "t.me/c/1/2/3/4", "t.me/share/1", "t.me/addstickers/1", "t.me/joinchat/1", "t.me/+AbCdEfGh1234/1", "t.me/c/9223372036854775807/1", "t.me/abcd/1"}
+	cases := []string{"", "telegram/1", "https://evil.test/telegram/1", "https://t.me/telegram", "t.me/telegram/0", "t.me/telegram/-2", "t.me/telegram/nope", "t.me/telegram/1/2/3", "t.me/c/0/1", "t.me/c/nope/1", "t.me/c/1/0", "t.me/c/1/2/3/4", "t.me/share/1", "t.me/addstickers/1", "t.me/joinchat/1", "t.me/+AbCdEfGh1234/1", "t.me/c/9223372036854775807/1", "t.me/abcd/1", "https://user@t.me/telegram/1", "https://user:pass@t.me/telegram/1", "t.me/telegram/+1", "t.me/telegram/7/+9"}
 	for _, input := range cases {
 		t.Run(input, func(t *testing.T) {
 			_, err := ParseMessageLink(input)
@@ -52,5 +53,39 @@ func TestFormatMessageLink(t *testing.T) {
 		if link, err := FormatMessageLink(bad, ""); err == nil {
 			t.Errorf("formatted invalid %+v: %s", bad, link)
 		}
+	}
+}
+
+func TestFormatMessageLinkEdges(t *testing.T) {
+	channel := Ref{Kind: ID, ID: -1000000012345}
+	for _, tc := range []struct {
+		name     string
+		ref      MessageRef
+		username string
+		want     string // empty means an error is expected
+	}{
+		{"negative topic", MessageRef{Chat: channel, Topic: -1, ID: 5}, "", ""},
+		{"zero message id", MessageRef{Chat: channel, ID: 0}, "", ""},
+		{"username taken from the chat", MessageRef{Chat: Ref{Kind: Username, Username: "telegram"}, ID: 5}, "", "https://t.me/telegram/5"},
+		{"argument wins over the chat username", MessageRef{Chat: Ref{Kind: Username, Username: "telegram"}, ID: 5}, "newsfeed", "https://t.me/newsfeed/5"},
+		{"reserved username", MessageRef{Chat: channel, ID: 5}, "share", ""},
+		{"invalid username", MessageRef{Chat: channel, ID: 5}, "bad name", ""},
+		{"reserved username in the chat", MessageRef{Chat: Ref{Kind: Username, Username: "addstickers"}, ID: 5}, "", ""},
+		{"phone without a name", MessageRef{Chat: Ref{Kind: Phone, Phone: "15551234567"}, ID: 5}, "", ""},
+		{"invite without a name", MessageRef{Chat: Ref{Kind: Invite, Invite: "AbCdEfGh1234"}, ID: 5}, "", ""},
+		{"phone with a public name", MessageRef{Chat: Ref{Kind: Phone, Phone: "15551234567"}, ID: 5}, "telegram", "https://t.me/telegram/5"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			link, err := FormatMessageLink(tc.ref, tc.username)
+			if tc.want == "" {
+				if err == nil {
+					t.Fatalf("formatted %+v: %s", tc.ref, link)
+				}
+				return
+			}
+			if err != nil || link != tc.want {
+				t.Fatalf("got %q, %v; want %q", link, err, tc.want)
+			}
+		})
 	}
 }
