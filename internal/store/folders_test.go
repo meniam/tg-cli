@@ -2,15 +2,15 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"tg-cli/internal/rpc"
 )
 
 // TestFolderListPinsFolderChats pins the composition of folders: explicit pinned,
-// include and exclude peers become rows of folder_chats with their kind, a folder
-// of a shared chat list keeps only pinned and include, and a chat the access lists
-// close never becomes a row.
+// include and exclude peers become rows of folder_chats with their kind, and a
+// chat the access lists close never becomes a row.
 func TestFolderListPinsFolderChats(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
@@ -83,8 +83,32 @@ func TestFolderListPinsFolderChats(t *testing.T) {
 	if err := db.read.QueryRow(`SELECT rules FROM folders WHERE id=2`).Scan(&rules); err != nil {
 		t.Fatal(err)
 	}
-	if rules == "" {
-		t.Error("the rules of folder 2 are lost")
+	var savedRules rpc.FolderRules
+	if err := json.Unmarshal([]byte(rules), &savedRules); err != nil {
+		t.Fatalf("the rules of folder 2 are not JSON: %q: %v", rules, err)
+	}
+	if savedRules != *folders[0].Rules {
+		t.Errorf("the rules of folder 2 = %+v, want %+v", savedRules, *folders[0].Rules)
+	}
+	// Folders without rules keep a NULL, not an empty document.
+	var nullRules int
+	if err := db.read.QueryRow(`SELECT count(*) FROM folders WHERE id IN (3, 0) AND rules IS NULL`).Scan(&nullRules); err != nil || nullRules != 2 {
+		t.Errorf("folders without rules with a NULL value = %d, err=%v, want 2", nullRules, err)
+	}
+	countFolders := func() (n int) {
+		t.Helper()
+		if err := db.read.QueryRow(`SELECT count(*) FROM folders`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := countFolders(); n != 3 {
+		t.Errorf("folders = %d, want 3", n)
+	}
+	var allKind string
+	var allPosition int
+	if err := db.read.QueryRow(`SELECT kind, position FROM folders WHERE id=0`).Scan(&allKind, &allPosition); err != nil || allKind != "all" || allPosition != 2 {
+		t.Errorf("the all folder = %q at %d, err=%v, want all at 2", allKind, allPosition, err)
 	}
 
 	// A chat in both pinned and include keeps one row: the primary key refuses
@@ -99,6 +123,14 @@ func TestFolderListPinsFolderChats(t *testing.T) {
 	}
 	if kind != "pinned" {
 		t.Errorf("kind = %q, want pinned", kind)
+	}
+	// The second call replaces everything: the earlier folders and their chats
+	// are gone.
+	if n := countFolders(); n != 1 {
+		t.Errorf("folders after the second replace = %d, want 1", n)
+	}
+	if rows := read(); len(rows) != 1 || rows[0].folderID != 7 {
+		t.Errorf("folder_chats after the second replace = %+v, want only folder 7", rows)
 	}
 }
 

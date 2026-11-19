@@ -50,23 +50,12 @@ func TestChatVersionsObserveMeaningfulChanges(t *testing.T) {
 
 func TestChatVersionsMigrationFromFive(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "old.db")
+	buildDatabaseAt(t, path, []string{"0001_init.sql", "0002_schema.sql", "0003_events.sql", "0004_idempotency.sql", "0005_folders_account_state.sql"}, 5)
 	raw, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, file := range []string{"0001_init.sql", "0002_schema.sql", "0003_events.sql", "0004_idempotency.sql", "0005_folders_account_state.sql"} {
-		body, e := migrationFiles.ReadFile("migrations/" + file)
-		if e != nil {
-			t.Fatal(e)
-		}
-		if _, e = raw.Exec(string(body)); e != nil {
-			t.Fatal(e)
-		}
-	}
 	if _, err = raw.Exec(`INSERT INTO chats(id,type,title,first_seen_at,last_seen_at) VALUES(42,'group','preserved',1,1)`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = raw.Exec(`PRAGMA user_version=5`); err != nil {
 		t.Fatal(err)
 	}
 	if err = raw.Close(); err != nil {

@@ -59,6 +59,9 @@ func TestChatFilterHidesChatOwnedRowsBeforeLimit(t *testing.T) {
 			if tc.visibleChat != 0 && (len(limited) != 1 || limited[0].ChatID == nil || *limited[0].ChatID != tc.visibleChat) {
 				t.Errorf("filtered page = %+v", limited)
 			}
+			if tc.visibleChat == 0 && len(limited) != 0 {
+				t.Errorf("a hidden filter returned a page of messages: %+v", limited)
+			}
 			notes, err := db.ListNotes(ctx, NoteFilter{ChatFilter: tc.filter})
 			if err != nil {
 				t.Fatal(err)
