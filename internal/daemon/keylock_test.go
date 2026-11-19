@@ -32,26 +32,29 @@ func TestKeyLockLifecycle(t *testing.T) {
 		}
 		done <- err
 	}()
+	// Cancel only once the waiter is queued behind the holder, so the
+	// cancellation is observed by the wait itself and not by the early check.
+	audit05WaitRefs(t, &locks, idempotencyKey{1, "key"}, 2)
 	cancel()
 	select {
 	case err := <-done:
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("got %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(audit05Timeout):
 		t.Fatal("waiter did not cancel")
 	}
-	waiting := make(chan struct{})
+	audit05WaitRefs(t, &locks, idempotencyKey{1, "key"}, 1)
 	acquired := make(chan struct{})
 	go func() {
-		close(waiting)
 		unlock, err := locks.lock(context.Background(), 1, "key")
 		if err == nil {
 			close(acquired)
 			unlock()
 		}
 	}()
-	<-waiting
+	// The waiter is registered and still blocked behind the holder.
+	audit05WaitRefs(t, &locks, idempotencyKey{1, "key"}, 2)
 	select {
 	case <-acquired:
 		t.Fatal("same key acquired while held")
@@ -60,7 +63,7 @@ func TestKeyLockLifecycle(t *testing.T) {
 	release()
 	select {
 	case <-acquired:
-	case <-time.After(time.Second):
+	case <-time.After(audit05Timeout):
 		t.Fatal("waiter did not acquire")
 	}
 	deadline := time.After(time.Second)
