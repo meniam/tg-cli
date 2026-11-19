@@ -84,7 +84,7 @@ func TestExportLocalThreePagesWithoutTelegram(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	two, _ := json.Marshal(rpc.ExportPage{Messages: []rpc.ExportMessage{
+	two := audit05MustJSON(t, rpc.ExportPage{Messages: []rpc.ExportMessage{
 		{Message: rpcStoredMessage(first)}, {Message: rpcStoredMessage(second)},
 	}, NextAfter: 2})
 	budget := len(two)
@@ -96,7 +96,7 @@ func TestExportLocalThreePagesWithoutTelegram(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		encoded, _ := json.Marshal(result)
+		encoded := audit05MustJSON(t, result)
 		if len(encoded) > budget {
 			t.Fatalf("page size %d exceeds budget %d", len(encoded), budget)
 		}
@@ -162,7 +162,7 @@ func TestExportLocalPolicyChangesBetweenPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	one, _ := json.Marshal(rpc.ExportPage{Messages: []rpc.ExportMessage{{Message: rpcStoredMessage(first)}}, NextAfter: 1})
+	one := audit05MustJSON(t, rpc.ExportPage{Messages: []rpc.ExportMessage{{Message: rpcStoredMessage(first)}}, NextAfter: 1})
 	page, err := d.exportLocalPage(context.Background(), params(t, rpc.ExportParams{Chat: "42"}), len(one))
 	if err != nil || page.NextAfter != 1 {
 		t.Fatalf("first page: %+v err=%v", page, err)
@@ -194,7 +194,7 @@ func TestExportLocalDatesDeletedAndEmptyPage(t *testing.T) {
 	if empty.Messages == nil || len(empty.Messages) != 0 || empty.NextAfter != 0 {
 		t.Fatalf("empty page: %+v", empty)
 	}
-	encoded, _ := json.Marshal(empty)
+	encoded := audit05MustJSON(t, empty)
 	if string(encoded) != `{"messages":[]}` {
 		t.Fatalf("empty JSON: %s", encoded)
 	}

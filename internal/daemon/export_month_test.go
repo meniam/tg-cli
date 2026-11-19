@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +21,10 @@ func monthFixture(t *testing.T) (*daemon, *store.DB, string, rpc.ExportMonthPara
 	t.Helper()
 	d, db, access := exportTestDaemon(t)
 	root := t.TempDir()
-	raw, _ := json.Marshal(map[string]any{"downloads": []string{root}})
+	raw, err := json.Marshal(map[string]any{"downloads": []string{root}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	writeAccess(t, access, string(raw))
 	d.account.set(&rpc.User{ID: 42})
 	if err := db.UpsertMessages(context.Background(), []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 11, 1, 0, 0, 0, 0, time.UTC).Unix(), Text: "<test &>", Raw: []byte(`{}`)}, {ChatID: 42, ID: 2, Date: time.Date(2023, 12, 1, 0, 0, 0, 0, time.UTC).Unix(), Text: "outside", Raw: []byte(`{}`)}}); err != nil {
@@ -38,6 +42,11 @@ func TestExportMonthRoundTrip(t *testing.T) {
 	res := got.(rpc.ExportMonthResult)
 	if res.Existing || len(res.Files) != 1 || res.Files[0].Messages != 1 {
 		t.Fatalf("result: %+v", res)
+	}
+	// The fixture has no history sync state, so the start of the month is not
+	// known to be covered.
+	if res.Files[0].MonthStartCovered {
+		t.Fatalf("month start covered without sync state: %+v", res.Files[0])
 	}
 	page := exportPage(t, d, rpc.ExportParams{Chat: "42", Since: "2023-11-01T00:00:00Z", Until: "2023-11-30T23:59:59Z"})
 	var expected bytes.Buffer
@@ -57,7 +66,10 @@ func TestExportMonthRoundTrip(t *testing.T) {
 	if err != nil || !again.(rpc.ExportMonthResult).Existing {
 		t.Fatalf("existing=%+v err=%v", again, err)
 	}
-	after, _ := os.ReadFile(filepath.Join(res.Dir, "manifest.json"))
+	after, err := os.ReadFile(filepath.Join(res.Dir, "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !bytes.Equal(before, after) {
 		t.Fatal("manifest changed")
 	}
@@ -77,7 +89,7 @@ func TestExportMonthRoundTrip(t *testing.T) {
 	}
 }
 func TestExportMonthBoundaries(t *testing.T) {
-	d, db, root, p := monthFixture(t)
+	d, _, root, p := monthFixture(t)
 	ctx := context.Background()
 	for _, bad := range []string{"2023-1", "2023-13", "9999-01", time.Now().UTC().Format("2006-01")} {
 		p.Month = bad
@@ -102,14 +114,13 @@ func TestExportMonthBoundaries(t *testing.T) {
 	p.Output = root
 	old := exportMonthLimit
 	exportMonthLimit = 8
-	defer func() { exportMonthLimit = old }()
-	if _, err := d.messageExportMonth(ctx, params(t, p)); err == nil {
-		t.Fatal("expected size error")
+	t.Cleanup(func() { exportMonthLimit = old })
+	if _, err := d.messageExportMonth(ctx, params(t, p)); err == nil || !strings.Contains(err.Error(), "size limit") {
+		t.Fatalf("size error: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "tg-export-42-2023-11")); !os.IsNotExist(err) {
 		t.Fatalf("partial archive remains: %v", err)
 	}
-	_ = db
 }
 func TestExportMonthIncompleteAndExtra(t *testing.T) {
 	d, _, root, p := monthFixture(t)
@@ -193,7 +204,10 @@ func TestExportMonthPermissionAndSymlinks(t *testing.T) {
 	if _, err := d.messageExportMonth(ctx, params(t, p)); rpcCode(t, err) != rpc.CodeWriteDisabled {
 		t.Fatal(err)
 	}
-	data, _ := json.Marshal(map[string]any{"downloads": []string{root}, "block": []int{42}})
+	data, err := json.Marshal(map[string]any{"downloads": []string{root}, "block": []int{42}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	writeAccess(t, d.opts.Paths.Dir+"/access.json", string(data))
 	if _, err := d.messageExportMonth(ctx, params(t, p)); rpcCode(t, err) != rpc.CodeNotFound {
 		t.Fatal(err)
@@ -201,21 +215,35 @@ func TestExportMonthPermissionAndSymlinks(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "tg-export-42-2023-11")); !os.IsNotExist(err) {
 		t.Fatalf("created for denied chat: %v", err)
 	}
-	data, _ = json.Marshal(map[string]any{"downloads": []string{root}})
+	data, err = json.Marshal(map[string]any{"downloads": []string{root}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	writeAccess(t, d.opts.Paths.Dir+"/access.json", string(data))
 	got, err := d.messageExportMonth(ctx, params(t, p))
 	if err != nil {
 		t.Fatal(err)
 	}
 	path := got.(rpc.ExportMonthResult).Dir
+	// The link points at a file outside the archive that holds the exact
+	// original bytes: reading through the link would verify, so only a
+	// refusal to follow it makes the file missing.
+	original, err := os.ReadFile(filepath.Join(path, "42.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "42.jsonl")
+	if err = os.WriteFile(outside, original, 0600); err != nil {
+		t.Fatal(err)
+	}
 	if err = os.Remove(filepath.Join(path, "42.jsonl")); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.Symlink(filepath.Join(path, "SHA256SUMS"), filepath.Join(path, "42.jsonl")); err != nil {
+	if err = os.Symlink(outside, filepath.Join(path, "42.jsonl")); err != nil {
 		t.Fatal(err)
 	}
 	v, err := d.messageExportVerify(ctx, params(t, rpc.ExportVerifyParams{Dir: path}))
-	if err != nil || v.(rpc.ExportVerifyResult).OK {
+	if res, _ := v.(rpc.ExportVerifyResult); err != nil || res.OK || !slices.Equal(res.Missing, []string{"42.jsonl"}) {
 		t.Fatalf("symlink verify %+v %v", v, err)
 	}
 }

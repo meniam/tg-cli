@@ -3,7 +3,6 @@ package daemon
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"path/filepath"
@@ -183,11 +182,17 @@ func TestMessageAnswersPersistVersionsSendersAndSearch(t *testing.T) {
 		t.Fatalf("history changed response: %+v, %v", history, err)
 	}
 	first, err := db.GetMessage(ctx, -10, 1)
-	firstDate, _ := time.Parse(time.RFC3339, wantHistory[0].Date)
-	if err != nil || first.Text != "Ёлка first" || first.Date != firstDate.Unix() || first.Out == nil || *first.Out || first.Pinned == nil || !*first.Pinned || first.ReplyTo == nil || *first.ReplyTo != 4 || first.TopicID == nil || *first.TopicID != 5 || first.MediaType == nil || *first.MediaType != "photo" || first.EditedAt != nil {
+	if err != nil {
+		t.Fatalf("stored first message: %v", err)
+	}
+	firstDate, err := time.Parse(time.RFC3339, wantHistory[0].Date)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Text != "Ёлка first" || first.Date != firstDate.Unix() || first.Out == nil || *first.Out || first.Pinned == nil || !*first.Pinned || first.ReplyTo == nil || *first.ReplyTo != 4 || first.TopicID == nil || *first.TopicID != 5 || first.MediaType == nil || *first.MediaType != "photo" || first.EditedAt != nil {
 		t.Fatalf("stored first message = %+v, %v", first, err)
 	}
-	wantRaw, _ := json.Marshal(wantHistory[0])
+	wantRaw := audit05MustJSON(t, wantHistory[0])
 	if !bytes.Equal(first.Raw, wantRaw) {
 		t.Errorf("raw message = %s, want %s", first.Raw, wantRaw)
 	}
