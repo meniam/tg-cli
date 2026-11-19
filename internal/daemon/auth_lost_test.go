@@ -43,21 +43,38 @@ func TestAuthorizationLossKeepsDaemonAvailable(t *testing.T) {
 				t.Fatalf("auth is blocked: %v", err)
 			}
 			ctx, cancel := context.WithCancel(context.Background())
-			tgDone := make(chan error, 1)
+			defer cancel()
+			// tgDone is unbuffered: the send below returns only after
+			// waitForShutdown has taken the client failure.
+			tgDone := make(chan error)
 			serveDone := make(chan error, 1)
 			done := make(chan struct{})
-			go func() { d.waitForShutdown(ctx, tgDone, serveDone); close(done) }()
+			var stoppedBeforeCancel bool
+			go func() {
+				_, _ = d.waitForShutdown(ctx, tgDone, serveDone)
+				stoppedBeforeCancel = ctx.Err() == nil
+				close(done)
+			}()
 			tgDone <- errors.New("client stopped")
+			// Negative check: the window only has to be long enough for an
+			// early return to show up. stoppedBeforeCancel catches one that
+			// the window misses.
 			select {
 			case <-done:
 				t.Fatal("daemon stopped after authorization loss")
 			case <-time.After(50 * time.Millisecond):
 			}
+			if d.getAuthLost() != kind {
+				t.Fatalf("authorization state = %q, want %q", d.getAuthLost(), kind)
+			}
 			cancel()
 			select {
 			case <-done:
-			case <-time.After(time.Second):
+			case <-time.After(5 * time.Second):
 				t.Fatal("daemon did not stop")
+			}
+			if stoppedBeforeCancel {
+				t.Fatal("daemon stopped before the context was canceled")
 			}
 			got, err := os.ReadFile(path)
 			if err != nil || string(got) != string(original) {

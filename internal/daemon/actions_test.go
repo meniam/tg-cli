@@ -303,8 +303,8 @@ func TestReactPinPollSuccessStorageAndErrors(t *testing.T) {
 	if saved, err := db.GetMessage(ctx, 42, 7); err != nil || saved.Pinned == nil || *saved.Pinned {
 		t.Fatalf("failed pin changed storage: %+v %v", saved, err)
 	}
-	if _, err := db.GetMessage(ctx, 42, 11); err != nil {
-		t.Fatalf("failed poll changed saved row: %v", err)
+	if got, err := db.GetMessage(ctx, 42, 11); err != nil || got.Text != "Quiz?" {
+		t.Fatalf("failed poll changed saved row: %+v %v", got, err)
 	}
 	actor.callErr = nil
 	if err := db.Close(); err != nil {

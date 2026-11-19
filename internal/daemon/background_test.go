@@ -186,8 +186,9 @@ func startBackgroundDaemon(t *testing.T, paths Paths) func() {
 	}
 }
 
-// TestJournalIsTrimmedOnStart keeps the journal bounded, which the decision
-// requires: an old journal only explains an old failure.
+// TestJournalRotatesAndKeepsPrivatePermissions keeps the journal bounded by
+// rotation into three copies, which the decision requires: an old journal only
+// explains an old failure.
 func TestJournalRotatesAndKeepsPrivatePermissions(t *testing.T) {
 	paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
 	if err != nil {

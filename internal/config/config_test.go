@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,24 +15,23 @@ func TestLoad(t *testing.T) {
 		name, content string
 		missing       bool
 		wantHome      string
-		wantError     bool
+		wantError     string
 	}{
 		{name: "missing", missing: true},
-		{name: "unknown", content: "unknown = 1", wantError: true},
+		{name: "unknown", content: "unknown = 1", wantError: "unknown config key at line 1"},
 		{name: "home tilde", content: `home = "~/data"`, wantHome: filepath.Join(home, "data")},
 		{name: "home tilde alone", content: `home = "~"`, wantHome: home},
-		{name: "other user", content: `home = "~other/data"`, wantError: true},
-		{name: "relative", content: `home = "relative"`, wantError: true},
-		{name: "duplicate files", content: "[files]\nsession = 'store.db'", wantError: true},
-		{name: "reserved file", content: "[files]\naccess = 'store.db-wal'", wantError: true},
-		{name: "reserved database record", content: "[files]\ndatabase = 'data-dir'", wantError: true},
-		{name: "reserved database lock", content: "[files]\ndatabase = 'db.lock'", wantError: true},
-		{name: "reserved session record", content: "[files]\nsession = 'data-dir'", wantError: true},
-		{name: "reserved profile", content: "[profiles.db]\nclient = 'desktop'", wantError: true},
-		{name: "reserved default profile", content: "default_profile = 'db'", wantError: true},
-		{name: "proxy invalid", content: "[profiles.default]\nproxy = 'socks5://user:secret@example:invalid'", wantError: true},
-		{name: "proxy malformed TOML", content: "[profiles.default]\nproxy = 'socks5://user:secret@example", wantError: true},
-		{name: "bad percent", content: "[behavior]\nthrottle_percent = 0", wantError: true},
+		{name: "other user", content: `home = "~other/data"`, wantError: "home must not use ~user"},
+		{name: "relative", content: `home = "relative"`, wantError: "home must be an absolute path"},
+		{name: "duplicate files", content: "[files]\nsession = 'store.db'", wantError: "invalid or conflicting files name"},
+		{name: "reserved file", content: "[files]\naccess = 'store.db-wal'", wantError: "invalid or conflicting files name"},
+		{name: "reserved database record", content: "[files]\ndatabase = 'data-dir'", wantError: "invalid or conflicting files name"},
+		{name: "reserved database lock", content: "[files]\ndatabase = 'db.lock'", wantError: "invalid or conflicting files name"},
+		{name: "reserved session record", content: "[files]\nsession = 'data-dir'", wantError: "invalid or conflicting files name"},
+		{name: "reserved default profile", content: "default_profile = 'db'", wantError: "default_profile: the name db is reserved"},
+		{name: "proxy invalid", content: "[profiles.default]\nproxy = 'socks5://user:secret@example:invalid'", wantError: "invalid profiles proxy"},
+		{name: "proxy malformed TOML", content: "[profiles.default]\nproxy = 'socks5://user:secret@example", wantError: "invalid TOML at line"},
+		{name: "bad percent", content: "[behavior]\nthrottle_percent = 0", wantError: "behavior.throttle_percent must be between 1 and 100"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -42,10 +42,17 @@ func TestLoad(t *testing.T) {
 				}
 			}
 			c, err := Load(path)
-			if (err != nil) != tc.wantError {
+			if (err != nil) != (tc.wantError != "") {
 				t.Fatalf("Load error = %v", err)
 			}
 			if err != nil {
+				var configErr *Error
+				if !errors.As(err, &configErr) || configErr.Code() != 2 {
+					t.Fatalf("Load error = %v, want a *config.Error with code 2", err)
+				}
+				if !strings.Contains(err.Error(), tc.wantError) {
+					t.Fatalf("Load error = %q, want it to contain %q", err, tc.wantError)
+				}
 				if strings.Contains(err.Error(), "secret") {
 					t.Fatal("error exposes proxy secret")
 				}

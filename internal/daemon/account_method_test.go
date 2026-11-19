@@ -20,7 +20,7 @@ func TestAccountMethod(t *testing.T) {
 		{rpc.MethodChatOverview, true}, {rpc.MethodFolderList, true},
 		{rpc.MethodUserProfile, true}, {rpc.MethodUserBlock, true}, {rpc.MethodUserUnblock, true},
 		{rpc.MethodContactList, true}, {rpc.MethodContactAdd, true}, {rpc.MethodContactDelete, true}, {rpc.MethodContactSearch, true},
-		{rpc.MethodFolderList, true}, {rpc.MethodAccountSessions, true}, {rpc.MethodAccountBlocked, true}, {rpc.MethodAccountNotify, true},
+		{rpc.MethodAccountSessions, true}, {rpc.MethodAccountBlocked, true}, {rpc.MethodAccountNotify, true},
 		{rpc.MethodPing, false}, {rpc.MethodStatus, false}, {rpc.MethodShutdown, false}, {rpc.MethodAuthStart, false}, {rpc.MethodAuthPassword, false}, {rpc.MethodEvent, false}, {"account", false}, {"unknown", false},
 	}
 	for _, tt := range tests {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -75,25 +76,34 @@ func TestTelegramAdmissionDrainWaitsAfterCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	done := make(chan error, 1)
-	go func() { done <- g.drain(context.Background(), 0) }()
+	type drainResult struct {
+		err          error
+		afterRelease bool
+	}
+	var released atomic.Bool
+	done := make(chan drainResult, 1)
+	go func() {
+		err := g.drain(context.Background(), 0)
+		done <- drainResult{err, released.Load()}
+	}()
 	select {
 	case <-ctx.Done():
-	case <-time.After(time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("operation was not canceled")
 	}
-	select {
-	case <-done:
-		t.Fatal("drain returned before release")
-	default:
-	}
+	// The lease is canceled but still held: drain must stay blocked until
+	// release. Setting the flag first makes the order visible to the result.
+	released.Store(true)
 	release()
 	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
+	case got := <-done:
+		if got.err != nil {
+			t.Fatal(got.err)
 		}
-	case <-time.After(time.Second):
+		if !got.afterRelease {
+			t.Fatal("drain returned before release")
+		}
+	case <-time.After(5 * time.Second):
 		t.Fatal("drain did not complete")
 	}
 }

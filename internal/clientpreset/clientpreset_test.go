@@ -82,14 +82,14 @@ func TestResolve(t *testing.T) {
 	}
 	_, err = Resolve([]byte(fixture), "nope")
 	if err == nil || !strings.Contains(err.Error(), "desktop, ios, web-k") {
-		t.Errorf("an unknown preset must list the available ones, got %v", err)
+		t.Fatalf("an unknown preset must list the available ones, got %v", err)
 	}
 	if strings.Contains(err.Error(), "0123456789abcdef") {
 		t.Error("an error must not contain hashes")
 	}
 }
 
-func TestFetchChecksumAndLimits(t *testing.T) {
+func TestFetchChecksumAndHTTPErrors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(fixture))
 	}))

@@ -70,16 +70,21 @@ func TestMigrateProfiles(t *testing.T) {
 	if err != nil || string(b) != "session placeholder" {
 		t.Fatal("session changed")
 	}
-	stat, err := os.Stat(path)
-	if err != nil {
+	// Move the mtime far into the past: a rewrite, even with the same bytes,
+	// would bring it back to the present on any file system.
+	past := time.Unix(1000000000, 0)
+	if err := os.Chtimes(path, past, past); err != nil {
 		t.Fatal(err)
 	}
 	again, err := MigrateProfiles(path, home)
 	if err != nil || again.Backup != "" {
 		t.Fatalf("second migration: %+v %v", again, err)
 	}
-	next, _ := os.Stat(path)
-	if !next.ModTime().Equal(stat.ModTime()) {
+	next, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !next.ModTime().Equal(past) {
 		t.Fatal("config changed on second migration")
 	}
 }
