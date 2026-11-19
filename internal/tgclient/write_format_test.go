@@ -378,8 +378,10 @@ func TestFormattedEditsAndRichRejection(t *testing.T) {
 	}))
 	_, err = sendText(context.Background(), floodAPI, &tg.InputPeerUser{UserID: 42}, 42, rpc.SendParams{Text: "# heading", Parse: "rich-markdown"})
 	formatErrorCode(t, err, rpc.CodeFloodWait)
+	// sendText has no retry loop of its own; retries are the middleware's job
+	// (see TestAudit10_WritesAreNotRetriedByTheThrottleMiddleware).
 	if calls != 1 {
-		t.Fatalf("rich write retried %d times", calls)
+		t.Fatalf("sendText sent %d requests, want 1", calls)
 	}
 }
 

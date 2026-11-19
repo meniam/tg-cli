@@ -50,8 +50,12 @@ func TestWriteSendRequestAndResponse(t *testing.T) {
 				if wantReply == 0 {
 					wantReply = tc.topic
 				}
-				if !ok || reply.ReplyToMsgID != wantReply {
+				if !ok {
 					t.Errorf("reply: %+v", req.ReplyTo)
+					return errors.New("wrong reply type")
+				}
+				if reply.ReplyToMsgID != wantReply {
+					t.Errorf("reply to %d, want %d", reply.ReplyToMsgID, wantReply)
 				}
 				if top, _ := reply.GetTopMsgID(); top != tc.wantTop {
 					t.Errorf("top=%d want=%d", top, tc.wantTop)
@@ -137,7 +141,11 @@ func TestWriteEditDeleteAndForwardRequests(t *testing.T) {
 	})
 }
 
-func TestWriteFloodAndLengthDoNotRetry(t *testing.T) {
+// TestWriteFloodIsMappedAndLengthIsRejectedLocally covers sendText on a bare invoker:
+// a flood becomes flood_wait and long text is rejected before any request. The rule
+// that a write is not retried on FLOOD lives in throttleMiddleware and is checked by
+// TestAudit10_WritesAreNotRetriedByTheThrottleMiddleware.
+func TestWriteFloodIsMappedAndLengthIsRejectedLocally(t *testing.T) {
 	calls := 0
 	flood := tgerr.New(420, "FLOOD_WAIT_8")
 	api := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { calls++; return flood }))

@@ -55,11 +55,14 @@ func TestTranslateRequest(t *testing.T) {
 			if e.Code != want {
 				t.Fatalf("error: %+v", e)
 			}
-			if name == "TRANSLATIONS_DISABLED" && e.Data.(map[string]any)["reason"] != "translations_disabled" {
+			if name == "count" && e.Message != "Telegram returned an unexpected translation count" {
+				t.Fatalf("count error message: %q", e.Message)
+			}
+			if name == "TRANSLATIONS_DISABLED" && audit10Reason(e) != "translations_disabled" {
 				t.Fatal(e)
 			}
 			if name == "TRANSLATE_REQ_FAILED" || name == "TRANSLATE_REQ_QUOTA_EXCEEDED" || name == "TRANSLATION_TIMEOUT" {
-				if e.Data.(map[string]any)["reason"] != "translation_unavailable" {
+				if audit10Reason(e) != "translation_unavailable" {
 					t.Fatal(e)
 				}
 			}
@@ -67,10 +70,20 @@ func TestTranslateRequest(t *testing.T) {
 	}
 }
 
+// TestTranslateValidation checks that translateResolved refuses invalid
+// parameters with invalid_params before it makes any Telegram request.
+// rpc.ValidateTranslate itself belongs to internal/rpc (see the audit report).
 func TestTranslateValidation(t *testing.T) {
-	for _, p := range []rpc.TranslateParams{{ToLang: "en"}, {IDs: make([]int, 21), ToLang: "en"}, {IDs: []int{1, 1}, ToLang: "en"}, {IDs: []int{1}, ToLang: "english"}, {IDs: []int{1}, ToLang: "e1"}} {
-		if rpc.ValidateTranslate(&p) == nil {
-			t.Fatalf("accepted: %+v", p)
+	for _, p := range []rpc.TranslateParams{{ToLang: "en"}, {IDs: make([]int, 21), ToLang: "en"}, {IDs: []int{1, 1}, ToLang: "en"}, {IDs: []int{0}, ToLang: "en"}, {IDs: []int{-3}, ToLang: "en"}, {IDs: []int{1}, ToLang: "english"}, {IDs: []int{1}, ToLang: "e1"}} {
+		err := rpc.ValidateTranslate(&p)
+		if err == nil || rpcErrorCode(t, err) != rpc.CodeInvalidParams {
+			t.Fatalf("ValidateTranslate(%+v) = %v, want invalid_params", p, err)
+		}
+		calls := 0
+		api := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { calls++; return nil }))
+		peer := testPeers(api).User(user(9, "A", "", "", false))
+		if _, err := translateResolved(context.Background(), api, peer, p); err == nil || rpcErrorCode(t, err) != rpc.CodeInvalidParams || calls != 0 {
+			t.Fatalf("translateResolved(%+v) = %v with %d requests, want invalid_params without a request", p, err, calls)
 		}
 	}
 }
