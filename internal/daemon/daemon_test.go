@@ -322,11 +322,21 @@ func (f *fakeTelegram) Pinned(_ context.Context, ref chatref.Ref, limit int) (rp
 	return rpc.MessagesResult{Messages: f.pinned}, nil // nil slice: the handler must return an empty list
 }
 
+// shortTempDirBase is the longest temporary directory path that still leaves room
+// for the profile directory and the socket name under MaxSocketPath.
+const shortTempDirBase = 30
+
 // shortTempDir returns a short directory: Unix socket paths are length-limited
-// and t.TempDir is too long on macOS.
+// and t.TempDir is too long on macOS. It honours TMPDIR when that path is short
+// enough and falls back to /tmp only when it is not, so a test run that moved its
+// temporary files keeps them there whenever a socket can still bind.
 func shortTempDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "tgd")
+	base := os.TempDir()
+	if len(base) > shortTempDirBase {
+		base = "/tmp"
+	}
+	dir, err := os.MkdirTemp(base, "tgd")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,8 +476,10 @@ func TestResolvePaths(t *testing.T) {
 	}
 }
 
-func TestSocketPathLimitMatchesTheOS(t *testing.T) {
-	// MaxSocketPath bytes must bind; one more must not (macOS limit is 104 with NUL).
+// TestSocketPathOfMaxSocketPathBinds checks that the conservative limit of the
+// daemon is a path the OS accepts. The other side is not asserted: an OS may
+// accept a longer path, and the limit stays low on purpose.
+func TestSocketPathOfMaxSocketPathBinds(t *testing.T) {
 	dir := shortTempDir(t)
 	fit := filepath.Join(dir, strings.Repeat("a", MaxSocketPath-len(dir)-1))
 	l, err := listenUnix(fit)
@@ -475,10 +487,8 @@ func TestSocketPathLimitMatchesTheOS(t *testing.T) {
 		t.Fatalf("a path of %d bytes must bind: %v", len(fit), err)
 	}
 	_ = l.Close()
-	over := fit + strings.Repeat("a", 6)
-	if l, err := listenUnix(over); err == nil {
-		_ = l.Close()
-		t.Logf("this OS accepts a socket path of %d bytes; the limit stays conservative", len(over))
+	if len(fit) != MaxSocketPath {
+		t.Errorf("the path has %d bytes, want MaxSocketPath = %d", len(fit), MaxSocketPath)
 	}
 }
 
@@ -595,11 +605,9 @@ func TestSecondDataDirectoryIsRefused(t *testing.T) {
 	}
 }
 
-// TestSecondDataDirectoryIsRefused covers Q1 at the start path: two data
-// directories with one profile name share the database, so the second start must
-// not open it. The first daemon keeps the profile lock, which is the answer of a
-// start in this process; the data-directory record and the database lock are
-// covered by TestDatabaseBinding and TestDatabaseLock, which need no socket.
+// TestStaleSocketIsReplaced covers a start after a crash: a file on the socket
+// path with the profile lock free is a stale socket, so the start deletes it and
+// the daemon answers on the same path.
 func TestStaleSocketIsReplaced(t *testing.T) {
 	home := shortTempDir(t)
 	paths, err := ResolvePaths(home, dbRoot(t), "test", DefaultFileNames())
@@ -653,7 +661,9 @@ func TestLoginWithPassword(t *testing.T) {
 		t.Fatalf("after start: %+v", res)
 	}
 	var st rpc.StatusResult
-	_ = r.client.Call(ctx, rpc.MethodStatus, nil, &st)
+	if err := r.client.Call(ctx, rpc.MethodStatus, nil, &st); err != nil {
+		t.Fatal(err)
+	}
 	if st.LoginState != rpc.AuthCodeRequired || st.Authorized {
 		t.Errorf("status during login: %+v", st)
 	}
@@ -670,7 +680,9 @@ func TestLoginWithPassword(t *testing.T) {
 		t.Fatalf("after password: %+v", res)
 	}
 	st = rpc.StatusResult{}
-	_ = r.client.Call(ctx, rpc.MethodStatus, nil, &st)
+	if err := r.client.Call(ctx, rpc.MethodStatus, nil, &st); err != nil {
+		t.Fatal(err)
+	}
 	if !st.Authorized || st.User == nil || st.LoginState != "" {
 		t.Errorf("status after login: %+v", st)
 	}
@@ -735,7 +747,9 @@ func TestWrongCodeEndsTheLoginAndAllowsRetry(t *testing.T) {
 		t.Fatalf("wrong code: %v", err)
 	}
 	var st rpc.StatusResult
-	_ = r.client.Call(ctx, rpc.MethodStatus, nil, &st)
+	if err := r.client.Call(ctx, rpc.MethodStatus, nil, &st); err != nil {
+		t.Fatal(err)
+	}
 	if st.LoginState != "" {
 		t.Errorf("a failed login must be cleared, state %q", st.LoginState)
 	}
@@ -791,13 +805,25 @@ func TestSecretsAreNeverLogged(t *testing.T) {
 	fake.wantPass = "SECRETPASSWORD"
 	r := start(t, fake, shortTempDir(t))
 	ctx := ctxTimeout(t)
-	_ = r.client.Call(ctx, rpc.MethodAuthStart, rpc.AuthStartParams{Phone: "+SECRETPHONE"}, nil)
-	_ = r.client.Call(ctx, rpc.MethodAuthCode, rpc.AuthCodeParams{Code: "SECRETCODE"}, nil)
-	_ = r.client.Call(ctx, rpc.MethodAuthPassword, rpc.AuthPasswordParams{Password: "SECRETPASSWORD"}, nil)
+	// The secrets must reach the daemon, or the log check below proves nothing.
+	if err := r.client.Call(ctx, rpc.MethodAuthStart, rpc.AuthStartParams{Phone: "+SECRETPHONE"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.client.Call(ctx, rpc.MethodAuthCode, rpc.AuthCodeParams{Code: "SECRETCODE"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.client.Call(ctx, rpc.MethodAuthPassword, rpc.AuthPasswordParams{Password: "SECRETPASSWORD"}, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	_ = r.client.Close()
 	r.cancel()
 	<-r.finished
+	for _, method := range []string{rpc.MethodAuthStart, rpc.MethodAuthCode, rpc.MethodAuthPassword} {
+		if !strings.Contains(r.logs.String(), "method="+method) {
+			t.Fatalf("the log has no record of %s, so the secret check is empty:\n%s", method, r.logs.String())
+		}
+	}
 	for _, secret := range []string{"SECRETCODE", "SECRETPASSWORD", "SECRETPHONE"} {
 		if strings.Contains(r.logs.String(), secret) {
 			t.Errorf("log contains %s:\n%s", secret, r.logs.String())
@@ -841,25 +867,41 @@ func TestResendCode(t *testing.T) {
 	}
 }
 
-// waitAsync calls auth.wait in the background and returns its result.
-func waitAsync(t *testing.T, r *running) <-chan rpc.AuthResult {
+// waitOutcome is the answer of one auth.wait call.
+type waitOutcome struct {
+	res rpc.AuthResult
+	err error
+}
+
+// waitAsync calls auth.wait in the background and returns its outcome. The call
+// has its own deadline, and the test cleanup cancels it and waits for the
+// goroutine, so it never reports to a finished test.
+func waitAsync(t *testing.T, r *running) <-chan waitOutcome {
 	t.Helper()
-	out := make(chan rpc.AuthResult, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	out := make(chan waitOutcome, 1)
+	finished := make(chan struct{})
 	go func() {
+		defer close(finished)
 		var res rpc.AuthResult
-		if err := r.client.Call(context.Background(), rpc.MethodAuthWait, nil, &res); err != nil {
-			t.Errorf("auth.wait: %v", err)
-		}
-		out <- res
+		err := r.client.Call(ctx, rpc.MethodAuthWait, nil, &res)
+		out <- waitOutcome{res: res, err: err}
 	}()
+	t.Cleanup(func() {
+		cancel()
+		<-finished
+	})
 	return out
 }
 
-func receive(t *testing.T, ch <-chan rpc.AuthResult) rpc.AuthResult {
+func receive(t *testing.T, ch <-chan waitOutcome) rpc.AuthResult {
 	t.Helper()
 	select {
-	case res := <-ch:
-		return res
+	case outcome := <-ch:
+		if outcome.err != nil {
+			t.Fatalf("auth.wait: %v", outcome.err)
+		}
+		return outcome.res
 	case <-time.After(5 * time.Second):
 		t.Fatal("no answer")
 		return rpc.AuthResult{}
@@ -879,7 +921,9 @@ func TestQRLogin(t *testing.T) {
 		t.Fatalf("after start_qr: %+v", res)
 	}
 	var st rpc.StatusResult
-	_ = r.client.Call(ctx, rpc.MethodStatus, nil, &st)
+	if err := r.client.Call(ctx, rpc.MethodStatus, nil, &st); err != nil {
+		t.Fatal(err)
+	}
 	if st.LoginState != rpc.AuthQRScan {
 		t.Errorf("status during the QR login: %+v", st)
 	}
@@ -930,7 +974,9 @@ func TestQRScanBeforeWait(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		var st rpc.StatusResult
-		_ = r.client.Call(ctx, rpc.MethodStatus, nil, &st)
+		if err := r.client.Call(ctx, rpc.MethodStatus, nil, &st); err != nil {
+			t.Fatal(err)
+		}
 		if st.Authorized {
 			break
 		}
