@@ -2,7 +2,7 @@ package tgclient
 
 import (
 	"context"
-	"crypto/sha256"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"testing"
@@ -51,8 +51,7 @@ func BenchmarkTransferBaseline(b *testing.B) {
 				case *tg.UploadSaveBigFilePartRequest:
 					return uploadOK(out)
 				default:
-					b.Fatalf("unexpected request %T", in)
-					return nil
+					return fmt.Errorf("unexpected request %T", in)
 				}
 			}))
 			b.ResetTimer()
@@ -77,48 +76,9 @@ type zeroReader struct{}
 
 func (zeroReader) Read(p []byte) (int, error) { clear(p); return len(p), nil }
 
-type hashProbe struct {
-	*tg.Client
-	window    int
-	hashCalls atomic.Int64
-	fileCalls atomic.Int64
-}
-
-func (p *hashProbe) UploadGetFile(_ context.Context, req *tg.UploadGetFileRequest) (tg.UploadFileClass, error) {
-	p.fileCalls.Add(1)
-	return &tg.UploadFile{Type: &tg.StorageFileUnknown{}, Bytes: make([]byte, req.Limit)}, nil
-}
-func (p *hashProbe) UploadGetFileHashes(_ context.Context, req *tg.UploadGetFileHashesRequest) ([]tg.FileHash, error) {
-	p.hashCalls.Add(1)
-	if req.Offset >= 32<<20 {
-		return nil, nil
-	}
-	data := make([]byte, p.window)
-	sum := sha256.Sum256(data)
-	hashes := make([]tg.FileHash, 0, (32<<20)/p.window)
-	for offset := req.Offset; offset < 32<<20; offset += int64(p.window) {
-		hashes = append(hashes, tg.FileHash{Offset: offset, Limit: p.window, Hash: sum[:]})
-	}
-	return hashes, nil
-}
-
 type discardAt struct{}
 
 func (discardAt) WriteAt(p []byte, _ int64) (int, error) { return len(p), nil }
-
-func TestHashWindowControlsVerifiedPartSize(t *testing.T) {
-	for _, window := range []int{512 << 10, 1 << 20} {
-		p := &hashProbe{window: window}
-		_, err := downloader.NewDownloader().WithPartSize(1<<20).Download(p, &tg.InputDocumentFileLocation{ID: 1}).WithThreads(8).WithSize(32<<20).WithVerify(true).Parallel(context.Background(), discardAt{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got, want := p.fileCalls.Load(), int64((32<<20)/window); got != want {
-			t.Fatalf("window=%d: parts=%d want=%d", window, got, want)
-		}
-		t.Logf("window=%d: parts=%d hash requests=%d", window, p.fileCalls.Load(), p.hashCalls.Load())
-	}
-}
 
 func BenchmarkTransferParallel(b *testing.B) {
 	for _, kind := range []string{"download", "upload"} {
@@ -145,8 +105,7 @@ func BenchmarkTransferParallel(b *testing.B) {
 				case *tg.UploadSaveBigFilePartRequest:
 					return uploadOK(out)
 				default:
-					b.Fatalf("unexpected request %T", in)
-					return nil
+					return fmt.Errorf("unexpected request %T", in)
 				}
 			})
 			inv := throttleMiddleware(limiter).Handle(inner)

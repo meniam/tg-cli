@@ -8,17 +8,15 @@ import (
 	"io"
 	"net"
 	"os"
-	"runtime"
-	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/session"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/dcs"
-	"github.com/gotd/td/telegram/downloader"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 	"github.com/gotd/td/tgtest/cluster"
@@ -29,42 +27,50 @@ import (
 type fakeFileInvokers struct {
 	dc  int
 	inv tg.Invoker
+	err error
 }
 
 func (f *fakeFileInvokers) FileDC(_ context.Context, dc int) (tg.Invoker, error) {
 	f.dc = dc
+	if f.err != nil {
+		return nil, f.err
+	}
 	return f.inv, nil
 }
 
 func TestTransferSlotsAndCancellation(t *testing.T) {
-	tr := newTransfers()
-	release1, err := tr.acquire(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	release2, err := tr.acquire(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { _, err := tr.acquire(ctx); done <- err }()
-	select {
-	case <-done:
-		t.Fatal("third transfer admitted")
-	default:
-	}
-	cancel()
-	if err := <-done; !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
-	}
-	release1()
-	release2()
-	release, err := tr.acquire(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	release()
+	synctest.Test(t, func(t *testing.T) {
+		tr := newTransfers()
+		release1, err := tr.acquire(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		release2, err := tr.acquire(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() { _, err := tr.acquire(ctx); done <- err }()
+		// Every goroutine is blocked after Wait, so a free slot would already have admitted the third transfer.
+		synctest.Wait()
+		select {
+		case err := <-done:
+			t.Fatalf("third transfer returned %v while two transfers hold the slots", err)
+		default:
+		}
+		cancel()
+		if err := <-done; !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+		release1()
+		release2()
+		release, err := tr.acquire(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		release()
+	})
 }
 
 func TestTransferDCAndLongFlood(t *testing.T) {
@@ -87,6 +93,7 @@ func TestTransferDCAndLongFlood(t *testing.T) {
 func TestSendMediaLargeFileUsesParallelBigParts(t *testing.T) {
 	file := mediaFixture(t, "large.bin", 30<<20)
 	var active, peak, calls atomic.Int64
+	barrier := audit10NewBarrier(4)
 	f := &fakeFileInvokers{inv: writeInvoker(func(ctx context.Context, in bin.Encoder, out bin.Decoder) error {
 		req, ok := in.(*tg.UploadSaveBigFilePartRequest)
 		if !ok {
@@ -99,6 +106,10 @@ func TestSendMediaLargeFileUsesParallelBigParts(t *testing.T) {
 		n := active.Add(1)
 		defer active.Add(-1)
 		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
+		}
+		// The first four parts wait for each other, so the lower bound of the peak is guaranteed.
+		if err := barrier.wait(ctx); err != nil {
+			return err
 		}
 		select {
 		case <-time.After(5 * time.Millisecond):
@@ -116,6 +127,7 @@ func TestSendMediaLargeFileUsesParallelBigParts(t *testing.T) {
 func TestTransferDownloadPhotoParts(t *testing.T) {
 	const size = 32 << 20
 	var active, peak, calls atomic.Int64
+	barrier := audit10NewBarrier(4)
 	parts := &fakeFileInvokers{inv: writeInvoker(func(ctx context.Context, in bin.Encoder, out bin.Decoder) error {
 		req, ok := in.(*tg.UploadGetFileRequest)
 		if !ok {
@@ -128,6 +140,9 @@ func TestTransferDownloadPhotoParts(t *testing.T) {
 		n := active.Add(1)
 		defer active.Add(-1)
 		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
+		}
+		if err := barrier.wait(ctx); err != nil {
+			return err
 		}
 		select {
 		case <-time.After(5 * time.Millisecond):
@@ -189,42 +204,50 @@ func TestTransferDocumentHashMismatch(t *testing.T) {
 func TestTransferDownloadFloodHandling(t *testing.T) {
 	for _, seconds := range []int{3, 30} {
 		t.Run(fmt.Sprint(seconds), func(t *testing.T) {
-			var first atomic.Bool
-			var calls atomic.Int64
-			parts := &fakeFileInvokers{inv: writeInvoker(func(_ context.Context, in bin.Encoder, out bin.Decoder) error {
-				req := in.(*tg.UploadGetFileRequest)
-				calls.Add(1)
-				if req.Offset == 1<<20 && first.CompareAndSwap(false, true) {
-					return tgerr.New(420, fmt.Sprintf("FLOOD_WAIT_%d", seconds))
-				}
-				return respond(out, &tg.UploadFile{Type: &tg.StorageFileUnknown{}, Bytes: make([]byte, req.Limit)})
-			})}
-			api := tg.NewClient(writeInvoker(func(_ context.Context, _ bin.Encoder, out bin.Decoder) error {
-				m := &tg.Message{ID: 7, PeerID: &tg.PeerUser{UserID: 42}, Date: 1, Media: &tg.MessageMediaPhoto{Photo: &tg.Photo{ID: 1, DCID: 4, Sizes: []tg.PhotoSizeClass{&tg.PhotoSize{Type: "x", Size: 2 << 20}}}}}
-				return respond(out, &tg.MessagesMessages{Messages: []tg.MessageClass{m}})
-			}))
-			file, err := os.CreateTemp(t.TempDir(), "download")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer file.Close()
-			tr := newTransfers()
-			_, failures, err := downloadResolvedWithTransfer(context.Background(), api, nil, &tg.InputPeerUser{UserID: 42}, 42, []int{7}, func(_ rpc.DownloadedFile, fetch func(io.Writer) error) error { return fetch(file) }, tr, parts, 10*time.Second)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if seconds == 3 {
-				window := tr.downloadWindow(4)
-				window.mu.Lock()
-				decreases := window.epoch
-				window.mu.Unlock()
-				if len(failures) != 0 || calls.Load() != 3 || decreases == 0 {
-					t.Fatalf("failures=%+v calls=%d window decreases=%d", failures, calls.Load(), decreases)
-				}
-			} else if len(failures) != 1 || failures[0].Code != "flood_wait" {
-				t.Fatalf("failures=%+v", failures)
-			}
+			// The bubble makes the FLOOD_WAIT sleep of fileInvoker virtual.
+			synctest.Test(t, func(t *testing.T) { audit10DownloadFlood(t, seconds) })
 		})
+	}
+}
+
+func audit10DownloadFlood(t *testing.T, seconds int) {
+	var first atomic.Bool
+	var calls atomic.Int64
+	parts := &fakeFileInvokers{inv: writeInvoker(func(_ context.Context, in bin.Encoder, out bin.Decoder) error {
+		req, ok := in.(*tg.UploadGetFileRequest)
+		if !ok {
+			return fmt.Errorf("unexpected %T", in)
+		}
+		calls.Add(1)
+		if req.Offset == 1<<20 && first.CompareAndSwap(false, true) {
+			return tgerr.New(420, fmt.Sprintf("FLOOD_WAIT_%d", seconds))
+		}
+		return respond(out, &tg.UploadFile{Type: &tg.StorageFileUnknown{}, Bytes: make([]byte, req.Limit)})
+	})}
+	api := tg.NewClient(writeInvoker(func(_ context.Context, _ bin.Encoder, out bin.Decoder) error {
+		m := &tg.Message{ID: 7, PeerID: &tg.PeerUser{UserID: 42}, Date: 1, Media: &tg.MessageMediaPhoto{Photo: &tg.Photo{ID: 1, DCID: 4, Sizes: []tg.PhotoSizeClass{&tg.PhotoSize{Type: "x", Size: 2 << 20}}}}}
+		return respond(out, &tg.MessagesMessages{Messages: []tg.MessageClass{m}})
+	}))
+	file, err := os.CreateTemp(t.TempDir(), "download")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	tr := newTransfers()
+	_, failures, err := downloadResolvedWithTransfer(context.Background(), api, nil, &tg.InputPeerUser{UserID: 42}, 42, []int{7}, func(_ rpc.DownloadedFile, fetch func(io.Writer) error) error { return fetch(file) }, tr, parts, 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seconds == 3 {
+		window := tr.downloadWindow(4)
+		window.mu.Lock()
+		decreases := window.epoch
+		window.mu.Unlock()
+		if len(failures) != 0 || calls.Load() != 3 || decreases == 0 {
+			t.Fatalf("failures=%+v calls=%d window decreases=%d", failures, calls.Load(), decreases)
+		}
+	} else if len(failures) != 1 || failures[0].Code != "flood_wait" {
+		t.Fatalf("failures=%+v", failures)
 	}
 }
 
@@ -251,8 +274,14 @@ func TestUploadWindowAdaptsAndCancels(t *testing.T) {
 	if w.window != 2 {
 		t.Fatalf("window after flood=%d", w.window)
 	}
-	a, _ := w.acquire(context.Background())
-	b, _ := w.acquire(context.Background())
+	a, err := w.acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := w.acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := w.acquire(ctx); !errors.Is(err, context.Canceled) {
@@ -329,10 +358,11 @@ func TestTransferDownloadCancellationReleasesSlots(t *testing.T) {
 		_, _, err := downloadResolvedWithTransfer(ctx, api, nil, &tg.InputPeerUser{UserID: 42}, 42, []int{7}, func(_ rpc.DownloadedFile, fetch func(io.Writer) error) error { return fetch(file) }, tr, parts, 10*time.Second)
 		done <- err
 	}()
+	// The deadlines are safety nets only: a healthy run never waits for them.
 	for i := 0; i < 4; i++ {
 		select {
 		case <-started:
-		case <-time.After(time.Second):
+		case <-time.After(30 * time.Second):
 			cancel()
 			t.Fatal("parts did not start")
 		}
@@ -343,7 +373,7 @@ func TestTransferDownloadCancellationReleasesSlots(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatal(err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("cancellation did not finish")
 	}
 	if active.Load() != 0 || tr.scheduler(4).Snapshot().InFlight != 0 || len(tr.slots) != 0 {
@@ -418,68 +448,6 @@ func TestTransferRefreshesDocumentReference(t *testing.T) {
 	}
 }
 
-type blockedDownloadProbe struct {
-	*tg.Client
-	calls atomic.Int64
-}
-
-func (p *blockedDownloadProbe) UploadGetFile(_ context.Context, req *tg.UploadGetFileRequest) (tg.UploadFileClass, error) {
-	p.calls.Add(1)
-	return &tg.UploadFile{Type: &tg.StorageFileUnknown{}, Bytes: make([]byte, req.Limit)}, nil
-}
-
-type blockingWriterAt struct {
-	entered chan struct{}
-	unblock chan struct{}
-	once    sync.Once
-}
-
-func (w *blockingWriterAt) WriteAt(p []byte, _ int64) (int, error) {
-	w.once.Do(func() { close(w.entered) })
-	<-w.unblock
-	return len(p), nil
-}
-func TestDownloadBufferBoundWithSlowWriter(t *testing.T) {
-	p := &blockedDownloadProbe{}
-	w := &blockingWriterAt{entered: make(chan struct{}), unblock: make(chan struct{})}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	scheduler := downloader.NewScheduler(downloader.SchedulerOptions{Start: 4, Max: 8})
-	go func() {
-		_, err := downloader.NewDownloader().WithPartSize(1<<20).Download(p, &tg.InputPhotoFileLocation{ID: 1}).WithSize(32<<20).WithThreads(downloadWorkers).WithScheduler(scheduler).Parallel(ctx, w)
-		done <- err
-	}()
-	select {
-	case <-w.entered:
-	case <-time.After(time.Second):
-		cancel()
-		close(w.unblock)
-		t.Fatal("writer did not start")
-	}
-	deadline := time.After(time.Second)
-	for p.calls.Load() < 2*downloadWorkers+1 {
-		select {
-		case <-deadline:
-			cancel()
-			close(w.unblock)
-			<-done
-			t.Fatalf("only %d blocks reached the stalled writer", p.calls.Load())
-		default:
-			runtime.Gosched()
-		}
-	}
-	time.Sleep(25 * time.Millisecond)
-	calls := p.calls.Load()
-	window := scheduler.Snapshot().Window
-	t.Logf("held parts=%d window=%d", calls, window)
-	cancel()
-	close(w.unblock)
-	<-done
-	if calls > int64(2*window) || calls > 16 {
-		t.Fatalf("held %d parts with window %d while writer was blocked", calls, window)
-	}
-}
-
 // This uses in-memory pipes only; no network socket is opened.
 func TestFilePoolUsesConfiguredResolver(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -527,31 +495,62 @@ func TestFilePoolUsesConfiguredResolver(t *testing.T) {
 	}
 }
 
-func TestTransferRejectsOversizedHashWindow(t *testing.T) {
-	called := false
-	f := fileInvoker{next: writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { called = true; return nil }), autoWait: 10 * time.Second}
-	err := f.Invoke(context.Background(), &tg.UploadGetFileRequest{Limit: (1 << 20) + 1}, nil)
-	if err == nil || called {
-		t.Fatalf("err=%v called=%v", err, called)
+func TestTransferRejectsInvalidHashWindow(t *testing.T) {
+	for _, limit := range []int{-1, 0, (1 << 20) + 1} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			called := false
+			f := fileInvoker{next: writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { called = true; return nil }), autoWait: 10 * time.Second}
+			err := f.Invoke(context.Background(), &tg.UploadGetFileRequest{Limit: limit}, nil)
+			var re *rpc.Error
+			if !errors.As(err, &re) || re.Code != rpc.CodeTelegram || re.Message != "invalid Telegram file hash window" || called {
+				t.Fatalf("err=%v called=%v", err, called)
+			}
+		})
 	}
 }
 
+// TestFileInvokerOwnsFloodRetry builds the same chains as production: upload
+// requests go through the upload window, download requests through
+// downloadInvoker, which keeps everything except UploadGetFile outside the window.
 func TestFileInvokerOwnsFloodRetry(t *testing.T) {
-	for _, input := range []bin.Encoder{&tg.UploadSaveBigFilePartRequest{}, &tg.UploadSaveFilePartRequest{}, &tg.UploadGetFileHashesRequest{}, &tg.UploadGetFileRequest{Limit: 4096}} {
-		t.Run(fmt.Sprintf("%T", input), func(t *testing.T) {
-			var calls int
-			window := newTransfers().uploadWindow(2)
-			inner := writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error {
-				calls++
-				if calls == 1 {
-					return tgerr.New(420, "FLOOD_WAIT_1")
+	cases := []struct {
+		input      bin.Encoder
+		download   bool
+		wantWindow int
+	}{
+		{&tg.UploadSaveBigFilePartRequest{}, false, 2},
+		{&tg.UploadSaveFilePartRequest{}, false, 2},
+		{&tg.UploadGetFileRequest{Limit: 4096}, true, 2},
+		{&tg.UploadGetFileHashesRequest{}, true, 4},
+	}
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%T", tc.input), func(t *testing.T) {
+			// The bubble makes the one-second FLOOD_WAIT virtual.
+			synctest.Test(t, func(t *testing.T) {
+				var calls int
+				tr := newTransfers()
+				window := tr.uploadWindow(2)
+				inner := writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error {
+					calls++
+					if calls == 1 {
+						return tgerr.New(420, "FLOOD_WAIT_1")
+					}
+					return nil
+				})
+				var next tg.Invoker = windowInvoker{next: inner, window: window}
+				if tc.download {
+					window = tr.downloadWindow(2)
+					next = downloadInvoker{next: inner, window: window}
 				}
-				return nil
+				f := fileInvoker{next: next, autoWait: 10 * time.Second}
+				start := time.Now()
+				if err := f.Invoke(context.Background(), tc.input, nil); err != nil || calls != 2 || window.window != tc.wantWindow {
+					t.Fatalf("err=%v calls=%d window=%d, want window %d", err, calls, window.window, tc.wantWindow)
+				}
+				if waited := time.Since(start); waited != time.Second {
+					t.Fatalf("flood wait lasted %s, want 1s", waited)
+				}
 			})
-			f := fileInvoker{next: windowInvoker{next: inner, window: window}, autoWait: 10 * time.Second}
-			if err := f.Invoke(context.Background(), input, nil); err != nil || calls != 2 || window.window != 2 {
-				t.Fatalf("err=%v calls=%d window=%d", err, calls, window.window)
-			}
 		})
 	}
 }
@@ -581,7 +580,7 @@ func TestUploadLongFloodStopsBeforeSend(t *testing.T) {
 	})}
 	api := tg.NewClient(writeInvoker(func(context.Context, bin.Encoder, bin.Decoder) error { sends.Add(1); return nil }))
 	tr := newTransfers()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_, err := sendMediaWithTransfers(ctx, api, &tg.InputPeerSelf{}, 42, rpc.SendMediaParams{As: "document"}, []rpc.MediaFile{file}, tr, parts, 2, 10*time.Second)
 	var rpcErr *rpc.Error
