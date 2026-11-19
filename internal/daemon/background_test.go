@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -69,10 +70,10 @@ func TestStartLaunchesAndWaits(t *testing.T) {
 	if len(launched) == 0 {
 		t.Fatal("a start with no daemon must launch the child")
 	}
-	for _, arg := range launched {
-		if strings.Contains(arg, "APIHASH") || arg == "12345" {
-			t.Errorf("a credential reached the command line of the child: %q", arg)
-		}
+	// Start hands the arguments to the launcher unchanged. Keeping credentials
+	// out of them is the job of the CLI that builds the arguments.
+	if want := []string{"daemon", "start", "--foreground", "--profile", "test"}; !reflect.DeepEqual(launched, want) {
+		t.Errorf("launched args = %v, want %v", launched, want)
 	}
 	if bg.PID != os.Getpid() {
 		t.Errorf("pid = %d, want the daemon pid %d", bg.PID, os.Getpid())

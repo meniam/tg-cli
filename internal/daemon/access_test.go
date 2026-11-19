@@ -60,6 +60,9 @@ func sameRPCError(t *testing.T, got, want error) {
 	}
 }
 
+// TestRegisteredMethodsHaveAccessClass only keeps the table below complete: a
+// new method must be listed here. The class names are documentation. The access
+// behavior itself is checked by TestAudit03ChatMethodsRefuseAClosedChat.
 func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 	d, _, _, _ := accessTestDaemon(t)
 	d.register()
@@ -195,19 +198,33 @@ func TestChatAccessFiltersStoredSearchAndNotes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	visibleHit := false
 	for _, hit := range search.(rpc.SearchResult).Hits {
 		if hit.Scope == "chats" && hit.ID == 1 || hit.ChatID != nil && *hit.ChatID == 1 {
 			t.Errorf("hidden search hit: %+v", hit)
 		}
+		if hit.Scope == "chats" && hit.ID == 2 || hit.ChatID != nil && *hit.ChatID == 2 {
+			visibleHit = true
+		}
+	}
+	if !visibleHit {
+		t.Errorf("the open chat 2 is missing from the search under a block policy: %+v", search)
 	}
 	list, err := d.noteList(ctx, params(t, rpc.NoteListParams{}))
 	if err != nil {
 		t.Fatal(err)
 	}
+	visibleNote := false
 	for _, note := range list.(rpc.NoteListResult).Notes {
 		if note.ChatID != nil && *note.ChatID == 1 {
 			t.Errorf("hidden note: %+v", note)
 		}
+		if note.ChatID != nil && *note.ChatID == 2 && note.Body == "Public tree" {
+			visibleNote = true
+		}
+	}
+	if !visibleNote {
+		t.Errorf("the note of the open chat 2 is missing under a block policy: %+v", list)
 	}
 	for _, chat := range []string{"1", "999", "@unknownchat"} {
 		result, err := d.search(ctx, params(t, rpc.SearchParams{Query: "tree", Chat: chat}))
