@@ -21,6 +21,8 @@ func TestChatOverviewReadsOnlyTheDatabase(t *testing.T) {
 	if r := e.run("message", "history", "@TeamChat", "--limit", "3"); r.code != exitcode.OK {
 		t.Fatalf("history: exit %d, %q", r.code, r.stdout)
 	}
+	// The counters cover the methods of fakeTelegram defined in cli_test.go; methods
+	// that other test files add to the fake are not counted.
 	before := e.tg.audit01CallSnapshot()
 	if before["History"] == 0 || before["ChatInfo"] == 0 {
 		t.Fatalf("the setup did not reach the fake Telegram: %v", before)

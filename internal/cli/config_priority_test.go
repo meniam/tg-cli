@@ -56,7 +56,7 @@ func TestDaemonThrottleConfigurationPriority(t *testing.T) {
 	}
 }
 
-func TestProfileSelectionConfigDefaultAndFlag(t *testing.T) {
+func TestAudit01_ProfileSelectionConfigDefaultAndFlag(t *testing.T) {
 	e := newEnv(t)
 	path := filepath.Join(e.home, ".config", "tg-cli", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -89,7 +89,7 @@ func TestProfileSelectionConfigDefaultAndFlag(t *testing.T) {
 	}
 }
 
-func TestConfigWarningsPrintedOnceAndInvalidConfigExitsUsage(t *testing.T) {
+func TestAudit01_ConfigWarningsPrintedOnceAndInvalidConfigExitsUsage(t *testing.T) {
 	e := newEnv(t)
 	path := filepath.Join(e.home, ".config", "tg-cli", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

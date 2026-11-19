@@ -91,15 +91,19 @@ func (f *fakeTelegram) Ready() <-chan struct{}                       { return f.
 func (f *fakeTelegram) SetEventSink(func(rpc.Event))                 {}
 func (f *fakeTelegram) SetTranscriptionSink(func(rpc.Transcription)) {}
 func (f *fakeTelegram) ChatStats(_ context.Context, _ chatref.Ref, _ string) (rpc.ChatStats, error) {
+	f.audit01Record("ChatStats")
 	return rpc.ChatStats{ChatID: 77, Kind: "megagroup"}, nil
 }
 func (f *fakeTelegram) ChatBoosts(_ context.Context, _ chatref.Ref) (rpc.ChatBoosts, error) {
+	f.audit01Record("ChatBoosts")
 	return rpc.ChatBoosts{ChatID: 77}, nil
 }
 func (f *fakeTelegram) Transcribe(_ context.Context, _ chatref.Ref, id int) (rpc.Transcription, error) {
+	f.audit01Record("Transcribe")
 	return rpc.Transcription{ChatID: 77, ID: id, TranscriptionID: 1, Text: "fixture"}, nil
 }
 func (f *fakeTelegram) Translate(_ context.Context, _ chatref.Ref, p rpc.TranslateParams) (rpc.TranslateResult, error) {
+	f.audit01Record("Translate")
 	items := make([]rpc.TranslationItem, 0, len(p.IDs))
 	for _, id := range p.IDs {
 		items = append(items, rpc.TranslationItem{ID: id, Text: "fixture"})
@@ -109,34 +113,44 @@ func (f *fakeTelegram) Translate(_ context.Context, _ chatref.Ref, p rpc.Transla
 func (f *fakeTelegram) FloodWaitRemaining() time.Duration   { return 0 }
 func (f *fakeTelegram) CheckTextLocal(rpc.SendParams) error { return nil }
 func (f *fakeTelegram) CheckText(_ context.Context, p rpc.SendParams) (rpc.TextCheck, error) {
+	f.audit01Record("CheckText")
 	return rpc.TextCheck{Mode: "plain", PlainLength: len([]rune(p.Text))}, nil
 }
 
 func (f *fakeTelegram) Send(context.Context, chatref.Ref, rpc.SendParams) (rpc.SendResult, error) {
+	f.audit01Record("Send")
 	return rpc.SendResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) SendMedia(context.Context, chatref.Ref, rpc.SendMediaParams, []rpc.MediaFile) (rpc.SendMediaResult, error) {
+	f.audit01Record("SendMedia")
 	return rpc.SendMediaResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Edit(context.Context, chatref.Ref, rpc.EditParams) (rpc.SendResult, error) {
+	f.audit01Record("Edit")
 	return rpc.SendResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Delete(context.Context, chatref.Ref, rpc.DeleteParams) (rpc.DeleteResult, error) {
+	f.audit01Record("Delete")
 	return rpc.DeleteResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Forward(context.Context, chatref.Ref, chatref.Ref, rpc.ForwardParams) (rpc.ForwardResult, error) {
+	f.audit01Record("Forward")
 	return rpc.ForwardResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) React(context.Context, chatref.Ref, rpc.ReactParams) (rpc.ReactResult, error) {
+	f.audit01Record("React")
 	return rpc.ReactResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Pin(context.Context, chatref.Ref, rpc.PinParams) (rpc.PinResult, error) {
+	f.audit01Record("Pin")
 	return rpc.PinResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Unpin(context.Context, chatref.Ref, rpc.UnpinParams) (rpc.PinResult, error) {
+	f.audit01Record("Unpin")
 	return rpc.PinResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) SendPoll(context.Context, chatref.Ref, rpc.PollParams) (rpc.SendResult, error) {
+	f.audit01Record("SendPoll")
 	return rpc.SendResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) SearchMessages(context.Context, chatref.Ref, rpc.SearchMessagesParams) (rpc.MessagesResult, error) {
@@ -160,30 +174,41 @@ func (f *fakeTelegram) MessageLink(context.Context, chatref.Ref, rpc.LinkParams)
 	return rpc.LinkResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) DraftGet(context.Context, chatref.Ref) (rpc.Draft, error) {
+	f.audit01Record("DraftGet")
 	return rpc.Draft{}, nil
 }
-func (f *fakeTelegram) DraftList(context.Context) (rpc.DraftList, error) { return rpc.DraftList{}, nil }
+func (f *fakeTelegram) DraftList(context.Context) (rpc.DraftList, error) {
+	f.audit01Record("DraftList")
+	return rpc.DraftList{}, nil
+}
 func (f *fakeTelegram) DraftSet(context.Context, chatref.Ref, rpc.DraftParams) (rpc.DraftWriteResult, error) {
+	f.audit01Record("DraftSet")
 	return rpc.DraftWriteResult{}, nil
 }
 func (f *fakeTelegram) ScheduledList(context.Context, chatref.Ref) (rpc.ScheduledResult, error) {
+	f.audit01Record("ScheduledList")
 	return rpc.ScheduledResult{}, nil
 }
 func (f *fakeTelegram) ScheduledDelete(context.Context, chatref.Ref, []int) (rpc.ScheduledResult, error) {
+	f.audit01Record("ScheduledDelete")
 	return rpc.ScheduledResult{}, nil
 }
 func (f *fakeTelegram) ScheduledSendNow(context.Context, chatref.Ref, []int) (rpc.ScheduledResult, error) {
+	f.audit01Record("ScheduledSendNow")
 	return rpc.ScheduledResult{}, nil
 }
 func (f *fakeTelegram) Typing(context.Context, chatref.Ref, rpc.TypingParams) (rpc.TypingResult, error) {
+	f.audit01Record("Typing")
 	return rpc.TypingResult{}, nil
 }
 
 func (f *fakeTelegram) MarkRead(context.Context, chatref.Ref) (rpc.MarkReadResult, error) {
+	f.audit01Record("MarkRead")
 	return rpc.MarkReadResult{}, errors.New("not implemented")
 }
 
 func (f *fakeTelegram) Self(context.Context) (*rpc.User, error) {
+	f.audit01Record("Self")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.user == nil {
@@ -194,6 +219,7 @@ func (f *fakeTelegram) Self(context.Context) (*rpc.User, error) {
 }
 
 func (f *fakeTelegram) Login(ctx context.Context, _ string, code func(context.Context, rpc.CodePrompt) (string, bool, error), password func(context.Context) (string, error)) error {
+	f.audit01Record("Login")
 	prompt := rpc.CodePrompt{Delivery: rpc.DeliverySMS, NextDelivery: rpc.DeliveryCall, ResendAfterSeconds: 45}
 	var c string
 	for {
@@ -226,6 +252,7 @@ func (f *fakeTelegram) Login(ctx context.Context, _ string, code func(context.Co
 }
 
 func (f *fakeTelegram) LoginQR(ctx context.Context, show func(context.Context, rpc.QRToken) error, password func(context.Context) (string, error)) error {
+	f.audit01Record("LoginQR")
 	if err := show(ctx, rpc.QRToken{URL: "tg://login?token=FIRST", ExpiresInSeconds: 30}); err != nil {
 		return err
 	}
@@ -1315,38 +1342,50 @@ func TestNegativeIDNeedsDoubleDash(t *testing.T) {
 }
 
 func (f *fakeTelegram) MessageReaders(_ context.Context, ref chatref.Ref, id int) (rpc.MessageReadersResult, error) {
+	f.audit01Record("MessageReaders")
 	return rpc.MessageReadersResult{ChatID: 77, ID: id, Readers: []rpc.MessageReader{{UserID: 5, Name: "Alice", Username: "alice", Date: "2026-01-01T00:00:00Z"}}}, nil
 }
 
 func (f *fakeTelegram) AccountProfile(context.Context) (rpc.AccountProfile, error) {
+	f.audit01Record("AccountProfile")
 	return rpc.AccountProfile{ID: 42, FirstName: "Alice"}, nil
 }
 
 func (f *fakeTelegram) AccountEmojiStatuses(context.Context, bool) (rpc.EmojiStatusesResult, error) {
+	f.audit01Record("AccountEmojiStatuses")
 	return rpc.EmojiStatusesResult{Statuses: []rpc.EmojiStatusOption{{DocumentID: 123}}}, nil
 }
 
 func (f *fakeTelegram) HandleJoinRequest(context.Context, chatref.Ref, chatref.Ref, bool) error {
+	f.audit01Record("HandleJoinRequest")
 	return nil
 }
 
 func (f *fakeTelegram) SetChannelSetting(context.Context, chatref.Ref, string, string, *string, *string) (bool, error) {
+	f.audit01Record("SetChannelSetting")
 	return true, nil
 }
 
 func (f *fakeTelegram) SetAccountField(context.Context, string, string, string, *chatref.Ref) (bool, error) {
+	f.audit01Record("SetAccountField")
 	return true, nil
 }
 
 func (f *fakeTelegram) ChatRequests(context.Context, chatref.Ref, rpc.JoinRequestsParams) (rpc.JoinRequestsResult, error) {
+	f.audit01Record("ChatRequests")
 	return rpc.JoinRequestsResult{Requests: []rpc.JoinRequest{{UserID: 5, Name: "Alice", Username: "alice", Date: "2026-01-01T00:00:00Z", About: "hello"}}}, nil
 }
 
 func (f *fakeTelegram) AccountPrivacyGet(_ context.Context, key string) (rpc.PrivacyRules, error) {
+	f.audit01Record("AccountPrivacyGet")
 	return rpc.PrivacyRules{Key: key, Default: "nobody", AllowUsers: []int64{}, DenyUsers: []int64{}, AllowChats: []int64{}, DenyChats: []int64{}}, nil
 }
 func (f *fakeTelegram) AccountPrivacySet(_ context.Context, p rpc.PrivacySetParams, _, _, _, _ []chatref.Ref) (rpc.PrivacyRules, error) {
+	f.audit01Record("AccountPrivacySet")
 	return rpc.PrivacyRules{Key: p.Key, Default: p.Default, AllowUsers: []int64{}, DenyUsers: []int64{}, AllowChats: []int64{}, DenyChats: []int64{}}, nil
 }
 
-func (f *fakeTelegram) CacheJoinRequestUsers(context.Context, []rpc.JoinRequest) error { return nil }
+func (f *fakeTelegram) CacheJoinRequestUsers(context.Context, []rpc.JoinRequest) error {
+	f.audit01Record("CacheJoinRequestUsers")
+	return nil
+}

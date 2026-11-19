@@ -56,7 +56,7 @@ func TestFormatMessageLink(t *testing.T) {
 	}
 }
 
-func TestFormatMessageLinkEdges(t *testing.T) {
+func TestAudit01_FormatMessageLinkEdges(t *testing.T) {
 	channel := Ref{Kind: ID, ID: -1000000012345}
 	for _, tc := range []struct {
 		name     string
