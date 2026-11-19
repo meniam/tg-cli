@@ -115,3 +115,30 @@ func TestAudit06_HumanExactText(t *testing.T) {
 		})
 	}
 }
+
+// TestAudit06_ThrottleExactTextInHumanAndToon pins the whole text of the throttle
+// line, not only that the words throttled_ms and 25 occur somewhere.
+func TestAudit06_ThrottleExactTextInHumanAndToon(t *testing.T) {
+	cases := []struct {
+		name   string
+		value  any
+		format Format
+		want   string
+	}{
+		{"toon success", SuccessDataWithThrottle(map[string]any{"id": 7}, 25), FormatToon, "ok: true\ndata:\n  id: 7\nthrottled_ms: 25\n"},
+		{"toon failure", FailureDataWithThrottle("flood_wait", "wait", 25), FormatToon, "ok: false\nerror:\n  code: flood_wait\n  message: wait\nthrottled_ms: 25\n"},
+		{"human success", SuccessDataWithThrottle(map[string]any{"id": 7}, 25), FormatHuman, "id: 7\nthrottled_ms: 25\n"},
+		{"human failure", FailureDataWithThrottle("flood_wait", "wait", 25), FormatHuman, "error (flood_wait): wait\nthrottled_ms: 25\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var b bytes.Buffer
+			if err := Write(&b, tc.format, tc.value); err != nil {
+				t.Fatal(err)
+			}
+			if b.String() != tc.want {
+				t.Errorf("got %q, want %q", b.String(), tc.want)
+			}
+		})
+	}
+}

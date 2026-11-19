@@ -249,7 +249,7 @@ func TestAudit06_ContactSyncWaitsForLogin(t *testing.T) {
 	d.opts.Telegram = f
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	auth := make(chan struct{}, 1)
+	auth := make(chan struct{}) // unbuffered: the send completes only when the sync receives it
 	done := make(chan struct{})
 	go func() { defer close(done); d.syncContactsAfterLogin(ctx, auth) }()
 	select {
@@ -257,15 +257,15 @@ func TestAudit06_ContactSyncWaitsForLogin(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the sync never checked who is logged in")
 	}
-	// A short window is enough to see a regression: without the wait for the
-	// login signal the sync reads contacts at once. A pass here proves nothing
-	// by itself, the second half does.
+	// A sync that does not wait for the login never receives from auth: it reads
+	// the contacts and ends, and done closes while the send is still pending.
 	select {
-	case <-f.contactsCalled:
-		t.Fatal("contacts were read before the login")
-	case <-time.After(50 * time.Millisecond):
+	case auth <- struct{}{}:
+	case <-done:
+		t.Fatal("the sync finished without waiting for the login")
+	case <-time.After(10 * time.Second):
+		t.Fatal("the sync neither waited for the login nor finished")
 	}
-	auth <- struct{}{}
 	select {
 	case <-f.contactsCalled:
 	case <-time.After(10 * time.Second):

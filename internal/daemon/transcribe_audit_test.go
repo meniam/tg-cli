@@ -77,3 +77,43 @@ func TestAudit06_TranscribeCanceledWhileWaiting(t *testing.T) {
 		t.Fatal("the canceled request kept waiting")
 	}
 }
+
+// The update arrives after the pending row is stored, that is, when the request
+// is about to wait or already waits; the request must return the text.
+func TestAudit06_TranscribeUpdateAfterPendingStored(t *testing.T) {
+	d, _, db := audit06TranscribeCase(t)
+	done := make(chan rpc.Transcription, 1)
+	errs := make(chan error, 1)
+	go func() {
+		v, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Chat: "77", ID: 1, WaitMS: 90000}))
+		if err != nil {
+			errs <- err
+			return
+		}
+		done <- v.(rpc.Transcription)
+	}()
+	safety := time.After(10 * time.Second)
+	for {
+		if _, err := db.GetTranscription(context.Background(), 77, 1); err == nil {
+			break
+		}
+		select {
+		case err := <-errs:
+			t.Fatalf("the request failed before waiting: %v", err)
+		case <-safety:
+			t.Fatal("the pending transcription was never stored")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	d.handleTranscription(rpc.Transcription{ChatID: 77, ID: 1, TranscriptionID: 4, Text: "late"})
+	select {
+	case got := <-done:
+		if got.Text != "late" || got.Pending {
+			t.Fatalf("late update: %+v", got)
+		}
+	case err := <-errs:
+		t.Fatal(err)
+	case <-safety:
+		t.Fatal("the request did not see the update")
+	}
+}
