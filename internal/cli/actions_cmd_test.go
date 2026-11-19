@@ -278,6 +278,7 @@ func hasFlag(flags []flagDoc, name string) bool {
 }
 
 func TestActionCLINegativeChatID(t *testing.T) {
+	audit01Isolate(t)
 	for _, args := range [][]string{
 		{"message", "react", "--remove", "--", "-1001234567890", "7", "👍"},
 		{"message", "pin", "--silent", "--", "-1001234567890", "7"},
