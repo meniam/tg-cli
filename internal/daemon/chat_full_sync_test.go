@@ -207,12 +207,12 @@ func TestChatFullSyncReadsAllowedChatsOnly(t *testing.T) {
 			t.Errorf("a chat outside the job was requested: %d", id)
 		}
 	}
-	// The worker pauses after every chat, the last one included, and the job is
-	// final before the last pause is recorded. The second request proves that the
-	// pause after the first chat happened, so one to two pauses of chatFullPause
-	// are the only valid outcome.
+	// The worker pauses after every chat, the last one included. The job is final
+	// before that last pause is recorded, so the worker is stopped first: close
+	// waits for it, and the pause that is already under way is recorded.
+	m.close()
 	sleeps := clock.slept()
-	if len(sleeps) < 1 || len(sleeps) > 2 {
+	if len(sleeps) != 2 {
 		t.Errorf("pauses = %v, want one per chat", sleeps)
 	}
 	for _, sleep := range sleeps {
@@ -405,11 +405,11 @@ func TestChatFullSyncUnknownChat(t *testing.T) {
 	}
 }
 
-// TestChatFullSyncOneChatFollowsTheSelection covers selectChats with a chat
+// TestAudit04_ChatFullSyncOneChatFollowsTheSelection covers selectChats with a chat
 // argument: a chat in the selection is read alone, and a chat that the access
 // lists close or that is no group or channel gets not_found from the selection
 // itself, with no Telegram request.
-func TestChatFullSyncOneChatFollowsTheSelection(t *testing.T) {
+func TestAudit04_ChatFullSyncOneChatFollowsTheSelection(t *testing.T) {
 	t.Run("one chat of the selection", func(t *testing.T) {
 		tg := &fakeChatFullTelegram{}
 		m, _, _ := chatFullFixture(t, `{"block":[3]}`, tg)

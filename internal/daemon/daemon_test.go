@@ -322,9 +322,9 @@ func (f *fakeTelegram) Pinned(_ context.Context, ref chatref.Ref, limit int) (rp
 	return rpc.MessagesResult{Messages: f.pinned}, nil // nil slice: the handler must return an empty list
 }
 
-// shortTempDirBase is the longest temporary directory path that still leaves room
+// audit04ShortTempDirBase is the longest temporary directory path that still leaves room
 // for the profile directory and the socket name under MaxSocketPath.
-const shortTempDirBase = 30
+const audit04ShortTempDirBase = 30
 
 // shortTempDir returns a short directory: Unix socket paths are length-limited
 // and t.TempDir is too long on macOS. It honours TMPDIR when that path is short
@@ -333,7 +333,7 @@ const shortTempDirBase = 30
 func shortTempDir(t *testing.T) string {
 	t.Helper()
 	base := os.TempDir()
-	if len(base) > shortTempDirBase {
+	if len(base) > audit04ShortTempDirBase {
 		base = "/tmp"
 	}
 	dir, err := os.MkdirTemp(base, "tgd")
@@ -476,10 +476,10 @@ func TestResolvePaths(t *testing.T) {
 	}
 }
 
-// TestSocketPathOfMaxSocketPathBinds checks that the conservative limit of the
+// TestAudit04_SocketPathOfMaxSocketPathBinds checks that the conservative limit of the
 // daemon is a path the OS accepts. The other side is not asserted: an OS may
 // accept a longer path, and the limit stays low on purpose.
-func TestSocketPathOfMaxSocketPathBinds(t *testing.T) {
+func TestAudit04_SocketPathOfMaxSocketPathBinds(t *testing.T) {
 	dir := shortTempDir(t)
 	fit := filepath.Join(dir, strings.Repeat("a", MaxSocketPath-len(dir)-1))
 	l, err := listenUnix(fit)
@@ -867,8 +867,8 @@ func TestResendCode(t *testing.T) {
 	}
 }
 
-// waitOutcome is the answer of one auth.wait call.
-type waitOutcome struct {
+// audit04WaitOutcome is the answer of one auth.wait call.
+type audit04WaitOutcome struct {
 	res rpc.AuthResult
 	err error
 }
@@ -876,16 +876,16 @@ type waitOutcome struct {
 // waitAsync calls auth.wait in the background and returns its outcome. The call
 // has its own deadline, and the test cleanup cancels it and waits for the
 // goroutine, so it never reports to a finished test.
-func waitAsync(t *testing.T, r *running) <-chan waitOutcome {
+func waitAsync(t *testing.T, r *running) <-chan audit04WaitOutcome {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	out := make(chan waitOutcome, 1)
+	out := make(chan audit04WaitOutcome, 1)
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
 		var res rpc.AuthResult
 		err := r.client.Call(ctx, rpc.MethodAuthWait, nil, &res)
-		out <- waitOutcome{res: res, err: err}
+		out <- audit04WaitOutcome{res: res, err: err}
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -894,7 +894,7 @@ func waitAsync(t *testing.T, r *running) <-chan waitOutcome {
 	return out
 }
 
-func receive(t *testing.T, ch <-chan waitOutcome) rpc.AuthResult {
+func receive(t *testing.T, ch <-chan audit04WaitOutcome) rpc.AuthResult {
 	t.Helper()
 	select {
 	case outcome := <-ch:

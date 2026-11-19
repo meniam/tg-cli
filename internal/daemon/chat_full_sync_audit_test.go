@@ -175,16 +175,21 @@ func TestAudit04_ChatFullCancelHandler(t *testing.T) {
 	var once sync.Once
 	closeRelease := func() { once.Do(func() { close(release) }) }
 	defer closeRelease()
-	clock.onSleep = func(time.Duration) { <-release }
+	entered := make(chan struct{}, 1)
+	clock.onSleep = func(time.Duration) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-release
+	}
 
 	audit04Call(t, d.chatFullStart, params(t, rpc.ChatFullStartParams{Refresh: true}))
-	// The worker is in the pause after the first chat once that chat was requested.
-	deadline := time.Now().Add(5 * time.Second)
-	for len(client.full.requests()) < 1 || len(clock.slept()) < 1 {
-		if time.Now().After(deadline) {
-			t.Fatal("the worker never reached its first pause")
-		}
-		time.Sleep(time.Millisecond)
+	// The worker is in the pause after the first chat once the hook reports it.
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the worker never reached its first pause")
 	}
 	cancelled := audit04Call(t, d.chatFullCancel, nil)
 	if cancelled.State != rpc.ChatFullCancelled {

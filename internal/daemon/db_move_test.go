@@ -52,9 +52,9 @@ func newDatabase(t *testing.T, path string) {
 	}
 }
 
-// checkpointFixture folds the journal of a fixture database into its main file,
+// audit04CheckpointFixture folds the journal of a fixture database into its main file,
 // for the tests that copy the main file alone.
-func checkpointFixture(t *testing.T, path string) {
+func audit04CheckpointFixture(t *testing.T, path string) {
 	t.Helper()
 	busy, err := store.Checkpoint(path)
 	if err != nil || busy {
@@ -62,8 +62,8 @@ func checkpointFixture(t *testing.T, path string) {
 	}
 }
 
-// journalSize returns the size of path-wal, zero when it does not exist.
-func journalSize(t *testing.T, path string) int64 {
+// audit04JournalSize returns the size of path-wal, zero when it does not exist.
+func audit04JournalSize(t *testing.T, path string) int64 {
 	t.Helper()
 	info, err := os.Stat(path + "-wal")
 	if errors.Is(err, os.ErrNotExist) {
@@ -75,8 +75,8 @@ func journalSize(t *testing.T, path string) int64 {
 	return info.Size()
 }
 
-// wantMoveStep fails unless err is a *MoveError that stopped at step.
-func wantMoveStep(t *testing.T, err error, step string) {
+// audit04WantMoveStep fails unless err is a *MoveError that stopped at step.
+func audit04WantMoveStep(t *testing.T, err error, step string) {
 	t.Helper()
 	var moveErr *MoveError
 	if !errors.As(err, &moveErr) {
@@ -162,7 +162,7 @@ func TestMoveLegacyDatabaseCopiesAndCommits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if journalSize(t, old) == 0 {
+	if audit04JournalSize(t, old) == 0 {
 		t.Fatal("the fixture must hand the move a journal with data")
 	}
 	moved, err := MoveLegacyDatabase(p)
@@ -248,7 +248,7 @@ func TestMoveLegacyDatabaseKeepsTheOldFileOnFailure(t *testing.T) {
 	}
 	writeFile(t, p.DatabaseDir, "not a directory")
 	_, err = MoveLegacyDatabase(p)
-	wantMoveStep(t, err, "inspect the database directory")
+	audit04WantMoveStep(t, err, "inspect the database directory")
 	current, readErr := os.ReadFile(old)
 	if readErr != nil || string(current) != string(original) {
 		t.Fatalf("the old database changed: %v", readErr)
@@ -262,7 +262,7 @@ func TestMoveLegacyDatabaseRefusesADamagedSource(t *testing.T) {
 	p, old := moveFixture(t)
 	// The pages are damaged in the main file, so the journal goes into it first:
 	// a checkpoint in the move would overwrite the damage with the journal pages.
-	checkpointFixture(t, old)
+	audit04CheckpointFixture(t, old)
 	info, err := os.Stat(old)
 	if err != nil {
 		t.Fatal(err)
@@ -287,7 +287,7 @@ func TestMoveLegacyDatabaseRefusesADamagedSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = MoveLegacyDatabase(p)
-	wantMoveStep(t, err, "the integrity check of the copy")
+	audit04WantMoveStep(t, err, "the integrity check of the copy")
 	after, readErr := os.ReadFile(old)
 	if readErr != nil || !bytes.Equal(after, before) {
 		t.Fatalf("the old database changed: %v", readErr)
@@ -380,7 +380,7 @@ func TestMoveLegacyDatabaseFinishesAnInterruptedMove(t *testing.T) {
 	p, old := moveFixture(t)
 	// The interrupted run had folded the journal already: the main file alone
 	// holds the row, and the journal files that are left are empty.
-	checkpointFixture(t, old)
+	audit04CheckpointFixture(t, old)
 	raw, err := os.ReadFile(old)
 	if err != nil {
 		t.Fatal(err)
@@ -414,7 +414,7 @@ func TestMoveLegacyDatabaseKeepsADatabaseInUse(t *testing.T) {
 	p, old := moveFixture(t)
 	// A checkpoint that fails on a busy database may still move pages, so the
 	// journal is folded first and "stays as it was" can be compared byte for byte.
-	checkpointFixture(t, old)
+	audit04CheckpointFixture(t, old)
 	before, err := os.ReadFile(old)
 	if err != nil {
 		t.Fatal(err)
@@ -422,7 +422,7 @@ func TestMoveLegacyDatabaseKeepsADatabaseInUse(t *testing.T) {
 	release := holdWriteLock(t, old)
 	defer release()
 	_, err = MoveLegacyDatabase(p)
-	wantMoveStep(t, err, "checkpoint the database")
+	audit04WantMoveStep(t, err, "checkpoint the database")
 	if !strings.Contains(err.Error(), "in use") {
 		t.Errorf("the error must say the database is in use: %v", err)
 	}

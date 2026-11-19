@@ -124,8 +124,10 @@ func TestFolderWriteBarriersAndHidden(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	d.opts.Paths.Dir = missing
 	_, err = d.folderWrite(ctx, params(t, rpc.FolderWriteParams{ID: 2, Yes: true}), "delete")
-	if !errors.Is(err, os.ErrNotExist) || fake.writes != 0 {
-		t.Fatalf("journal error: %v writes %d, want a missing-directory error and no write", err, fake.writes)
+	// The error names the journal file, so it comes from opening the journal.
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || !errors.Is(err, os.ErrNotExist) || pathErr.Path != filepath.Join(missing, "account.jsonl") || fake.writes != 0 {
+		t.Fatalf("journal error: %v writes %d, want a missing-directory error on account.jsonl and no write", err, fake.writes)
 	}
 	if _, statErr := os.Stat(filepath.Join(missing, "account.jsonl")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("the journal was created in a directory that is not there: %v", statErr)

@@ -337,9 +337,9 @@ func TestEventPruningStopsWithContext(t *testing.T) {
 	}
 }
 
-// TestEventPruningKeepsTheNewest covers the retention count: events inside the
+// TestAudit04_EventPruningKeepsTheNewest covers the retention count: events inside the
 // retention period survive, except the oldest ones beyond the count.
-func TestEventPruningKeepsTheNewest(t *testing.T) {
+func TestAudit04_EventPruningKeepsTheNewest(t *testing.T) {
 	d, _, db, _ := accessTestDaemon(t)
 	ctx := context.Background()
 	for i := 0; i < 3; i++ {
@@ -356,7 +356,11 @@ func TestEventPruningKeepsTheNewest(t *testing.T) {
 		return err == nil && first == 2
 	})
 	cancel()
-	<-done
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pruner did not stop")
+	}
 	if last, err := db.LastEventID(ctx); err != nil || last != 3 {
 		t.Fatalf("last event = %d %v, want 3", last, err)
 	}
