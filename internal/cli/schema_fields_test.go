@@ -154,8 +154,13 @@ func realResponses(t *testing.T) map[string][]byte {
 	if r := e.run("note", "add", "--chat", "77", "--author", "ai", "--model", "model-x", "--tag", "t", "A note"); r.code != exitcode.OK {
 		t.Fatalf("note add: %q", r.stdout)
 	}
-	if r := e.run("search", "third"); r.code != exitcode.OK {
-		t.Fatalf("search: %q", r.stdout)
+	// The cases below run in map order. The commands that read the local
+	// database need its content first, so fill it here, not in a case that may
+	// run later than the one that reads it.
+	for _, prime := range [][]string{{"chat", "list"}, {"message", "history", "@teamchat"}, {"search", "third"}} {
+		if r := e.run(prime...); r.code != exitcode.OK {
+			t.Fatalf("%v: %q", prime, r.stdout)
+		}
 	}
 	// Every deletion case deletes one note of its own, so the cases do not
 	// depend on the order they run in and none of them empties the list.
@@ -247,6 +252,15 @@ func TestSchemaFieldsMatchRealResponses(t *testing.T) {
 		for _, missing := range schema.Missing(paths, cmd.Fields) {
 			t.Errorf("%s: the response has %q, the schema does not", path, missing)
 		}
+		// A command that prints a list is compared on a filled list: with an
+		// empty one the fields of the items are never looked at.
+		if cmd.Item != nil && !audit02HasPathUnder(paths, cmd.Item.Path) {
+			if reason, empty := audit02EmptyItemResponses[path]; empty {
+				t.Logf("%s: the list %q is empty in the fixture: %s", path, cmd.Item.Path, reason)
+			} else {
+				t.Errorf("%s: the response has no field inside the list %q, so the fields of its items are not compared (paths %v)", path, cmd.Item.Path, paths)
+			}
+		}
 		checked++
 	}
 	if want := len(realResponseCases) + 1; checked != want { // + daemon stop
@@ -327,7 +341,8 @@ func TestEveryCommandResponseIsCompared(t *testing.T) {
 	for _, name := range []string{"config path", "config init", "config show", "config migrate"} {
 		t.Run(name, func(t *testing.T) { compareConfigResponse(t, name) })
 	}
-	t.Run("message export-month and verify", TestExportMonthCLI)
+	t.Run("message export-month", TestExportMonthCLI)
+	t.Run("message export-verify", TestAudit02_ExportVerifyCLI)
 	cases := map[string]bool{}
 	for path := range realResponseCases {
 		cases[path] = true
@@ -446,4 +461,22 @@ func TestSchemaListItemsMatchJSONL(t *testing.T) {
 			t.Errorf("%s: no JSONL item lines", path)
 		}
 	}
+}
+
+// audit02EmptyItemResponses lists the commands with a list whose fixture response
+// is empty, and why that is accepted. Every other command with a list must
+// return at least one item, so the fields of the items are compared.
+var audit02EmptyItemResponses = map[string]string{
+	"daemon logs": "the in-process daemon of the fixture writes no log lines",
+}
+
+// audit02HasPathUnder reports whether a path of the response lies inside the
+// list at prefix.
+func audit02HasPathUnder(paths []string, prefix string) bool {
+	for _, path := range paths {
+		if strings.HasPrefix(path, prefix+".") {
+			return true
+		}
+	}
+	return false
 }

@@ -14,16 +14,16 @@ func (f *fakeTelegram) Folders(context.Context) (rpc.FoldersResult, error) {
 	return rpc.FoldersResult{Folders: []rpc.Folder{{ID: 2, Kind: "filter", Title: "test"}}}, nil
 }
 func (f *fakeTelegram) ChatStates(context.Context, *chatref.Ref, int) (rpc.ChatStatesResult, error) {
-	return rpc.ChatStatesResult{States: []rpc.ChatState{}}, nil
+	return rpc.ChatStatesResult{States: []rpc.ChatState{{ChatID: 77, Unread: 2, TopMessage: 30}}}, nil
 }
 func (f *fakeTelegram) Sessions(context.Context) (rpc.SessionsResult, error) {
 	return rpc.SessionsResult{Sessions: []rpc.Session{{Hash: 1, DeviceModel: "Fixture", Platform: "test", AppName: "fixture"}}}, nil
 }
 func (f *fakeTelegram) Blocked(context.Context, rpc.BlockedParams) (rpc.BlockedResult, error) {
-	return rpc.BlockedResult{Peers: []rpc.BlockedPeer{}}, nil
+	return rpc.BlockedResult{Peers: []rpc.BlockedPeer{{PeerID: 8, Type: "user", Title: "Blocked", Username: "blocked", Date: 1}}}, nil
 }
 func (f *fakeTelegram) NotifyDefaults(context.Context) (rpc.NotifyDefaultsResult, error) {
-	return rpc.NotifyDefaultsResult{Defaults: []rpc.NotifyDefault{}}, nil
+	return rpc.NotifyDefaultsResult{Defaults: []rpc.NotifyDefault{{Scope: "users"}}}, nil
 }
 
 func TestOwnerStateCLI(t *testing.T) {
@@ -114,7 +114,7 @@ func (f *fakeTelegram) SavedTags(context.Context, *chatref.Ref) (rpc.SavedTagsRe
 func (f *fakeTelegram) RenameSavedTag(context.Context, rpc.SavedTagRenameParams) error { return nil }
 
 func (f *fakeTelegram) SavedMessages(context.Context, int64, *chatref.Ref, rpc.SavedMessagesParams, bool) (rpc.MessagesResult, error) {
-	return rpc.MessagesResult{Messages: []rpc.Message{}}, nil
+	return rpc.MessagesResult{Messages: []rpc.Message{{ChatID: 77, ID: 5, Date: "2026-11-14T10:00:00Z", Text: "saved"}}}, nil
 }
 
 func (f *fakeTelegram) SavedList(context.Context, rpc.SavedListParams) (rpc.SavedListResult, error) {
