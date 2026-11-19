@@ -44,7 +44,7 @@ func TestSaveDetachesRequestCancellation(t *testing.T) {
 }
 
 func TestChatAnswersArePersistedWithoutLosingDetails(t *testing.T) {
-	client, db, tg, _ := noteTestRPC(t)
+	client, db, tg, _ := rpcTestDaemon(t)
 	authorizeFake(tg)
 	tg.mu.Lock()
 	tg.chats = []rpc.Chat{
@@ -57,7 +57,7 @@ func TestChatAnswersArePersistedWithoutLosingDetails(t *testing.T) {
 	wantChats := append([]rpc.Chat(nil), tg.chats...)
 	tg.mu.Unlock()
 	var listed rpc.ChatListResult
-	if err := noteCall(t, client, rpc.MethodChatList, rpc.ChatListParams{}, &listed); err != nil || !reflect.DeepEqual(listed.Chats, wantChats) {
+	if err := rpcCall(t, client, rpc.MethodChatList, rpc.ChatListParams{}, &listed); err != nil || !reflect.DeepEqual(listed.Chats, wantChats) {
 		t.Fatalf("chat.list changed response: %+v, %v", listed, err)
 	}
 	ctx := context.Background()
@@ -80,14 +80,14 @@ func TestChatAnswersArePersistedWithoutLosingDetails(t *testing.T) {
 	if _, err := db.GetPerson(ctx, -10); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("group was stored as a person: %v", err)
 	}
-	if err := noteCall(t, client, rpc.MethodChatList, rpc.ChatListParams{}, &listed); err != nil {
+	if err := rpcCall(t, client, rpc.MethodChatList, rpc.ChatListParams{}, &listed); err != nil {
 		t.Fatal(err)
 	}
 	if hits, err := db.Search(ctx, store.SearchOptions{Query: "ЁЛКА", Scopes: []string{"chats"}}); err != nil || len(hits) != 1 {
 		t.Fatalf("duplicate chat or missing FTS: %+v, %v", hits, err)
 	}
 	var resolved rpc.Chat
-	if err := noteCall(t, client, rpc.MethodChatResolve, rpc.ChatRefParams{Chat: "@treeuser"}, &resolved); err != nil || resolved.ID != 42 {
+	if err := rpcCall(t, client, rpc.MethodChatResolve, rpc.ChatRefParams{Chat: "@treeuser"}, &resolved); err != nil || resolved.ID != 42 {
 		t.Fatalf("chat.resolve = %+v, %v", resolved, err)
 	}
 	chat, err = db.GetChat(ctx, 42)
@@ -97,7 +97,7 @@ func TestChatAnswersArePersistedWithoutLosingDetails(t *testing.T) {
 	tg.mu.Lock()
 	tg.resolved = &rpc.Chat{ID: 44, Type: "bot", Title: "Resolved Bot", Username: "resolvedbot"}
 	tg.mu.Unlock()
-	if err := noteCall(t, client, rpc.MethodChatResolve, rpc.ChatRefParams{Chat: "@resolvedbot"}, &resolved); err != nil {
+	if err := rpcCall(t, client, rpc.MethodChatResolve, rpc.ChatRefParams{Chat: "@resolvedbot"}, &resolved); err != nil {
 		t.Fatal(err)
 	}
 	resolvedPerson, err := db.GetPerson(ctx, 44)
@@ -105,7 +105,7 @@ func TestChatAnswersArePersistedWithoutLosingDetails(t *testing.T) {
 		t.Fatalf("resolved bot person = %+v, %v", resolvedPerson, err)
 	}
 	var info rpc.ChatInfo
-	if err := noteCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "@treeuser"}, &info); err != nil || info.About != "Зелёный лес" {
+	if err := rpcCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "@treeuser"}, &info); err != nil || info.About != "Зелёный лес" {
 		t.Fatalf("chat.info = %+v, %v", info, err)
 	}
 	chat, err = db.GetChat(ctx, 42)
@@ -118,7 +118,7 @@ func TestChatAnswersArePersistedWithoutLosingDetails(t *testing.T) {
 	tg.info.Forum = false
 	tg.info.Verified = false
 	tg.mu.Unlock()
-	if err := noteCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "@treeuser"}, &info); err != nil {
+	if err := rpcCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "@treeuser"}, &info); err != nil {
 		t.Fatal(err)
 	}
 	chat, err = db.GetChat(ctx, 42)
@@ -126,7 +126,7 @@ func TestChatAnswersArePersistedWithoutLosingDetails(t *testing.T) {
 		// The member count 0 means "unknown" and keeps the stored 11; forum and verified are real booleans.
 		t.Fatalf("empty info erased details: %+v, %v", chat, err)
 	}
-	if err := noteCall(t, client, rpc.MethodChatList, rpc.ChatListParams{}, &listed); err != nil {
+	if err := rpcCall(t, client, rpc.MethodChatList, rpc.ChatListParams{}, &listed); err != nil {
 		t.Fatal(err)
 	}
 	chat, err = db.GetChat(ctx, 42)
@@ -136,7 +136,7 @@ func TestChatAnswersArePersistedWithoutLosingDetails(t *testing.T) {
 }
 
 func TestMessageAnswersPersistVersionsSendersAndSearch(t *testing.T) {
-	client, db, tg, logs := noteTestRPC(t)
+	client, db, tg, logs := rpcTestDaemon(t)
 	authorizeFake(tg)
 	ctx := context.Background()
 	var noteIDs []int64
@@ -168,17 +168,17 @@ func TestMessageAnswersPersistVersionsSendersAndSearch(t *testing.T) {
 	wantHistory := append([]rpc.Message(nil), tg.messages...)
 	tg.mu.Unlock()
 	var chats rpc.ChatListResult
-	if err := noteCall(t, client, rpc.MethodChatList, rpc.ChatListParams{}, &chats); err != nil {
+	if err := rpcCall(t, client, rpc.MethodChatList, rpc.ChatListParams{}, &chats); err != nil {
 		t.Fatal(err)
 	}
-	if err := noteCall(t, client, rpc.MethodChatResolve, rpc.ChatRefParams{Chat: "-10"}, nil); err != nil {
+	if err := rpcCall(t, client, rpc.MethodChatResolve, rpc.ChatRefParams{Chat: "-10"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := noteCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "-10"}, nil); err != nil {
+	if err := rpcCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "-10"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	var history rpc.MessagesResult
-	if err := noteCall(t, client, rpc.MethodMessageHistory, rpc.HistoryParams{Chat: "-10"}, &history); err != nil || !reflect.DeepEqual(history.Messages, wantHistory) {
+	if err := rpcCall(t, client, rpc.MethodMessageHistory, rpc.HistoryParams{Chat: "-10"}, &history); err != nil || !reflect.DeepEqual(history.Messages, wantHistory) {
 		t.Fatalf("history changed response: %+v, %v", history, err)
 	}
 	first, err := db.GetMessage(ctx, -10, 1)
@@ -216,14 +216,14 @@ func TestMessageAnswersPersistVersionsSendersAndSearch(t *testing.T) {
 		t.Errorf("skip log = %s", logs.String())
 	}
 	var search rpc.SearchResult
-	if err := noteCall(t, client, rpc.MethodSearch, rpc.SearchParams{Query: "ЕЛКА", Scopes: []string{"chats", "messages"}}, &search); err != nil || len(search.Hits) != 2 || search.Hits[0].Scope != "chats" || search.Hits[1].Scope != "messages" {
+	if err := rpcCall(t, client, rpc.MethodSearch, rpc.SearchParams{Query: "ЕЛКА", Scopes: []string{"chats", "messages"}}, &search); err != nil || len(search.Hits) != 2 || search.Hits[0].Scope != "chats" || search.Hits[1].Scope != "messages" {
 		t.Fatalf("offline search = %+v, %v", search, err)
 	}
 	tg.mu.Lock()
 	tg.messages[0].Text = "Елка edited"
 	tg.messages[0].Pinned = false
 	tg.mu.Unlock()
-	if err := noteCall(t, client, rpc.MethodMessageHistory, rpc.HistoryParams{Chat: "-10"}, &history); err != nil {
+	if err := rpcCall(t, client, rpc.MethodMessageHistory, rpc.HistoryParams{Chat: "-10"}, &history); err != nil {
 		t.Fatal(err)
 	}
 	changed, err := db.GetMessage(ctx, -10, 1)
@@ -238,7 +238,7 @@ func TestMessageAnswersPersistVersionsSendersAndSearch(t *testing.T) {
 	tg.pinned = []rpc.Message{{ID: 1, ChatID: -10, Date: "2026-11-13T10:00:00Z", Text: "Елка edited", Pinned: true}}
 	tg.mu.Unlock()
 	var pinned rpc.MessagesResult
-	if err := noteCall(t, client, rpc.MethodMessagePinned, rpc.PinnedParams{Chat: "-10"}, &pinned); err != nil || len(pinned.Messages) != 1 {
+	if err := rpcCall(t, client, rpc.MethodMessagePinned, rpc.PinnedParams{Chat: "-10"}, &pinned); err != nil || len(pinned.Messages) != 1 {
 		t.Fatalf("pinned = %+v, %v", pinned, err)
 	}
 	storedPinned, err := db.GetMessage(ctx, -10, 1)
@@ -248,7 +248,7 @@ func TestMessageAnswersPersistVersionsSendersAndSearch(t *testing.T) {
 	tg.mu.Lock()
 	tg.pinned[0].Pinned = false
 	tg.mu.Unlock()
-	if err := noteCall(t, client, rpc.MethodMessagePinned, rpc.PinnedParams{Chat: "-10"}, &pinned); err != nil {
+	if err := rpcCall(t, client, rpc.MethodMessagePinned, rpc.PinnedParams{Chat: "-10"}, &pinned); err != nil {
 		t.Fatal(err)
 	}
 	storedPinned, err = db.GetMessage(ctx, -10, 1)
@@ -260,10 +260,10 @@ func TestMessageAnswersPersistVersionsSendersAndSearch(t *testing.T) {
 	tg.pinned = []rpc.Message{{ID: 6, ChatID: -10, Date: "2026-11-13T10:06:00Z", Text: "Pinned result", Pinned: true}}
 	tg.mu.Unlock()
 	var got rpc.Message
-	if err := noteCall(t, client, rpc.MethodMessageGet, rpc.MessageGetParams{Chat: "-10", ID: 5}, &got); err != nil || got.ID != 5 {
+	if err := rpcCall(t, client, rpc.MethodMessageGet, rpc.MessageGetParams{Chat: "-10", ID: 5}, &got); err != nil || got.ID != 5 {
 		t.Fatalf("message.get = %+v, %v", got, err)
 	}
-	if err := noteCall(t, client, rpc.MethodMessagePinned, rpc.PinnedParams{Chat: "-10"}, &pinned); err != nil {
+	if err := rpcCall(t, client, rpc.MethodMessagePinned, rpc.PinnedParams{Chat: "-10"}, &pinned); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.GetMessage(ctx, -10, 5); err != nil {
@@ -286,7 +286,7 @@ func TestMessageAnswersPersistVersionsSendersAndSearch(t *testing.T) {
 func persistInt64(v int64) *int64 { return &v }
 
 func TestClosedStoreDoesNotChangeReadResponsesOrLeakData(t *testing.T) {
-	client, db, tg, logs := noteTestRPC(t)
+	client, db, tg, logs := rpcTestDaemon(t)
 	authorizeFake(tg)
 	marker := "DISTINCT_PRIVATE_MARKER"
 	tg.mu.Lock()
@@ -300,27 +300,27 @@ func TestClosedStoreDoesNotChangeReadResponsesOrLeakData(t *testing.T) {
 		t.Fatal(err)
 	}
 	var list rpc.ChatListResult
-	if err := noteCall(t, client, rpc.MethodChatList, rpc.ChatListParams{}, &list); err != nil || len(list.Chats) != 1 || list.Chats[0].Title != marker {
+	if err := rpcCall(t, client, rpc.MethodChatList, rpc.ChatListParams{}, &list); err != nil || len(list.Chats) != 1 || list.Chats[0].Title != marker {
 		t.Fatalf("chat.list = %+v, %v", list, err)
 	}
 	var chat rpc.Chat
-	if err := noteCall(t, client, rpc.MethodChatResolve, rpc.ChatRefParams{Chat: "@markeruser"}, &chat); err != nil || !reflect.DeepEqual(chat, *tg.resolved) {
+	if err := rpcCall(t, client, rpc.MethodChatResolve, rpc.ChatRefParams{Chat: "@markeruser"}, &chat); err != nil || !reflect.DeepEqual(chat, *tg.resolved) {
 		t.Fatalf("chat.resolve = %+v, %v", chat, err)
 	}
 	var info rpc.ChatInfo
-	if err := noteCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "@markeruser"}, &info); err != nil || !reflect.DeepEqual(info, *tg.info) {
+	if err := rpcCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "@markeruser"}, &info); err != nil || !reflect.DeepEqual(info, *tg.info) {
 		t.Fatalf("chat.info = %+v, %v", info, err)
 	}
 	var history rpc.MessagesResult
-	if err := noteCall(t, client, rpc.MethodMessageHistory, rpc.HistoryParams{Chat: "77"}, &history); err != nil || len(history.Messages) != 1 || history.Messages[0].Text != marker {
+	if err := rpcCall(t, client, rpc.MethodMessageHistory, rpc.HistoryParams{Chat: "77"}, &history); err != nil || len(history.Messages) != 1 || history.Messages[0].Text != marker {
 		t.Fatalf("message.history = %+v, %v", history, err)
 	}
 	var message rpc.Message
-	if err := noteCall(t, client, rpc.MethodMessageGet, rpc.MessageGetParams{Chat: "77", ID: 1}, &message); err != nil || !reflect.DeepEqual(message, tg.messages[0]) {
+	if err := rpcCall(t, client, rpc.MethodMessageGet, rpc.MessageGetParams{Chat: "77", ID: 1}, &message); err != nil || !reflect.DeepEqual(message, tg.messages[0]) {
 		t.Fatalf("message.get = %+v, %v", message, err)
 	}
 	history = rpc.MessagesResult{}
-	if err := noteCall(t, client, rpc.MethodMessagePinned, rpc.PinnedParams{Chat: "77"}, &history); err != nil || !reflect.DeepEqual(history.Messages, tg.pinned) {
+	if err := rpcCall(t, client, rpc.MethodMessagePinned, rpc.PinnedParams{Chat: "77"}, &history); err != nil || !reflect.DeepEqual(history.Messages, tg.pinned) {
 		t.Fatalf("message.pinned = %+v, %v", history, err)
 	}
 	for _, op := range []string{rpc.MethodChatList, rpc.MethodChatResolve, rpc.MethodChatInfo, rpc.MethodMessageHistory, rpc.MethodMessageGet, rpc.MethodMessagePinned} {
@@ -337,19 +337,19 @@ func TestClosedStoreDoesNotChangeReadResponsesOrLeakData(t *testing.T) {
 }
 
 func TestChatInfoWithoutMemberCountKeepsTheStoredOne(t *testing.T) {
-	client, db, tg, _ := noteTestRPC(t)
+	client, db, tg, _ := rpcTestDaemon(t)
 	authorizeFake(tg)
 	tg.mu.Lock()
 	tg.info = &rpc.ChatInfo{ID: -1001234567890, Type: "channel", Title: "News", Members: 12}
 	tg.mu.Unlock()
-	if err := noteCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "-1001234567890"}, nil); err != nil {
+	if err := rpcCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "-1001234567890"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	// A later answer that does not know the size (it is left out of the JSON) must not reset it.
 	tg.mu.Lock()
 	tg.info = &rpc.ChatInfo{ID: -1001234567890, Type: "channel", Title: "News"}
 	tg.mu.Unlock()
-	if err := noteCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "-1001234567890"}, nil); err != nil {
+	if err := rpcCall(t, client, rpc.MethodChatInfo, rpc.ChatRefParams{Chat: "-1001234567890"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	chat, err := db.GetChat(context.Background(), -1001234567890)

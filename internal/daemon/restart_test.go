@@ -311,7 +311,7 @@ func TestSupervisorUnexpectedExitGoesOffline(t *testing.T) {
 	first := &failedTCPClient{fakeTelegram: newFake()}
 	gate := &telegramAdmission{client: first}
 	s := newClientSupervisor(ctx, gate, first, nil, func(Telegram) {}, nil, nil, nil, time.Second)
-	deadline := time.After(time.Second)
+	deadline := time.After(audit05Timeout)
 	for !s.offline() {
 		select {
 		case <-deadline:
@@ -424,13 +424,13 @@ func TestRestartCallerCancellationDoesNotAbortReplacement(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("got %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(audit05Timeout):
 		t.Fatal("canceled caller did not return")
 	}
 	close(finish)
 	select {
 	case <-workerDone:
-	case <-time.After(time.Second):
+	case <-time.After(audit05Timeout):
 		t.Fatal("replacement did not finish")
 	}
 }

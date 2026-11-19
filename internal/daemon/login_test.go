@@ -70,7 +70,7 @@ func TestLoginReleasesClientBeforeAuthorizationCallback(t *testing.T) {
 	if err != nil || res.State != rpc.AuthAuthorized {
 		t.Fatalf("code: %+v %v", res, err)
 	}
-	if err := <-callback; err != nil {
+	if err := audit05Recv(t, callback, "drain result"); err != nil {
 		t.Fatal(err)
 	}
 }
