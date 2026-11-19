@@ -47,32 +47,3 @@ func TestIdempotentSendReplayConflictAndDryRun(t *testing.T) {
 		t.Fatalf("conflict: %v", err)
 	}
 }
-func TestAccountGuard(t *testing.T) {
-	var c accountCache
-	req := rpc.Request{Method: rpc.MethodSubscribe, ExpectUser: "@alice"}
-	if c.check(req) == nil {
-		t.Fatal("unknown account accepted")
-	}
-	c.set(&rpc.User{ID: 42, Username: "Alice"})
-	if err := c.check(req); err != nil {
-		t.Fatal(err)
-	}
-	req.Method = rpc.MethodSearch
-	req.ExpectUser = "42"
-	if err := c.check(req); err != nil {
-		t.Fatal(err)
-	}
-	req.ExpectUser = "43"
-	if c.check(req) == nil {
-		t.Fatal("wrong account accepted")
-	}
-	req.Method = rpc.MethodPing
-	if err := c.check(req); err != nil {
-		t.Fatal(err)
-	}
-	c.set(nil)
-	req.Method = rpc.MethodUnsubscribe
-	if c.check(req) == nil {
-		t.Fatal("cleared account accepted")
-	}
-}

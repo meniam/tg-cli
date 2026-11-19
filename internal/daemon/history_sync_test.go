@@ -237,9 +237,6 @@ func cancelSync(t *testing.T, d *daemon, chatID int64) *rpc.HistorySyncJob {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result == nil {
-		return nil
-	}
 	return result.(*rpc.HistorySyncJob)
 }
 
@@ -283,9 +280,16 @@ func TestHistorySyncCompletePagesAndNoImplicitStart(t *testing.T) {
 		maxActive = max(maxActive, active)
 		index := calls
 		calls++
-		active--
 		mu.Unlock()
+		// The request stays active until it returns, so an overlapping
+		// request from the manager would raise maxActive.
+		defer func() {
+			mu.Lock()
+			active--
+			mu.Unlock()
+		}()
 		offsets <- offset
+		runtime.Gosched()
 		return pages[index], nil
 	}
 	if _, found, err := db.SyncState(context.Background(), 42); err != nil || found {
@@ -429,11 +433,11 @@ func TestHistorySyncCancelDuringRequestAndPause(t *testing.T) {
 			if during == "pause" {
 				clock.awaitTimer(t)
 			}
-			if job := cancelSync(t, d, 42); job == nil || job.State != rpc.HistorySyncCancelled {
+			if job := cancelSync(t, d, 42); job.State != rpc.HistorySyncCancelled {
 				t.Fatalf("cancel: %+v", job)
 			}
 			awaitSyncState(t, d, 42, rpc.HistorySyncCancelled)
-			if job := cancelSync(t, d, 42); job == nil || job.State != rpc.HistorySyncCancelled {
+			if job := cancelSync(t, d, 42); job.State != rpc.HistorySyncCancelled {
 				t.Fatalf("second cancel: %+v", job)
 			}
 			select {
@@ -536,7 +540,7 @@ func TestHistorySyncClosesChatDuringRequest(t *testing.T) {
 	}
 	writeAccess(t, path, `{"allow":[42]}`)
 	startSync(t, d, 42)
-	<-entered
+	audit05Recv(t, entered, "history request start")
 	writeAccess(t, path, `{"allow":[999]}`)
 	close(release)
 	job := awaitSyncState(t, d, 42, rpc.HistorySyncFailed)
@@ -559,7 +563,7 @@ func TestHistorySyncCancelQueuedTask(t *testing.T) {
 	startSync(t, d, 42)
 	receiveOffset(t, entered)
 	startSync(t, d, 43)
-	if job := cancelSync(t, d, 43); job == nil || job.State != rpc.HistorySyncCancelled {
+	if job := cancelSync(t, d, 43); job.State != rpc.HistorySyncCancelled {
 		t.Fatalf("queued cancel: %+v", job)
 	}
 	cancelSync(t, d, 42)
@@ -576,10 +580,13 @@ func TestHistorySyncPlaceholdersAndLoopGuard(t *testing.T) {
 		name       string
 		pages      []rpc.HistoryPage
 		wantState  string
-		wantStored bool
+		wantOldest int
+		// storedAfterFirst: the first page already leaves sync progress. A
+		// page of placeholders only moves the offset and stores nothing.
+		storedAfterFirst bool
 	}{
-		{"placeholders", []rpc.HistoryPage{{RawNextOffsetID: 8}, syncPage(42, 7), syncPage(42)}, rpc.HistorySyncDone, true},
-		{"repeated offset", []rpc.HistoryPage{syncPage(42, 10), syncPage(42, 10)}, rpc.HistorySyncFailed, true},
+		{"placeholders", []rpc.HistoryPage{{RawNextOffsetID: 8}, syncPage(42, 7), syncPage(42)}, rpc.HistorySyncDone, 7, false},
+		{"repeated offset", []rpc.HistoryPage{syncPage(42, 10), syncPage(42, 10)}, rpc.HistorySyncFailed, 10, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d, tg, db, clock, _ := syncFixture(t)
@@ -597,7 +604,7 @@ func TestHistorySyncPlaceholdersAndLoopGuard(t *testing.T) {
 			startSync(t, d, 42)
 			receiveOffset(t, offsets)
 			clock.awaitTimer(t)
-			if _, found, err := db.SyncState(context.Background(), 42); err != nil || found == (tc.name == "placeholders") {
+			if _, found, err := db.SyncState(context.Background(), 42); err != nil || found != tc.storedAfterFirst {
 				t.Fatalf("progress after first page: found=%v err=%v", found, err)
 			}
 			clock.Advance(historySyncPause)
@@ -613,7 +620,7 @@ func TestHistorySyncPlaceholdersAndLoopGuard(t *testing.T) {
 			if tc.name == "repeated offset" && (job.ErrorCode != rpc.CodeTelegram || job.Error == "") {
 				t.Fatalf("loop guard: %+v", job)
 			}
-			if state, found, err := db.SyncState(context.Background(), 42); err != nil || found != tc.wantStored || state.OldestID == nil || *state.OldestID != map[string]int{"placeholders": 7, "repeated offset": 10}[tc.name] {
+			if state, found, err := db.SyncState(context.Background(), 42); err != nil || !found || state.OldestID == nil || *state.OldestID != tc.wantOldest {
 				t.Fatalf("stored progress: %+v found=%v err=%v", state, found, err)
 			}
 		})
@@ -632,7 +639,7 @@ func TestHistorySyncWaitingFloodAndShutdown(t *testing.T) {
 	}
 	tg.flood = func() time.Duration { return 119*time.Second + time.Millisecond }
 	startSync(t, d, 42)
-	<-entered
+	audit05Recv(t, entered, "history request start")
 	result, err := d.historySyncStatus(context.Background(), params(t, rpc.HistorySyncStatusParams{Chat: "42"}))
 	if err != nil {
 		t.Fatal(err)
@@ -663,7 +670,7 @@ func TestHistorySyncStatusAndCancelUseKnownReferenceLocally(t *testing.T) {
 	if _, err := d.historySyncStart(context.Background(), params(t, rpc.HistorySyncParams{Chat: "@myteam"})); err != nil {
 		t.Fatal(err)
 	}
-	<-entered
+	audit05Recv(t, entered, "history request start")
 	if result, err := d.historySyncStatus(context.Background(), params(t, rpc.HistorySyncStatusParams{Chat: "@myteam"})); err != nil || result.(*rpc.HistorySyncJob).ChatID != 77 {
 		t.Fatalf("known status: %+v err=%v", result, err)
 	}
