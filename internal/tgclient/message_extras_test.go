@@ -3,6 +3,7 @@ package tgclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -151,6 +152,10 @@ func TestInstalledStickerSetsOneRequestAndSummary(t *testing.T) {
 	if strings.Contains(string(encoded), "animated") || strings.Contains(string(encoded), "video") {
 		t.Fatalf("unexpected properties: %s", encoded)
 	}
+	summary := summarizeStickerSets(sets)
+	if len(summary.Sets) != 1 || summary.Sets[0].ShortName != "example" || summary.Sets[0].Title != "Example" || summary.Sets[0].Count != 3 || summary.Sets[0].Type != "regular" {
+		t.Fatalf("summary: %+v", summary)
+	}
 }
 
 func TestSelectStickerByEmojiAndIndex(t *testing.T) {
@@ -164,5 +169,32 @@ func TestSelectStickerByEmojiAndIndex(t *testing.T) {
 	doc, index, err = selectSticker(set, rpc.SendStickerParams{Index: &n})
 	if err != nil || index != 0 || doc.ID != 1 {
 		t.Fatalf("doc=%v index=%d err=%v", doc, index, err)
+	}
+}
+
+func TestAudit09_SelectStickerErrors(t *testing.T) {
+	set := &tg.MessagesStickerSet{Documents: []tg.DocumentClass{&tg.Document{ID: 1}, &tg.DocumentEmpty{ID: 2}}}
+	zero, one, outOfRange, negative := 0, 1, 2, -1
+	missing, present := "🙃", "🙂"
+	for _, tc := range []struct {
+		name string
+		p    rpc.SendStickerParams
+		code int
+		msg  string
+	}{
+		{"neither", rpc.SendStickerParams{}, rpc.CodeInvalidParams, "choose exactly one of index or emoji"},
+		{"both", rpc.SendStickerParams{Index: &zero, Emoji: &present}, rpc.CodeInvalidParams, "choose exactly one of index or emoji"},
+		{"index out of range", rpc.SendStickerParams{Index: &outOfRange}, rpc.CodeInvalidParams, "sticker was not found in set"},
+		{"negative index", rpc.SendStickerParams{Index: &negative}, rpc.CodeInvalidParams, "sticker was not found in set"},
+		{"emoji not found", rpc.SendStickerParams{Emoji: &missing}, rpc.CodeInvalidParams, "sticker was not found in set"},
+		{"invalid sticker", rpc.SendStickerParams{Index: &one}, rpc.CodeTelegram, "Telegram returned an invalid sticker"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := selectSticker(set, tc.p)
+			var re *rpc.Error
+			if !errors.As(err, &re) || re.Code != tc.code || re.Message != tc.msg {
+				t.Fatalf("error %v, want code %d %q", err, tc.code, tc.msg)
+			}
+		})
 	}
 }

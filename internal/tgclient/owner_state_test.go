@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -51,17 +52,25 @@ func TestOwnerBlockedPageAndErrors(t *testing.T) {
 	}
 }
 func TestOwnerNotifyReadOnly(t *testing.T) {
-	n := 0
+	var peers []string
 	api := tg.NewClient(writeInvoker(func(_ context.Context, in bin.Encoder, out bin.Decoder) error {
-		if _, ok := in.(*tg.AccountGetNotifySettingsRequest); !ok {
-			t.Fatalf("write or unexpected request %T", in)
+		req, ok := in.(*tg.AccountGetNotifySettingsRequest)
+		if !ok {
+			t.Errorf("write or unexpected request %T", in)
+			return errors.New("wrong request")
 		}
-		n++
+		peers = append(peers, req.Peer.TypeName())
 		return respond(out, &tg.PeerNotifySettings{})
 	}))
 	result, err := notifyDefaultsAPI(context.Background(), api)
-	if err != nil || n != 3 || len(result.Defaults) != 3 || result.Defaults[0].Silent != nil || result.Defaults[0].MuteUntil != nil {
-		t.Fatalf("result %+v %v", result, err)
+	wantPeers := []string{"inputNotifyUsers", "inputNotifyChats", "inputNotifyBroadcasts"}
+	if err != nil || !slices.Equal(peers, wantPeers) || len(result.Defaults) != 3 || result.Defaults[0].Silent != nil || result.Defaults[0].MuteUntil != nil {
+		t.Fatalf("result %+v peers %v %v", result, peers, err)
+	}
+	for i, scope := range []string{"users", "chats", "broadcasts"} {
+		if result.Defaults[i].Scope != scope {
+			t.Fatalf("defaults[%d].Scope = %q, want %q", i, result.Defaults[i].Scope, scope)
+		}
 	}
 }
 

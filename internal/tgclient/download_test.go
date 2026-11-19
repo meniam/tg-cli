@@ -133,7 +133,7 @@ func TestDownloadResolvedProtectedNoFileRequest(t *testing.T) {
 	}
 }
 
-func TestDownloadResolvedMediaAndSizeLimits(t *testing.T) {
+func TestDownloadResolvedMediaAndVisitErrors(t *testing.T) {
 	photo := &tg.Photo{ID: 5, AccessHash: 6, FileReference: []byte("ref"), Sizes: []tg.PhotoSizeClass{&tg.PhotoSize{Type: "s", Size: 1}, &tg.PhotoSizeProgressive{Type: "x", Sizes: []int{3, 4}}}}
 	cases := []struct {
 		name     string
@@ -144,7 +144,7 @@ func TestDownloadResolvedMediaAndSizeLimits(t *testing.T) {
 		{"photo", &tg.MessageMediaPhoto{Photo: photo}, true, "photo"},
 		{"document", &tg.MessageMediaDocument{Document: &tg.Document{ID: 8, Size: 4, MimeType: "text/plain"}}, true, "document"},
 		{"none", nil, false, ""}, {"paid", &tg.MessageMediaPaidMedia{StarsAmount: 1}, false, ""},
-		{"oversized", &tg.MessageMediaDocument{Document: &tg.Document{ID: 9, Size: 100*1024*1024 + 1}}, false, ""},
+		{"visit error", &tg.MessageMediaDocument{Document: &tg.Document{ID: 9, Size: 4}}, false, "document"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -162,8 +162,8 @@ func TestDownloadResolvedMediaAndSizeLimits(t *testing.T) {
 				}
 			}))
 			_, failures, err := downloadResolved(context.Background(), api, nil, &tg.InputPeerUser{UserID: 42}, 42, []int{7}, func(f rpc.DownloadedFile, fetch func(io.Writer) error) error {
-				if f.Size > 100*1024*1024 {
-					return rpc.NewError(rpc.CodeInvalidParams, "file exceeds 100 MiB")
+				if tc.name == "visit error" {
+					return rpc.NewError(rpc.CodeInvalidParams, "rejected by visitor")
 				}
 				if f.MediaType != tc.wantType {
 					t.Fatalf("type=%s", f.MediaType)

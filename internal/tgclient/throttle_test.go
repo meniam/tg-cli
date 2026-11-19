@@ -231,8 +231,10 @@ func TestThrottleSecondFloodStopsAfterOneRetry(t *testing.T) {
 	other := invokeAsync(invoke, context.Background(), &tg.MessagesGetHistoryRequest{})
 	clock.awaitTimer(t, clock.Now().Add(3*time.Second))
 	clock.Advance(3 * time.Second)
-	// The new request can run after the second flood pause; its result is separate.
-	_ = invokeResult(t, other)
+	// The new request runs after the second flood pause and succeeds on its own.
+	if err := invokeResult(t, other); err != nil || calls != 3 {
+		t.Fatalf("third request: err = %v, calls = %d, want nil and 3", err, calls)
+	}
 }
 
 func TestThrottleSendFloodPausesWithoutRetry(t *testing.T) {
