@@ -24,6 +24,7 @@ func chatListsFixture(method string, _ json.RawMessage) (any, error) {
 }
 
 func TestChatListsCLIRequests(t *testing.T) {
+	audit01Isolate(t)
 	for _, tc := range []struct {
 		name   string
 		args   []string
@@ -69,6 +70,7 @@ func TestChatListsCLIRequests(t *testing.T) {
 }
 
 func TestChatListsCLIFormatsFieldsAndHints(t *testing.T) {
+	audit01Isolate(t)
 	members := runDiscoveryCLI(t, []string{"chat", "members", "@teamchat", "--format", "jsonl", "--fields", "id,name"}, chatListsFixture, nil)
 	if members.code != exitcode.OK || members.stdout != "{\"id\":5,\"name\":\"Foreign\\nname\"}\n{\"next_offset\":12}\n" || !strings.Contains(members.stderr, "--offset 12") {
 		t.Fatalf("members JSONL %+v", members)
@@ -91,8 +93,13 @@ func TestChatListsCLIFormatsFieldsAndHints(t *testing.T) {
 			t.Fatalf("%s human %+v", name, run)
 		}
 		toon := runDiscoveryCLI(t, []string{"chat", name, "@teamchat", "--format", "toon", "--fields", "id"}, chatListsFixture, nil)
-		if toon.code != exitcode.OK || !strings.Contains(toon.stdout, "id") {
-			t.Fatalf("%s toon %+v", name, toon)
+		wantToon := map[string]string{
+			"members": "ok: true\ndata:\n  members[1]{id}:\n    5\n",
+			"topics":  "ok: true\ndata:\n  topics[1]{id}:\n    7\n",
+			"common":  "ok: true\ndata:\n  chats[1]{id}:\n    -77\n",
+		}[name]
+		if toon.code != exitcode.OK || toon.stdout != wantToon {
+			t.Fatalf("%s toon %+v, want stdout %q", name, toon, wantToon)
 		}
 	}
 	empty := runDiscoveryCLI(t, []string{"chat", "common", "@aliceuser"}, func(string, json.RawMessage) (any, error) {
@@ -108,6 +115,7 @@ func TestChatListsCLIFormatsFieldsAndHints(t *testing.T) {
 }
 
 func TestChatListsCLIErrorCodes(t *testing.T) {
+	audit01Isolate(t)
 	for _, tc := range []struct {
 		command, method string
 		code, exit      int
@@ -129,25 +137,31 @@ func TestChatListsCLIErrorCodes(t *testing.T) {
 }
 
 func TestChatListsCLIRejectsInvalidFlagsBeforeRPC(t *testing.T) {
-	for _, args := range [][]string{
-		{"chat", "members", "@teamchat", "--limit", "0"},
-		{"chat", "members", "@teamchat", "--limit", "201"},
-		{"chat", "members", "@teamchat", "--offset", "-1"},
-		{"chat", "members", "@teamchat", "--filter", "unknown"},
-		{"chat", "topics", "@forumchat", "--limit", "0"},
-		{"chat", "topics", "@forumchat", "--limit", "101"},
-		{"chat", "common", "@aliceuser", "--limit", "0"},
-		{"chat", "common", "@aliceuser", "--limit", "101"},
-		{"chat", "members", "-1001234567890"},
+	audit01Isolate(t)
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"chat", "members", "@teamchat", "--limit", "0"}, "--limit must be at least 1"},
+		{[]string{"chat", "members", "@teamchat", "--limit", "201"}, "--limit must be between 1 and 200"},
+		{[]string{"chat", "members", "@teamchat", "--offset", "-1"}, "--offset must not be negative"},
+		{[]string{"chat", "members", "@teamchat", "--filter", "unknown"}, "--filter must be recent, admins, or bots"},
+		{[]string{"chat", "topics", "@forumchat", "--limit", "0"}, "--limit must be at least 1"},
+		{[]string{"chat", "topics", "@forumchat", "--limit", "101"}, "--limit must be between 1 and 100"},
+		{[]string{"chat", "common", "@aliceuser", "--limit", "0"}, "--limit must be at least 1"},
+		{[]string{"chat", "common", "@aliceuser", "--limit", "101"}, "--limit must be between 1 and 100"},
+		{[]string{"chat", "members", "-1001234567890"}, "put -- before negative chat ids"},
 	} {
-		run := runDiscoveryCLI(t, args, chatListsFixture, nil)
-		if run.code != exitcode.Usage || run.method != "" {
-			t.Fatalf("args %v: %+v", args, run)
+		run := runDiscoveryCLI(t, tc.args, chatListsFixture, nil)
+		if run.method != "" {
+			t.Fatalf("args %v reached the daemon: %+v", tc.args, run)
 		}
+		audit01WantUsage(t, run.code, run.stdout, tc.want)
 	}
 }
 
 func TestChatListsSchemaAndResponseFields(t *testing.T) {
+	audit01Isolate(t)
 	commands := schemaCommands(t)
 	for _, tc := range []struct {
 		name, item string
