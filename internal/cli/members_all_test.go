@@ -12,10 +12,10 @@ func TestMembersAllPages(t *testing.T) {
 	r := runDiscoveryCLI(t, []string{"chat", "members", "42", "--all", "--format", "jsonl"}, func(_ string, raw json.RawMessage) (any, error) {
 		var p rpc.MembersParams
 		if err := json.Unmarshal(raw, &p); err != nil {
-			t.Fatal(err)
+			return audit02Reject(t, "members params: %v", err)
 		}
 		if p.Offset != calls*200 || p.Limit != 200 {
-			t.Fatalf("page: %+v", p)
+			return audit02Reject(t, "page: %+v", p)
 		}
 		calls++
 		next := 0

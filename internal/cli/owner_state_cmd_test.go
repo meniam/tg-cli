@@ -40,8 +40,7 @@ func TestOwnerStateCLI(t *testing.T) {
 		case rpc.MethodAccountNotify:
 			return rpc.NotifyDefaultsResult{Defaults: []rpc.NotifyDefault{{Scope: "users"}}}, nil
 		}
-		t.Fatalf("method %s", method)
-		return nil, nil
+		return audit02Reject(t, "method %s", method)
 	}
 	for _, tc := range []struct {
 		args   []string

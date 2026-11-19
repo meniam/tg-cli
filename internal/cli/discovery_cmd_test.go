@@ -23,11 +23,7 @@ type discoveryRun struct {
 
 func runDiscoveryCLI(t *testing.T, args []string, reply func(string, json.RawMessage) (any, error), dialErr error) discoveryRun {
 	t.Helper()
-	home, err := os.MkdirTemp("/tmp", "tgd")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	home := audit02Home(t)
 	serverSide, clientSide := net.Pipe()
 	server := rpc.NewServer(nil)
 	calls := make(chan struct {
@@ -50,7 +46,7 @@ func runDiscoveryCLI(t *testing.T, args []string, reply func(string, json.RawMes
 	done := make(chan struct{})
 	go func() { server.ServeConn(serverSide); close(done) }()
 	var stdout, stderr bytes.Buffer
-	deps := Deps{Stdout: &stdout, Stderr: &stderr, Getenv: func(name string) string {
+	deps := Deps{Stdout: &stdout, Stderr: &stderr, ConfigPath: audit02ConfigPath(home), CallTimeout: audit02CallTimeout, Getenv: func(name string) string {
 		if name == "TG_CLI_HOME" {
 			return home
 		}

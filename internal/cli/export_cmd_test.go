@@ -26,11 +26,7 @@ type exportRun struct {
 
 func runExportCLI(t *testing.T, args []string, reply func(rpc.ExportParams) (rpc.ExportPage, error), dialErr error) exportRun {
 	t.Helper()
-	home, err := os.MkdirTemp("/tmp", "tgx")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	home := audit02Home(t)
 	serverSide, clientSide := net.Pipe()
 	server := rpc.NewServer(nil)
 	calls := make(chan rpc.ExportParams, 10)
@@ -50,6 +46,7 @@ func runExportCLI(t *testing.T, args []string, reply func(rpc.ExportParams) (rpc
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), args, Deps{
 		Stdout: &stdout, Stderr: &stderr,
+		ConfigPath: audit02ConfigPath(home), CallTimeout: audit02CallTimeout,
 		Getenv: func(key string) string {
 			if key == "TG_CLI_HOME" {
 				return home

@@ -11,7 +11,7 @@ func TestTypingCLI(t *testing.T) {
 	reply := func(method string, raw json.RawMessage) (any, error) {
 		var p rpc.TypingParams
 		if err := json.Unmarshal(raw, &p); err != nil {
-			t.Fatal(err)
+			return audit02Reject(t, "typing params: %v", err)
 		}
 		return rpc.TypingResult{ChatID: 42, Action: p.Action, DryRun: p.DryRun}, nil
 	}

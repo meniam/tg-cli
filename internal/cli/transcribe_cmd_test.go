@@ -14,7 +14,7 @@ func TestTranscribeCommand(t *testing.T) {
 	r := runDiscoveryCLI(t, []string{"message", "transcribe", "https://t.me/example/7", "--wait", "0s"}, func(method string, raw json.RawMessage) (any, error) {
 		var p rpc.TranscribeParams
 		if err := json.Unmarshal(raw, &p); err != nil || method != rpc.MethodMessageTranscribe || p.Chat != "@example" || p.ID != 7 || p.WaitMS != 0 {
-			t.Fatalf("request: %s %+v %v", method, p, err)
+			return audit02Reject(t, "request: %s %+v %v", method, p, err)
 		}
 		return rpc.Transcription{ChatID: 42, ID: 7, Pending: true}, nil
 	}, nil)
@@ -24,7 +24,7 @@ func TestTranscribeCommand(t *testing.T) {
 	r = runDiscoveryCLI(t, []string{"message", "transcribe", "42", "7"}, func(_ string, raw json.RawMessage) (any, error) {
 		var p rpc.TranscribeParams
 		if err := json.Unmarshal(raw, &p); err != nil || p.WaitMS != 30000 {
-			t.Fatalf("default wait: %+v %v", p, err)
+			return audit02Reject(t, "default wait: %+v %v", p, err)
 		}
 		return rpc.Transcription{ChatID: 42, ID: 7, Text: "ready"}, nil
 	}, nil)
