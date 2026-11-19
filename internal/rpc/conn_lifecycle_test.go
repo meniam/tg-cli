@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 )
 
 func pipeClient(t *testing.T, s *Server) *Client {
@@ -46,11 +45,7 @@ func TestConnLifecycleLimitsAndCancellation(t *testing.T) {
 	}
 	for range MaxConcurrentPerConn {
 		hold(first)
-		select {
-		case <-started:
-		case <-time.After(time.Second):
-			t.Fatal("handler did not start")
-		}
+		audit07Wait(t, started, "a handler to start")
 	}
 	var rpcErr *Error
 	err := first.Call(ctxTimeout(t), "ping", nil, nil)
@@ -62,11 +57,7 @@ func TestConnLifecycleLimitsAndCancellation(t *testing.T) {
 	}
 	for range MaxConcurrentPerConn {
 		hold(second)
-		select {
-		case <-started:
-		case <-time.After(time.Second):
-			t.Fatal("second connection did not start")
-		}
+		audit07Wait(t, started, "a handler of the second connection to start")
 	}
 	third := pipeClient(t, s)
 	err = third.Call(ctxTimeout(t), "ping", nil, nil)
@@ -75,19 +66,9 @@ func TestConnLifecycleLimitsAndCancellation(t *testing.T) {
 	}
 	_ = first.Close()
 	for range MaxConcurrentPerConn {
-		select {
-		case <-canceled:
-		case <-time.After(time.Second):
-			t.Fatal("handler not canceled")
-		}
+		audit07Wait(t, canceled, "a handler to be canceled")
 	}
-	deadline := time.Now().Add(time.Second)
-	for s.Active() != MaxConcurrentPerConn {
-		if time.Now().After(deadline) {
-			t.Fatal("closed connection retained active requests")
-		}
-		time.Sleep(time.Millisecond)
-	}
+	audit07Eventually(t, "the closed connection to release its requests", func() bool { return s.Active() == MaxConcurrentPerConn })
 	if err := third.Call(ctxTimeout(t), "ping", nil, nil); err != nil {
 		t.Fatalf("third connection after close: %v", err)
 	}
@@ -124,17 +105,9 @@ func TestConnLifecycleHalfClose(t *testing.T) {
 	if _, err := c.Write([]byte("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"hold\"}\n")); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-started:
-	case <-time.After(time.Second):
-		t.Fatal("handler not started")
-	}
+	audit07Wait(t, started, "the handler to start")
 	if err := c.CloseWrite(); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-canceled:
-	case <-time.After(time.Second):
-		t.Fatal("handler not canceled")
-	}
+	audit07Wait(t, canceled, "the handler to be canceled")
 }

@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -248,7 +251,7 @@ func TestClosingConnectionCancelsHandler(t *testing.T) {
 	})
 	c := dial(t, startServer(t, srv))
 	go func() { _ = c.Call(context.Background(), "block", nil, nil) }()
-	<-started
+	audit07Wait(t, started, "the handler to start")
 	_ = c.Close()
 	select {
 	case <-canceled:
@@ -270,7 +273,7 @@ func TestBusyWhenLimitReached(t *testing.T) {
 	c := dial(t, startServer(t, srv))
 	done := make(chan error, 1)
 	go func() { done <- c.Call(context.Background(), "hold", nil, nil) }()
-	<-started
+	audit07Wait(t, started, "the first handler to start")
 
 	var rpcErr *Error
 	err := c.Call(ctxTimeout(t), "hold", nil, nil)
@@ -353,7 +356,7 @@ func TestShutdownWaitsForInFlightAndClosesIdle(t *testing.T) {
 		}
 		result <- err
 	}()
-	<-started
+	audit07Wait(t, started, "the handler to start")
 
 	shut := make(chan error, 1)
 	go func() { shut <- srv.Shutdown(ctxTimeout(t)) }()
@@ -379,14 +382,27 @@ func TestShutdownWaitsForInFlightAndClosesIdle(t *testing.T) {
 }
 
 func TestIsNotRunning(t *testing.T) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	// A path that does not exist: nobody ever listened there.
+	missing := filepath.Join(t.TempDir(), "s")
+	_, err := Dial(context.Background(), "unix", missing)
+	if err == nil || !IsNotRunning(err) || !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a missing socket must count as not running, got %v", err)
+	}
+	// A stale socket file whose listener is gone: the connection is refused.
+	stale := filepath.Join(t.TempDir(), "s")
+	l, err := net.Listen("unix", stale)
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr := l.Addr().String()
+	l.(*net.UnixListener).SetUnlinkOnClose(false)
 	_ = l.Close()
-	_, err = Dial(context.Background(), "tcp", addr)
-	if err == nil || !IsNotRunning(err) {
-		t.Errorf("connection refused must count as not running, got %v", err)
+	_, err = Dial(context.Background(), "unix", stale)
+	if err == nil || !IsNotRunning(err) || !errors.Is(err, syscall.ECONNREFUSED) {
+		t.Errorf("a stale socket must count as not running, got %v", err)
+	}
+	for _, other := range []error{nil, context.DeadlineExceeded, errors.New("boom")} {
+		if IsNotRunning(other) {
+			t.Errorf("%v must not count as not running", other)
+		}
 	}
 }

@@ -21,9 +21,16 @@ func TestDiscoverySchemasMarkOtherPeopleText(t *testing.T) {
 			t.Errorf("untrusted field %s missing", path)
 		}
 	}
+	foundLink := false
 	for _, field := range schema.Fields(reflect.TypeOf(rpc.LinkResult{})) {
-		if field.Path == "link" && field.Untrusted {
-			t.Fatal("generated link must not be untrusted")
+		if field.Path == "link" {
+			foundLink = true
+			if field.Untrusted {
+				t.Fatal("generated link must not be untrusted")
+			}
 		}
+	}
+	if !foundLink {
+		t.Fatal("LinkResult has no link field: the check would pass without looking at anything")
 	}
 }

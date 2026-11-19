@@ -24,4 +24,15 @@ func TestErrorRedactionAtServerBoundary(t *testing.T) {
 	if result.Message != "internal error" || strings.Contains(log.String(), "private") {
 		t.Fatalf("result=%q log=%q", result.Message, log.String())
 	}
+	// The journal keeps the redacted cause of both kinds of failure: a typed
+	// error with a cause and a plain error. The first call had no cause.
+	if n := strings.Count(log.String(), "handler failed"); n != 2 {
+		t.Fatalf("handler failed records = %d, want 2: %q", n, log.String())
+	}
+	if !strings.Contains(log.String(), "[redacted]") {
+		t.Fatalf("the journal does not show the redaction: %q", log.String())
+	}
+	if result := s.toError("test", NewError(CodeTelegram, "password=private")); result.Message != "[redacted]" {
+		t.Fatalf("message = %q, want [redacted]", result.Message)
+	}
 }

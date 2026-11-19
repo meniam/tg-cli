@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -27,6 +28,20 @@ func audit07Wait(t *testing.T, ch <-chan struct{}, what string) {
 	case <-ch:
 	case <-time.After(audit07WaitLimit):
 		t.Fatalf("timed out waiting for %s", what)
+	}
+}
+
+// audit07Eventually polls a condition that has no signal of its own, such as
+// a counter updated by a deferred function. The limit is a safety net only.
+func audit07Eventually(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(audit07WaitLimit)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		runtime.Gosched()
+		time.Sleep(time.Millisecond)
 	}
 }
 
