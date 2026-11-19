@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -105,8 +106,21 @@ func TestSchemaConfigKeys(t *testing.T) {
 	if err := json.Unmarshal(parse(t, r).Data, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc.SchemaVersion != 1 || len(doc.Config) != 14 {
-		t.Fatalf("config schema: %+v", doc.Config)
+	if doc.SchemaVersion != 1 {
+		t.Fatalf("schema version %d", doc.SchemaVersion)
+	}
+	var keys []string
+	for _, item := range doc.Config {
+		keys = append(keys, item.Key)
+	}
+	wantKeys := []string{
+		"home", "default_profile",
+		"files.database", "files.session", "files.log", "files.deletions", "files.access",
+		"behavior.throttle_percent", "behavior.flood_autowait", "behavior.expect_user",
+		"profiles.<profile>.client", "profiles.<profile>.device", "profiles.<profile>.transport", "profiles.<profile>.proxy",
+	}
+	if !reflect.DeepEqual(keys, wantKeys) {
+		t.Fatalf("config schema keys:\n got %q\nwant %q", keys, wantKeys)
 	}
 	for _, item := range doc.Config {
 		if item.Key == "behavior.expect_user" && item.Environment == "TG_CLI_EXPECT_USER" && item.Flag == "--expect-user" {

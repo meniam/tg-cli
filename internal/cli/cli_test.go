@@ -38,6 +38,24 @@ type fakeTelegram struct {
 	peopleFixture bool
 
 	audit01Calls map[string]int // calls of the chat and message read methods, by name
+	audit01Refs  map[string]chatref.Ref
+}
+
+// audit01Remember keeps the last reference a read method was asked about.
+func (f *fakeTelegram) audit01Remember(method string, ref chatref.Ref) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.audit01Refs == nil {
+		f.audit01Refs = make(map[string]chatref.Ref)
+	}
+	f.audit01Refs[method] = ref
+}
+
+func (f *fakeTelegram) audit01LastRef(method string) (chatref.Ref, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ref, ok := f.audit01Refs[method]
+	return ref, ok
 }
 
 // audit01Record counts a call of a read method so a test can prove that a command
@@ -269,6 +287,7 @@ func (f *fakeTelegram) CommonChats(context.Context, chatref.Ref, rpc.CommonChats
 
 func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, error) {
 	f.audit01Record("Resolve")
+	f.audit01Remember("Resolve", ref)
 	f.mu.Lock()
 	f.resolveCalls++
 	f.mu.Unlock()
@@ -286,6 +305,7 @@ func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, er
 
 func (f *fakeTelegram) ChatInfo(_ context.Context, ref chatref.Ref) (rpc.ChatInfo, error) {
 	f.audit01Record("ChatInfo")
+	f.audit01Remember("ChatInfo", ref)
 	if f.missing {
 		return rpc.ChatInfo{}, rpc.NewError(rpc.CodeNotFound, "not found: no such chat")
 	}
@@ -581,7 +601,9 @@ func TestLoginAndChatListEndToEnd(t *testing.T) {
 		t.Fatalf("login failed: exit %d, %q, stderr %q", login.code, login.stdout, login.stderr)
 	}
 	var res rpc.AuthResult
-	_ = json.Unmarshal(env.Data, &res)
+	if err := json.Unmarshal(env.Data, &res); err != nil {
+		t.Fatalf("decode %q: %v", env.Data, err)
+	}
 	if res.State != rpc.AuthAuthorized || res.User == nil || res.User.ID != 42 {
 		t.Errorf("unexpected login result %+v", res)
 	}
@@ -594,7 +616,9 @@ func TestLoginAndChatListEndToEnd(t *testing.T) {
 	list := e.run("chat", "list", "--limit", "2")
 	env = parse(t, list)
 	var chats rpc.ChatListResult
-	_ = json.Unmarshal(env.Data, &chats)
+	if err := json.Unmarshal(env.Data, &chats); err != nil {
+		t.Fatalf("decode %q: %v", env.Data, err)
+	}
 	if list.code != exitcode.OK || !env.OK || len(chats.Chats) != 2 || chats.Chats[1].Title != "Family" {
 		t.Errorf("chat list: exit %d, %q", list.code, list.stdout)
 	}
@@ -602,7 +626,9 @@ func TestLoginAndChatListEndToEnd(t *testing.T) {
 	status := e.run("daemon", "status")
 	env = parse(t, status)
 	var st rpc.StatusResult
-	_ = json.Unmarshal(env.Data, &st)
+	if err := json.Unmarshal(env.Data, &st); err != nil {
+		t.Fatalf("decode %q: %v", env.Data, err)
+	}
 	if status.code != exitcode.OK || !st.Authorized || !st.Connected || st.Profile != "default" {
 		t.Errorf("status: exit %d, %q", status.code, status.stdout)
 	}
@@ -869,12 +895,24 @@ func TestInterruptEndsLoginWaitingForInput(t *testing.T) {
 
 	var stdout, stderr safeBuffer
 	deps := e.deps(&stdout, &stderr)
-	deps.ReadLine = func(string) (string, error) { <-block; return "", errors.New("unreachable") }
+	entered := make(chan struct{}, 1)
+	deps.ReadLine = func(string) (string, error) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-block
+		return "", errors.New("unreachable")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
 	go func() { done <- Execute(ctx, []string{"auth", "login", "--phone", "+15550006666"}, deps) }()
-	time.Sleep(200 * time.Millisecond) // the login is now waiting for the code
+	select {
+	case <-entered: // the login is now waiting for the code
+	case <-time.After(10 * time.Second):
+		t.Fatal("the login never asked for the code")
+	}
 	cancel()
 
 	select {
@@ -911,8 +949,10 @@ func TestAuthCancel(t *testing.T) {
 
 	// The daemon still waits for the code, so another login is refused.
 	e.lines = []string{"CODE777"}
-	if r := e.run("auth", "login", "--phone", "+15550007777"); r.code == exitcode.OK {
-		t.Fatal("a login must be refused while another one waits")
+	refused := e.run("auth", "login", "--phone", "+15550007777")
+	wantFailure(t, refused, exitcode.Failure)
+	if !strings.Contains(refused.stdout, "a login is already in progress") {
+		t.Fatalf("a login must be refused because another one waits: %q", refused.stdout)
 	}
 	r := e.run("auth", "cancel")
 	if r.code != exitcode.OK || !strings.Contains(r.stdout, `"canceled":true`) {
@@ -996,7 +1036,9 @@ func TestAuthResendFromAnotherTerminal(t *testing.T) {
 	r := e.run("auth", "resend")
 	env := parse(t, r)
 	var res rpc.AuthResult
-	_ = json.Unmarshal(env.Data, &res)
+	if err := json.Unmarshal(env.Data, &res); err != nil {
+		t.Fatalf("decode %q: %v", env.Data, err)
+	}
 	if r.code != exitcode.OK || res.Delivery != rpc.DeliveryCall {
 		t.Errorf("auth resend: exit %d, %q", r.code, r.stdout)
 	}
@@ -1013,7 +1055,9 @@ func TestLoginByQR(t *testing.T) {
 	r := e.run("auth", "login", "--qr")
 	env := parse(t, r)
 	var res rpc.AuthResult
-	_ = json.Unmarshal(env.Data, &res)
+	if err := json.Unmarshal(env.Data, &res); err != nil {
+		t.Fatalf("decode %q: %v", env.Data, err)
+	}
 	if r.code != exitcode.OK || !env.OK || res.State != rpc.AuthAuthorized || res.User == nil {
 		t.Fatalf("login --qr: exit %d, %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
@@ -1108,10 +1152,16 @@ func TestChatCommands(t *testing.T) {
 	if r.code != exitcode.OK || json.Unmarshal(parse(t, r).Data, &chat) != nil || chat.ID != 77 || chat.Type != "supergroup" {
 		t.Errorf("chat resolve: exit %d, %q", r.code, r.stdout)
 	}
+	if got, ok := e.tg.audit01LastRef("Resolve"); !ok || got != (chatref.Ref{Kind: chatref.Username, Username: "teamchat"}) {
+		t.Errorf("chat resolve sent %+v to Telegram (called: %v)", got, ok)
+	}
 	var info rpc.ChatInfo
 	r = e.run("chat", "info", "--", "-1001234567890")
 	if r.code != exitcode.OK || json.Unmarshal(parse(t, r).Data, &info) != nil || info.About != "About the team" || info.Members != 12 {
 		t.Errorf("chat info: exit %d, %q", r.code, r.stdout)
+	}
+	if got, ok := e.tg.audit01LastRef("ChatInfo"); !ok || got != (chatref.Ref{Kind: chatref.ID, ID: -1001234567890}) {
+		t.Errorf("chat info sent %+v to Telegram (called: %v)", got, ok)
 	}
 	var invite rpc.InviteInfo
 	r = e.run("chat", "invite-info", "https://t.me/+AbCdEfGh1234")
@@ -1126,7 +1176,6 @@ func TestChatCommands(t *testing.T) {
 	e.tg.missing = true
 	r = e.run("chat", "resolve", "@nosuchchat")
 	wantFailure(t, r, exitcode.NotFound)
-	e.tg.missing = false
 }
 
 func TestChatListTypeAndJSONL(t *testing.T) {
@@ -1250,8 +1299,12 @@ func TestNegativeIDNeedsDoubleDash(t *testing.T) {
 		t.Errorf("the hint about -- is missing: %q", r.stdout)
 	}
 	// An unrelated unknown flag gets no hint about ids.
-	if r := e.run("chat", "info", "--bogus"); strings.Contains(r.stdout, "negative chat ids") {
-		t.Errorf("no hint expected: %q", r.stdout)
+	for _, tc := range []struct{ flag, want string }{{"--bogus", "unknown flag: --bogus"}, {"-x", "unknown shorthand flag: 'x'"}} {
+		r := e.run("chat", "info", tc.flag)
+		wantFailure(t, r, exitcode.Usage)
+		if !strings.Contains(r.stdout, tc.want) || strings.Contains(r.stdout, "negative chat ids") {
+			t.Errorf("chat info %s: want %q and no hint about ids: %q", tc.flag, tc.want, r.stdout)
+		}
 	}
 	// With -- it works, also for a basic group id.
 	for _, id := range []string{"-1001234567890", "-12345"} {
