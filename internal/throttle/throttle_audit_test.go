@@ -4,7 +4,11 @@ import (
 	"context"
 	"errors"
 	"math"
+	"runtime"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -129,9 +133,42 @@ func TestAudit10_PauseBackgroundBoundaryAndRounding(t *testing.T) {
 	})
 }
 
-// TestAudit10_CanceledAfterGrantSpendsNoToken cancels a queued request in the
-// same instant the clock releases it. Whichever side wins, the slot is freed
-// and the token is returned, so the next request needs no wait.
+// audit10ArmedContext reports no error until armed. Once armed it reports
+// context.Canceled to every caller except the limiter's scheduler goroutine, and
+// its Done channel never closes. Acquire can therefore see the cancellation only
+// through its own Err call after the scheduler has already granted the request,
+// which is the refund path of Acquire. The scheduler is recognised by its stack.
+type audit10ArmedContext struct {
+	context.Context
+	armed atomic.Bool
+}
+
+func (c *audit10ArmedContext) Err() error {
+	if !c.armed.Load() || audit10CalledFromScheduler() {
+		return nil
+	}
+	return context.Canceled
+}
+
+func (c *audit10ArmedContext) Done() <-chan struct{} { return nil }
+
+func audit10CalledFromScheduler() bool {
+	pcs := make([]uintptr, 16)
+	frames := runtime.CallersFrames(pcs[:runtime.Callers(2, pcs)])
+	for {
+		frame, more := frames.Next()
+		if strings.HasSuffix(frame.Function, "(*Limiter).run") {
+			return true
+		}
+		if !more {
+			return false
+		}
+	}
+}
+
+// TestAudit10_CanceledAfterGrantSpendsNoToken grants a queued request and only
+// then lets it see its cancellation. The slot must be freed and the token
+// returned.
 func TestAudit10_CanceledAfterGrantSpendsNoToken(t *testing.T) {
 	audit10Test(t, func(t *testing.T) {
 		clock := newFakeClock()
@@ -145,25 +182,20 @@ func TestAudit10_CanceledAfterGrantSpendsNoToken(t *testing.T) {
 			t.Fatal(err)
 		}
 		first.Release()
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx := &audit10ArmedContext{Context: context.Background()}
 		queued := acquireAsync(l, ctx, General, "", nil)
 		awaitQueue(t, l, 1)
-		cancel()
+		ctx.armed.Store(true)
 		clock.Advance(time.Second)
+		synctest.Wait()
 		if r := <-queued; !errors.Is(r.err, context.Canceled) {
 			t.Fatalf("queued request: permit=%v err=%v", r.permit, r.err)
 		}
-		waited := new(Wait)
-		next, err := l.Acquire(context.Background(), General, "", waited)
-		if err != nil || waited.Duration() != 0 {
-			t.Fatalf("next request waited %s, err %v; the canceled one kept its token", waited.Duration(), err)
-		}
-		next.Release()
 		l.mu.Lock()
-		active := l.active
+		active, tokens := l.active, l.general.tokens
 		l.mu.Unlock()
-		if active != 0 {
-			t.Fatalf("active = %d, want 0", active)
+		if active != 0 || tokens < 1 {
+			t.Fatalf("active = %d, tokens = %v; the canceled request kept its slot or token", active, tokens)
 		}
 	})
 }

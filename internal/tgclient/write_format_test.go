@@ -201,8 +201,13 @@ func TestAllManualEntityTypes(t *testing.T) {
 		{"phone", "messageEntityPhone", nil},
 		{"mention", "messageEntityMention", nil},
 		{"mention_name", "inputMessageEntityMentionName", func(t *testing.T, e tg.MessageEntityClass) {
-			if got := e.(*tg.InputMessageEntityMentionName).UserID.(*tg.InputUser).UserID; got != 7 {
-				t.Errorf("user id = %d, want 7", got)
+			mention, ok := e.(*tg.InputMessageEntityMentionName)
+			if !ok {
+				t.Fatalf("entity = %T", e)
+			}
+			input, ok := mention.UserID.(*tg.InputUser)
+			if !ok || input.UserID != 7 {
+				t.Errorf("user = %#v, want input user 7", mention.UserID)
 			}
 		}},
 		{"hashtag", "messageEntityHashtag", nil},

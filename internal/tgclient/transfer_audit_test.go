@@ -78,15 +78,15 @@ func (w *audit10WriterAt) WriteAt(p []byte, _ int64) (int, error) {
 
 func audit10Download(ctx context.Context, api *tg.Client, target io.WriterAt, tr *transfers, parts fileInvokers) ([]rpc.ItemError, error) {
 	_, failures, err := downloadResolvedWithTransfer(ctx, api, nil, &tg.InputPeerUser{UserID: 42}, 42, []int{7}, func(_ rpc.DownloadedFile, fetch func(io.Writer) error) error {
-		return fetch(writerAtOnly{target})
+		return fetch(audit10WriterAtOnly{target})
 	}, tr, parts, 10*time.Second)
 	return failures, err
 }
 
-// writerAtOnly exposes io.Writer and io.WriterAt of the target without any other method.
-type writerAtOnly struct{ io.WriterAt }
+// audit10WriterAtOnly exposes io.Writer and io.WriterAt of the target without any other method.
+type audit10WriterAtOnly struct{ io.WriterAt }
 
-func (w writerAtOnly) Write([]byte) (int, error) {
+func (w audit10WriterAtOnly) Write([]byte) (int, error) {
 	return 0, errors.New("sequential write is not expected")
 }
 

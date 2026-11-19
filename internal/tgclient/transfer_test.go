@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -111,10 +112,9 @@ func TestSendMediaLargeFileUsesParallelBigParts(t *testing.T) {
 		if err := barrier.wait(ctx); err != nil {
 			return err
 		}
-		select {
-		case <-time.After(5 * time.Millisecond):
-		case <-ctx.Done():
-			return ctx.Err()
+		// Yielding lets other parts overlap so the upper bound of the peak is exercised without a wall-clock wait.
+		for i := 0; i < 20; i++ {
+			runtime.Gosched()
 		}
 		return uploadOK(out)
 	})}
@@ -144,10 +144,9 @@ func TestTransferDownloadPhotoParts(t *testing.T) {
 		if err := barrier.wait(ctx); err != nil {
 			return err
 		}
-		select {
-		case <-time.After(5 * time.Millisecond):
-		case <-ctx.Done():
-			return ctx.Err()
+		// Yielding lets other parts overlap so the upper bound of the peak is exercised without a wall-clock wait.
+		for i := 0; i < 20; i++ {
+			runtime.Gosched()
 		}
 		return respond(out, &tg.UploadFile{Type: &tg.StorageFileUnknown{}, Bytes: make([]byte, req.Limit)})
 	})}
