@@ -50,13 +50,19 @@ func TestRenderQRColor(t *testing.T) {
 
 func TestRenderQRIsDeterministic(t *testing.T) {
 	var a, b bytes.Buffer
-	_ = renderQR(&a, "tg://login?token=same", false)
-	_ = renderQR(&b, "tg://login?token=same", false)
+	if err := renderQR(&a, "tg://login?token=same", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := renderQR(&b, "tg://login?token=same", false); err != nil {
+		t.Fatal(err)
+	}
 	if a.String() != b.String() {
 		t.Error("the same text must give the same picture")
 	}
 	var c bytes.Buffer
-	_ = renderQR(&c, "tg://login?token=other", false)
+	if err := renderQR(&c, "tg://login?token=other", false); err != nil {
+		t.Fatal(err)
+	}
 	if a.String() == c.String() {
 		t.Error("different texts must give different pictures")
 	}

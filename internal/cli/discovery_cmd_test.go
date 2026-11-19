@@ -88,77 +88,99 @@ func TestDiscoveryCLICommands(t *testing.T) {
 	}{
 		{"chat search", []string{"message", "search", "42", "needle", "--media", "photo", "--limit", "2", "--cursor", "CUR"}, rpc.MethodMessageSearch, rpc.MessagesResult{Messages: []rpc.Message{message}, NextCursor: "NEXT"}, func(t *testing.T, raw json.RawMessage) {
 			var p rpc.SearchMessagesParams
-			json.Unmarshal(raw, &p)
+			if err := json.Unmarshal(raw, &p); err != nil {
+				t.Fatal(err)
+			}
 			if p.Chat != "42" || p.Query != "needle" || p.Media != "photo" || p.Limit != 2 || p.Cursor != "CUR" {
 				t.Fatalf("params: %+v", p)
 			}
 		}},
 		{"public search", []string{"message", "search", "--public", "#tag", "--limit", "3"}, rpc.MethodMessageSearchPublic, rpc.PublicSearchResult{Hits: []rpc.PublicHit{{ChatID: 42, Chat: &rpc.Chat{ID: 42, Type: "user", Title: "Ann"}, Message: message}}}, func(t *testing.T, raw json.RawMessage) {
 			var p rpc.PublicSearchParams
-			json.Unmarshal(raw, &p)
+			if err := json.Unmarshal(raw, &p); err != nil {
+				t.Fatal(err)
+			}
 			if p.Query != "#tag" || p.Limit != 3 {
 				t.Fatalf("params: %+v", p)
 			}
 		}},
 		{"context", []string{"message", "context", "42", "7", "--before", "0", "--after", "2", "--local"}, rpc.MethodMessageContext, rpc.MessagesResult{Messages: []rpc.Message{message}}, func(t *testing.T, raw json.RawMessage) {
 			var p map[string]any
-			json.Unmarshal(raw, &p)
+			if err := json.Unmarshal(raw, &p); err != nil {
+				t.Fatal(err)
+			}
 			if p["before"] != float64(0) || p["after"] != float64(2) || p["local"] != true {
 				t.Fatalf("params: %+v", p)
 			}
 		}},
 		{"context link", []string{"message", "context", "t.me/c/12345/3/7"}, rpc.MethodMessageContext, rpc.MessagesResult{Messages: []rpc.Message{message}}, func(t *testing.T, raw json.RawMessage) {
 			var p rpc.ContextParams
-			json.Unmarshal(raw, &p)
+			if err := json.Unmarshal(raw, &p); err != nil {
+				t.Fatal(err)
+			}
 			if p.Chat != "-1000000012345" || p.ID != 7 || p.Before != 5 || p.After != 5 {
 				t.Fatalf("params: %+v", p)
 			}
 		}},
 		{"comments", []string{"message", "comments", "42", "7", "--limit", "5", "--cursor", "CUR"}, rpc.MethodMessageComments, rpc.MessagesResult{Messages: []rpc.Message{message}}, func(t *testing.T, raw json.RawMessage) {
 			var p rpc.CommentsParams
-			json.Unmarshal(raw, &p)
+			if err := json.Unmarshal(raw, &p); err != nil {
+				t.Fatal(err)
+			}
 			if p.Chat != "42" || p.ID != 7 || p.Limit != 5 || p.Cursor != "CUR" {
 				t.Fatalf("params: %+v", p)
 			}
 		}},
 		{"comments link", []string{"message", "comments", "https://t.me/newsfeed/7"}, rpc.MethodMessageComments, rpc.MessagesResult{Messages: []rpc.Message{message}}, func(t *testing.T, raw json.RawMessage) {
 			var p rpc.CommentsParams
-			json.Unmarshal(raw, &p)
+			if err := json.Unmarshal(raw, &p); err != nil {
+				t.Fatal(err)
+			}
 			if p.Chat != "@newsfeed" || p.ID != 7 {
 				t.Fatalf("params: %+v", p)
 			}
 		}},
 		{"link", []string{"message", "link", "42", "7", "--topic", "3"}, rpc.MethodMessageLink, rpc.LinkResult{Link: "https://t.me/c/123/3/7"}, func(t *testing.T, raw json.RawMessage) {
 			var p rpc.LinkParams
-			json.Unmarshal(raw, &p)
+			if err := json.Unmarshal(raw, &p); err != nil {
+				t.Fatal(err)
+			}
 			if p.Chat != "42" || p.ID != 7 || p.Topic != 3 {
 				t.Fatalf("params: %+v", p)
 			}
 		}},
 		{"get link", []string{"message", "get", "https://t.me/c/12345/3/7"}, rpc.MethodMessageGet, message, func(t *testing.T, raw json.RawMessage) {
 			var p rpc.MessageGetParams
-			json.Unmarshal(raw, &p)
+			if err := json.Unmarshal(raw, &p); err != nil {
+				t.Fatal(err)
+			}
 			if p.Chat != "-1000000012345" || p.ID != 7 {
 				t.Fatalf("params: %+v", p)
 			}
 		}},
 		{"get pair", []string{"message", "get", "42", "7"}, rpc.MethodMessageGet, message, func(t *testing.T, raw json.RawMessage) {
 			var p rpc.MessageGetParams
-			json.Unmarshal(raw, &p)
+			if err := json.Unmarshal(raw, &p); err != nil {
+				t.Fatal(err)
+			}
 			if p.Chat != "42" || p.ID != 7 {
 				t.Fatalf("params: %+v", p)
 			}
 		}},
 		{"get negative chat", []string{"message", "get", "--", "-1000000012345", "7"}, rpc.MethodMessageGet, message, func(t *testing.T, raw json.RawMessage) {
 			var p rpc.MessageGetParams
-			json.Unmarshal(raw, &p)
+			if err := json.Unmarshal(raw, &p); err != nil {
+				t.Fatal(err)
+			}
 			if p.Chat != "-1000000012345" || p.ID != 7 {
 				t.Fatalf("params: %+v", p)
 			}
 		}},
 		{"mark read", []string{"chat", "mark-read", "42", "--dry-run"}, rpc.MethodChatMarkRead, rpc.MarkReadResult{ChatID: 42, DryRun: true}, func(t *testing.T, raw json.RawMessage) {
 			var p rpc.MarkReadParams
-			json.Unmarshal(raw, &p)
+			if err := json.Unmarshal(raw, &p); err != nil {
+				t.Fatal(err)
+			}
 			if p.Chat != "42" || !p.DryRun {
 				t.Fatalf("params: %+v", p)
 			}

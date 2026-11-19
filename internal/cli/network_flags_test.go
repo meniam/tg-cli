@@ -24,8 +24,8 @@ func TestNetworkSettingsPersistence(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("transport", "", "")
 	cmd.Flags().String("proxy", "", "")
-	_ = cmd.Flags().Set("transport", "wss")
-	_ = cmd.Flags().Set("proxy", "socks5://alice:secret-marker@localhost:1080")
+	audit02SetFlag(t, cmd, "transport", "wss")
+	audit02SetFlag(t, cmd, "proxy", "socks5://alice:secret-marker@localhost:1080")
 	s, err := a.networkSettings(cmd, paths, true)
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestNetworkSettingsPersistence(t *testing.T) {
 	if err != nil || s.Transport != "wss" || s.Proxy == nil {
 		t.Fatalf("settings not restored: %v %v", s, err)
 	}
-	_ = cmd2.Flags().Set("proxy", "none")
+	audit02SetFlag(t, cmd2, "proxy", "none")
 	if _, err = a.networkSettings(cmd2, paths, true); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestNetworkBadProxyDoesNotExposeSecret(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("transport", "", "")
 	cmd.Flags().String("proxy", "", "")
-	_ = cmd.Flags().Set("proxy", "tg://proxy?server=x&port=443&secret=secret-marker")
+	audit02SetFlag(t, cmd, "proxy", "tg://proxy?server=x&port=443&secret=secret-marker")
 	_, err = a.networkSettings(cmd, paths, true)
 	if err == nil || strings.Contains(err.Error(), "secret-marker") {
 		t.Fatalf("unsafe error: %v", err)
@@ -89,8 +89,8 @@ func TestNetworkAutoSettings(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("transport", "", "")
 	cmd.Flags().String("proxy", "", "")
-	_ = cmd.Flags().Set("transport", "auto")
-	_ = cmd.Flags().Set("proxy", "http://user:password@proxy.test:8080")
+	audit02SetFlag(t, cmd, "transport", "auto")
+	audit02SetFlag(t, cmd, "proxy", "http://user:password@proxy.test:8080")
 	s, err := a.networkSettings(cmd, paths, true)
 	if err != nil || s.Transport != "auto" || s.Proxy.Redacted() != "http://proxy.test:8080" {
 		t.Fatalf("settings: %v %v", s, err)

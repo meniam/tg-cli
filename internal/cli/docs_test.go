@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 var (
@@ -161,35 +160,8 @@ func TestDocsCommandsAndFlags(t *testing.T) {
 		}
 	})
 
-	t.Run("global flags", func(t *testing.T) {
-		file := filepath.Join(rootDir, "docs", "cli", "overview.md")
-		data, err := os.ReadFile(file)
-		if err != nil {
-			t.Fatal(err)
-		}
-		body := string(data)
-		root.PersistentFlags().VisitAll(func(flag *pflag.Flag) {
-			if flag.Name != "help" && !flag.Hidden && !strings.Contains(body, "`--"+flag.Name+"`") {
-				t.Errorf("docs/cli/overview.md: missing global flag --%s", flag.Name)
-			}
-		})
-	})
-
-	t.Run("command flags", func(t *testing.T) {
-		for name, cmd := range commands {
-			found := sections[name]
-			if len(found) == 0 {
-				continue
-			}
-			section := found[0]
-			cmd.LocalFlags().VisitAll(func(flag *pflag.Flag) {
-				// Hidden flags are internal and are not part of the documented contract.
-				if flag.Name != "help" && !flag.Hidden && !strings.Contains(section.body, "`--"+flag.Name+"`") {
-					t.Errorf("%s: %s: missing flag --%s", section.file, name, flag.Name)
-				}
-			})
-		}
-	})
+	// Flag tables are checked by TestDocsGenerated, which compares each table
+	// with the one generated from the command tree.
 }
 
 func TestDocsRelativeLinks(t *testing.T) {

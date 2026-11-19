@@ -31,7 +31,7 @@ func TestFieldsNarrowsEveryFormat(t *testing.T) {
 		t.Errorf("toon --fields: exit %d, %q", r.code, r.stdout)
 	}
 	if r := e.run("chat", "list", "--fields", paths, "--format", "human"); r.code != exitcode.OK ||
-		strings.Contains(r.stdout, "type") {
+		strings.Contains(r.stdout, "type") || !strings.Contains(r.stdout, "Ann") || !strings.Contains(r.stdout, "Family") {
 		t.Errorf("human --fields must not show a field that was not asked for: %q", r.stdout)
 	}
 

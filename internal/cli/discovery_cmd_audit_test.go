@@ -2,10 +2,13 @@ package cli
 
 import (
 	"encoding/json"
+	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
 	"time"
 )
@@ -55,4 +58,17 @@ func audit02Params[T any](t *testing.T, raw json.RawMessage, want T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("params %s decode to %+v, want %+v", raw, got, want)
 	}
+}
+
+func audit02SetFlag(t *testing.T, cmd *cobra.Command, name, value string) {
+	t.Helper()
+	if err := cmd.Flags().Set(name, value); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// audit02Refused reports whether the run failed with a usage error that names
+// the wanted reason, so a refusal for another reason does not pass for it.
+func audit02Refused(r result, reason string) bool {
+	return r.code == exitcode.Usage && strings.Contains(r.stdout, reason)
 }
