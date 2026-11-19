@@ -36,6 +36,30 @@ type fakeTelegram struct {
 	missing       bool          // the read methods answer "not found"
 	resolveCalls  int
 	peopleFixture bool
+
+	audit01Calls map[string]int // calls of the chat and message read methods, by name
+}
+
+// audit01Record counts a call of a read method so a test can prove that a command
+// answered without touching Telegram.
+func (f *fakeTelegram) audit01Record(method string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.audit01Calls == nil {
+		f.audit01Calls = make(map[string]int)
+	}
+	f.audit01Calls[method]++
+}
+
+// audit01CallSnapshot returns a copy of the call counters.
+func (f *fakeTelegram) audit01CallSnapshot() map[string]int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make(map[string]int, len(f.audit01Calls))
+	for k, v := range f.audit01Calls {
+		out[k] = v
+	}
+	return out
 }
 
 func (f *fakeTelegram) Run(ctx context.Context) error {
@@ -98,18 +122,23 @@ func (f *fakeTelegram) SendPoll(context.Context, chatref.Ref, rpc.PollParams) (r
 	return rpc.SendResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) SearchMessages(context.Context, chatref.Ref, rpc.SearchMessagesParams) (rpc.MessagesResult, error) {
+	f.audit01Record("SearchMessages")
 	return rpc.MessagesResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) SearchPublic(context.Context, rpc.PublicSearchParams) (rpc.PublicSearchResult, error) {
+	f.audit01Record("SearchPublic")
 	return rpc.PublicSearchResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) MessageContext(context.Context, chatref.Ref, rpc.ContextParams) (rpc.MessagesResult, error) {
+	f.audit01Record("MessageContext")
 	return rpc.MessagesResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Comments(context.Context, chatref.Ref, rpc.CommentsParams) (rpc.MessagesResult, error) {
+	f.audit01Record("Comments")
 	return rpc.MessagesResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) MessageLink(context.Context, chatref.Ref, rpc.LinkParams) (rpc.LinkResult, error) {
+	f.audit01Record("MessageLink")
 	return rpc.LinkResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) DraftGet(context.Context, chatref.Ref) (rpc.Draft, error) {
@@ -211,6 +240,7 @@ func (f *fakeTelegram) LoginQR(ctx context.Context, show func(context.Context, r
 }
 
 func (f *fakeTelegram) Chats(_ context.Context, limit int, chatType string) ([]rpc.Chat, error) {
+	f.audit01Record("Chats")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []rpc.Chat
@@ -223,18 +253,22 @@ func (f *fakeTelegram) Chats(_ context.Context, limit int, chatType string) ([]r
 }
 
 func (f *fakeTelegram) Members(context.Context, chatref.Ref, rpc.MembersParams) (rpc.MembersResult, error) {
+	f.audit01Record("Members")
 	return rpc.MembersResult{Members: []rpc.Member{{ID: 5, Name: "Ann", Username: "ann", Role: "admin"}}, NextOffset: 1}, nil
 }
 
 func (f *fakeTelegram) Topics(context.Context, chatref.Ref, rpc.TopicsParams) (rpc.TopicsResult, error) {
+	f.audit01Record("Topics")
 	return rpc.TopicsResult{Topics: []rpc.Topic{{ID: 7, Title: "Foreign topic", TopMessage: 30, Created: "2026-11-14T10:00:00Z"}}, NextCursor: "TOPIC-NEXT"}, nil
 }
 
 func (f *fakeTelegram) CommonChats(context.Context, chatref.Ref, rpc.CommonChatsParams) (rpc.CommonChatsResult, error) {
+	f.audit01Record("CommonChats")
 	return rpc.CommonChatsResult{Chats: []rpc.CommonChat{{ID: -77, Type: "group", Title: "Shared"}}, NextCursor: "COMMON-NEXT"}, nil
 }
 
 func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, error) {
+	f.audit01Record("Resolve")
 	f.mu.Lock()
 	f.resolveCalls++
 	f.mu.Unlock()
@@ -251,6 +285,7 @@ func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, er
 }
 
 func (f *fakeTelegram) ChatInfo(_ context.Context, ref chatref.Ref) (rpc.ChatInfo, error) {
+	f.audit01Record("ChatInfo")
 	if f.missing {
 		return rpc.ChatInfo{}, rpc.NewError(rpc.CodeNotFound, "not found: no such chat")
 	}
@@ -261,10 +296,12 @@ func (f *fakeTelegram) ChatInfo(_ context.Context, ref chatref.Ref) (rpc.ChatInf
 }
 
 func (f *fakeTelegram) InviteInfo(_ context.Context, ref chatref.Ref) (rpc.InviteInfo, error) {
+	f.audit01Record("InviteInfo")
 	return rpc.InviteInfo{Title: "Private team", Type: "group", Members: 5}, nil
 }
 
 func (f *fakeTelegram) History(_ context.Context, ref chatref.Ref, q rpc.HistoryQuery) (rpc.MessagesResult, error) {
+	f.audit01Record("History")
 	if f.missing {
 		return rpc.MessagesResult{}, rpc.NewError(rpc.CodeNotFound, "not found: no such chat")
 	}
@@ -277,10 +314,12 @@ func (f *fakeTelegram) History(_ context.Context, ref chatref.Ref, q rpc.History
 }
 
 func (f *fakeTelegram) HistoryPage(_ context.Context, _ chatref.Ref, _ int) (rpc.HistoryPage, error) {
+	f.audit01Record("HistoryPage")
 	return rpc.HistoryPage{}, nil
 }
 
 func (f *fakeTelegram) Message(_ context.Context, ref chatref.Ref, id int) (rpc.Message, error) {
+	f.audit01Record("Message")
 	for _, m := range f.messages {
 		if m.ID == id {
 			return m, nil
@@ -290,6 +329,7 @@ func (f *fakeTelegram) Message(_ context.Context, ref chatref.Ref, id int) (rpc.
 }
 
 func (f *fakeTelegram) Pinned(_ context.Context, ref chatref.Ref, limit int) (rpc.MessagesResult, error) {
+	f.audit01Record("Pinned")
 	return rpc.MessagesResult{Messages: f.messages[:min(limit, len(f.messages))]}, nil
 }
 
