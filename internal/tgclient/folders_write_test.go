@@ -3,9 +3,9 @@ package tgclient
 import (
 	"context"
 	"errors"
-	"slices"
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/tg"
+	"slices"
 	"testing"
 	"tg-cli/internal/rpc"
 )
