@@ -142,7 +142,7 @@ func TestContactsSyncLocalAndDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	p, err := db.GetPerson(ctx, 1)
-	if err != nil || *p.IsContact {
+	if err != nil || p.IsContact == nil || *p.IsContact {
 		t.Fatalf("removed contact %+v %v", p, err)
 	}
 }
@@ -194,7 +194,7 @@ func TestContactsAllowedWritesAndSearch(t *testing.T) {
 		t.Fatalf("delete: writes=%d err=%v", f.writes, err)
 	}
 	p, err = db.GetPerson(ctx, 77)
-	if err != nil || *p.IsContact {
+	if err != nil || p.IsContact == nil || *p.IsContact {
 		t.Fatalf("deleted: %+v %v", p, err)
 	}
 }
@@ -210,5 +210,74 @@ func TestContactListCanceledWhileLocked(t *testing.T) {
 	_, err := d.contactList(ctx, params(t, rpc.ContactListParams{Local: true}))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("contact list: %v", err)
+	}
+}
+
+// auditSelfProbe reports when the background sync asks who is logged in and
+// when it starts reading contacts.
+type auditSelfProbe struct {
+	*usersFake
+	selfCalled     chan struct{}
+	contactsCalled chan struct{}
+}
+
+func (f *auditSelfProbe) Self(ctx context.Context) (*rpc.User, error) {
+	user, err := f.usersFake.Self(ctx)
+	select {
+	case f.selfCalled <- struct{}{}:
+	default:
+	}
+	return user, err
+}
+
+func (f *auditSelfProbe) Contacts(ctx context.Context) ([]rpc.Contact, error) {
+	select {
+	case f.contactsCalled <- struct{}{}:
+	default:
+	}
+	return f.usersFake.Contacts(ctx)
+}
+
+func TestAudit06ContactSyncWaitsForLogin(t *testing.T) {
+	d, base, db, _ := accessTestDaemon(t)
+	base.user = nil
+	f := &auditSelfProbe{
+		usersFake:      &usersFake{fakeTelegram: base, contacts: []rpc.Contact{{ID: 7, FirstName: "Ann"}}},
+		selfCalled:     make(chan struct{}, 1),
+		contactsCalled: make(chan struct{}, 1),
+	}
+	d.opts.Telegram = f
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	auth := make(chan struct{}, 1)
+	done := make(chan struct{})
+	go func() { defer close(done); d.syncContactsAfterLogin(ctx, auth) }()
+	select {
+	case <-f.selfCalled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the sync never checked who is logged in")
+	}
+	// A short window is enough to see a regression: without the wait for the
+	// login signal the sync reads contacts at once. A pass here proves nothing
+	// by itself, the second half does.
+	select {
+	case <-f.contactsCalled:
+		t.Fatal("contacts were read before the login")
+	case <-time.After(50 * time.Millisecond):
+	}
+	auth <- struct{}{}
+	select {
+	case <-f.contactsCalled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("contacts were not read after the login")
+	}
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the sync did not finish")
+	}
+	person, err := db.GetPerson(context.Background(), 7)
+	if err != nil || person.IsContact == nil || !*person.IsContact {
+		t.Fatalf("synced contact: %+v %v", person, err)
 	}
 }
