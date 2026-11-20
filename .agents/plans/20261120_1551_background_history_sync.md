@@ -10,9 +10,9 @@ PR: —
 
 ## Status
 
-- Current status: in_progress (2026-11-20: шаги 2-10 приняты и слиты, остался шаг 11: документы, плюс поле last_chat_id в блоке фона)
+- Current status: in_progress (2026-11-20: шаги 1-11 выполнены и слиты в интеграционную ветку, `isocheck.sh` и `-race ./...` зелёные; осталось слияние в `main` и деплой по решению владельца)
 - Last update: 2026-11-20
-- Next safe step: поток status (шаг 10: метод `dashboard` и `tg status`) в worktree `../tg-cli-bgsync-status`, затем шаг 11 (документы, тот же агент после приёмки кода).
+- Next safe step: слияние `feature/20261120_1551_background_history_sync` в `main` (один конфликт в `.agents/decisions/_TOC.md`, оставить обе строки), копия `~/.config/tg-cli/db/default`, `just install`, затем владелец включает `[background_sync] enabled = true`.
 
 ## Context and sources
 
@@ -161,22 +161,22 @@ page_pause_max = "8s"
 - [x] Шаг 8 (2026-11-20, поток sched, коммит 140c79e, `isocheck.sh` и `-race` для daemon, rpc, cli зелёные). Планировщик `internal/daemon/background_sync.go`: окно, случайный интервал, часы подменяются интерфейсом, остановка вместе с демоном (канал `done` в списке ожидания `daemon.go`), отмена в конце окна, пропуск при `auth_lost`.
 - [x] Шаг 9 (2026-11-20, поток sched, коммит 140c79e). Блок `background_sync` в ответе `daemon status` (состояние, окно, `next_run_at`, `last_run_at`, `last_result`, `current_chat_id`); схема и `--human` вывод `daemon status` дополнены.
 - [x] Шаг 10 (2026-11-20, поток status, `isocheck.sh` и `-race` для daemon, store, rpc, cli, throttle, tgclient зелёные; запросы статистики 35 мс на копии боевой базы). Метод демона `dashboard` (аккаунт, соединение, доступ, база, счётчики полноты по группам, планировщик, задачи `chat sync` и `chat full`, состояние дросселя, события потока) и команда `tg status` с текстовым выводом; без демона код 3 и подсказка.
-- [ ] Шаг 11. Документы: `docs/cli/chats.md`, `docs/cli/daemon-and-auth.md` (`daemon status`, `status`), `docs/cli/config.md`, `docs/cli/overview.md`, `docs/contracts.md`, `README.md`, FEATURES 10.12; `just docs` для сгенерированных таблиц.
+- [x] Шаг 11 (2026-11-20, поток status, коммиты aae3c55 и 0236a56; независимая проверка `glavred` не проводилась: агентов `docwriter` и `glavred` в репозитории нет, автор проверил текст сам). Документы: `docs/cli/chats.md`, `docs/cli/daemon-and-auth.md` (`daemon status`, `status`), `docs/cli/config.md`, `docs/cli/overview.md`, `docs/contracts.md`, `README.md`, FEATURES 10.12; `just docs` для сгенерированных таблиц.
 
 ## Verification
 
 | Check | Command | Expected result | Status |
 | ----- | ------- | --------------- | ------ |
-| Миграция и дата | `go test ./internal/store -run 'FirstMessage|Migration' -count=1` | чистая и обновляемая база дают `user_version` 10; у полного чата дата равна `MIN(date)`, у неполного пуста; дата переживает удаление сообщения | not_run |
-| Пауза и источник | `go test ./internal/daemon -run HistorySync -count=1` | ручная задача ждёт ровно 2 с, фоновая 2-8 с (часы подменены); `source` в статусе | not_run |
-| Приоритет ручной | `go test -race ./internal/daemon -run BackgroundSync -count=1` | ручной старт отменяет задачу планировщика, прогресс сохранён, ручная идёт первой | not_run |
-| Расписание | `go test ./internal/daemon -run BackgroundSchedule -count=1` | запуск только в окне, интервал в 40-180 минут, перенос за 20:00 на 08:00, отмена в 20:00, остановка при отмене контекста | not_run |
-| Выбор чатов | `go test ./internal/store -run BackgroundPick -count=1` | порядок user, папки (`pinned`, `include`), остальные; закрытые чаты не возвращаются; `exclude` не считается папкой | not_run |
-| Конфиг | `go test ./internal/config ./internal/cli -count=1` | значения по умолчанию, неверное значение даёт код 2, переменные передаются демону | not_run |
-| Блок в `daemon status` | `go test ./internal/daemon ./internal/cli -run 'DaemonStatus|BackgroundStatus' -count=1` | `disabled` без `enabled`; `waiting_window` вне окна; `next_run_at` лежит в окне и в пределах 40-180 минут; `running` с `current_chat_id`; поля в схеме | not_run |
-| Дашборд | `go test ./internal/cli ./internal/daemon ./internal/output -run 'Dashboard|StatusCmd' -count=1` | текст по эталону (golden), счётчики по группам сходятся с базой, `--format json` даёт код 2, без демона код 3, недоверенные названия помечены | not_run |
-| Инвариант | тест демона без `enabled` | ни одного вызова клиента Telegram | not_run |
-| Всё | `just check` и `go test -race -count=1 ./...` в изоляции | зелёные, `gofmt -l` пуст | not_run |
+| Миграция и дата | `go test ./internal/store -run 'FirstMessage|Migration' -count=1` | чистая и обновляемая база дают `user_version` 10; у полного чата дата равна `MIN(date)`, у неполного пуста; дата переживает удаление сообщения | passed 2026-11-20 |
+| Пауза и источник | `go test ./internal/daemon -run HistorySync -count=1` | ручная задача ждёт ровно 2 с, фоновая 2-8 с (часы подменены); `source` в статусе | passed 2026-11-20 |
+| Приоритет ручной | `go test -race ./internal/daemon -run BackgroundSync -count=1` | ручной старт отменяет задачу планировщика, прогресс сохранён, ручная идёт первой | passed 2026-11-20 |
+| Расписание | `go test ./internal/daemon -run BackgroundSchedule -count=1` | запуск только в окне, интервал в 40-180 минут, перенос за 20:00 на 08:00, отмена в 20:00, остановка при отмене контекста | passed 2026-11-20 |
+| Выбор чатов | `go test ./internal/store -run BackgroundPick -count=1` | порядок user, папки (`pinned`, `include`), остальные; закрытые чаты не возвращаются; `exclude` не считается папкой | passed 2026-11-20 |
+| Конфиг | `go test ./internal/config ./internal/cli -count=1` | значения по умолчанию, неверное значение даёт код 2, переменные передаются демону | passed 2026-11-20 |
+| Блок в `daemon status` | `go test ./internal/daemon ./internal/cli -run 'DaemonStatus|BackgroundStatus' -count=1` | `disabled` без `enabled`; `waiting_window` вне окна; `next_run_at` лежит в окне и в пределах 40-180 минут; `running` с `current_chat_id`; поля в схеме | passed 2026-11-20 |
+| Дашборд | `go test ./internal/cli ./internal/daemon ./internal/output -run 'Dashboard|StatusCmd' -count=1` | текст по эталону (golden), счётчики по группам сходятся с базой, `--format json` даёт код 2, без демона код 3, недоверенные названия помечены | passed 2026-11-20 |
+| Инвариант | тест демона без `enabled` | ни одного вызова клиента Telegram | passed 2026-11-20 |
+| Всё | `just check` и `go test -race -count=1 ./...` в изоляции | зелёные, `gofmt -l` пуст | passed 2026-11-20 |
 
 ## Deploy / rollback
 
