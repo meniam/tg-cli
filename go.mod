@@ -5,6 +5,7 @@ go 1.27.4
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/gotd/td v0.166.0
+	github.com/kljensen/snowball v0.10.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.9

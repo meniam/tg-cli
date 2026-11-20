@@ -301,6 +301,7 @@ func (d *daemon) search(ctx context.Context, params json.RawMessage) (any, error
 		}
 		if hit.Scope == "messages" {
 			out.Date = time.Unix(hit.Date, 0).UTC().Format(time.RFC3339)
+			out.Link, out.LinkUnavailable = hit.Link, hit.LinkUnavailable
 		}
 		result.Hits = append(result.Hits, out)
 	}

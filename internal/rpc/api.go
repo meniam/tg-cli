@@ -559,6 +559,25 @@ type SearchHit struct {
 	Model    string  `json:"model,omitempty"`
 	NoteKind string  `json:"note_kind,omitempty"`
 	Rank     float64 `json:"rank"`
+	// Link and LinkUnavailable belong to message hits. Link is the t.me link of
+	// the message, built locally; it is null (always present for a message hit)
+	// when the chat has none, and LinkUnavailable then holds private_chat or
+	// basic_group, or nothing if the chat is unknown.
+	Link            *string `json:"link,omitempty"`
+	LinkUnavailable string  `json:"link_unavailable,omitempty"`
+}
+
+// MarshalJSON writes "link": null for a message hit without a link, so the
+// field is always there for messages, and leaves it out for other scopes.
+func (h SearchHit) MarshalJSON() ([]byte, error) {
+	type plain SearchHit
+	if h.Scope != "messages" || h.Link != nil {
+		return json.Marshal(plain(h))
+	}
+	return json.Marshal(struct {
+		plain
+		Link *string `json:"link"`
+	}{plain: plain(h)})
 }
 
 // SearchResult contains hits grouped by scope.

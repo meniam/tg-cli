@@ -20,7 +20,7 @@ func TestEveryResponseStringHasTrustClassification(t *testing.T) {
 		{rpc.InviteInfo{}, map[string]bool{"title": true, "type": false, "about": true}},
 		{rpc.Sender{}, map[string]bool{"name": true, "username": true}},
 		{rpc.Message{}, map[string]bool{"date": false, "sender.name": true, "sender.username": true, "text": true, "media_type": false, "service": false}},
-		{rpc.SearchHit{}, map[string]bool{"scope": false, "title": true, "snippet": true, "date": false, "author": false, "model": false, "note_kind": false}},
+		{rpc.SearchHit{}, map[string]bool{"scope": false, "title": true, "snippet": true, "date": false, "author": false, "model": false, "note_kind": false, "link": false, "link_unavailable": false}},
 	}
 	for _, tc := range cases {
 		t.Run(reflect.TypeOf(tc.value).Name(), func(t *testing.T) {

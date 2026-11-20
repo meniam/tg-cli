@@ -2,11 +2,15 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode"
 
+	"tg-cli/internal/chatref"
+	"tg-cli/internal/stem"
 	"tg-cli/internal/textnorm"
 )
 
@@ -40,7 +44,13 @@ type SearchHit struct {
 	Author   string
 	Model    *string
 	NoteKind string
-	Rank     float64
+	// Rank is lower-is-better in every scope: bm25 for chats, people and notes,
+	// the negated RRF score for messages.
+	Rank float64
+	// Link and LinkUnavailable are set for message hits only. Link is a t.me
+	// link, nil if the chat has none; LinkUnavailable then says why.
+	Link            *string
+	LinkUnavailable string
 }
 
 var searchScopeOrder = []string{"chats", "people", "messages", "notes"}
@@ -151,8 +161,90 @@ func (db *DB) searchPeople(ctx context.Context, match string, limit int, terms [
 	return hits, rows.Err()
 }
 
+// rrfK is the Reciprocal Rank Fusion constant: a message at rank r in a leg
+// adds 1/(rrfK+r) to its score. 60 is the value from the original RRF paper
+// and the one brain-agent uses.
+const rrfK = 60
+
+// messageCandidate is one message found by a search leg, before fusion.
+type messageCandidate struct {
+	hit  SearchHit
+	text string
+}
+
+// searchMessages fuses two legs by RRF: the exact one over messages_fts (finds
+// numbers, part numbers and names as written) and the stemmed one over
+// messages_stem_fts (finds other word forms). Each leg contributes its
+// limit*3 best messages, the fused list is cut to limit.
 func (db *DB) searchMessages(ctx context.Context, match string, limit int, terms []string, options SearchOptions) ([]SearchHit, error) {
-	query := `SELECT m.id,m.chat_id,m.text,m.date,m.deleted_at,bm25(messages_fts) FROM messages_fts JOIN messages m ON m.rowid=messages_fts.rowid WHERE messages_fts MATCH ?`
+	legSize := limit * 3
+	exact, err := db.messageLeg(ctx, "messages_fts", match, legSize, options)
+	if err != nil {
+		return nil, err
+	}
+	var stemmed []messageCandidate
+	stemMatch := stem.Query(options.Query, options.Prefix)
+	if stemMatch != "" {
+		if stemmed, err = db.messageLeg(ctx, "messages_stem_fts", stemMatch, legSize, options); err != nil {
+			return nil, err
+		}
+	}
+
+	fusedLegs := fuseRRF(limit, exact, stemmed)
+	stemTerms := stem.Terms(options.Query)
+	hits := make([]SearchHit, 0, len(fusedLegs))
+	for _, entry := range fusedLegs {
+		hit := entry.candidate.hit
+		// Rank stays "lower is better" like bm25 in the other scopes.
+		hit.Rank = -entry.score
+		hit.Snippet = messageSnippet(entry.candidate.text, terms, stemTerms, options.Prefix)
+		hits = append(hits, hit)
+	}
+	return hits, nil
+}
+
+// fusedMessage is a message with its Reciprocal Rank Fusion score.
+type fusedMessage struct {
+	candidate messageCandidate
+	score     float64
+}
+
+// fuseRRF merges ranked legs: a message at rank r (from 1) in a leg adds
+// 1/(rrfK+r), messages are identified by chat and id, the best score comes
+// first and the result is cut to limit. Among equal scores the earlier leg and
+// the better rank win, because the sort is stable over first appearance.
+func fuseRRF(limit int, legs ...[]messageCandidate) []*fusedMessage {
+	var total int
+	for _, leg := range legs {
+		total += len(leg)
+	}
+	byKey := make(map[[2]int64]*fusedMessage, total)
+	order := make([]*fusedMessage, 0, total)
+	for _, leg := range legs {
+		for rank, candidate := range leg {
+			key := [2]int64{*candidate.hit.ChatID, candidate.hit.ID}
+			entry := byKey[key]
+			if entry == nil {
+				entry = &fusedMessage{candidate: candidate}
+				byKey[key] = entry
+				order = append(order, entry)
+			}
+			entry.score += 1 / float64(rrfK+rank+1)
+		}
+	}
+	sort.SliceStable(order, func(i, j int) bool { return order[i].score > order[j].score })
+	if len(order) > limit {
+		order = order[:limit]
+	}
+	return order
+}
+
+// messageLeg runs one full-text leg over a messages FTS table. The table name
+// is one of two constants, never user input; the query goes through MATCH as a
+// bound argument. Filters (chat, closed chats, deleted) are identical in both
+// legs.
+func (db *DB) messageLeg(ctx context.Context, table, match string, limit int, options SearchOptions) ([]messageCandidate, error) {
+	query := `SELECT m.id,m.chat_id,m.text,m.date,m.deleted_at,m.topic_id,c.type,c.username FROM ` + table + ` JOIN messages m ON m.rowid=` + table + `.rowid LEFT JOIN chats c ON c.id=m.chat_id WHERE ` + table + ` MATCH ?`
 	args := []any{match}
 	if options.ChatID != nil {
 		query += ` AND m.chat_id=?`
@@ -164,27 +256,61 @@ func (db *DB) searchMessages(ctx context.Context, match string, limit int, terms
 	if !options.IncludeDeleted {
 		query += ` AND m.deleted_at IS NULL`
 	}
-	query += ` ORDER BY bm25(messages_fts),m.rowid LIMIT ?`
+	query += ` ORDER BY bm25(` + table + `),m.rowid LIMIT ?`
 	args = append(args, limit)
 	rows, err := db.read.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var hits []SearchHit
+	var found []messageCandidate
 	for rows.Next() {
-		var hit SearchHit
-		var text string
-		var deletedAt *int64
-		if err := rows.Scan(&hit.ID, &hit.ChatID, &text, &hit.Date, &deletedAt, &hit.Rank); err != nil {
+		var candidate messageCandidate
+		var deletedAt, topicID *int64
+		var chatID int64
+		var chatType, username sql.NullString
+		if err := rows.Scan(&candidate.hit.ID, &chatID, &candidate.text, &candidate.hit.Date, &deletedAt, &topicID, &chatType, &username); err != nil {
 			return nil, err
 		}
-		hit.Scope = "messages"
-		hit.Deleted = deletedAt != nil
-		hit.Snippet = makeSnippet(text, terms, options.Prefix)
-		hits = append(hits, hit)
+		candidate.hit.ChatID = &chatID
+		candidate.hit.Scope = "messages"
+		candidate.hit.Deleted = deletedAt != nil
+		candidate.hit.Link, candidate.hit.LinkUnavailable = messageLink(chatID, candidate.hit.ID, chatType.String, username.String, topicID)
+		found = append(found, candidate)
 	}
-	return hits, rows.Err()
+	return found, rows.Err()
+}
+
+// Reasons a message has no web link.
+const (
+	linkPrivateChat = "private_chat"
+	linkBasicGroup  = "basic_group"
+)
+
+// messageLink builds the t.me link of a stored message without asking Telegram,
+// from the chat type and username in chats and the message's forum topic. Only
+// channels and supergroups have web links. Direct chats and basic groups give
+// no link and a reason; an unknown chat or a username Telegram would not
+// accept gives no link and no reason. The link names the chat and the message
+// number only, never any text.
+func messageLink(chatID, messageID int64, chatType, username string, topicID *int64) (*string, string) {
+	switch chatType {
+	case "user", "bot":
+		return nil, linkPrivateChat
+	case "group":
+		return nil, linkBasicGroup
+	case "supergroup", "channel":
+		ref := chatref.MessageRef{Chat: chatref.Ref{Kind: chatref.ID, ID: chatID}, ID: int(messageID)}
+		if topicID != nil && *topicID > 0 {
+			ref.Topic = int(*topicID)
+		}
+		link, err := chatref.FormatMessageLink(ref, username)
+		if err != nil {
+			return nil, ""
+		}
+		return &link, ""
+	}
+	return nil, ""
 }
 
 func (db *DB) searchNotes(ctx context.Context, match string, limit int, terms []string, options SearchOptions) ([]SearchHit, error) {
@@ -229,6 +355,27 @@ func queryWords(query string) []string {
 }
 
 func firstWordMatch(source string, terms []string, prefix bool) (int, int, bool) {
+	return firstMatch(source, func(word string) bool { return wordMatches(word, terms, prefix) })
+}
+
+// firstStemMatch is firstWordMatch over word stems: it finds the first word of
+// source whose stem is one of stemTerms (the stemmed query terms).
+func firstStemMatch(source string, stemTerms []string, prefix bool) (int, int, bool) {
+	return firstMatch(source, func(word string) bool { return wordMatches(stem.Word(word), stemTerms, prefix) })
+}
+
+func wordMatches(word string, terms []string, prefix bool) bool {
+	for i, term := range terms {
+		if word == term || (prefix && i == len(terms)-1 && strings.HasPrefix(word, term)) {
+			return true
+		}
+	}
+	return false
+}
+
+// firstMatch returns the rune span of the first word of source accepted by
+// match, which receives the normalized word.
+func firstMatch(source string, match func(word string) bool) (int, int, bool) {
 	runes := []rune(source)
 	for start := 0; start < len(runes); {
 		if !unicode.IsLetter(runes[start]) && !unicode.IsDigit(runes[start]) {
@@ -239,15 +386,23 @@ func firstWordMatch(source string, terms []string, prefix bool) (int, int, bool)
 		for end < len(runes) && (unicode.IsLetter(runes[end]) || unicode.IsDigit(runes[end])) {
 			end++
 		}
-		word := textnorm.Normalize(string(runes[start:end]))
-		for i, term := range terms {
-			if word == term || (prefix && i == len(terms)-1 && strings.HasPrefix(word, term)) {
-				return start, end, true
-			}
+		if match(textnorm.Normalize(string(runes[start:end]))) {
+			return start, end, true
 		}
 		start = end
 	}
 	return 0, 0, false
+}
+
+// messageSnippet centers the snippet on a word written as in the query, or,
+// for a message found only through stems, on the first word with a query stem.
+func messageSnippet(text string, terms, stemTerms []string, prefix bool) string {
+	if _, _, found := firstWordMatch(text, terms, prefix); !found {
+		if start, _, found := firstStemMatch(text, stemTerms, prefix); found {
+			return snippetAt(text, start, true)
+		}
+	}
+	return makeSnippet(text, terms, prefix)
 }
 
 func chooseSnippetSource(terms []string, prefix bool, sources ...string) string {
@@ -265,12 +420,18 @@ func chooseSnippetSource(terms []string, prefix bool, sources ...string) string 
 }
 
 func makeSnippet(source string, terms []string, prefix bool) string {
+	matchStart, _, found := firstWordMatch(source, terms, prefix)
+	return snippetAt(source, matchStart, found)
+}
+
+// snippetAt cuts a 160-rune window with the match 40 runes from its start.
+func snippetAt(source string, matchStart int, found bool) string {
 	runes := []rune(source)
 	if len(runes) == 0 {
 		return ""
 	}
 	start := 0
-	if matchStart, _, found := firstWordMatch(source, terms, prefix); found && matchStart > 40 {
+	if found && matchStart > 40 {
 		start = matchStart - 40
 	}
 	end := start + 160
