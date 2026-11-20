@@ -78,7 +78,7 @@ func TestRawFormatsInLocalContextAndExport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	messages := result.(rpc.MessagesResult).Messages
+	messages := result.(rpc.ContextResult).Messages
 	if len(messages) != 2 || !messages[0].Edited || !messages[1].Edited || messages[0].Text != "old" || messages[1].Text != "new" {
 		t.Fatalf("context = %+v", messages)
 	}

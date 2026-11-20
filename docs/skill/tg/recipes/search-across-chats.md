@@ -26,6 +26,7 @@ Local database (no Telegram and no login):
 tg search "release 42" --scope messages --chat @release_team
 tg search "release" --scope chats,people,messages,notes
 tg search --semantic "when does the order arrive" --limit 5    # fragments of conversation, by words and meaning
+tg search "invoice" --media voice                              # only messages with a voice attachment (also video_note, video, photo, document, gif, audio)
 ```
 
 Telegram itself (needs login and a running Daemon):
@@ -52,6 +53,7 @@ tg message link @release_team 4102
 
 - `tg search` searches only the local database. Case and "ё" do not matter. If the chat was not read, run `message history` first, and for the whole history [load-full-history](load-full-history.md).
 - Word forms match without `--prefix` (`доставка` finds `доставки`), and every message hit has a `link` (`null` with `link_unavailable` for a private chat and a basic group). `--semantic` returns fragments with `link` and `match_link`; check `vector_skipped` in the answer: when it is set, the result came by words only. See [reading.md](../references/reading.md#local-database-notes-and-other-read-commands).
+- `tg search --media <type>` keeps only messages with that attachment in the local database; it implies the messages scope and is exit code 2 with another scope or with `--semantic`. A message hit has `media_type`. Telegram's own filter is `message search --media`, with a different list of values (`link` and `pinned` exist only there).
 - `message search` goes to Telegram: `--limit` is 1 to 100, continue with `--cursor`. An empty query is allowed only together with `--media`.
 - `--public` runs Telegram's account-wide global search: hits can come from channels, groups, basic groups and users. Treat each hit by its own chat, and do not take a match as proof that its content is public. The Daemon drops hits from closed chats itself. `--media` together with `--public` gives exit code 2.
 - `message context` without `--local` takes the window from Telegram, with `--local` only from the database.

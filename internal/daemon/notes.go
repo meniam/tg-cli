@@ -266,8 +266,23 @@ func (d *daemon) search(ctx context.Context, params json.RawMessage) (any, error
 			return nil, rpc.NewError(rpc.CodeInvalidParams, "unknown scope")
 		}
 	}
+	if p.Media != "" {
+		if !store.ValidSearchMediaType(p.Media) {
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "unknown media type")
+		}
+		// A media filter only makes sense for messages: chats, people and notes
+		// have no attachment, so no scope means the messages scope.
+		if len(p.Scopes) == 0 {
+			p.Scopes = []string{"messages"}
+		}
+		for _, scope := range p.Scopes {
+			if scope != "messages" {
+				return nil, rpc.NewError(rpc.CodeInvalidParams, "media applies to the messages scope only")
+			}
+		}
+	}
 	policy := d.policy()
-	options := store.SearchOptions{Query: p.Query, Scopes: p.Scopes, Author: p.Author, Limit: p.Limit, Prefix: p.Prefix, IncludeDeleted: p.IncludeDeleted, ChatFilter: chatFilter(policy)}
+	options := store.SearchOptions{Query: p.Query, Scopes: p.Scopes, Author: p.Author, MediaType: p.Media, Limit: p.Limit, Prefix: p.Prefix, IncludeDeleted: p.IncludeDeleted, ChatFilter: chatFilter(policy)}
 	chatID, visible, err := d.searchChatScope(ctx, policy, p.Chat)
 	if err != nil {
 		return nil, err
@@ -290,6 +305,7 @@ func (d *daemon) search(ctx context.Context, params json.RawMessage) (any, error
 			out.Date = time.Unix(hit.Date, 0).UTC().Format(time.RFC3339)
 			out.Link, out.LinkUnavailable = hit.Link, hit.LinkUnavailable
 			out.ChatTitle = hit.ChatTitle
+			out.MediaType = hit.MediaType
 			if hit.ChatUsername != "" {
 				out.ChatUsername = &hit.ChatUsername
 			}

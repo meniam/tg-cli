@@ -18,6 +18,7 @@ func (d *daemon) registerVoice() {
 	d.handle(rpc.MethodChatVoiceOff, d.chatVoiceOff)
 	d.handle(rpc.MethodChatVoiceList, d.chatVoiceList)
 	d.handle(rpc.MethodVoiceStatus, d.voiceStatus)
+	d.handle(rpc.MethodVoiceList, d.voiceList)
 	d.handle(rpc.MethodVoiceCancel, d.voiceCancel)
 	d.handle(rpc.MethodVoiceRetry, d.voiceRetry)
 	d.handle(rpc.MethodVoiceBackfill, d.voiceBackfill)

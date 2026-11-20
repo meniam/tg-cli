@@ -4,7 +4,7 @@ The Daemon turns voice messages, video notes and (on request) videos into text o
 
 ## Rules for an agent
 
-- **Safety classes.** `voice status` and `chat voice list` are `read`. `voice install`, `voice cancel`, `voice retry`, `voice backfill`, `chat voice on` and `chat voice off` are `local_write`: they change the local queue, the marks and the engine files, and call no Telegram method (the jobs download files later). Run them only when the user asked in the current task. `message transcribe` is `read`.
+- **Safety classes.** `voice status`, `voice list` and `chat voice list` are `read`. `voice install`, `voice cancel`, `voice retry`, `voice backfill`, `chat voice on` and `chat voice off` are `local_write`: they change the local queue, the marks and the engine files, and call no Telegram method (the jobs download files later). Run them only when the user asked in the current task. `message transcribe` is `read`.
 - **The owner turns it on.** `[voice_transcription] enabled = true` in `config.toml` makes the Daemon queue jobs by itself. Do not edit the config yourself: tell the user the key and that the Daemon needs a restart. While it is off nothing is queued by itself and no new Telegram request is made; `message transcribe` and `voice retry` work either way.
 - **Install before use.** The engine is not part of the build. `tg voice install --check` reports what is missing (`ffmpeg`, `runtime`, `model`, `vad`); `tg voice install` downloads about 190 MB into `<home>/models/gigaam/`. Ask the user before the download: it takes time and bandwidth.
 - **Closed chats do not exist.** The queue never takes a chat that `access.json` closes. You get `not_found`, as everywhere.
@@ -19,18 +19,22 @@ tg message transcribe @release_team 4711 --wait 120s
 tg message transcribe @release_team 4711 --wait 120s --fields text,source,pending
 ```
 
-A finished answer has `text`, `source: "local"`, `engine: "gigaam-v3"` and `queued: true`; a stored text comes back at once with `cached: true`. `pending: true` means the job did not finish within `--wait` (60 s by default, 600 s at most): it keeps running, so ask again later. A failure is an error with `error.reason`: `engine_missing` (exit code 2: run `tg voice install`, check `ffmpeg`), `too_large` or `too_long` (exit code 2: the file is above the limit of its kind, nothing was downloaded), `download`, `convert`, `engine`, `disk` (exit code 1), `cancelled`. `--telegram` asks Telegram instead (Premium, voice messages and video notes only) and replaces a local text.
+A finished answer has `text`, `source: "local"`, `engine: "gigaam-v3"` and `queued: true`; a stored text comes back at once with `cached: true`. `pending: true` means the job did not finish within `--wait` (60 s by default, 600 s at most): it keeps running, so ask again later. A failure is an error with `error.reason`: `engine_missing` (exit code 2: run `tg voice install`, check `ffmpeg`), `too_large` or `too_long` (exit code 2: the file is above the limit of its kind, nothing was downloaded), `download`, `convert`, `engine`, `disk` (exit code 1), `cancelled`. `--telegram` asks Telegram instead (Premium, voice messages and video notes only) and replaces a local text. A video or a video note recorded without sound is not an error: the job ends `done` with the reason `no_audio` (the engine does not run) and the answer has an empty `text`.
+
+To read stored texts without starting anything, use the commands that read the local database: `tg message context <chat> <id> --local` and `tg message export <chat> --local` carry a finished transcription as `transcription` (`text` untrusted, `source`, `engine`) beside the message. `message get`, `message history` and the live `message context` read Telegram and do not.
 
 ## Read the queue
 
 ```bash
 tg voice status                              # enabled, installed, state, queue by state, today's downloads against the budget, last_failure
+tg voice list --state failed                 # which jobs failed, and why (reason): newest first, no message text
+tg voice list --chat @release_team --kind voice --limit 20 --cursor C   # filters; continue with next_cursor
 tg voice cancel                              # stop the running job and skip every queued one
 tg voice cancel @release_team 4711           # cancel one message's job
 tg voice retry @release_team 4711            # queue a finished or failed job again, at the front
 ```
 
-`state` is `disabled` (the setting is off and no manual job started the worker), `idle`, `working` or `paused`. `paused` is `engine_missing` (no engine or no `ffmpeg`), `budget` (today's `daily_files` or `daily_download_mb` is spent: the queue waits for the next local day) or `offline` (no Telegram connection). A paused queue spends no attempts. A network failure of a download is retried three times (10, 60 and 300 seconds), other failures are not retried. `last_failure` is a machine word, never text.
+`state` is `disabled` (the setting is off and no manual job started the worker), `idle`, `working` or `paused`. `paused` is `engine_missing` (no engine or no `ffmpeg`), `budget` (today's `daily_files` or `daily_download_mb` is spent: the queue waits for the next local day) or `offline` (no Telegram connection). A paused queue spends no attempts. A network failure of a download is retried three times (10, 60 and 300 seconds), other failures are not retried. `last_failure` is a machine word, never text. `voice list` shows each job (`chat_id`, `chat_title`, `message_id`, `kind`, `source`, `state`, `reason`, `attempts`, `bytes`, `enqueued_at`, `finished_at`), so use it, not `voice status`, to find which messages are done, failed or skipped and why; `chat_title` is untrusted. It reads the database only, hides closed chats, and a page continues with `next_cursor`. The reasons are in `docs/cli/voice.md`; `no_speech` and `no_audio` are `done` (a recording without speech, a video without sound), not failures.
 
 ## Which chats and which messages
 

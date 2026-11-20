@@ -39,6 +39,7 @@ func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 		"chat topics":                {"topics.title"},
 		"chat common":                {"chats.title", "chats.username"},
 		"chat voice list":            {"chats.title", "chats.username"},
+		"voice list":                 {"jobs.chat_title"},
 		"chat resolve":               {"title", "username"},
 		"chat info":                  {"title", "username", "about", "restriction_reason.text"},
 		"chat overview":              {"chats.title", "chats.username", "chats.first_message.text", "chats.last_message.text"},
@@ -57,8 +58,8 @@ func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 		"message translate":          {"items.text"},
 		"message pinned":             {"messages.sender.name", "messages.sender.username", "messages.text"},
 		"message search":             {"messages.sender.name", "messages.sender.username", "messages.text", "hits.chat.title", "hits.chat.username", "hits.message.sender.name", "hits.message.sender.username", "hits.message.text"},
-		"message context":            {"messages.sender.name", "messages.sender.username", "messages.text"},
-		"message export":             {"messages.sender.name", "messages.sender.username", "messages.text"},
+		"message context":            {"messages.sender.name", "messages.sender.username", "messages.text", "messages.transcription.text"},
+		"message export":             {"messages.sender.name", "messages.sender.username", "messages.text", "messages.transcription.text"},
 		"message comments":           {"messages.sender.name", "messages.sender.username", "messages.text"},
 		"search":                     {"hits.title", "hits.snippet", "hits.chat_title", "hits.chat_username", "fragments.text", "fragments.chat_title", "fragments.chat_username"},
 		// An event carries message text and names inside data, so the whole payload is untrusted.

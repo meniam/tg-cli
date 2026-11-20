@@ -56,13 +56,17 @@ func (d *daemon) exportLocalPage(ctx context.Context, raw json.RawMessage, maxBy
 	if err != nil {
 		return rpc.ExportPage{}, err
 	}
+	transcriptions, err := d.storedTranscriptions(ctx, chatID, stored.Messages)
+	if err != nil {
+		return rpc.ExportPage{}, err
+	}
 	result := rpc.ExportPage{Messages: make([]rpc.ExportMessage, 0, len(stored.Messages))}
 	// The size is that of {"messages":[]} plus encoded items and commas. The
 	// cursor is added for every non-final candidate. maxPageBytes leaves room
 	// for the JSON-RPC envelope and request ID outside this result.
 	size := len(`{"messages":[]}`)
 	for i, message := range stored.Messages {
-		item := rpc.ExportMessage{Message: rpcStoredMessage(message), Deleted: message.DeletedAt != nil}
+		item := rpc.ExportMessage{Message: rpcStoredMessage(message), Deleted: message.DeletedAt != nil, Transcription: transcriptions[message.ID]}
 		encoded, err := json.Marshal(item)
 		if err != nil {
 			return rpc.ExportPage{}, err

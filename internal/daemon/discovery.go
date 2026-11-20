@@ -147,9 +147,13 @@ func (d *daemon) localContext(ctx context.Context, p rpc.ContextParams) (any, er
 	if err != nil {
 		return nil, err
 	}
-	result := rpc.MessagesResult{Messages: make([]rpc.Message, 0, len(stored))}
+	transcriptions, err := d.storedTranscriptions(ctx, id, stored)
+	if err != nil {
+		return nil, err
+	}
+	result := rpc.ContextResult{Messages: make([]rpc.ContextMessage, 0, len(stored))}
 	for _, message := range stored {
-		result.Messages = append(result.Messages, rpcStoredMessage(message))
+		result.Messages = append(result.Messages, rpc.ContextMessage{Message: rpcStoredMessage(message), Transcription: transcriptions[message.ID]})
 	}
 	return result, nil
 }

@@ -18,6 +18,8 @@ const (
 	// MethodVoiceBackfill queues the saved voice messages and video notes of
 	// the personal chats.
 	MethodVoiceBackfill = "voice.backfill"
+	// MethodVoiceList lists the jobs of the queue with their state and reason.
+	MethodVoiceList = "voice.list"
 )
 
 // States of the voice worker in VoiceStatus.State.
@@ -88,6 +90,44 @@ type VoiceStatus struct {
 	DailyFiles  int              `json:"daily_files"`
 	DailyBytes  int64            `json:"daily_bytes"`
 	LastFailure string           `json:"last_failure,omitempty"`
+}
+
+// VoiceListParams selects the jobs to list, newest first. Empty State, Chat and
+// Kind keep everything. Limit is the page size (0 means the default 50, at most
+// 200); Cursor is the NextCursor of the previous page.
+type VoiceListParams struct {
+	State  string `json:"state,omitempty"`
+	Chat   string `json:"chat,omitempty"`
+	Kind   string `json:"kind,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+	Cursor string `json:"cursor,omitempty"`
+}
+
+// VoiceJob is one job of the queue. It carries no message text and no
+// transcription: only machine words, ids and numbers. ChatTitle is the name of
+// the chat from Telegram (untrusted data), empty when the database does not
+// know the chat. Reason is the machine word of the last outcome or delay,
+// absent when none. EnqueuedAt and FinishedAt are Unix seconds, FinishedAt is
+// absent while the job has not ended. Bytes is what the job downloaded.
+type VoiceJob struct {
+	ChatID     int64  `json:"chat_id"`
+	ChatTitle  string `json:"chat_title,omitempty" untrusted:"true"`
+	MessageID  int    `json:"message_id"`
+	Kind       string `json:"kind"`
+	Source     string `json:"source"`
+	State      string `json:"state"`
+	Reason     string `json:"reason,omitempty"`
+	Attempts   int    `json:"attempts"`
+	Bytes      int64  `json:"bytes"`
+	EnqueuedAt int64  `json:"enqueued_at"`
+	FinishedAt *int64 `json:"finished_at,omitempty"`
+}
+
+// VoiceListResult is one page of jobs, newest enqueued first. NextCursor is
+// absent on the last page.
+type VoiceListResult struct {
+	Jobs       []VoiceJob `json:"jobs"`
+	NextCursor string     `json:"next_cursor,omitempty"`
 }
 
 // VoiceCancelParams selects what to cancel. Without Chat and ID everything is

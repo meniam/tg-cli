@@ -114,10 +114,10 @@ func TestDiscoveryContextLocalAndRemote(t *testing.T) {
 	}
 	tg.user = nil
 	local, err := d.messageContext(ctx, []byte(`{"chat":"42","id":9,"local":true,"before":1,"after":1}`))
-	if err != nil || len(local.(rpc.MessagesResult).Messages) != 3 || tg.calls["context"] != 0 {
+	if err != nil || len(local.(rpc.ContextResult).Messages) != 3 || tg.calls["context"] != 0 {
 		t.Fatalf("local: %+v %v calls=%v", local, err, tg.calls)
 	}
-	if sender := local.(rpc.MessagesResult).Messages[1].Sender; sender == nil || sender.Username != "ann" {
+	if sender := local.(rpc.ContextResult).Messages[1].Sender; sender == nil || sender.Username != "ann" {
 		t.Fatalf("local sender: %+v", sender)
 	}
 	_, err = d.messageContext(ctx, []byte(`{"chat":"42","id":99,"local":true}`))

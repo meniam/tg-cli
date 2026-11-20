@@ -22,7 +22,7 @@ var audit02LimitCommands = map[string][]string{
 	"message history": {"message", "history", "42"}, "message pinned": {"message", "pinned", "42"},
 	"message search": {"message", "search", "42", "term"}, "message unread": {"message", "unread", "42"},
 	"note list": {"note", "list"}, "saved history": {"saved", "history", "42"}, "saved list": {"saved", "list"},
-	"saved search": {"saved", "search"}, "search": {"search", "term"}, "sticker search": {"sticker", "search", "term"},
+	"saved search": {"saved", "search"}, "search": {"search", "term"}, "sticker search": {"sticker", "search", "term"}, "voice list": {"voice", "list"},
 }
 
 func TestAudit02_LimitCommandsAreComplete(t *testing.T) {

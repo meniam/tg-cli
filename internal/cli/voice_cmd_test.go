@@ -16,6 +16,7 @@ import (
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
+	"tg-cli/internal/schema"
 	"tg-cli/internal/voice/gigaam"
 )
 
@@ -30,7 +31,7 @@ func runVoiceCLI(t *testing.T, args []string, env map[string]string, reply func(
 		method string
 		params json.RawMessage
 	}, 10)
-	for _, method := range []string{rpc.MethodVoiceStatus, rpc.MethodVoiceCancel, rpc.MethodVoiceRetry, rpc.MethodVoiceBackfill, rpc.MethodChatVoiceOn, rpc.MethodChatVoiceOff, rpc.MethodChatVoiceList} {
+	for _, method := range []string{rpc.MethodVoiceStatus, rpc.MethodVoiceList, rpc.MethodVoiceCancel, rpc.MethodVoiceRetry, rpc.MethodVoiceBackfill, rpc.MethodChatVoiceOn, rpc.MethodChatVoiceOff, rpc.MethodChatVoiceList} {
 		server.Handle(method, func(_ context.Context, raw json.RawMessage) (any, error) {
 			calls <- struct {
 				method string
@@ -74,6 +75,69 @@ func TestVoiceStatusCommand(t *testing.T) {
 	})
 	if r.code != 0 || r.method != rpc.MethodVoiceStatus || !strings.Contains(r.stdout, `"state":"paused"`) || !strings.Contains(r.stdout, `"paused":"budget"`) || !strings.Contains(r.stdout, `"queued":3`) {
 		t.Fatalf("status: %+v", r)
+	}
+}
+
+func TestVoiceListCommand(t *testing.T) {
+	finished := int64(1700000100)
+	reply := func(string, json.RawMessage) (any, error) {
+		return rpc.VoiceListResult{
+			Jobs: []rpc.VoiceJob{
+				{ChatID: 5, ChatTitle: "Alice", MessageID: 9, Kind: "voice", Source: "incoming", State: "failed", Reason: "convert", Attempts: 2, Bytes: 4096, EnqueuedAt: 1700000000, FinishedAt: &finished},
+				{ChatID: 5, MessageID: 8, Kind: "video", Source: "sync", State: "queued", EnqueuedAt: 1699999000},
+			},
+			NextCursor: "cursor-1",
+		}, nil
+	}
+	r := runVoiceCLI(t, []string{"voice", "list", "--state", "failed", "--chat", "@alice", "--kind", "voice", "--limit", "20", "--cursor", "abc"}, nil, reply)
+	var p rpc.VoiceListParams
+	if err := json.Unmarshal(r.params, &p); err != nil || r.code != 0 || r.method != rpc.MethodVoiceList ||
+		p != (rpc.VoiceListParams{State: "failed", Chat: "@alice", Kind: "voice", Limit: 20, Cursor: "abc"}) {
+		t.Fatalf("voice list: %+v %+v %v", r, p, err)
+	}
+	for _, want := range []string{`"reason":"convert"`, `"chat_title":"Alice"`, `"finished_at":1700000100`, `"next_cursor":"cursor-1"`} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("answer lacks %s: %q", want, r.stdout)
+		}
+	}
+	// Every field of a filled page, finished or not, is a field of the schema.
+	filled, _ := reply("", nil)
+	data, err := json.Marshal(filled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths, err := schema.Paths(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command, ok := schemaCommands(t)["voice list"]
+	if !ok {
+		t.Fatal("voice list is not in the schema")
+	}
+	if missing := schema.Missing(paths, command.Fields); len(missing) != 0 {
+		t.Errorf("the response has %v, the schema does not", missing)
+	}
+	// A job that has not ended carries no finished_at, and a page of JSONL ends
+	// with the cursor line.
+	jsonl := runVoiceCLI(t, []string{"voice", "list", "--format", "jsonl"}, nil, reply)
+	lines := strings.Split(strings.TrimSpace(jsonl.stdout), "\n")
+	if jsonl.code != 0 || len(lines) != 3 || strings.Contains(lines[1], "finished_at") || lines[2] != `{"next_cursor":"cursor-1"}` {
+		t.Fatalf("jsonl: %+v", jsonl)
+	}
+	// Bad values are usage errors found before the Daemon is called.
+	for _, args := range [][]string{
+		{"voice", "list", "--state", "paused"}, {"voice", "list", "--kind", "audio"},
+		{"voice", "list", "--limit", "0"}, {"voice", "list", "--limit", "201"}, {"voice", "list", "extra"},
+	} {
+		if r = runVoiceCLI(t, args, nil, reply); r.code != exitcode.Usage || r.method != "" {
+			t.Fatalf("%v: %+v", args, r)
+		}
+	}
+	// The default page size is sent when --limit is not given.
+	r = runVoiceCLI(t, []string{"voice", "list"}, nil, reply)
+	p = rpc.VoiceListParams{}
+	if err := json.Unmarshal(r.params, &p); err != nil || p.Limit != 50 {
+		t.Fatalf("default limit: %+v %+v %v", r, p, err)
 	}
 }
 

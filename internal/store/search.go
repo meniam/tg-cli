@@ -20,11 +20,30 @@ var ErrEmptyQuery = errors.New("empty search query")
 // ErrInvalidSearchOptions identifies an unknown scope or author.
 var ErrInvalidSearchOptions = errors.New("invalid search options")
 
+// SearchMediaTypes are the attachment types a local message search can filter
+// by. They are values of messages.media_type as tgclient writes it; "photo" and
+// "gif" name the same kinds as `message search --media`.
+var SearchMediaTypes = []string{"voice", "video_note", "video", "photo", "document", "gif", "audio"}
+
+// ValidSearchMediaType reports whether value is one of SearchMediaTypes.
+func ValidSearchMediaType(value string) bool {
+	for _, name := range SearchMediaTypes {
+		if value == name {
+			return true
+		}
+	}
+	return false
+}
+
 // SearchOptions controls per-scope FTS queries.
 type SearchOptions struct {
-	Query          string
-	Scopes         []string
-	Author         string
+	Query  string
+	Scopes []string
+	Author string
+	// MediaType keeps only message hits whose attachment is of this type (one
+	// of SearchMediaTypes). Empty keeps all messages. It does not touch the
+	// other scopes: callers that set it ask for the messages scope only.
+	MediaType      string
 	ChatID         *int64
 	ChatFilter     ChatFilter
 	Limit          int
@@ -56,6 +75,9 @@ type SearchHit struct {
 	// the chat is unknown or has no username.
 	ChatTitle    string
 	ChatUsername string
+	// MediaType is the attachment type of a message hit, empty for a message
+	// without an attachment.
+	MediaType string
 }
 
 var searchScopeOrder = []string{"chats", "people", "messages", "notes"}
@@ -68,6 +90,9 @@ func (db *DB) Search(ctx context.Context, options SearchOptions) ([]SearchHit, e
 	}
 	if options.Author != "" && !validNoteAuthor(options.Author) {
 		return nil, fmt.Errorf("%w: unknown author %q", ErrInvalidSearchOptions, options.Author)
+	}
+	if options.MediaType != "" && !ValidSearchMediaType(options.MediaType) {
+		return nil, fmt.Errorf("%w: unknown media type %q", ErrInvalidSearchOptions, options.MediaType)
 	}
 	enabled := make(map[string]bool, len(searchScopeOrder))
 	if len(options.Scopes) == 0 {
@@ -255,11 +280,15 @@ func fuseRRF(limit int, legs ...[]messageCandidate) []*fusedMessage {
 // bound argument. Filters (chat, closed chats, deleted) are identical in both
 // legs.
 func (db *DB) messageLeg(ctx context.Context, table, match string, limit int, options SearchOptions) ([]messageCandidate, error) {
-	query := `SELECT m.id,m.chat_id,m.text,COALESCE(t.text,''),m.date,m.deleted_at,m.topic_id,c.type,c.username,c.title FROM ` + table + ` JOIN messages m ON m.rowid=` + table + `.rowid` + transcriptJoin + ` LEFT JOIN chats c ON c.id=m.chat_id WHERE ` + table + ` MATCH ?`
+	query := `SELECT m.id,m.chat_id,m.text,COALESCE(t.text,''),m.date,m.deleted_at,m.topic_id,c.type,c.username,c.title,m.media_type FROM ` + table + ` JOIN messages m ON m.rowid=` + table + `.rowid` + transcriptJoin + ` LEFT JOIN chats c ON c.id=m.chat_id WHERE ` + table + ` MATCH ?`
 	args := []any{match}
 	if options.ChatID != nil {
 		query += ` AND m.chat_id=?`
 		args = append(args, *options.ChatID)
+	}
+	if options.MediaType != "" {
+		query += ` AND m.media_type=?`
+		args = append(args, options.MediaType)
 	}
 	condition, filterArgs := options.ChatFilter.condition("m.chat_id", false)
 	query += condition
@@ -279,11 +308,12 @@ func (db *DB) messageLeg(ctx context.Context, table, match string, limit int, op
 		var candidate messageCandidate
 		var deletedAt, topicID *int64
 		var chatID int64
-		var chatType, username, chatTitle sql.NullString
+		var chatType, username, chatTitle, mediaType sql.NullString
 		var transcript string
-		if err := rows.Scan(&candidate.hit.ID, &chatID, &candidate.text, &transcript, &candidate.hit.Date, &deletedAt, &topicID, &chatType, &username, &chatTitle); err != nil {
+		if err := rows.Scan(&candidate.hit.ID, &chatID, &candidate.text, &transcript, &candidate.hit.Date, &deletedAt, &topicID, &chatType, &username, &chatTitle, &mediaType); err != nil {
 			return nil, err
 		}
+		candidate.hit.MediaType = mediaType.String
 		candidate.text = composeMessageText(candidate.text, transcript)
 		candidate.hit.ChatID = &chatID
 		candidate.hit.Scope = "messages"

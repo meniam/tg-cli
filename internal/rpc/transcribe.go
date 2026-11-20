@@ -47,3 +47,29 @@ type Transcription struct {
 	// Raw carries the Telegram object as received; never encoded in responses.
 	Raw json.RawMessage `json:"-"`
 }
+
+// MessageTranscription is the stored text of a voice message, video note or
+// video, shown beside the message by the commands that read the local database.
+// Text is untrusted data like the message text, and it is empty for a recording
+// the engine found no speech in. Source is "local" for the local engine and
+// "telegram" for Telegram's; Engine names the local engine.
+type MessageTranscription struct {
+	Text   string `json:"text" untrusted:"true"`
+	Source string `json:"source"`
+	Engine string `json:"engine,omitempty"`
+}
+
+// ContextMessage is a message of MethodMessageContext. Transcription is set only
+// for a local context (Local): the finished text the database holds for the
+// message, absent when it has none.
+type ContextMessage struct {
+	Message
+	Transcription *MessageTranscription `json:"transcription,omitempty"`
+}
+
+// ContextResult is the answer of MethodMessageContext. The Daemon answers a live
+// context with a MessagesResult of the same shape, without transcriptions.
+type ContextResult struct {
+	Messages   []ContextMessage `json:"messages"`
+	NextCursor string           `json:"next_cursor,omitempty"`
+}

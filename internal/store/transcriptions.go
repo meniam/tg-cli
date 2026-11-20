@@ -92,3 +92,39 @@ func (db *DB) UpdateTranscription(ctx context.Context, t Transcription) (bool, e
 	}
 	return true, tx.Commit()
 }
+
+// FinishedTranscriptions returns the finished transcriptions (not pending ones)
+// of the given messages of one chat, by message id. A message with no
+// transcription, or with one still pending, is absent from the map. A text may
+// be empty: a recording the engine found no speech in. It reads the database
+// only.
+func (db *DB) FinishedTranscriptions(ctx context.Context, chatID int64, messageIDs []int) (map[int]Transcription, error) {
+	found := make(map[int]Transcription, len(messageIDs))
+	const chunk = 400
+	for start := 0; start < len(messageIDs); start += chunk {
+		part := messageIDs[start:min(start+chunk, len(messageIDs))]
+		args := make([]any, 0, len(part)+1)
+		args = append(args, chatID)
+		for _, id := range part {
+			args = append(args, id)
+		}
+		rows, err := db.read.QueryContext(ctx, `SELECT message_id,text,source,engine FROM transcriptions WHERE chat_id=? AND pending=0 AND message_id IN (`+placeholders(len(part))+`)`, args...)
+		if err != nil {
+			return nil, fmt.Errorf("read transcriptions: %w", err)
+		}
+		for rows.Next() {
+			t := Transcription{ChatID: chatID}
+			if err := rows.Scan(&t.MessageID, &t.Text, &t.Source, &t.Engine); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("read transcriptions: %w", err)
+			}
+			found[t.MessageID] = t
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read transcriptions: %w", err)
+		}
+	}
+	return found, nil
+}

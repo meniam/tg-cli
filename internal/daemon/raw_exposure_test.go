@@ -34,7 +34,7 @@ func TestRawLegacyColumnsOverrideRaw(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	messages := response.(rpc.MessagesResult).Messages
+	messages := response.(rpc.ContextResult).Messages
 	if len(messages) != 1 || messages[0].Text != "Allowed" || messages[0].Sender == nil || messages[0].Sender.ID != senderID || messages[0].Sender.Name != senderName || messages[0].Sender.Username != "" {
 		t.Fatalf("columns not preserved: %+v", messages)
 	}
@@ -334,7 +334,7 @@ func TestRawEditedDateIsOnlyLocalReadDifference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := before.(rpc.MessagesResult).Messages
+	a := before.(rpc.ContextResult).Messages
 	if len(a) != 1 || !a[0].Edited {
 		t.Fatalf("edited message=%+v", a)
 	}
@@ -350,7 +350,7 @@ func TestRawEditedDateIsOnlyLocalReadDifference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := after.(rpc.MessagesResult).Messages
+	b := after.(rpc.ContextResult).Messages
 	if len(b) != 1 || b[0].Edited {
 		t.Fatalf("baseline=%+v", b)
 	}
