@@ -161,3 +161,22 @@ func TestFoldersReadComposition(t *testing.T) {
 		t.Error("the snapshot timestamp of folders is missing")
 	}
 }
+
+// TestFoldersSyncedAt covers the age of the folder snapshot: empty before the
+// first read from Telegram, then the time of the last replacement.
+func TestFoldersSyncedAt(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	if at, err := db.FoldersSyncedAt(ctx); err != nil || at != nil {
+		t.Fatalf("before the first snapshot: %v %v", at, err)
+	}
+	for _, unix := range []int64{1_700_000_000, 1_700_003_600} {
+		setClock(db, unix)
+		if err := db.ReplaceFolders(ctx, []rpc.Folder{}, ChatFilter{}); err != nil {
+			t.Fatal(err)
+		}
+		if at, err := db.FoldersSyncedAt(ctx); err != nil || at == nil || *at != unix {
+			t.Fatalf("after the snapshot at %d: %v %v", unix, at, err)
+		}
+	}
+}

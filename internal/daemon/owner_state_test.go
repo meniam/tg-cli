@@ -11,6 +11,7 @@ import (
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
+	"time"
 )
 
 func (f *fakeTelegram) Folders(context.Context) (rpc.FoldersResult, error) {
@@ -49,6 +50,72 @@ func (f *ownerFake) Blocked(context.Context, rpc.BlockedParams) (rpc.BlockedResu
 	f.calls++
 	return f.blocked, nil
 }
+func TestRefreshFoldersSavesSnapshot(t *testing.T) {
+	d, base, db, path := accessTestDaemon(t)
+	ctx := context.Background()
+	if err := db.UpsertChats(ctx, []store.Chat{{ID: 42, Type: "user", Title: "Kept"}}); err != nil {
+		t.Fatal(err)
+	}
+	f := &ownerFake{fakeTelegram: base, folders: rpc.FoldersResult{Folders: []rpc.Folder{{
+		ID: 1, Kind: "filter", Title: "Work",
+		Pinned:  []rpc.FolderPeer{{ID: 42}, {ID: 77}},
+		Include: []rpc.FolderPeer{{ID: 43}},
+		Exclude: []rpc.FolderPeer{{ID: 77}},
+	}}}}
+	d.opts.Telegram = f
+	writeAccess(t, path, `{"block":[77]}`)
+	if at, err := db.FoldersSyncedAt(ctx); err != nil || at != nil {
+		t.Fatalf("snapshot before the refresh: %v %v", at, err)
+	}
+	before := time.Now().Unix()
+	result, err := d.refreshFolders(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Folders) != 1 || len(result.Folders[0].Pinned) != 1 || result.Folders[0].Pinned[0].Title != "Kept" || result.SyncedAt == nil {
+		t.Fatalf("result %+v", result)
+	}
+	at, err := db.FoldersSyncedAt(ctx)
+	if err != nil || at == nil || *at < before || *at > time.Now().Unix() {
+		t.Fatalf("snapshot after the refresh: %v %v", at, err)
+	}
+	connection, err := sql.Open("sqlite", filepath.Join(filepath.Dir(path), "store.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	var folders, links, closed int
+	for query, target := range map[string]*int{
+		`SELECT COUNT(*) FROM folders`:                         &folders,
+		`SELECT COUNT(*) FROM folder_chats`:                    &links,
+		`SELECT COUNT(*) FROM folder_chats WHERE chat_id = 77`: &closed,
+	} {
+		if err := connection.QueryRowContext(ctx, query).Scan(target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if folders != 1 || links != 2 || closed != 0 {
+		t.Fatalf("folders=%d folder_chats=%d closed chat rows=%d", folders, links, closed)
+	}
+}
+
+func TestRefreshFoldersReportsStorageFailure(t *testing.T) {
+	d, base, db, _ := accessTestDaemon(t)
+	d.opts.Telegram = &ownerFake{fakeTelegram: base, folders: rpc.FoldersResult{Folders: []rpc.Folder{{ID: 1, Kind: "filter"}}}}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	result, err := d.refreshFolders(context.Background())
+	if !errors.Is(err, errFoldersNotSaved) || len(result.Folders) != 1 {
+		t.Fatalf("refresh with a closed database: %+v %v", result, err)
+	}
+	// The handler keeps its former behavior: the Telegram answer survives a storage failure.
+	v, err := d.folderList(context.Background(), params(t, rpc.LocalParams{}))
+	if err != nil || len(v.(rpc.FoldersResult).Folders) != 1 {
+		t.Fatalf("folder.list with a closed database: %+v %v", v, err)
+	}
+}
+
 func TestOwnerStateAccessAndLocal(t *testing.T) {
 	d, base, db, path := accessTestDaemon(t)
 	ctx := context.Background()

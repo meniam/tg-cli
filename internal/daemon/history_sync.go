@@ -15,6 +15,9 @@ import (
 
 const historySyncPause = 2 * time.Second
 
+// defaultHistorySyncPause is the page pause of a manual load.
+func defaultHistorySyncPause() time.Duration { return historySyncPause }
+
 type historySyncTimer interface {
 	C() <-chan time.Time
 	Stop() bool
@@ -40,6 +43,15 @@ type historySyncTask struct {
 	offset int
 	ctx    context.Context
 	cancel context.CancelFunc
+	// pause returns the wait before the next page; it is called once per page.
+	pause func() time.Duration
+	// final is closed, under the manager mutex, when the job reaches done,
+	// failed or cancelled.
+	final chan struct{}
+}
+
+func (t *historySyncTask) active() bool {
+	return t.State == rpc.HistorySyncQueued || t.State == rpc.HistorySyncRunning
 }
 
 // historySyncManager owns one worker for all chats and joins it on shutdown.
@@ -75,9 +87,7 @@ func (m *historySyncManager) close() {
 	m.cancel()
 	m.mu.Lock()
 	for _, task := range m.queue {
-		task.State = rpc.HistorySyncCancelled
-		task.UpdatedAt = m.now()
-		task.cancel()
+		m.cancelTaskLocked(task)
 	}
 	m.queue = nil
 	m.mu.Unlock()
@@ -101,36 +111,137 @@ func (m *historySyncManager) now() string {
 	return m.clock.Now().UTC().Format(time.RFC3339)
 }
 
+// start queues a manual load. A manual load has priority over a background
+// one: it cancels the background job, queued or running, and waits only for
+// the manual jobs ahead of it.
 func (m *historySyncManager) start(chatID int64, ref chatref.Ref, state store.SyncProgress) (rpc.HistorySyncJob, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.ctx.Err(); err != nil {
 		return rpc.HistorySyncJob{}, rpc.NewError(rpc.CodeBusy, "history sync is stopping")
 	}
-	if existing := m.jobs[chatID]; existing != nil && (existing.State == rpc.HistorySyncQueued || existing.State == rpc.HistorySyncRunning) {
+	if existing := m.jobs[chatID]; existing != nil && existing.active() && existing.Source == rpc.HistorySyncManual {
 		return existing.HistorySyncJob, nil
+	}
+	if !state.Complete {
+		m.cancelBackgroundLocked()
+	}
+	return m.enqueueLocked(chatID, ref, state, rpc.HistorySyncManual, nil), nil
+}
+
+// startBackground queues a background load only when the manager is idle.
+// The check and the queueing happen under one lock, so a manual load that
+// arrives meanwhile either goes first or makes this call return busy.
+func (m *historySyncManager) startBackground(chatID int64, ref chatref.Ref, state store.SyncProgress, pause func() time.Duration) (rpc.HistorySyncJob, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.ctx.Err(); err != nil {
+		return rpc.HistorySyncJob{}, rpc.NewError(rpc.CodeBusy, "history sync is stopping")
+	}
+	if m.current != nil || len(m.queue) > 0 {
+		return rpc.HistorySyncJob{}, rpc.NewError(rpc.CodeBusy, "history sync is busy")
+	}
+	return m.enqueueLocked(chatID, ref, state, rpc.HistorySyncBackground, pause), nil
+}
+
+func (m *historySyncManager) enqueueLocked(chatID int64, ref chatref.Ref, state store.SyncProgress, source string, pause func() time.Duration) rpc.HistorySyncJob {
+	if pause == nil {
+		pause = defaultHistorySyncPause
 	}
 	when := m.now()
 	jobCtx, cancel := context.WithCancel(m.ctx)
 	task := &historySyncTask{
 		HistorySyncJob: rpc.HistorySyncJob{
-			ChatID: chatID, State: rpc.HistorySyncQueued,
+			ChatID: chatID, State: rpc.HistorySyncQueued, Source: source,
 			OldestID: state.OldestID, NewestID: state.NewestID, Complete: state.Complete,
 			StartedAt: when, UpdatedAt: when,
 		},
-		ref: ref, ctx: jobCtx, cancel: cancel,
+		ref: ref, ctx: jobCtx, cancel: cancel, pause: pause, final: make(chan struct{}),
 	}
 	if state.OldestID != nil {
 		task.offset = *state.OldestID
 	}
 	if state.Complete {
-		task.State = rpc.HistorySyncDone
+		m.setStateLocked(task, rpc.HistorySyncDone, 0, "")
 		cancel()
 	} else {
 		m.queue = append(m.queue, task)
 		m.signal()
 	}
 	m.jobs[chatID] = task
+	return task.HistorySyncJob
+}
+
+// setStateLocked moves a job to state and releases its waiters when the state
+// is final. The caller holds m.mu.
+func (m *historySyncManager) setStateLocked(task *historySyncTask, state string, code int, message string) {
+	task.State = state
+	task.ErrorCode = code
+	task.Error = message
+	task.UpdatedAt = m.now()
+	if !task.active() {
+		select {
+		case <-task.final:
+		default:
+			close(task.final)
+		}
+	}
+}
+
+// cancelTaskLocked cancels a queued or running job and drops it from the
+// queue. Saved pages stay: the next load continues from oldest_id.
+func (m *historySyncManager) cancelTaskLocked(task *historySyncTask) {
+	if !task.active() {
+		return
+	}
+	for i, queued := range m.queue {
+		if queued == task {
+			m.queue = append(m.queue[:i], m.queue[i+1:]...)
+			break
+		}
+	}
+	m.setStateLocked(task, rpc.HistorySyncCancelled, 0, "")
+	task.cancel()
+}
+
+func (m *historySyncManager) cancelBackgroundLocked() {
+	for _, task := range append([]*historySyncTask(nil), m.queue...) {
+		if task.Source == rpc.HistorySyncBackground {
+			m.cancelTaskLocked(task)
+		}
+	}
+	if m.current != nil && m.current.Source == rpc.HistorySyncBackground {
+		m.cancelTaskLocked(m.current)
+	}
+}
+
+// cancelBackground cancels the current and queued background jobs and leaves
+// manual ones alone. It is safe when there are none.
+func (m *historySyncManager) cancelBackground() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cancelBackgroundLocked()
+}
+
+// waitJob blocks while the job of the chat is queued or running and returns
+// its final snapshot. A chat without a job returns at once as idle.
+func (m *historySyncManager) waitJob(ctx context.Context, chatID int64) (rpc.HistorySyncJob, error) {
+	m.mu.Lock()
+	task := m.jobs[chatID]
+	if task == nil {
+		m.mu.Unlock()
+		return rpc.HistorySyncJob{ChatID: chatID, State: rpc.HistorySyncIdle}, nil
+	}
+	final := task.final
+	m.mu.Unlock()
+	select {
+	case <-final:
+	case <-m.done:
+	case <-ctx.Done():
+		return rpc.HistorySyncJob{}, ctx.Err()
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return task.HistorySyncJob, nil
 }
 
@@ -141,19 +252,7 @@ func (m *historySyncManager) cancelJob(chatID int64) *rpc.HistorySyncJob {
 	if task == nil {
 		return nil
 	}
-	if task.State == rpc.HistorySyncQueued {
-		for i, queued := range m.queue {
-			if queued == task {
-				m.queue = append(m.queue[:i], m.queue[i+1:]...)
-				break
-			}
-		}
-	}
-	if task.State == rpc.HistorySyncQueued || task.State == rpc.HistorySyncRunning {
-		task.State = rpc.HistorySyncCancelled
-		task.UpdatedAt = m.now()
-		task.cancel()
-	}
+	m.cancelTaskLocked(task)
 	result := task.HistorySyncJob
 	return &result
 }
@@ -260,10 +359,7 @@ func (m *historySyncManager) finish(task *historySyncTask, state string, code in
 	if task.State == rpc.HistorySyncCancelled {
 		return
 	}
-	task.State = state
-	task.ErrorCode = code
-	task.Error = message
-	task.UpdatedAt = m.now()
+	m.setStateLocked(task, state, code, message)
 }
 
 func (m *historySyncManager) fail(task *historySyncTask, err error) {
@@ -365,7 +461,7 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 			m.recordPage(task, nil, 0)
 		}
 		offset = page.RawNextOffsetID
-		timer := m.clock.NewTimer(historySyncPause)
+		timer := m.clock.NewTimer(task.pause())
 		select {
 		case <-ctx.Done():
 			timer.Stop()

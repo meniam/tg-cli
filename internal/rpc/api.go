@@ -390,10 +390,17 @@ const (
 	HistorySyncCancelled    = "cancelled"
 )
 
+// Sources of a history load: the owner's command or the Daemon's schedule.
+const (
+	HistorySyncManual     = "manual"
+	HistorySyncBackground = "background"
+)
+
 // HistorySyncJob is the in-memory state of one background history load.
 type HistorySyncJob struct {
 	ChatID      int64  `json:"chat_id"`
 	State       string `json:"state"`
+	Source      string `json:"source,omitempty"` // HistorySyncManual or HistorySyncBackground; empty when idle
 	Pages       int    `json:"pages"`
 	Loaded      int    `json:"loaded"`
 	OldestID    *int   `json:"oldest_id"`

@@ -189,7 +189,7 @@ func TestChatSyncSchema(t *testing.T) {
 	for _, field := range status.ChatFields {
 		paths = append(paths, field.Path)
 	}
-	for _, path := range []string{"chat_id", "state", "pages", "loaded", "oldest_id", "newest_id", "complete", "wait_seconds", "error_code", "error", "started_at", "updated_at"} {
+	for _, path := range []string{"chat_id", "state", "source", "pages", "loaded", "oldest_id", "newest_id", "complete", "wait_seconds", "error_code", "error", "started_at", "updated_at"} {
 		if !slices.Contains(paths, path) {
 			t.Errorf("chat result is missing %s", path)
 		}

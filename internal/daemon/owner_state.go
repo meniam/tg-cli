@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"tg-cli/internal/access"
 	"tg-cli/internal/chatref"
+	"tg-cli/internal/redact"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
 )
@@ -66,9 +68,30 @@ func (d *daemon) folderList(ctx context.Context, raw json.RawMessage) (any, erro
 	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
-	result, err := d.telegram(ctx).Folders(ctx)
+	result, err := d.refreshFolders(ctx)
+	if errors.Is(err, errFoldersNotSaved) {
+		// Like every read that fills the local copy, the answer survives a storage failure.
+		d.log.Warn("local storage failed", "op", rpc.MethodFolderList, "err", redact.Text(err.Error()))
+		err = nil
+	}
 	if err != nil {
 		return nil, err
+	}
+	return result, nil
+}
+
+// errFoldersNotSaved marks a refreshFolders result that was read from Telegram
+// but could not be written to the local database.
+var errFoldersNotSaved = errors.New("folders were not saved")
+
+// refreshFolders reads the folders from Telegram, hides what the access lists
+// close, fills in the chat titles and replaces the local snapshot. It does not
+// check the login: the caller does. When only the write fails, the result is
+// still returned together with an error that wraps errFoldersNotSaved.
+func (d *daemon) refreshFolders(ctx context.Context) (rpc.FoldersResult, error) {
+	result, err := d.telegram(ctx).Folders(ctx)
+	if err != nil {
+		return rpc.FoldersResult{}, err
 	}
 	result.Folders = filterFolders(result.Folders, d.policy())
 	for i := range result.Folders {
@@ -86,10 +109,14 @@ func (d *daemon) folderList(ctx context.Context, raw json.RawMessage) (any, erro
 	for i := range result.Folders {
 		result.Folders[i].SyncedAt = &now
 	}
-	d.save(ctx, rpc.MethodFolderList, func(ctx context.Context) error {
-		return d.store.ReplaceFolders(ctx, result.Folders, chatFilter(d.policy()))
-	})
+	// The write is synchronous and survives a cancelled request, like d.save.
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveTimeout)
+	defer cancel()
+	saveErr := d.store.ReplaceFolders(saveCtx, result.Folders, chatFilter(d.policy()))
 	result.Folders = filterFolders(result.Folders, d.policy())
+	if saveErr != nil {
+		return result, fmt.Errorf("%w: %w", errFoldersNotSaved, saveErr)
+	}
 	return result, nil
 }
 func (d *daemon) chatState(ctx context.Context, raw json.RawMessage) (any, error) {
