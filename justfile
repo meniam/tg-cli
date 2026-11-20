@@ -110,6 +110,16 @@ docs help="":
     set -x
     go test ./internal/cli -run TestDocsGenerated -update-docs
 
+# Check the agent skill docs/skill/tg against `tg schema`
+[group('maintenance')]
+[arg("help", long="help", short="h", value="1")]
+skill-check help="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ -z "{{ help }}" ]] || exec bash bin/lib/recipe-help.sh skill-check
+    set -x
+    python3 bin/skill_check.py docs/skill/tg
+
 # Tidy go.mod and go.sum
 [group('maintenance')]
 [arg("help", long="help", short="h", value="1")]

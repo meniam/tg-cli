@@ -15,7 +15,7 @@ This file is an index: what every task needs. Details live in the documents link
 | The feature list, statuses, what is checked on a live account | [FEATURES.md](FEATURES.md) (IDs are never renumbered; a new feature takes the next free number in its section) |
 | Every command, flag, output format and exit code | [docs/cli/](docs/cli/overview.md) (index: [docs/README.md](docs/README.md)); `tg schema` prints the same from the binary |
 | Detailed behavior contracts (journal, throttle, history load, export, access lists, events, writes, media) | [docs/contracts.md](docs/contracts.md) |
-| How an agent should work with the tool | [docs/skill/tg-cli/](docs/skill/tg-cli/SKILL.md) (Russian, keep it in step with `tg schema`) |
+| How an agent should work with the tool | [docs/skill/tg/](docs/skill/tg/SKILL.md) (English body, Russian trigger phrases; keep it in step with `tg schema`, `just skill-check` verifies it) |
 | Decisions with their alternatives | [.agents/decisions/_TOC.md](.agents/decisions/_TOC.md). Do not change a settled rule silently: record a decision |
 | Plans and their status | [.agents/plans/](.agents/plans/), format in [plans.md](.agents/rules/plans.md) |
 | Open questions | the "Open questions" tables of the plans and the open questions of `INTENT.md`; do not choose yourself, ask or record a decision |
@@ -31,7 +31,6 @@ bin/lib/, bin/just/   `just` help rendering and help texts (update them when you
 bin/apps/atlas/       Atlas build (code graph and docs index), a copy: do not edit; launcher `bin/atlas`
 .atlas.json           Atlas config: what is indexed; the index is in `var/cache/atlas`
 lefthook.yml         git hooks: after a branch switch or a pull the Atlas index is caught up in the background (`lefthook install` once per clone)
-.agents/agents/       project agents (`pathfinder`); profiles in `.claude/agents/` and `.codex/agents/`
 dist/                 build output (dist/tg), not tracked by git
 docs/                 documentation: cli/ (command reference), contracts.md, skill/ (agent skill)
 cmd/tg-cli/main.go    entry point and wiring only, no logic
@@ -56,16 +55,16 @@ internal/             cli, daemon, rpc, tgclient, netconf, throttle, access, fil
 
 ## Roles and models
 
-- Every agent runs in a herdr pane (see "Herdr layout"), not as a Claude subagent. The exception is `pathfinder`: read-only scouting runs as a Claude subagent on Haiku, see "Search".
+- Every agent runs in a herdr pane (see "Herdr layout"), not as a Claude subagent.
 - Planner: Claude Opus 5.5 (`herdr agent start <name> --kind claude -- --model opus`). It writes and revises plans: requirement audit, decision questions, the plan file.
 - Manager (the main session): Claude Sonnet 5.5, unless a skill or an agent definition sets another model.
 - Everything else (code, tests, audits, documents, checks) goes to Codex. The agent that starts the job picks the Codex model by the task and says which one it chose: Terra (`gpt-6.1-terra`) is the default for Go code, a lighter model for mechanical edits, a stronger one for hard design or review. Claude does other work only when a skill or agent definition requires it.
 
 ## Search
 
-Any search through code, configs, documents and tests of this project goes to the `pathfinder` agent ([pathfinder.md](.agents/agents/pathfinder.md)), also questions like "what do you know about X", "how does it work", "where is it done", "who calls". It checks documents against code through Atlas and returns a report with `path:line` links. Do not conclude about behavior from a document alone.
+Before any search through code, configs, documents and tests of this project, load the skill [scout](.agents/skills/scout/SKILL.md), also for questions like "what do you know about X", "how does it work", "where is it done", "who calls". It checks documents against code through Atlas (`bin/atlas`) and fixes the report format with `path:line` links. Do not conclude about behavior from a document alone.
 
-You may read files named by the user, an instruction or a scout's report yourself; finding new files and links stays with `pathfinder`. A subagent that already got a scouting job searches itself and delegates no further: first documents and Atlas (`bin/atlas`), then a pointed `rg`. Commands and limits are in the skill [pathfinder](.agents/skills/pathfinder/SKILL.md). Atlas needs `uv` (https://docs.astral.sh/uv/getting-started/installation/); it installs Python 3.14 itself. `bin/apps/atlas` is a copy of a build: a bug or a missing feature goes to the owner, not into the copy.
+Order: documents and Atlas first, then a pointed `rg`. Commands and limits are in the skill. Atlas needs `uv` (https://docs.astral.sh/uv/getting-started/installation/); it installs Python 3.14 itself. `bin/apps/atlas` is a copy of a build: a bug or a missing feature goes to the owner, not into the copy.
 
 ## Herdr layout
 
@@ -94,7 +93,7 @@ The main session runs in herdr and lays parallel work out in tabs:
 ## Documents and language
 
 - Code, comments, identifiers, error strings, log strings and commit messages are in English. So are this file, `README.md`, the `just` help, the JSON-RPC package, `docs/cli/` and `docs/contracts.md`. This project overrides the global `justfile.md` preference for Russian help text.
-- `INTENT.md`, `FEATURES.md`, plans, decisions and `docs/skill/` are in Russian, avoiding the em dash "—" where possible. Commands, flags and identifiers stay in the original.
+- `INTENT.md`, `FEATURES.md`, plans and decisions are in Russian, avoiding the em dash "—" where possible. Commands, flags and identifiers stay in the original. `docs/skill/` is English; only the trigger phrases (the Russian words in the `description` and in the `task` field of recipes) are Russian.
 - `README.md` is the public face: it documents only what is implemented and verified.
 - Text documents are written and checked by the `writer` or `docwriter` agent and `glavred` per [docs_chain.md](.agents/rules/docs_chain.md). Editing this file does not start that chain.
 

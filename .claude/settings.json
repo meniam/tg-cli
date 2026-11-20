@@ -4,18 +4,5 @@
       "Bash(bin/atlas:*)",
       "Bash(just atlas:*)"
     ]
-  },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 -I \"$CLAUDE_PROJECT_DIR/.agents/skills/pathfinder/scripts/readonly-guard.py\""
-          }
-        ]
-      }
-    ]
   }
 }

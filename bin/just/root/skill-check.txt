@@ -1,0 +1,19 @@
+    Checks the agent skill in docs/skill/tg against the machine description printed by `tg schema`.
+    Catches text that drifted from the binary. Changes nothing.
+
+  What runs
+    1. python3 bin/skill_check.py docs/skill/tg
+
+  What it checks
+    - every `tg <group> <command>` in the skill text names a command of the schema;
+    - every --flag in a code block belongs to that command or is global;
+    - every recipe has the frontmatter fields (title, task, writes, access, commands,
+      live_checked, tags) with valid values, and `commands` equals the commands its code uses.
+    - a recipe whose `commands` has a write command (`account_write` or `local_write`) says `writes: true`,
+      and one with an `account_write` command names a write permission in `access`; `access` is a
+      non-empty list and `none` stands alone; a command that writes a file (`>` redirect, `--output`)
+      needs `writes: true`; `message send-media` needs `files` and `message download` and
+      `message export-month` need `downloads`.
+
+    Uses dist/tg when it exists, otherwise tg from PATH; TG_BIN overrides both.
+    Exit code 1 means findings, 2 means the schema could not be read.

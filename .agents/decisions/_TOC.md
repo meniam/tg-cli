@@ -50,3 +50,6 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-16 — [Каждая таблица с данными Telegram хранит полученный объект в raw как JSON](20261116_1336_every_telegram_table_keeps_the_received_object_in_raw_as_json.md)
 - 2026-11-18 — [raw хранит объект Telegram с ключом типа и без access_hash, сериализатор лежит в отдельном пакете tgraw](20261118_1211_raw_keeps_telegram_objects_with_type_keys_and_no_access_hash.md)
 - 2026-11-20 — [Фоновая дозагрузка истории идёт по расписанию в окне 08:00-20:00, выключена по умолчанию, дата первого сообщения лежит колонкой](20261120_1651_background_history_sync_runs_in_a_daily_window_and_is_off_by_default.md)
+||||||| 57f8dcc
+- 2026-11-20 — [Поиск по проекту это скилл scout без отдельного агента](20261120_1551_scouting_is_the_scout_skill_without_an_agent.md)
+- 2026-11-20 — [Скилл для агента называется tg и состоит из маршрутизатора, справочников и рецептов](20261120_1700_agent_skill_is_tg_with_references_and_recipes.md)
