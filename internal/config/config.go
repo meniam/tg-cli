@@ -27,6 +27,8 @@ type Config struct {
 	Files Files `toml:"files"`
 	// Behavior holds operational settings.
 	Behavior Behavior `toml:"behavior"`
+	// BackgroundSync holds the scheduled history load settings.
+	BackgroundSync BackgroundSync `toml:"background_sync"`
 	// Profiles holds settings for each named profile.
 	Profiles map[string]Profile `toml:"profiles"`
 	// Warnings contains diagnostics that do not reveal proxy credentials.
@@ -159,6 +161,9 @@ func Load(path string) (Config, error) {
 	if err != nil || duration < 0 {
 		return Config{}, invalid("behavior.flood_autowait must be a non-negative duration")
 	}
+	if _, err := c.BackgroundSync.Resolve(); err != nil {
+		return Config{}, err
+	}
 	for name, p := range c.Profiles {
 		proxy, err := validateProfile(name, p)
 		if err != nil {
@@ -172,7 +177,7 @@ func Load(path string) (Config, error) {
 }
 
 func defaults(dir string) Config {
-	return Config{Home: filepath.Join(dir, "tg-cli"), DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}}
+	return Config{Home: filepath.Join(dir, "tg-cli"), DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}, BackgroundSync: defaultBackgroundSync()}
 }
 
 func validateHome(path string) (string, error) {

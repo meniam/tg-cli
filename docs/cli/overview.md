@@ -317,6 +317,18 @@ A `FLOOD_WAIT_X` from Telegram pauses the whole account for X seconds. A request
 | `behavior.throttle_percent` | `TG_CLI_THROTTLE_PERCENT` | a decimal number from 1 to 100: the share of the reference limits | 60 |
 | `behavior.flood_autowait` | `TG_CLI_FLOOD_AUTOWAIT` | a Go duration such as `10s`; `0` turns the auto-wait off, and commands then queue during a pause | `10s` |
 
+`[background_sync]` tunes the scheduled history load: the Daemon loads older history of chats that are not loaded to their first message, one chat per run, inside a daily window. It is off by default; while it is off the Daemon makes no new Telegram request for it, and `chat sync` is unchanged. The pauses and the window below apply to scheduled loads only. The same rules hold for the environment as for `[behavior]`: a variable overrides the file for one start, a bad value is exit code 2 before the Daemon starts, and a value that breaks a rule between two keys (the pair order, the minimum pause) is exit code 2 as well:
+
+| Config key | Environment variable | Values | Default |
+| --- | --- | --- | --- |
+| `background_sync.enabled` | `TG_CLI_BACKGROUND_SYNC_ENABLED` | `true` or `false` | `false` |
+| `background_sync.window_start` | `TG_CLI_BACKGROUND_SYNC_WINDOW_START` | local time of the Daemon machine, `HH:MM` on a 24-hour clock, earlier than `window_end` | `08:00` |
+| `background_sync.window_end` | `TG_CLI_BACKGROUND_SYNC_WINDOW_END` | local time, `HH:MM`; a running load stops then | `20:00` |
+| `background_sync.interval_min` | `TG_CLI_BACKGROUND_SYNC_INTERVAL_MIN` | a positive Go duration; the shortest random wait between two loads | `40m` |
+| `background_sync.interval_max` | `TG_CLI_BACKGROUND_SYNC_INTERVAL_MAX` | a positive Go duration, not below `interval_min` | `3h` |
+| `background_sync.page_pause_min` | `TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MIN` | a Go duration of at least `1s`; the shortest random pause between pages | `2s` |
+| `background_sync.page_pause_max` | `TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MAX` | a Go duration, not below `page_pause_min` | `8s` |
+
 Per-method buckets remain an open item: `getDialogs` can hit `FLOOD_WAIT` before the general bucket, so keep pauses between reads. Media parts go through `FileDC`, which retains the same middleware and the file-transfer lane; CDN is not enabled for these downloads. The init call, ping and ack bypass the throttle; the Telegram library keeps its own retries after `FLOOD_WAIT` in the updates manager, downloader and `QR.Auth`. See [FEATURES.md](../../FEATURES.md), item 11.4.
 
 ## The tool describes itself

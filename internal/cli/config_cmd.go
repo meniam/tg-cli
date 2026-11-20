@@ -29,6 +29,15 @@ type configBehaviorResult struct {
 	FloodAutoWait   string  `json:"flood_autowait"`
 	ExpectUser      string  `json:"expect_user"`
 }
+type configBackgroundSyncResult struct {
+	Enabled      bool   `json:"enabled"`
+	WindowStart  string `json:"window_start"`
+	WindowEnd    string `json:"window_end"`
+	IntervalMin  string `json:"interval_min"`
+	IntervalMax  string `json:"interval_max"`
+	PagePauseMin string `json:"page_pause_min"`
+	PagePauseMax string `json:"page_pause_max"`
+}
 type configProfileResult struct {
 	Client    string `json:"client"`
 	Device    string `json:"device"`
@@ -43,6 +52,7 @@ type configShowResult struct {
 	DefaultProfile string                         `json:"default_profile"`
 	Files          configFilesResult              `json:"files"`
 	Behavior       configBehaviorResult           `json:"behavior"`
+	BackgroundSync configBackgroundSyncResult     `json:"background_sync"`
 	Profiles       map[string]configProfileResult `json:"profiles"`
 }
 type configInitResult struct {
@@ -104,7 +114,7 @@ func (a *app) configShow(cmd *cobra.Command, _ []string) error {
 			return fail(exitcode.Usage, "%v", err)
 		}
 	}
-	result := configShowResult{Home: a.config.Home, DBDir: dbRoot, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}, Behavior: configBehaviorResult{a.config.Behavior.ThrottlePercent, a.config.Behavior.FloodAutoWait, a.config.Behavior.ExpectUser}, Profiles: map[string]configProfileResult{}}
+	result := configShowResult{Home: a.config.Home, DBDir: dbRoot, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}, Behavior: configBehaviorResult{a.config.Behavior.ThrottlePercent, a.config.Behavior.FloodAutoWait, a.config.Behavior.ExpectUser}, BackgroundSync: configBackgroundSyncResult(a.config.BackgroundSync), Profiles: map[string]configProfileResult{}}
 	for name, p := range a.config.Profiles {
 		proxy, err := netconf.ParseProxy(p.Proxy)
 		if err != nil {
