@@ -23,7 +23,7 @@ PR: —
   - `internal/store/sync_state.go:55-106`: `SaveHistoryPage`, upsert `sync_state` (`oldest_id` и `newest_id` через `MIN` и `MAX`, `complete` через `MAX`).
   - `internal/store/telegram.go:493-538`: upsert сообщений, `raw=excluded.raw` перезаписывает старый `raw`; изменившийся текст уходит в `message_versions`.
   - `internal/daemon/owner_state.go:~70-90` и `internal/store/folders.go:52-100`: `folder.list` читает папки из Telegram и пишет `folders`, `folder_chats(folder_id, chat_id, position, kind)` (`pinned`, `include`, `exclude`) и снимок `owner_snapshots` вида `folders` со `synced_at`.
-  - `internal/store/migrations/0008_chats_state.sql`: представление `chats_overview` уже отдаёт `first_message_date` (по сохранённым сообщениям без `deleted_at`) и `history_complete`.
+  - `internal/store/migrations/0008_chats_state.sql`: представление `chats_state` уже отдаёт `first_message_date` (по сохранённым сообщениям без `deleted_at`) и `history_complete`.
   - `internal/config/config.go` (структуры, `Load`, проверка), `internal/cli/throttle_config.go:20-36` (настройки доходят до отдельного процесса демона через `TG_CLI_*`), `internal/cli/schema_cmd.go:55` (список ключей и переменных).
   - `internal/daemon/daemon.go:~195-224` (создание менеджеров, фоновые горутины и их ожидание при остановке), `internal/store/store.go:155-182` (миграции, `user_version`).
   - `internal/tgclient/throttle.go:126,141` и `internal/throttle/context.go`: фоновая метка запроса, фоновая загрузка ждёт `FLOOD_WAIT` любой длины.
@@ -152,10 +152,10 @@ page_pause_max = "8s"
 
 ## Implementation steps
 
-- [ ] Шаг 2. Миграция `0010_first_message_date.sql` и запись даты в `SaveHistoryPage` при `complete = 1`; заполнение для уже полных чатов из `messages`; чтение даты в `SyncProgress`, `chat overview` и `chat sync status`.
+- [x] Шаг 2 (2026-11-20, поток store, коммит 3ee6a90, `isocheck.sh` и `-race` зелёные). Миграция `0010_first_message_date.sql` и запись даты в `SaveHistoryPage` при `complete = 1`; заполнение для уже полных чатов из `messages`; чтение даты в `SyncProgress`, `chat overview` и `chat sync status`.
 - [ ] Шаг 3. Случайная пауза у задачи: поле паузы (по умолчанию `historySyncPause`), источник `source`, поле в `rpc.HistorySyncJob`; ручная загрузка не меняется.
 - [ ] Шаг 4. Приоритет ручной загрузки: `start` с `source = manual` отменяет текущую и ставит выше очереди задачу планировщика; `hasActive()` различает источники.
-- [ ] Шаг 5. Запрос выбора чата в `internal/store` (по образцу `ChatsForFullSync`): три группы, фильтр доступа внутри запроса, исключения по Q2.
+- [x] Шаг 5 (2026-11-20, поток store, коммит 3ee6a90). Запрос выбора чата в `internal/store` (по образцу `ChatsForFullSync`): три группы, фильтр доступа внутри запроса, исключения по Q2.
 - [ ] Шаг 6. Вынести чтение и сохранение папок из обработчика `folder.list` в функцию демона; метод возраста снимка.
 - [x] Шаг 7 (2026-11-20, поток config, коммит 2a144ab, `isocheck.sh` и `-race` для config и cli зелёные). Секция `[background_sync]` в `internal/config` (разбор, проверка, шаблон), передача в демон, схема, переменные `TG_CLI_BACKGROUND_SYNC_*`.
 - [ ] Шаг 8. Планировщик `internal/daemon/background_sync.go`: окно, случайный интервал, часы подменяются интерфейсом, остановка вместе с демоном (канал `done` в списке ожидания `daemon.go`), отмена в конце окна, пропуск при `auth_lost`.
