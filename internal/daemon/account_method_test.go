@@ -14,7 +14,7 @@ func TestAccountMethod(t *testing.T) {
 		covered bool
 	}{
 		{rpc.MethodChatList, true}, {rpc.MethodMessageSend, true}, {rpc.MethodNoteAdd, true},
-		{rpc.MethodSearch, true}, {rpc.MethodHistorySyncStart, true}, {rpc.MethodSubscribe, true}, {rpc.MethodUnsubscribe, true},
+		{rpc.MethodSearch, true}, {rpc.MethodSearchSemantic, true}, {rpc.MethodHistorySyncStart, true}, {rpc.MethodSubscribe, true}, {rpc.MethodUnsubscribe, true},
 		// The full-data job reads Telegram, so it needs the account checks too.
 		{rpc.MethodChatFullStart, true}, {rpc.MethodChatFullStatus, true}, {rpc.MethodChatFullCancel, true},
 		{rpc.MethodChatOverview, true}, {rpc.MethodFolderList, true},
@@ -39,7 +39,7 @@ func TestNeedsTelegram(t *testing.T) {
 	for _, method := range []string{
 		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel,
 		rpc.MethodChatFullStatus, rpc.MethodChatFullCancel,
-		rpc.MethodChatOverview, rpc.MethodSearch, rpc.MethodNoteList,
+		rpc.MethodChatOverview, rpc.MethodSearch, rpc.MethodSearchSemantic, rpc.MethodNoteList,
 	} {
 		if needsTelegram(method) {
 			t.Errorf("needsTelegram(%q) = true, want false", method)

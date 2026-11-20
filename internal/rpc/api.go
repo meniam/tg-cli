@@ -52,6 +52,7 @@ const (
 	MethodNoteDelete          = "note.delete"
 	MethodNoteDeleteByAuthor  = "note.delete_by_author"
 	MethodSearch              = "search"
+	MethodSearchSemantic      = "search.semantic"
 	MethodHistorySyncStart    = "history_sync.start"
 	MethodHistorySyncStatus   = "history_sync.status"
 	MethodHistorySyncCancel   = "history_sync.cancel"
