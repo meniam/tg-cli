@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"tg-cli/internal/config"
 )
 
 const databaseContents = "SQLite format 3\x00 and the rest of a database"
@@ -282,11 +284,11 @@ func TestAudit05_FileNameGuardMissingProfileDirectory(t *testing.T) {
 	if err != nil || len(warnings) != 0 {
 		t.Fatalf("nothing to warn about: %v %v", warnings, err)
 	}
-	base, err := os.UserConfigDir()
+	base, err := config.DefaultHome()
 	if err != nil {
 		t.Fatal(err)
 	}
-	old := filepath.Join(base, "tg-cli", filepath.Base(p.Dir))
+	old := filepath.Join(base, filepath.Base(p.Dir))
 	if filepath.Clean(old) == filepath.Clean(p.Dir) {
 		t.Fatalf("fixture: the default profile directory %s is the profile directory", old)
 	}

@@ -59,11 +59,11 @@ func TestLoad(t *testing.T) {
 				return
 			}
 			if tc.wantHome == "" {
-				dir, err := os.UserConfigDir()
+				home, err := DefaultHome()
 				if err != nil {
 					t.Fatal(err)
 				}
-				tc.wantHome = filepath.Join(dir, "tg-cli")
+				tc.wantHome = home
 			}
 			if c.Home != tc.wantHome || c.DefaultProfile != "default" || c.Files.Database != "store.db" || c.Behavior.ThrottlePercent != 60 || c.Behavior.FloodAutoWait != "10s" {
 				t.Fatalf("unexpected config: %+v", c)

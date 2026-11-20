@@ -21,10 +21,10 @@
 # the journals live in <home>/<profile>/. The database does not: it lives next
 # to this file, in db/<profile>/. The socket path must stay within 103 bytes,
 # so keep this directory short.
-# Default: ~/Library/Application Support/tg-cli (macOS), ~/.config/tg-cli (Linux)
+# Default: ~/.config/tg-cli
 # Values:  an absolute path; "~" at the start is expanded; "~user" is not allowed
 # Overrides: environment TG_CLI_HOME
-# home = "~/Library/Application Support/tg-cli"
+# home = "~/.config/tg-cli"
 
 # Profile used when --profile is not given. One profile is one Telegram account
 # with its own session, daemon and database.

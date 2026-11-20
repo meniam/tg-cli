@@ -96,7 +96,12 @@ file names, behaviour, and per-profile client, device, transport, and proxy.
 `tg config path`, `tg config show`, and `tg config migrate` inspect or migrate
 those settings. `TG_CLI_HOME` remains a one-invocation override of the configured
 home, and the home holds the session, the socket, the journals and the access
-lists.
+lists. The home defaults to `~/.config/tg-cli`, next to the configuration file.
+Earlier builds kept it in `~/Library/Application Support/tg-cli` on macOS: the
+first command that reaches a profile moves it, copies the secret files into
+`.home-move-backup-<time>/` first, and leaves a `home` or `TG_CLI_HOME` that you
+set alone. Details are in
+[profiles and the data directory](docs/cli/overview.md#profiles-and-the-data-directory).
 
 The database does not live there. It is `~/.config/tg-cli/db/<profile>/store.db`,
 next to the configuration file, so neither the home nor `TG_CLI_HOME` moves the

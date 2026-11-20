@@ -38,8 +38,13 @@ install help="":
     [[ -z "{{ help }}" ]] || exec bash bin/lib/recipe-help.sh install
     set -x
     go build -o dist/tg ./cmd/tg-cli
+    # The installed binary stops the daemon: it looks for the socket where that
+    # binary put it, and the new binary may look elsewhere (the default data
+    # directory changed once). No installed binary means no daemon of ours.
     # Exit code 3 means the daemon was not running: nothing to stop.
-    dist/tg daemon stop || [[ $? -eq 3 ]]
+    if [[ -x "$HOME/.local/bin/tg" ]]; then
+        "$HOME/.local/bin/tg" daemon stop || [[ $? -eq 3 ]]
+    fi
     mkdir -p "$HOME/.local/bin"
     install -m 755 dist/tg "$HOME/.local/bin/tg"
     "$HOME/.local/bin/tg" daemon start

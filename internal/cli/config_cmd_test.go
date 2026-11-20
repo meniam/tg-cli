@@ -147,9 +147,17 @@ func TestSchemaConfigCommands(t *testing.T) {
 
 // TestConfigShowNamesTheDatabaseDirectory covers Q5: home no longer says where
 // the history lives, so the answer names the database directory next to the
-// configuration file.
+// configuration file. The default home is that same directory, so the test sets
+// a home elsewhere, as an owner who moves the profile data does.
 func TestConfigShowNamesTheDatabaseDirectory(t *testing.T) {
 	e := newEnv(t)
+	configPath := filepath.Join(e.home, ".config", "tg-cli", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte("home = '"+filepath.Join(e.home, "profiles")+"'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	r := e.run("config", "show")
 	if r.code != exitcode.OK {
 		t.Fatalf("show: %d %s", r.code, r.stdout)
