@@ -6,20 +6,27 @@ import (
 	"fmt"
 )
 
+// syncProgressColumns lists the sync_state columns scanSyncProgress reads.
+const syncProgressColumns = `chat_id,oldest_id,newest_id,complete,synced_at,first_message_date`
+
 // SyncProgress is durable history coverage for one chat. Nil IDs mean that no
 // storable message has been seen; a completed empty history can have nil IDs.
+// FirstMessageDate is the Unix time of the first message of the chat. It is set
+// together with Complete and stays nil while the load has not reached the start
+// of the chat, and for a completed chat without stored messages.
 type SyncProgress struct {
-	ChatID   int64
-	OldestID *int
-	NewestID *int
-	Complete bool
-	SyncedAt *int64
+	ChatID           int64
+	OldestID         *int
+	NewestID         *int
+	Complete         bool
+	SyncedAt         *int64
+	FirstMessageDate *int64
 }
 
 func scanSyncProgress(row rowScanner) (SyncProgress, error) {
 	var state SyncProgress
-	var oldest, newest, syncedAt sql.NullInt64
-	err := row.Scan(&state.ChatID, &oldest, &newest, &state.Complete, &syncedAt)
+	var oldest, newest, syncedAt, firstDate sql.NullInt64
+	err := row.Scan(&state.ChatID, &oldest, &newest, &state.Complete, &syncedAt, &firstDate)
 	if err != nil {
 		return SyncProgress{}, err
 	}
@@ -34,13 +41,16 @@ func scanSyncProgress(row rowScanner) (SyncProgress, error) {
 	if syncedAt.Valid {
 		state.SyncedAt = &syncedAt.Int64
 	}
+	if firstDate.Valid {
+		state.FirstMessageDate = &firstDate.Int64
+	}
 	return state, nil
 }
 
 // SyncState returns the saved progress for a chat, or found=false when absent.
 func (db *DB) SyncState(ctx context.Context, chatID int64) (state SyncProgress, found bool, err error) {
 	state, err = scanSyncProgress(db.read.QueryRowContext(ctx,
-		`SELECT chat_id,oldest_id,newest_id,complete,synced_at FROM sync_state WHERE chat_id=?`, chatID))
+		`SELECT `+syncProgressColumns+` FROM sync_state WHERE chat_id=?`, chatID))
 	if err == sql.ErrNoRows {
 		return SyncProgress{}, false, nil
 	}
@@ -52,6 +62,9 @@ func (db *DB) SyncState(ctx context.Context, chatID int64) (state SyncProgress, 
 
 // SaveHistoryPage stores a complete converted page and its progress atomically.
 // complete is supplied by the caller only when the raw Telegram page was empty.
+// The transaction that sets complete also saves first_message_date, the earliest
+// date among the stored messages of the chat, deleted ones included; a chat that
+// was already complete keeps its date.
 func (db *DB) SaveHistoryPage(ctx context.Context, chatID int64, messages []Message, people []Person, complete bool) (SyncProgress, error) {
 	if chatID == 0 {
 		return SyncProgress{}, fmt.Errorf("history page chat id must be nonzero")
@@ -107,8 +120,16 @@ func (db *DB) SaveHistoryPage(ctx context.Context, chatID int64, messages []Mess
 	if _, err := tx.ExecContext(ctx, upsert, chatID, oldest, newest, complete, now); err != nil {
 		return SyncProgress{}, fmt.Errorf("save sync state %d: %w", chatID, err)
 	}
+	if complete {
+		const firstDate = `UPDATE sync_state
+			SET first_message_date=(SELECT MIN(date) FROM messages WHERE chat_id=sync_state.chat_id)
+			WHERE chat_id=? AND first_message_date IS NULL`
+		if _, err := tx.ExecContext(ctx, firstDate, chatID); err != nil {
+			return SyncProgress{}, fmt.Errorf("save first message date %d: %w", chatID, err)
+		}
+	}
 	state, err := scanSyncProgress(tx.QueryRowContext(ctx,
-		`SELECT chat_id,oldest_id,newest_id,complete,synced_at FROM sync_state WHERE chat_id=?`, chatID))
+		`SELECT `+syncProgressColumns+` FROM sync_state WHERE chat_id=?`, chatID))
 	if err != nil {
 		return SyncProgress{}, fmt.Errorf("read saved sync state %d: %w", chatID, err)
 	}

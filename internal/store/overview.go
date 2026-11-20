@@ -36,6 +36,10 @@ type ChatsOverviewRow struct {
 	FirstMessage    *ChatMessagePreview `json:"first_message,omitempty"`
 	LastMessage     *ChatMessagePreview `json:"last_message,omitempty"`
 	HistoryComplete *bool               `json:"history_complete,omitempty"`
+	// HistoryFirstMessageDate is the saved date of the first message of the chat,
+	// set when the history load reaches the start of the chat. Unlike
+	// FirstMessage it does not move when that message is deleted locally.
+	HistoryFirstMessageDate *int64 `json:"history_first_message_date,omitempty"`
 }
 
 // overviewLimits bound the rows one overview call returns, so a caller cannot ask
@@ -65,7 +69,7 @@ func (db *DB) ChatsOverview(ctx context.Context, filter ChatFilter, limit int, c
 	       messages, my_messages,
 	       first_message_id, first_message_date, first_message_text,
 	       last_message_id, last_message_date, last_message_text,
-	       history_complete
+	       history_complete, history_first_message_date
 	FROM chats_state
 	WHERE (? = '' OR type = ?)` + cond + `
 	ORDER BY last_message_date DESC, chat_id
@@ -87,7 +91,7 @@ func (db *DB) ChatsOverview(ctx context.Context, filter ChatFilter, limit int, c
 		err := rows.Scan(&row.ChatID, &row.Type, &row.Title, &row.Username, &row.CreatedAt, &row.Muted,
 			&row.MuteUntil, &row.Archived, &row.Pinned, &row.Unread, &row.UnreadMentions, &row.UnreadMark,
 			&row.StateSyncedAt, &row.Messages, &row.MyMessages,
-			&firstID, &firstDate, &firstText, &lastID, &lastDate, &lastText, &row.HistoryComplete)
+			&firstID, &firstDate, &firstText, &lastID, &lastDate, &lastText, &row.HistoryComplete, &row.HistoryFirstMessageDate)
 		if err != nil {
 			return nil, fmt.Errorf("read chat overview: %w", err)
 		}

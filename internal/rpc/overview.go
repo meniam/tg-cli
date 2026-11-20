@@ -43,4 +43,8 @@ type ChatOverview struct {
 	FirstMessage    *ChatMessagePreview `json:"first_message,omitempty"`
 	LastMessage     *ChatMessagePreview `json:"last_message,omitempty"`
 	HistoryComplete *bool               `json:"history_complete,omitempty"`
+	// HistoryFirstMessageDate is the Unix time of the first message of the chat,
+	// saved when the history load reached the start of the chat. It survives a
+	// local deletion of that message; FirstMessage does not.
+	HistoryFirstMessageDate *int64 `json:"history_first_message_date,omitempty"`
 }

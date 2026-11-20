@@ -36,7 +36,7 @@ func (d *daemon) chatOverview(ctx context.Context, raw json.RawMessage) (any, er
 			Archived: row.Archived, Pinned: row.Pinned, Unread: row.Unread,
 			UnreadMentions: row.UnreadMentions, UnreadMark: row.UnreadMark,
 			StateSyncedAt: row.StateSyncedAt, Messages: row.Messages, MyMessages: row.MyMessages,
-			HistoryComplete: row.HistoryComplete,
+			HistoryComplete: row.HistoryComplete, HistoryFirstMessageDate: row.HistoryFirstMessageDate,
 		}
 		if row.FirstMessage != nil {
 			item.FirstMessage = &rpc.ChatMessagePreview{ID: row.FirstMessage.ID, Date: row.FirstMessage.Date, Text: row.FirstMessage.Text}

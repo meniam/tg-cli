@@ -391,19 +391,22 @@ const (
 )
 
 // HistorySyncJob is the in-memory state of one background history load.
+// FirstMessageDate is the Unix time of the first message of the chat, null until
+// the load has reached the start of the chat.
 type HistorySyncJob struct {
-	ChatID      int64  `json:"chat_id"`
-	State       string `json:"state"`
-	Pages       int    `json:"pages"`
-	Loaded      int    `json:"loaded"`
-	OldestID    *int   `json:"oldest_id"`
-	NewestID    *int   `json:"newest_id"`
-	Complete    bool   `json:"complete"`
-	WaitSeconds int    `json:"wait_seconds,omitempty"`
-	ErrorCode   int    `json:"error_code,omitempty"`
-	Error       string `json:"error,omitempty"`
-	StartedAt   string `json:"started_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ChatID           int64  `json:"chat_id"`
+	State            string `json:"state"`
+	Pages            int    `json:"pages"`
+	Loaded           int    `json:"loaded"`
+	OldestID         *int   `json:"oldest_id"`
+	NewestID         *int   `json:"newest_id"`
+	Complete         bool   `json:"complete"`
+	FirstMessageDate *int64 `json:"first_message_date"`
+	WaitSeconds      int    `json:"wait_seconds,omitempty"`
+	ErrorCode        int    `json:"error_code,omitempty"`
+	Error            string `json:"error,omitempty"`
+	StartedAt        string `json:"started_at"`
+	UpdatedAt        string `json:"updated_at"`
 }
 
 // HistorySyncJobs is the status result when no chat was selected.
