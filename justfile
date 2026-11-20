@@ -29,6 +29,21 @@ build help="":
     set -x
     go build -o dist/tg ./cmd/tg-cli
 
+# Build, install into ~/.local/bin/tg and restart the daemon
+[group('build')]
+[arg("help", long="help", short="h", value="1")]
+install help="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ -z "{{ help }}" ]] || exec bash bin/lib/recipe-help.sh install
+    set -x
+    go build -o dist/tg ./cmd/tg-cli
+    # Exit code 3 means the daemon was not running: nothing to stop.
+    dist/tg daemon stop || [[ $? -eq 3 ]]
+    mkdir -p "$HOME/.local/bin"
+    install -m 755 dist/tg "$HOME/.local/bin/tg"
+    "$HOME/.local/bin/tg" daemon start
+
 # Run the tool without building: just run <arguments>
 [group('build')]
 [positional-arguments]

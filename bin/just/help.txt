@@ -13,6 +13,7 @@
 
   Build and run
     just build                  Build the binary into dist/tg
+    just install                Build, install into ~/.local/bin/tg, restart the daemon
     just run <arguments>        Run the tool without building
 
   Checks

@@ -72,7 +72,7 @@ On failure the envelope is `{"ok":false,"error":{"code":"...","message":"..."}}`
 git clone https://github.com/meniam/tg-cli.git
 cd tg-cli
 just build                      # writes dist/tg
-export PATH="$PWD/dist:$PATH"   # optional: use `tg` instead of `dist/tg`
+just install                    # optional: installs `tg` into ~/.local/bin and restarts the daemon
 ```
 
 **1. Start the daemon.** It starts in the background and the command returns once the socket answers.
@@ -215,6 +215,7 @@ Design notes (in Russian) and the reasons behind each choice live in [`INTENT.md
 | Recipe | Does |
 | --- | --- |
 | `just build` | Build the binary into `dist/tg` |
+| `just install` | Build, copy to `~/.local/bin/tg` and restart the daemon (the deploy) |
 | `just run <args>` | Run without building |
 | `just fmt` / `just vet` / `just test` | gofmt, `go vet`, `go test ./...` |
 | `just check` | Format check, vet and tests in a row. Run it before every commit |

@@ -1,0 +1,9 @@
+    Builds the binary, installs it as ~/.local/bin/tg and restarts the daemon of the default profile. This is the deploy.
+    A failed build leaves the running daemon untouched.
+    New migrations apply on daemon start and an older binary cannot open the database afterwards: back up ~/.config/tg-cli/db/<profile> first.
+
+  What runs
+    1. go build -o dist/tg ./cmd/tg-cli
+    2. dist/tg daemon stop: "not running" is fine, any other failure stops the recipe
+    3. copies dist/tg to ~/.local/bin/tg, creating the directory if missing
+    4. ~/.local/bin/tg daemon start: the daemon runs from the installed binary
