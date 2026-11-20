@@ -19,7 +19,7 @@ PR: —
   `expect_user` из базы в Daemon, коды отказа по фразе, ограничение подбора,
   ключ `[files] access`, цепочка старых файлов профиля, `settings.*` без
   Telegram, журнал записи) владелец не отклонил; они действуют и ждут его вето.
-- Этапы: Э1 готов (2026-11-21), Э2 в работе, Э3-Э9 не начаты.
+- Этапы: Э1, Э2 готовы (2026-11-21), Э3 в работе, Э4-Э9 не начаты.
 
 ## Context and sources
 
@@ -295,15 +295,15 @@ PR: —
 
 ### Э2. Таблицы и миграция схемы (Terra)
 
-- [ ] `internal/store/migrations/0012_settings.sql` (номер сверить перед
+- [x] `internal/store/migrations/0012_settings.sql` (номер сверить перед
   началом: `ls internal/store/migrations`): таблицы по решению Q1
   (`20261120_2344_settings_are_one_key_value_table_and_the_passphrase_hash_has_its_own_table`): `settings(key TEXT PRIMARY KEY, value TEXT NOT NULL CHECK
   (json_valid(value)), updated_at INTEGER NOT NULL)`, `owner_secret(id INTEGER
   PRIMARY KEY CHECK (id = 1), hash TEXT NOT NULL, created_at, updated_at)`,
   `settings_meta(key TEXT PRIMARY KEY, value TEXT)` для отметки переноса.
-- [ ] Методы `store`: прочитать все настройки, записать набор ключей одной
+- [x] Методы `store`: прочитать все настройки, записать набор ключей одной
   транзакцией, удалить ключ, прочитать и записать хэш, отметка переноса.
-- [ ] Тесты: миграция с версии 11 на копии тестовой базы, запись и чтение,
+- [x] Тесты: миграция с версии 11 на копии тестовой базы, запись и чтение,
   откат транзакции при ошибке, `owner_secret` не попадает в чтение настроек.
 - Проверка: `go test ./internal/store -count=1` зелёный; `PRAGMA user_version`
   тестовой базы равен 12.
