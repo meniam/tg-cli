@@ -13,10 +13,12 @@ type connectionSink interface {
 	SetConnectionSink(func(rpc.ConnectionInfo))
 }
 
-func (d *daemon) fillConnection(ctx context.Context, st *rpc.StatusResult) bool {
-	reporter, ok := d.telegram(ctx).(connectionReporter)
+// connectionOf reads the connection state of client without a request; false
+// when the client does not report one.
+func (d *daemon) connectionOf(client Telegram) (rpc.ConnectionInfo, bool) {
+	reporter, ok := client.(connectionReporter)
 	if !ok {
-		return false
+		return rpc.ConnectionInfo{}, false
 	}
 	info := reporter.Connection()
 	if d.auto != nil && d.opts.TelegramConfig.Network.Transport == netconf.Auto {
@@ -24,6 +26,14 @@ func (d *daemon) fillConnection(ctx context.Context, st *rpc.StatusResult) bool 
 		if d.auto.hasSwitched() {
 			info.TransportSwitches = 1
 		}
+	}
+	return info, true
+}
+
+func (d *daemon) fillConnection(ctx context.Context, st *rpc.StatusResult) bool {
+	info, ok := d.connectionOf(d.telegram(ctx))
+	if !ok {
+		return false
 	}
 	st.ConnectionInfo = &info
 	st.Connected = st.Connection == "ready"

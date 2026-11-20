@@ -15,6 +15,13 @@ const (
 	BackgroundGroupOther = 2
 )
 
+// backgroundGroupSQL is the group of the chat c: the one definition behind both
+// the scheduled pick and the history counts of the dashboard, so the two never
+// disagree about which group a chat belongs to.
+const backgroundGroupSQL = `CASE WHEN c.type = 'user' THEN 0
+	            WHEN EXISTS (SELECT 1 FROM folder_chats f WHERE f.chat_id = c.id AND f.kind IN ('pinned','include')) THEN 1
+	            ELSE 2 END`
+
 // BackgroundSyncChat is one chat the scheduled history load may take.
 type BackgroundSyncChat struct {
 	ID    int64
@@ -49,9 +56,7 @@ func (db *DB) ChatsForBackgroundSync(ctx context.Context, filter ChatFilter, exc
 	args = append(args, limit)
 	// In SQLite NULL sorts first, so DESC puts the chats without messages last.
 	rows, err := db.read.QueryContext(ctx, `SELECT c.id, c.type, c.title,
-	       CASE WHEN c.type = 'user' THEN 0
-	            WHEN EXISTS (SELECT 1 FROM folder_chats f WHERE f.chat_id = c.id AND f.kind IN ('pinned','include')) THEN 1
-	            ELSE 2 END AS grp,
+	       `+backgroundGroupSQL+` AS grp,
 	       (SELECT MAX(m.date) FROM messages m WHERE m.chat_id = c.id) AS last_date
 	FROM chats c
 	LEFT JOIN sync_state s ON s.chat_id = c.id

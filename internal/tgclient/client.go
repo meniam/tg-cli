@@ -122,6 +122,14 @@ func (c *Client) FloodWaitRemaining() time.Duration {
 	return c.throttle.PausedFor()
 }
 
+// ThrottleQueued reports how many requests wait in the account throttle.
+func (c *Client) ThrottleQueued() int {
+	if c.throttle == nil {
+		return 0
+	}
+	return c.throttle.Queued()
+}
+
 // Run connects and keeps the connection until ctx ends. It is single-use.
 func (c *Client) Run(ctx context.Context) error {
 	catchupCtx, cancelCatchup := context.WithCancel(ctx)

@@ -85,6 +85,7 @@ type daemon struct {
 	full                 *chatFullSyncManager
 	background           *backgroundSync // nil when the scheduled history load is off
 	cancel               context.CancelFunc
+	startedAt            time.Time // the start of the process; zero in handler tests
 	once                 sync.Once
 	eventMu              sync.Mutex
 	deletionsMu          sync.Mutex
@@ -193,7 +194,7 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.Access == nil {
 		opts.Access = access.Open(opts.Paths.Access)
 	}
-	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore}
+	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore, startedAt: time.Now()}
 	d.admission.unblock(opts.Telegram)
 	d.sync = newHistorySyncManager(runCtx, d, nil)
 	d.full = newChatFullSyncManager(runCtx, d, nil)
@@ -464,7 +465,7 @@ func (d *daemon) tracking(h rpc.Handler) rpc.Handler {
 // handle registers a handler that counts as activity for the idle stop.
 func (d *daemon) handle(method string, h rpc.Handler) {
 	d.srv.Handle(method, d.tracking(func(ctx context.Context, params json.RawMessage) (any, error) {
-		if method != rpc.MethodPing && method != rpc.MethodStatus && method != rpc.MethodShutdown {
+		if method != rpc.MethodPing && method != rpc.MethodStatus && method != rpc.MethodDashboard && method != rpc.MethodShutdown {
 			ctx = rpc.WithConnectionWait(ctx)
 		}
 		if needsTelegram(method) && d.opts.NewTelegram != nil {
@@ -483,6 +484,7 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodSessionExport, d.sessionExport)
 	d.handle(rpc.MethodPing, d.ping)
 	d.handle(rpc.MethodStatus, d.status)
+	d.handle(rpc.MethodDashboard, d.dashboard)
 	d.handle(rpc.MethodShutdown, d.shutdown)
 	d.handle(rpc.MethodAuthStart, d.authStart)
 	d.handle(rpc.MethodAuthCode, d.authCode)

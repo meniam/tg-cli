@@ -201,6 +201,7 @@ func (a *app) rootCommand() *cobra.Command {
 		a.accountCommand(),
 		a.noteCommand(),
 		a.searchCommand(),
+		a.statusCommand(),
 		a.versionCommand(),
 		a.schemaCommand(root),
 	)
