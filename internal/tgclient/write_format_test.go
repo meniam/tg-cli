@@ -84,6 +84,9 @@ func TestPrepareWriteTextEntities(t *testing.T) {
 	}
 }
 
+// audit10Secret is a marker long enough that it cannot appear in an error message by accident.
+const audit10Secret = "SECRET-INPUT-42"
+
 func TestPrepareWriteTextManualEntitiesAndErrors(t *testing.T) {
 	valid := []rpc.Entity{{Type: "bold", Offset: 2, Length: 1}, {Type: "custom_emoji", Offset: 0, Length: 2, CustomEmojiID: 99}}
 	p, err := prepareWriteText("😀x", "", valid, knownUser)
@@ -94,16 +97,16 @@ func TestPrepareWriteTextManualEntitiesAndErrors(t *testing.T) {
 		name, text, parse string
 		entities          []rpc.Entity
 	}{
-		{"unknown type", "x", "", []rpc.Entity{{Type: "nope", Length: 1}}},
-		{"out of range", "x", "", []rpc.Entity{{Type: "bold", Offset: 1, Length: 1}}},
+		{"unknown type", audit10Secret, "", []rpc.Entity{{Type: "nope", Length: 1}}},
+		{"out of range", audit10Secret, "", []rpc.Entity{{Type: "bold", Offset: len(audit10Secret), Length: 1}}},
 		{"surrogate boundary", "😀x", "", []rpc.Entity{{Type: "bold", Offset: 1, Length: 1}}},
-		{"zero length", "x", "", []rpc.Entity{{Type: "bold", Length: 0}}},
-		{"parse and entities", "x", "html", []rpc.Entity{}},
+		{"zero length", audit10Secret, "", []rpc.Entity{{Type: "bold", Length: 0}}},
+		{"parse and entities", audit10Secret, "html", []rpc.Entity{}},
 		{"empty", "", "", nil},
 		{"long plain", strings.Repeat("x", 4097), "", nil},
 		{"long parsed", "<b>" + strings.Repeat("x", 4097) + "</b>", "html", nil},
 		{"long rich", strings.Repeat("x", 4097), "rich-html", nil},
-		{"unknown parse", "x", "other", nil},
+		{"unknown parse", audit10Secret, "other", nil},
 		{"unclosed html", "<b>x", "html", nil},
 		{"invalid link", `<a href="https://">x</a>`, "html", nil},
 		{"unknown html mention", `<a href="tg://user?id=8">x</a>`, "html", nil},
@@ -112,7 +115,7 @@ func TestPrepareWriteTextManualEntitiesAndErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := prepareWriteText(tc.text, tc.parse, tc.entities, knownUser)
 			formatErrorCode(t, err, rpc.CodeInvalidParams)
-			if strings.Contains(err.Error(), tc.text) && tc.text != "" {
+			if tc.text != "" && strings.Contains(err.Error(), tc.text) {
 				t.Fatalf("error leaked input: %v", err)
 			}
 		})
@@ -167,13 +170,72 @@ func TestPrepareWriteTextManualEntitiesAndErrors(t *testing.T) {
 }
 
 func TestAllManualEntityTypes(t *testing.T) {
-	types := []string{"bold", "italic", "underline", "strikethrough", "spoiler", "code", "pre", "blockquote", "text_url", "url", "email", "phone", "mention", "mention_name", "hashtag", "cashtag", "bot_command", "custom_emoji", "date_time"}
-	for _, typ := range types {
-		t.Run(typ, func(t *testing.T) {
-			item := rpc.Entity{Type: typ, Length: 1, URL: "https://example.com", UserID: 7, CustomEmojiID: 9, DateUnix: 1700000000, Format: "d"}
+	cases := []struct {
+		typ      string
+		wantType string
+		check    func(t *testing.T, e tg.MessageEntityClass)
+	}{
+		{"bold", "messageEntityBold", nil},
+		{"italic", "messageEntityItalic", nil},
+		{"underline", "messageEntityUnderline", nil},
+		{"strikethrough", "messageEntityStrike", nil},
+		{"spoiler", "messageEntitySpoiler", nil},
+		{"code", "messageEntityCode", nil},
+		{"pre", "messageEntityPre", func(t *testing.T, e tg.MessageEntityClass) {
+			if got := e.(*tg.MessageEntityPre).Language; got != "go" {
+				t.Errorf("language = %q, want go", got)
+			}
+		}},
+		{"blockquote", "messageEntityBlockquote", func(t *testing.T, e tg.MessageEntityClass) {
+			if !e.(*tg.MessageEntityBlockquote).Collapsed {
+				t.Error("collapsed flag lost")
+			}
+		}},
+		{"text_url", "messageEntityTextUrl", func(t *testing.T, e tg.MessageEntityClass) {
+			if got := e.(*tg.MessageEntityTextURL).URL; got != "https://example.com" {
+				t.Errorf("url = %q", got)
+			}
+		}},
+		{"url", "messageEntityUrl", nil},
+		{"email", "messageEntityEmail", nil},
+		{"phone", "messageEntityPhone", nil},
+		{"mention", "messageEntityMention", nil},
+		{"mention_name", "inputMessageEntityMentionName", func(t *testing.T, e tg.MessageEntityClass) {
+			mention, ok := e.(*tg.InputMessageEntityMentionName)
+			if !ok {
+				t.Fatalf("entity = %T", e)
+			}
+			input, ok := mention.UserID.(*tg.InputUser)
+			if !ok || input.UserID != 7 {
+				t.Errorf("user = %#v, want input user 7", mention.UserID)
+			}
+		}},
+		{"hashtag", "messageEntityHashtag", nil},
+		{"cashtag", "messageEntityCashtag", nil},
+		{"bot_command", "messageEntityBotCommand", nil},
+		{"custom_emoji", "messageEntityCustomEmoji", func(t *testing.T, e tg.MessageEntityClass) {
+			if got := e.(*tg.MessageEntityCustomEmoji).DocumentID; got != 9 {
+				t.Errorf("document id = %d, want 9", got)
+			}
+		}},
+		{"date_time", "messageEntityFormattedDate", func(t *testing.T, e tg.MessageEntityClass) {
+			if got := e.(*tg.MessageEntityFormattedDate); got.Date != 1700000000 || !got.ShortDate {
+				t.Errorf("date = %+v", got)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.typ, func(t *testing.T) {
+			item := rpc.Entity{Type: tc.typ, Length: 1, URL: "https://example.com", UserID: 7, CustomEmojiID: 9, DateUnix: 1700000000, Format: "d", Language: "go", Collapsed: true}
 			p, err := prepareWriteText("x", "", []rpc.Entity{item}, knownUser)
 			if err != nil || len(p.entities) != 1 || p.entities[0].GetLength() != 1 {
 				t.Fatalf("entity=%v err=%v", p.entities, err)
+			}
+			if got := p.entities[0].TypeName(); got != tc.wantType {
+				t.Fatalf("type = %s, want %s", got, tc.wantType)
+			}
+			if tc.check != nil {
+				tc.check(t, p.entities[0])
 			}
 		})
 	}
@@ -218,7 +280,10 @@ func TestFormattedWriteRequests(t *testing.T) {
 						t.Error("silent flag lost")
 					}
 					if forum {
-						r := req.ReplyTo.(*tg.InputReplyToMessage)
+						r, ok := req.ReplyTo.(*tg.InputReplyToMessage)
+						if !ok {
+							t.Fatalf("r = %T, want *tg.InputReplyToMessage", req.ReplyTo)
+						}
 						if r.ReplyToMsgID != 502 {
 							t.Errorf("reply=%d", r.ReplyToMsgID)
 						}
@@ -274,7 +339,10 @@ func TestFormattedEditsAndRichRejection(t *testing.T) {
 				t.Fatal(err)
 			}
 			api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
-				req := input.(*tg.MessagesEditMessageRequest)
+				req, ok := input.(*tg.MessagesEditMessageRequest)
+				if !ok {
+					t.Fatalf("req = %T, want *tg.MessagesEditMessageRequest", input)
+				}
 				if strings.HasPrefix(mode, "rich") {
 					if req.RichMessage == nil || req.Message != "" {
 						t.Errorf("rich edit=%+v", req)
@@ -315,14 +383,19 @@ func TestFormattedEditsAndRichRejection(t *testing.T) {
 	}))
 	_, err = sendText(context.Background(), floodAPI, &tg.InputPeerUser{UserID: 42}, 42, rpc.SendParams{Text: "# heading", Parse: "rich-markdown"})
 	formatErrorCode(t, err, rpc.CodeFloodWait)
+	// sendText has no retry loop of its own; retries are the middleware's job
+	// (see TestAudit10_WritesAreNotRetriedByTheThrottleMiddleware).
 	if calls != 1 {
-		t.Fatalf("rich write retried %d times", calls)
+		t.Fatalf("sendText sent %d requests, want 1", calls)
 	}
 }
 
 func TestPlainWriteRequestIsUnchanged(t *testing.T) {
 	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
-		req := input.(*tg.MessagesSendMessageRequest)
+		req, ok := input.(*tg.MessagesSendMessageRequest)
+		if !ok {
+			t.Fatalf("req = %T, want *tg.MessagesSendMessageRequest", input)
+		}
 		want := &tg.MessagesSendMessageRequest{Peer: &tg.InputPeerUser{UserID: 42, AccessHash: 99}, Message: "plain", RandomID: req.RandomID}
 		if !reflect.DeepEqual(req, want) {
 			t.Errorf("plain request changed: got=%+v want=%+v", req, want)
@@ -337,7 +410,10 @@ func TestPlainWriteRequestIsUnchanged(t *testing.T) {
 
 func TestPlainEditRequestIsUnchanged(t *testing.T) {
 	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
-		req := input.(*tg.MessagesEditMessageRequest)
+		req, ok := input.(*tg.MessagesEditMessageRequest)
+		if !ok {
+			t.Fatalf("req = %T, want *tg.MessagesEditMessageRequest", input)
+		}
 		want := &tg.MessagesEditMessageRequest{Peer: &tg.InputPeerUser{UserID: 42, AccessHash: 99}, ID: 5, Message: "plain"}
 		if !reflect.DeepEqual(req, want) {
 			t.Errorf("plain edit changed: got=%+v want=%+v", req, want)
@@ -487,7 +563,9 @@ func TestCheckTextDoesNotWrite(t *testing.T) {
 	}
 }
 
-func TestCheckTextLocalLengthBeforeResolvingMentions(t *testing.T) {
+// TestCheckTextLocalLengthLimit covers the 4096 UTF-16 unit limit with emoji;
+// the text holds no mention, so the resolver is never involved.
+func TestCheckTextLocalLengthLimit(t *testing.T) {
 	c := &Client{}
 	for _, mode := range []string{"html", "markdown"} {
 		text := strings.Repeat("😀", 4097)

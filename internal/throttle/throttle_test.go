@@ -3,9 +3,9 @@ package throttle
 import (
 	"context"
 	"errors"
-	"runtime"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -93,23 +93,40 @@ func acquireAsync(l *Limiter, ctx context.Context, class Class, peer string, wai
 	return result
 }
 
+// audit10AwaitLen waits until every goroutine of the synctest bubble is blocked
+// and then requires the selected queue to hold exactly n requests. Unlike a
+// polling loop it cannot return before the limiter reacted to the last clock step.
+func audit10AwaitLen(t *testing.T, l *Limiter, name string, queue func(*Limiter) int, n int) {
+	t.Helper()
+	synctest.Wait()
+	l.mu.Lock()
+	got := queue(l)
+	l.mu.Unlock()
+	if got != n {
+		t.Fatalf("%s queue length = %d, want %d", name, got, n)
+	}
+}
+
 func awaitQueue(t *testing.T, l *Limiter, n int) {
 	t.Helper()
-	deadline := time.After(2 * time.Second)
-	for {
-		l.mu.Lock()
-		got := len(l.queue)
-		l.mu.Unlock()
-		if got == n {
-			return
-		}
-		select {
-		case <-deadline:
-			t.Fatalf("queue length = %d, want %d", got, n)
-		default:
-			runtime.Gosched()
-		}
-	}
+	audit10AwaitLen(t, l, "normal", func(l *Limiter) int { return len(l.queue) }, n)
+}
+
+func awaitBackgroundQueue(t *testing.T, l *Limiter, n int) {
+	t.Helper()
+	audit10AwaitLen(t, l, "background", func(l *Limiter) int { return len(l.backgroundQueue) }, n)
+}
+
+func awaitFileQueue(t *testing.T, l *Limiter, n int) {
+	t.Helper()
+	audit10AwaitLen(t, l, "file", func(l *Limiter) int { return len(l.fileQueue) }, n)
+}
+
+// audit10Test runs body in a synctest bubble: the fake clock and the limiter
+// goroutines live inside it, so synctest.Wait is a real synchronisation point.
+func audit10Test(t *testing.T, body func(t *testing.T)) {
+	t.Helper()
+	synctest.Test(t, body)
 }
 
 func receive(t *testing.T, result <-chan acquireResult) *Permit {
@@ -126,273 +143,236 @@ func receive(t *testing.T, result <-chan acquireResult) *Permit {
 	}
 }
 
-func TestLowPriorityUploadAdmissionYieldsToNormalRequest(t *testing.T) {
-	clock := newFakeClock()
-	l := limiterForTest(t, clock, func(cfg *Config) {
-		cfg.Concurrency = 1
-		cfg.GeneralBurst = 5
-	})
-	held, err := l.Acquire(context.Background(), General, "", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	low := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
-	deadline := time.After(2 * time.Second)
-	for {
-		l.mu.Lock()
-		queued := len(l.backgroundQueue)
-		l.mu.Unlock()
-		if queued == 1 {
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatal("upload part did not enter low-priority queue")
-		default:
-			runtime.Gosched()
-		}
-	}
-	high := acquireAsync(l, context.Background(), General, "", nil)
-	awaitQueue(t, l, 1)
-	held.Release()
-	first := receive(t, high)
-	select {
-	case <-low:
-		t.Fatal("low-priority part overtook a normal request")
-	default:
-	}
-	first.Release()
-	receive(t, low).Release()
-}
-
 func TestRatesBurstsAndPeerKeys(t *testing.T) {
-	clock := newFakeClock()
-	l := limiterForTest(t, clock, nil)
-	for i := 0; i < DefaultGeneralBurst; i++ {
-		p, err := l.Acquire(context.Background(), General, "", nil)
+	audit10Test(t, func(t *testing.T) {
+		clock := newFakeClock()
+		l := limiterForTest(t, clock, nil)
+		for i := 0; i < DefaultGeneralBurst; i++ {
+			p, err := l.Acquire(context.Background(), General, "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p.Release()
+		}
+		waited := new(Wait)
+		general := acquireAsync(l, context.Background(), General, "", waited)
+		awaitQueue(t, l, 1)
+		clock.Advance(time.Second/18 + time.Nanosecond)
+		receive(t, general).Release()
+		if waited.Duration() < time.Second/18 {
+			t.Fatalf("general delay = %s", waited.Duration())
+		}
+
+		private := limiterForTest(t, clock, nil)
+		p, err := private.Acquire(context.Background(), PrivateSend, "alice", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		p.Release()
-	}
-	waited := new(Wait)
-	general := acquireAsync(l, context.Background(), General, "", waited)
-	awaitQueue(t, l, 1)
-	clock.Advance(time.Second/18 + time.Nanosecond)
-	receive(t, general).Release()
-	if waited.Duration() < time.Second/18 {
-		t.Fatalf("general delay = %s", waited.Duration())
-	}
+		other, err := private.Acquire(context.Background(), PrivateSend, "bob", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		other.Release()
+		second := acquireAsync(private, context.Background(), PrivateSend, "alice", nil)
+		awaitQueue(t, private, 1)
+		// One second is the unscaled private rate; at 60 percent the request must still wait.
+		clock.Advance(time.Second)
+		awaitQueue(t, private, 1)
+		clock.Advance(2*time.Second/3 + time.Nanosecond)
+		receive(t, second).Release()
 
-	private := limiterForTest(t, clock, nil)
-	p, err := private.Acquire(context.Background(), PrivateSend, "alice", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	p.Release()
-	other, err := private.Acquire(context.Background(), PrivateSend, "bob", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	other.Release()
-	second := acquireAsync(private, context.Background(), PrivateSend, "alice", nil)
-	awaitQueue(t, private, 1)
-	clock.Advance(time.Second)
-	awaitQueue(t, private, 1)
-	clock.Advance(2*time.Second/3 + time.Nanosecond)
-	receive(t, second).Release()
-
-	group := limiterForTest(t, clock, nil)
-	p, err = group.Acquire(context.Background(), GroupSend, "group-1", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	p.Release()
-	second = acquireAsync(group, context.Background(), GroupSend, "group-1", nil)
-	awaitQueue(t, group, 1)
-	clock.Advance(4 * time.Second)
-	awaitQueue(t, group, 1)
-	clock.Advance(time.Second)
-	receive(t, second).Release()
+		group := limiterForTest(t, clock, nil)
+		p, err = group.Acquire(context.Background(), GroupSend, "group-1", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.Release()
+		second = acquireAsync(group, context.Background(), GroupSend, "group-1", nil)
+		awaitQueue(t, group, 1)
+		// Three seconds is the unscaled group rate (20 per minute); 60 percent needs five.
+		clock.Advance(4 * time.Second)
+		awaitQueue(t, group, 1)
+		clock.Advance(time.Second)
+		receive(t, second).Release()
+	})
 }
 
 func TestFIFOAndCanceledRequestSpendsNoToken(t *testing.T) {
-	clock := newFakeClock()
-	l := limiterForTest(t, clock, func(c *Config) { c.GeneralBurst = 1; c.GeneralPerSecond = 1; c.Percent = 100 })
-	first, err := l.Acquire(context.Background(), General, "", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first.Release()
-	a := acquireAsync(l, context.Background(), General, "", nil)
-	awaitQueue(t, l, 1)
-	bctx, cancelB := context.WithCancel(context.Background())
-	b := acquireAsync(l, bctx, General, "", nil)
-	awaitQueue(t, l, 2)
-	c := acquireAsync(l, context.Background(), General, "", nil)
-	awaitQueue(t, l, 3)
-	cancelB()
-	select {
-	case result := <-b:
-		if result.err != context.Canceled {
-			t.Fatalf("canceled request: %v", result.err)
+	audit10Test(t, func(t *testing.T) {
+		clock := newFakeClock()
+		l := limiterForTest(t, clock, func(c *Config) { c.GeneralBurst = 1; c.GeneralPerSecond = 1; c.Percent = 100 })
+		first, err := l.Acquire(context.Background(), General, "", nil)
+		if err != nil {
+			t.Fatal(err)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("canceled request stayed queued")
-	}
-	awaitQueue(t, l, 2)
-	clock.Advance(time.Second)
-	receive(t, a).Release()
-	awaitQueue(t, l, 1)
-	clock.Advance(time.Second)
-	receive(t, c).Release()
+		first.Release()
+		a := acquireAsync(l, context.Background(), General, "", nil)
+		awaitQueue(t, l, 1)
+		bctx, cancelB := context.WithCancel(context.Background())
+		b := acquireAsync(l, bctx, General, "", nil)
+		awaitQueue(t, l, 2)
+		c := acquireAsync(l, context.Background(), General, "", nil)
+		awaitQueue(t, l, 3)
+		cancelB()
+		select {
+		case result := <-b:
+			if result.err != context.Canceled {
+				t.Fatalf("canceled request: %v", result.err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("canceled request stayed queued")
+		}
+		awaitQueue(t, l, 2)
+		clock.Advance(time.Second)
+		receive(t, a).Release()
+		awaitQueue(t, l, 1)
+		clock.Advance(time.Second)
+		receive(t, c).Release()
+	})
 }
 
 func TestFloodPauseBlocksAllClassesAndDoesNotShorten(t *testing.T) {
-	clock := newFakeClock()
-	l := limiterForTest(t, clock, nil)
-	l.Pause(5 * time.Second)
-	l.Pause(time.Second)
-	generalWait := new(Wait)
-	general := acquireAsync(l, context.Background(), General, "", generalWait)
-	awaitQueue(t, l, 1)
-	private := acquireAsync(l, context.Background(), PrivateSend, "alice", nil)
-	awaitQueue(t, l, 2)
-	clock.Advance(4 * time.Second)
-	awaitQueue(t, l, 2)
-	clock.Advance(time.Second)
-	receive(t, general).Release()
-	receive(t, private).Release()
-	if generalWait.Duration() != 5*time.Second {
-		t.Fatalf("pause wait = %s", generalWait.Duration())
-	}
+	audit10Test(t, func(t *testing.T) {
+		clock := newFakeClock()
+		l := limiterForTest(t, clock, nil)
+		l.Pause(5 * time.Second)
+		l.Pause(time.Second)
+		generalWait := new(Wait)
+		general := acquireAsync(l, context.Background(), General, "", generalWait)
+		awaitQueue(t, l, 1)
+		private := acquireAsync(l, context.Background(), PrivateSend, "alice", nil)
+		awaitQueue(t, l, 2)
+		clock.Advance(4 * time.Second)
+		awaitQueue(t, l, 2)
+		clock.Advance(time.Second)
+		receive(t, general).Release()
+		receive(t, private).Release()
+		if generalWait.Duration() != 5*time.Second {
+			t.Fatalf("pause wait = %s", generalWait.Duration())
+		}
+	})
 }
 
 func TestConcurrencyBound(t *testing.T) {
-	clock := newFakeClock()
-	l := limiterForTest(t, clock, nil)
-	a, err := l.Acquire(context.Background(), General, "", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := l.Acquire(context.Background(), General, "", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := acquireAsync(l, context.Background(), General, "", nil)
-	awaitQueue(t, l, 1)
-	l.mu.Lock()
-	active := l.active
-	l.mu.Unlock()
-	if active != 2 {
-		t.Fatalf("active = %d, want 2", active)
-	}
-	a.Release()
-	d := receive(t, c)
-	l.mu.Lock()
-	active = l.active
-	l.mu.Unlock()
-	if active != 2 {
-		t.Fatalf("active = %d after release, want 2", active)
-	}
-	b.Release()
-	d.Release()
-}
-
-func awaitBackgroundQueue(t *testing.T, l *Limiter, n int) {
-	t.Helper()
-	deadline := time.After(2 * time.Second)
-	for {
+	audit10Test(t, func(t *testing.T) {
+		clock := newFakeClock()
+		l := limiterForTest(t, clock, nil)
+		a, err := l.Acquire(context.Background(), General, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := l.Acquire(context.Background(), General, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := acquireAsync(l, context.Background(), General, "", nil)
+		awaitQueue(t, l, 1)
 		l.mu.Lock()
-		got := len(l.backgroundQueue)
+		active := l.active
 		l.mu.Unlock()
-		if got == n {
-			return
+		if active != 2 {
+			t.Fatalf("active = %d, want 2", active)
 		}
-		select {
-		case <-deadline:
-			t.Fatalf("background queue length = %d, want %d", got, n)
-		default:
-			runtime.Gosched()
+		a.Release()
+		d := receive(t, c)
+		l.mu.Lock()
+		active = l.active
+		l.mu.Unlock()
+		if active != 2 {
+			t.Fatalf("active = %d after release, want 2", active)
 		}
-	}
+		b.Release()
+		d.Release()
+	})
 }
 
+// TestBackgroundQueueYieldsToNormalAndRunsAlone also covers the low-priority
+// upload admission: a background request waits for a normal one and runs alone.
 func TestBackgroundQueueYieldsToNormalAndRunsAlone(t *testing.T) {
-	l := limiterForTest(t, newFakeClock(), func(c *Config) { c.Concurrency = 1; c.GeneralBurst = 5 })
-	hold, err := l.Acquire(context.Background(), General, "", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	background := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
-	awaitBackgroundQueue(t, l, 1)
-	normal := acquireAsync(l, context.Background(), General, "", nil)
-	awaitQueue(t, l, 1)
-	hold.Release()
-	normalPermit := receive(t, normal)
-	select {
-	case result := <-background:
-		result.permit.Release()
-		t.Fatal("background request overtook normal request")
-	default:
-	}
-	normalPermit.Release()
-	receive(t, background).Release()
+	audit10Test(t, func(t *testing.T) {
+		l := limiterForTest(t, newFakeClock(), func(c *Config) { c.Concurrency = 1; c.GeneralBurst = 5 })
+		hold, err := l.Acquire(context.Background(), General, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		background := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
+		awaitBackgroundQueue(t, l, 1)
+		normal := acquireAsync(l, context.Background(), General, "", nil)
+		awaitQueue(t, l, 1)
+		hold.Release()
+		normalPermit := receive(t, normal)
+		synctest.Wait()
+		select {
+		case result := <-background:
+			result.permit.Release()
+			t.Fatal("background request overtook normal request")
+		default:
+		}
+		normalPermit.Release()
+		receive(t, background).Release()
 
-	hold, err = l.Acquire(context.Background(), General, "", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	alone := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
-	awaitBackgroundQueue(t, l, 1)
-	hold.Release()
-	receive(t, alone).Release()
+		hold, err = l.Acquire(context.Background(), General, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		alone := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
+		awaitBackgroundQueue(t, l, 1)
+		hold.Release()
+		receive(t, alone).Release()
+	})
 }
 
 func TestBackgroundFloodGateFastRejectsNormal(t *testing.T) {
-	clock := newFakeClock()
-	l := limiterForTest(t, clock, nil)
-	l.PauseBackground(120 * time.Second)
-	_, err := l.Acquire(context.Background(), General, "", nil)
-	var flood *FloodWaitError
-	if !errors.As(err, &flood) || flood.RetryAfterSeconds != 120 {
-		t.Fatalf("fast flood error = %v", err)
-	}
-	background := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
-	awaitBackgroundQueue(t, l, 1)
-	clock.Advance(120 * time.Second)
-	receive(t, background).Release()
+	audit10Test(t, func(t *testing.T) {
+		clock := newFakeClock()
+		l := limiterForTest(t, clock, nil)
+		l.PauseBackground(120 * time.Second)
+		_, err := l.Acquire(context.Background(), General, "", nil)
+		var flood *FloodWaitError
+		if !errors.As(err, &flood) || flood.RetryAfterSeconds != 120 {
+			t.Fatalf("fast flood error = %v", err)
+		}
+		background := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
+		awaitBackgroundQueue(t, l, 1)
+		clock.Advance(120 * time.Second)
+		receive(t, background).Release()
+	})
 }
 
 func TestBackgroundFloodGateRejectsAlreadyQueuedNormal(t *testing.T) {
-	l := limiterForTest(t, newFakeClock(), func(c *Config) { c.Concurrency = 1 })
-	hold, err := l.Acquire(context.Background(), General, "", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	normal := acquireAsync(l, context.Background(), General, "", nil)
-	awaitQueue(t, l, 1)
-	l.PauseBackground(120 * time.Second)
-	select {
-	case result := <-normal:
-		var flood *FloodWaitError
-		if !errors.As(result.err, &flood) || flood.RetryAfterSeconds != 120 {
-			t.Fatalf("queued flood error = %v", result.err)
+	audit10Test(t, func(t *testing.T) {
+		l := limiterForTest(t, newFakeClock(), func(c *Config) { c.Concurrency = 1 })
+		hold, err := l.Acquire(context.Background(), General, "", nil)
+		if err != nil {
+			t.Fatal(err)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("queued normal request was not rejected")
-	}
-	hold.Release()
+		normal := acquireAsync(l, context.Background(), General, "", nil)
+		awaitQueue(t, l, 1)
+		l.PauseBackground(120 * time.Second)
+		select {
+		case result := <-normal:
+			var flood *FloodWaitError
+			if !errors.As(result.err, &flood) || flood.RetryAfterSeconds != 120 {
+				t.Fatalf("queued flood error = %v", result.err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("queued normal request was not rejected")
+		}
+		hold.Release()
+	})
 }
 
 func TestDisabledAutoWaitKeepsNormalQueueing(t *testing.T) {
-	clock := newFakeClock()
-	l := limiterForTest(t, clock, func(c *Config) { c.FloodAutoWait = 0 })
-	l.PauseBackground(120 * time.Second)
-	normal := acquireAsync(l, context.Background(), General, "", nil)
-	awaitQueue(t, l, 1)
-	clock.Advance(120 * time.Second)
-	receive(t, normal).Release()
+	audit10Test(t, func(t *testing.T) {
+		clock := newFakeClock()
+		l := limiterForTest(t, clock, func(c *Config) { c.FloodAutoWait = 0 })
+		l.PauseBackground(120 * time.Second)
+		normal := acquireAsync(l, context.Background(), General, "", nil)
+		awaitQueue(t, l, 1)
+		clock.Advance(120 * time.Second)
+		receive(t, normal).Release()
+	})
 }
 
 func TestPausedFor(t *testing.T) {

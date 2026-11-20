@@ -51,7 +51,10 @@ func TestTopicsPinnedDoNotRepeatAcrossPages(t *testing.T) {
 	}
 	calls := 0
 	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
-		req := input.(*tg.MessagesGetForumTopicsRequest)
+		req, ok := input.(*tg.MessagesGetForumTopicsRequest)
+		if !ok {
+			t.Fatalf("req = %T, want *tg.MessagesGetForumTopicsRequest", input)
+		}
 		calls++
 		response := responses[req.OffsetTopic]
 		if response == nil {
@@ -90,7 +93,10 @@ func TestTopicsPinnedDoNotRepeatAcrossPages(t *testing.T) {
 func TestTopicsEmptyDuplicatePageAdvancesByRawLast(t *testing.T) {
 	calls := 0
 	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
-		req := input.(*tg.MessagesGetForumTopicsRequest)
+		req, ok := input.(*tg.MessagesGetForumTopicsRequest)
+		if !ok {
+			t.Fatalf("req = %T, want *tg.MessagesGetForumTopicsRequest", input)
+		}
 		calls++
 		switch calls {
 		case 1:
@@ -160,7 +166,10 @@ func TestTopicsPinnedCursorCompatibilityAndBound(t *testing.T) {
 		t.Fatalf("old cursor: %+v %v", decoded, err)
 	}
 	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
-		req := input.(*tg.MessagesGetForumTopicsRequest)
+		req, ok := input.(*tg.MessagesGetForumTopicsRequest)
+		if !ok {
+			t.Fatalf("req = %T, want *tg.MessagesGetForumTopicsRequest", input)
+		}
 		if req.OffsetDate != 1 || req.OffsetID != 2 || req.OffsetTopic != 3 {
 			t.Errorf("old cursor offsets: %+v", req)
 		}
@@ -223,7 +232,10 @@ func TestTopicsPinnedCursorCapsAccumulationAt32(t *testing.T) {
 func TestTopicsOverLimitPinnedKeepsUnprocessedTopic(t *testing.T) {
 	calls := 0
 	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
-		req := input.(*tg.MessagesGetForumTopicsRequest)
+		req, ok := input.(*tg.MessagesGetForumTopicsRequest)
+		if !ok {
+			t.Fatalf("req = %T, want *tg.MessagesGetForumTopicsRequest", input)
+		}
 		calls++
 		if req.Limit != 100 {
 			t.Errorf("request limit %d", req.Limit)
@@ -259,7 +271,10 @@ func TestTopicsOverLimitPinnedKeepsUnprocessedTopic(t *testing.T) {
 func TestTopicsOverLimitWithPinnedRepeatsStopsAtShownLimit(t *testing.T) {
 	calls := 0
 	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
-		req := input.(*tg.MessagesGetForumTopicsRequest)
+		req, ok := input.(*tg.MessagesGetForumTopicsRequest)
+		if !ok {
+			t.Fatalf("req = %T, want *tg.MessagesGetForumTopicsRequest", input)
+		}
 		calls++
 		if calls == 1 {
 			return respond(output, forumResponse([]forumItem{{1, true}, {11, false}, {2, true}, {3, true}, {12, false}, {13, false}, {14, false}}, 10))
@@ -293,7 +308,10 @@ func TestTopicsThreePagesKeepAllPinnedAndOrdinary(t *testing.T) {
 		105: forumResponse([]forumItem{{1, true}, {106, false}, {107, false}, {4, true}, {108, false}, {109, false}, {110, false}}, 17),
 	}
 	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
-		req := input.(*tg.MessagesGetForumTopicsRequest)
+		req, ok := input.(*tg.MessagesGetForumTopicsRequest)
+		if !ok {
+			t.Fatalf("req = %T, want *tg.MessagesGetForumTopicsRequest", input)
+		}
 		response := responses[req.OffsetTopic]
 		if response == nil {
 			t.Errorf("unexpected offset topic %d", req.OffsetTopic)

@@ -32,7 +32,7 @@ func TestTypingRequest(t *testing.T) {
 				return respond(output, &tg.BoolTrue{})
 			}))
 			result, err := setTyping(context.Background(), api, &tg.InputPeerUser{UserID: 42}, 42, rpc.TypingParams{Action: tc.name, Topic: 12})
-			if err != nil || calls != 1 || result.Action != tc.name {
+			if err != nil || calls != 1 || result.Action != tc.name || result.ChatID != 42 {
 				t.Fatalf("result: %+v %v", result, err)
 			}
 		})

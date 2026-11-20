@@ -59,7 +59,7 @@ func TestUnreadMessagesReadMarkerAndFilterOutgoing(t *testing.T) {
 	m := peers.Options{}.Build(api)
 	peer := m.Chat(&tg.Chat{ID: 42, Title: "group"})
 	out, state, err := unreadMessagesAPI(context.Background(), api, peer, rpc.MessageUnreadParams{Limit: 2})
-	if err != nil || len(calls) != 2 || len(out.Messages) != 1 || out.Messages[0].ID != 12 || out.NextCursor == "" || state == nil || state.ReadInboxMaxID != 9 {
+	if err != nil || len(calls) != 2 || len(out.Messages) != 1 || out.Messages[0].ID != 12 || out.NextCursor == "" || state == nil || state.ReadInboxMaxID != 9 || out.Unread != 2 || out.ReadInboxMaxID != 9 {
 		t.Fatalf("result %+v state %+v calls %v error %v", out, state, calls, err)
 	}
 }
@@ -90,7 +90,8 @@ func TestUnreadForumTopic(t *testing.T) {
 	}))
 	m := peers.Options{}.Build(api)
 	forum := m.Channel(&tg.Channel{ID: 42, AccessHash: 3, Forum: true, Megagroup: true})
-	if _, _, err := unreadMessagesAPI(context.Background(), api, forum, rpc.MessageUnreadParams{Limit: 20}); err == nil || calls != 0 {
+	_, _, err := unreadMessagesAPI(context.Background(), api, forum, rpc.MessageUnreadParams{Limit: 20})
+	if err == nil || calls != 0 || rpcErrorCode(t, err) != rpc.CodeInvalidParams {
 		t.Fatalf("forum without topic: %v calls %d", err, calls)
 	}
 	out, _, err := unreadMessagesAPI(context.Background(), api, forum, rpc.MessageUnreadParams{Limit: 20, Topic: 5})
@@ -98,7 +99,8 @@ func TestUnreadForumTopic(t *testing.T) {
 		t.Fatalf("topic %+v %v calls %d", out, err, calls)
 	}
 	deleted = true
-	if _, _, err = unreadMessagesAPI(context.Background(), api, forum, rpc.MessageUnreadParams{Limit: 20, Topic: 5}); err == nil {
-		t.Fatal("deleted topic accepted")
+	_, _, err = unreadMessagesAPI(context.Background(), api, forum, rpc.MessageUnreadParams{Limit: 20, Topic: 5})
+	if err == nil || rpcErrorCode(t, err) != rpc.CodeNotFound {
+		t.Fatalf("deleted topic: %v", err)
 	}
 }

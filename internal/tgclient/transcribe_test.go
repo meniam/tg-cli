@@ -29,7 +29,7 @@ func TestTranscribeRequestAndPremiumError(t *testing.T) {
 		got, err := transcribeResolved(context.Background(), api, p, 17)
 		if failure {
 			var e *rpc.Error
-			if !errors.As(err, &e) || e.Code != rpc.CodeTelegram || e.Data.(map[string]any)["reason"] != "premium_required" {
+			if !errors.As(err, &e) || e.Code != rpc.CodeTelegram || audit10Reason(e) != "premium_required" {
 				t.Fatalf("error: %v", err)
 			}
 		} else if err != nil || got.Text != "hello" || got.TrialRemains == nil || *got.TrialRemains != 0 {

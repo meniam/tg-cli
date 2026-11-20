@@ -3,6 +3,8 @@ package tgclient
 import (
 	"context"
 	"encoding/json"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -65,7 +67,7 @@ func TestGotdUpdatesBecomeEvents(t *testing.T) {
 				t.Fatalf("events=%+v", events)
 			}
 			event := events[0]
-			if event.Type != tc.typ || !sameID(event.ChatID, tc.chat) || !strings.HasPrefix(event.DedupKey, tc.key) || !strings.Contains(string(event.Data), tc.field) {
+			if event.Type != tc.typ || !sameID(event.ChatID, tc.chat) || !audit10KeyMatches(tc.typ, event.DedupKey, tc.key) || !strings.Contains(string(event.Data), tc.field) {
 				t.Errorf("event=%+v data=%s", event, event.Data)
 			}
 			if event.ID != "" {
@@ -88,6 +90,16 @@ func TestGotdUpdatesBecomeEvents(t *testing.T) {
 	if events := syntheticEvents(t, &tg.UpdateWebPage{}); len(events) != 0 {
 		t.Errorf("unknown update produced events: %+v", events)
 	}
+}
+
+// audit10KeyMatches compares the dedup key exactly: an empty key must stay empty,
+// because a repeated non-empty key makes the daemon drop later events as duplicates.
+// Only reaction keys end in a hash, so they are compared by prefix.
+func audit10KeyMatches(typ, got, want string) bool {
+	if typ == rpc.EventReaction {
+		return strings.HasPrefix(got, want)
+	}
+	return got == want
 }
 
 func int64p(v int64) *int64 { return &v }
@@ -113,9 +125,14 @@ func TestGapCallbacksAndSlowSink(t *testing.T) {
 	if len(events) != 4 {
 		t.Fatalf("gap events=%+v", events)
 	}
+	wantReasons := []string{"channel_too_long", "channel_gap", "channel_inaccessible", "too_long"}
 	for i, event := range events {
 		if event.Type != rpc.EventGap || event.DedupKey != "" {
 			t.Errorf("gap %d=%+v", i, event)
+		}
+		var data rpc.GapData
+		if err := json.Unmarshal(event.Data, &data); err != nil || data.Reason != wantReasons[i] {
+			t.Errorf("gap %d reason = %q (err %v), want %q", i, data.Reason, err, wantReasons[i])
 		}
 		if i < 3 && !sameID(event.ChatID, int64p(-1000000000008)) {
 			t.Errorf("channel gap=%+v", event)
@@ -124,13 +141,19 @@ func TestGapCallbacksAndSlowSink(t *testing.T) {
 			t.Errorf("common gap=%+v", event)
 		}
 	}
+	// A sink that replaces itself would deadlock if the conversion lock were held
+	// during the callback. The timeout is only a safety net for that regression.
 	finished := make(chan struct{})
-	c.SetEventSink(func(rpc.Event) { c.SetEventSink(nil); time.Sleep(time.Millisecond); close(finished) })
-	go func() { _ = c.deleteEvent(0, []int{1}) }()
+	c.SetEventSink(func(rpc.Event) { c.SetEventSink(nil); close(finished) })
+	deleted := make(chan error, 1)
+	go func() { deleted <- c.deleteEvent(0, []int{1}) }()
 	select {
 	case <-finished:
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("sink callback held the conversion lock")
+	}
+	if err := <-deleted; err != nil {
+		t.Fatalf("deleteEvent: %v", err)
 	}
 }
 
@@ -188,16 +211,24 @@ func TestStateStorageUsesAccountKeysAndEnumeratesChannels(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var got []int64
+	var ids []int64
+	indexed := map[int64]int{}
+	stored := map[int64]int{}
 	if err := s.ForEachChannels(ctx, 42, func(ctx context.Context, id int64, pts int) error {
-		got = append(got, id)
-		_, _, err := s.GetChannelPts(ctx, 42, id)
+		ids = append(ids, id)
+		indexed[id] = pts
+		got, found, err := s.GetChannelPts(ctx, 42, id)
+		if err == nil && !found {
+			t.Errorf("channel %d is indexed but GetChannelPts reports it missing", id)
+		}
+		stored[id] = got
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0] != 7 || got[1] != 8 {
-		t.Errorf("channels=%v", got)
+	want := map[int64]int{7: 17, 8: 18}
+	if !slices.Equal(ids, []int64{7, 8}) || !maps.Equal(indexed, want) || !maps.Equal(stored, want) {
+		t.Errorf("channels=%v index=%v GetChannelPts=%v, want %v", ids, indexed, stored, want)
 	}
 	if _, ok := kv.values[userStateKey(42)]; !ok {
 		t.Error("user key missing")
