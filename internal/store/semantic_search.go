@@ -66,11 +66,12 @@ func toWordMatches(leg []messageCandidate) []WordMatch {
 // FragmentText returns the text of the live messages of one conversation
 // fragment: messages of the chat and the forum topic (0 for none) with an id
 // from firstID to lastID, not deleted, not service and not empty, in (date, id)
-// order, joined by a line feed. The text is cut to maxRunes characters, with an
+// order, joined by a line feed. The text of a voice message or a round video is
+// its caption and finished transcription, as in MessagesForFragments. The text is cut to maxRunes characters, with an
 // ellipsis as the last one when it was cut. It is empty if no message is left.
 // It does no access check: the caller passes only chats it may show.
 func (db *DB) FragmentText(ctx context.Context, chatID, topicID, firstID, lastID int64, maxRunes int) (string, error) {
-	rows, err := db.read.QueryContext(ctx, `SELECT text FROM messages WHERE chat_id=? AND id BETWEEN ? AND ? AND COALESCE(topic_id,0)=? AND deleted_at IS NULL AND service IS NULL AND text<>'' ORDER BY date,id`, chatID, firstID, lastID, topicID)
+	rows, err := db.read.QueryContext(ctx, `SELECT m.text,COALESCE(t.text,'') FROM messages m`+transcriptJoin+` WHERE m.chat_id=? AND m.id BETWEEN ? AND ? AND COALESCE(m.topic_id,0)=? AND m.deleted_at IS NULL AND m.service IS NULL AND (m.text<>'' OR t.text IS NOT NULL) ORDER BY m.date,m.id`, chatID, firstID, lastID, topicID)
 	if err != nil {
 		return "", err
 	}
@@ -78,10 +79,11 @@ func (db *DB) FragmentText(ctx context.Context, chatID, topicID, firstID, lastID
 	var b strings.Builder
 	runes := 0
 	for rows.Next() {
-		var text string
-		if err := rows.Scan(&text); err != nil {
+		var text, transcript string
+		if err := rows.Scan(&text, &transcript); err != nil {
 			return "", err
 		}
+		text = composeMessageText(text, transcript)
 		if runes > 0 {
 			b.WriteByte('\n')
 			runes++

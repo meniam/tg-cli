@@ -503,6 +503,9 @@ func upsertMessagesTx(ctx context.Context, tx *sql.Tx, messages []Message, last 
 			continue
 		}
 		fresh := mergeMessage(Message{}, incoming, false, now)
+		if err := applyTranscript(ctx, tx, &fresh); err != nil {
+			return err
+		}
 		result, err := newStmt.ExecContext(ctx, fresh.ChatID, fresh.ID, fresh.Date, fresh.SenderID, fresh.SenderName, fresh.Text, boolInt(fresh.Out), fresh.ReplyTo, fresh.TopicID, fresh.MediaType, fresh.EditedAt, boolInt(fresh.Pinned), fresh.Service, string(fresh.Raw), fresh.SearchText, nil, fresh.FirstSeenAt, fresh.LastSeenAt)
 		if err != nil {
 			return fmt.Errorf("insert message %d/%d: %w", incoming.ChatID, incoming.ID, err)
@@ -528,6 +531,9 @@ func upsertMessagesTx(ctx context.Context, tx *sql.Tx, messages []Message, last 
 			}
 		}
 		m := mergeMessage(old, incoming, true, now)
+		if err := applyTranscript(ctx, tx, &m); err != nil {
+			return err
+		}
 		query := insert
 		if m.SearchText != old.SearchText {
 			query += `,search_text=excluded.search_text`

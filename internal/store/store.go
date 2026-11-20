@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"errors"
@@ -91,6 +92,10 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("enable WAL: got %q", mode)
 	}
 	if err := applyMigrations(write, migrations); err != nil {
+		write.Close()
+		return nil, err
+	}
+	if err := backfillTranscribedSearchText(context.Background(), write); err != nil {
 		write.Close()
 		return nil, err
 	}

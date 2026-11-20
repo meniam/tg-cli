@@ -24,16 +24,18 @@ type FragmentMessage struct {
 }
 
 // MessagesForFragments returns the messages that go into the semantic index:
-// not deleted, not service, with text. The access filter applies inside the
+// not deleted, not service, with text. The text of a voice message or a round
+// video is its caption plus its finished transcription (see transcriptJoin); a
+// voice message without one has no text and is not returned. The access filter applies inside the
 // query, so a closed chat never reaches the indexer. The order is (chat_id,
 // date, id), the order the chunker needs. The scan walks the chat_id prefix of
 // messages_chat_date_idx and sorts only the ids inside equal dates.
 func (db *DB) MessagesForFragments(ctx context.Context, filter ChatFilter) ([]FragmentMessage, error) {
-	cond, args := filter.condition("chat_id", false)
-	rows, err := db.read.QueryContext(ctx, `SELECT chat_id, id, date, topic_id, text, reply_to
-FROM messages
-WHERE deleted_at IS NULL AND service IS NULL AND text <> ''`+cond+`
-ORDER BY chat_id, date, id`, args...)
+	cond, args := filter.condition("m.chat_id", false)
+	rows, err := db.read.QueryContext(ctx, `SELECT m.chat_id, m.id, m.date, m.topic_id, m.text, COALESCE(t.text, ''), m.reply_to
+FROM messages m`+transcriptJoin+`
+WHERE m.deleted_at IS NULL AND m.service IS NULL AND (m.text <> '' OR t.text IS NOT NULL)`+cond+`
+ORDER BY m.chat_id, m.date, m.id`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read messages for fragments: %w", err)
 	}
@@ -42,9 +44,11 @@ ORDER BY chat_id, date, id`, args...)
 	for rows.Next() {
 		var m FragmentMessage
 		var topic, reply *int64
-		if err := rows.Scan(&m.ChatID, &m.ID, &m.Date, &topic, &m.Text, &reply); err != nil {
+		var transcript string
+		if err := rows.Scan(&m.ChatID, &m.ID, &m.Date, &topic, &m.Text, &transcript, &reply); err != nil {
 			return nil, fmt.Errorf("read messages for fragments: %w", err)
 		}
+		m.Text = composeMessageText(m.Text, transcript)
 		if topic != nil {
 			m.TopicID = *topic
 		}
