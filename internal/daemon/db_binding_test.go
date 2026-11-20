@@ -76,6 +76,10 @@ func TestDatabaseBinding(t *testing.T) {
 	if !strings.Contains(err.Error(), record) {
 		t.Errorf("the message must name the record %s: %v", record, err)
 	}
+	// The reassurance is part of the contract, not only the absence of bad advice.
+	if !strings.Contains(err.Error(), "is never deleted") {
+		t.Errorf("the message must say the database is never deleted: %v", err)
+	}
 	for _, wrong := range []string{"remove " + first.DatabaseDir, "remove the directory", "delete " + first.DatabaseDir} {
 		if strings.Contains(err.Error(), wrong) {
 			t.Errorf("the message must never advise removing the database directory: %v", err)

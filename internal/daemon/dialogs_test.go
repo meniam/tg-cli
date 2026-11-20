@@ -119,10 +119,18 @@ func TestFolderWriteBarriersAndHidden(t *testing.T) {
 	if !errors.As(err, &re) || re.Code != rpc.CodeInvalidParams || fake.writes != 0 {
 		t.Fatalf("confirmation: %v", err)
 	}
-	d.opts.Paths.Dir = filepath.Join(t.TempDir(), "missing")
+	// The journal cannot be opened in a directory that does not exist; the write
+	// must stop there, before Telegram is asked.
+	missing := filepath.Join(t.TempDir(), "missing")
+	d.opts.Paths.Dir = missing
 	_, err = d.folderWrite(ctx, params(t, rpc.FolderWriteParams{ID: 2, Yes: true}), "delete")
-	if err == nil || fake.writes != 0 {
-		t.Fatalf("journal error: %v writes %d", err, fake.writes)
+	// The error names the journal file, so it comes from opening the journal.
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || !errors.Is(err, os.ErrNotExist) || pathErr.Path != filepath.Join(missing, "account.jsonl") || fake.writes != 0 {
+		t.Fatalf("journal error: %v writes %d, want a missing-directory error on account.jsonl and no write", err, fake.writes)
+	}
+	if _, statErr := os.Stat(filepath.Join(missing, "account.jsonl")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("the journal was created in a directory that is not there: %v", statErr)
 	}
 }
 

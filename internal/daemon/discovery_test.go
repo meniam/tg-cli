@@ -68,8 +68,8 @@ func TestDiscoveryReadVisibilityAndPublicFilter(t *testing.T) {
 	tg.messages = rpc.MessagesResult{Messages: []rpc.Message{discoveryMessage(42, 11, "visible"), discoveryMessage(77, 12, "secret")}}
 	tg.public = rpc.PublicSearchResult{Hits: []rpc.PublicHit{{ChatID: 42, Message: discoveryMessage(42, 13, "public")}, {ChatID: 77, Message: discoveryMessage(77, 14, "hidden")}}}
 	search, err := d.messageSearch(ctx, params(t, rpc.SearchMessagesParams{Chat: "42", Query: "a"}))
-	if err != nil || len(search.(rpc.MessagesResult).Messages) != 1 {
-		t.Fatalf("search: %+v %v", search, err)
+	if err != nil || len(search.(rpc.MessagesResult).Messages) != 1 || search.(rpc.MessagesResult).Messages[0].ID != 11 {
+		t.Fatalf("search: %+v %v, want only message 11", search, err)
 	}
 	if _, err := db.GetMessage(ctx, 42, 11); err != nil {
 		t.Fatal(err)
@@ -78,8 +78,8 @@ func TestDiscoveryReadVisibilityAndPublicFilter(t *testing.T) {
 		t.Fatalf("hidden search saved: %v", err)
 	}
 	public, err := d.messageSearchPublic(ctx, params(t, rpc.PublicSearchParams{Query: "#tag"}))
-	if err != nil || len(public.(rpc.PublicSearchResult).Hits) != 1 {
-		t.Fatalf("public: %+v %v", public, err)
+	if err != nil || len(public.(rpc.PublicSearchResult).Hits) != 1 || public.(rpc.PublicSearchResult).Hits[0].ChatID != 42 {
+		t.Fatalf("public: %+v %v, want only the hit of chat 42", public, err)
 	}
 	if _, err := db.GetMessage(ctx, 77, 14); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("hidden public hit saved: %v", err)
@@ -95,7 +95,8 @@ func TestDiscoveryReadVisibilityAndPublicFilter(t *testing.T) {
 		_, err := run()
 		sameRPCError(t, err, rpc.ErrUnknownChatID())
 	}
-	if tg.calls["context"] != 0 || tg.calls["comments"] != 0 || tg.calls["link"] != 0 {
+	// The one search above is the open chat; the closed chat added none.
+	if tg.calls["search"] != 1 || tg.calls["context"] != 0 || tg.calls["comments"] != 0 || tg.calls["link"] != 0 {
 		t.Fatalf("closed chat reached Telegram: %+v", tg.calls)
 	}
 }

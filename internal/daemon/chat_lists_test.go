@@ -20,20 +20,44 @@ type listTelegram struct {
 	topics       rpc.TopicsResult
 	pages        map[string]rpc.CommonChatsResult
 	commonPage   func(int, rpc.CommonChatsParams) rpc.CommonChatsResult
+
+	// The parameters of the last call, what the daemon handed to Telegram.
+	membersParams rpc.MembersParams
+	topicsParams  rpc.TopicsParams
+	commonParams  rpc.CommonChatsParams
+	// err is returned by all three reads; during runs while a read is in flight, so
+	// a test can change access.json between the request and the answer.
+	err    error
+	during func()
 }
 
-func (f *listTelegram) Members(context.Context, chatref.Ref, rpc.MembersParams) (rpc.MembersResult, error) {
+func (f *listTelegram) Members(_ context.Context, _ chatref.Ref, p rpc.MembersParams) (rpc.MembersResult, error) {
 	f.membersCalls++
-	return f.members, nil
+	f.membersParams = p
+	if f.during != nil {
+		f.during()
+	}
+	return f.members, f.err
 }
 
-func (f *listTelegram) Topics(context.Context, chatref.Ref, rpc.TopicsParams) (rpc.TopicsResult, error) {
+func (f *listTelegram) Topics(_ context.Context, _ chatref.Ref, p rpc.TopicsParams) (rpc.TopicsResult, error) {
 	f.topicsCalls++
-	return f.topics, nil
+	f.topicsParams = p
+	if f.during != nil {
+		f.during()
+	}
+	return f.topics, f.err
 }
 
 func (f *listTelegram) CommonChats(_ context.Context, _ chatref.Ref, p rpc.CommonChatsParams) (rpc.CommonChatsResult, error) {
 	f.commonCalls++
+	f.commonParams = p
+	if f.during != nil {
+		f.during()
+	}
+	if f.err != nil {
+		return rpc.CommonChatsResult{}, f.err
+	}
 	if f.commonPage != nil {
 		return f.commonPage(f.commonCalls, p), nil
 	}
@@ -164,8 +188,16 @@ func TestChatMembersTopicsNeedLoginAndRejectUser(t *testing.T) {
 	if _, err := d.chatTopics(ctx, params(t, rpc.TopicsParams{Chat: "42"})); rpcCode(t, err) != rpc.CodeInvalidParams {
 		t.Fatal(err)
 	}
+	// A bot is a person as well: the same refusal, no read.
+	tg.resolved = &rpc.Chat{ID: 43, Type: "bot", Title: "Robot"}
+	if _, err := d.chatMembers(ctx, params(t, rpc.MembersParams{Chat: "43"})); rpcCode(t, err) != rpc.CodeInvalidParams {
+		t.Fatal(err)
+	}
+	if _, err := d.chatTopics(ctx, params(t, rpc.TopicsParams{Chat: "43"})); rpcCode(t, err) != rpc.CodeInvalidParams {
+		t.Fatal(err)
+	}
 	if tg.membersCalls != 0 || tg.topicsCalls != 0 {
-		t.Fatal("read called for a user")
+		t.Fatal("read called for a user or a bot")
 	}
 }
 
