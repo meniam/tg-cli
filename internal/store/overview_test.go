@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -25,22 +26,9 @@ func buildDatabaseAt(t *testing.T, path string, files []string, version int) {
 			t.Fatalf("%s: %v", file, err)
 		}
 	}
-	if _, err = raw.Exec("PRAGMA user_version=" + itoa(version)); err != nil {
+	if _, err = raw.Exec("PRAGMA user_version=" + strconv.Itoa(version)); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// itoa renders a small number without a format package.
-func itoa(v int) string {
-	if v == 0 {
-		return "0"
-	}
-	var digits []byte
-	for v > 0 {
-		digits = append([]byte{byte('0' + v%10)}, digits...)
-		v /= 10
-	}
-	return string(digits)
 }
 
 // migrationsBeforeEight are the migrations a version 7 database has.

@@ -62,21 +62,13 @@ func TestMethodTimeoutConnectionCloseCancelsHandler(t *testing.T) {
 	go func() { srv.ServeConn(serverSide); close(serverDone) }()
 	callDone := make(chan error, 1)
 	go func() { callDone <- client.Call(context.Background(), "media", struct{}{}, nil) }()
-	select {
-	case <-entered:
-	case <-time.After(time.Second):
-		t.Fatal("handler did not start")
-	}
+	audit07Wait(t, entered, "the handler to start")
 	_ = client.Close()
+	audit07Wait(t, canceled, "the connection close to cancel the handler")
+	audit07Wait(t, serverDone, "the server to stop")
 	select {
-	case <-canceled:
-	case <-time.After(time.Second):
-		t.Fatal("connection close did not cancel handler")
+	case <-callDone:
+	case <-time.After(audit07WaitLimit):
+		t.Fatal("the client call did not end after the close")
 	}
-	select {
-	case <-serverDone:
-	case <-time.After(time.Second):
-		t.Fatal("server did not stop")
-	}
-	<-callDone
 }

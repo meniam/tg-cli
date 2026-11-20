@@ -34,7 +34,11 @@ func TestExportMessageJSONIsFlatAndSchemaKeepsUntrustedText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if json.Valid(raw) && jsonHasField(raw, "deleted") {
+	var live map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &live); err != nil {
+		t.Fatalf("live message is not a JSON object: %v: %s", err, raw)
+	}
+	if _, ok := live["deleted"]; ok {
 		t.Fatalf("live message has deleted marker: %s", raw)
 	}
 	marked := map[string]bool{}

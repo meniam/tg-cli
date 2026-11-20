@@ -23,7 +23,13 @@ func TestCheckpointFoldsTheJournal(t *testing.T) {
 		t.Fatal(err)
 	}
 	journal := path + "-wal"
-	if info, err := os.Stat(journal); err == nil && info.Size() == 0 {
+	// The journal must exist and hold the write, otherwise the test proves
+	// nothing about folding it.
+	info, err := os.Stat(journal)
+	if err != nil {
+		t.Fatalf("the journal is missing before the checkpoint: %v", err)
+	}
+	if info.Size() == 0 {
 		t.Fatalf("the journal is empty before the checkpoint: the test proves nothing")
 	}
 	busy, err := Checkpoint(path)
@@ -33,7 +39,13 @@ func TestCheckpointFoldsTheJournal(t *testing.T) {
 	if busy {
 		t.Fatalf("the checkpoint reports a busy journal")
 	}
-	if info, err := os.Stat(journal); err == nil && info.Size() != 0 {
+	// A truncated journal is either empty or already removed; any other
+	// failure to read it is a failure of the test.
+	switch info, err := os.Stat(journal); {
+	case errors.Is(err, os.ErrNotExist):
+	case err != nil:
+		t.Fatalf("stat the journal after the checkpoint: %v", err)
+	case info.Size() != 0:
 		t.Fatalf("the journal still holds %d bytes", info.Size())
 	}
 	raw, found, err := db.GetAccountState(context.Background(), "checkpoint.test")
@@ -57,7 +69,8 @@ func TestCheckpointRefusesAMissingFile(t *testing.T) {
 // TestIntegrityCheckReportsOk covers the healthy file and the damaged one: a
 // copy that lost a page must not pass as a database.
 func TestIntegrityCheckReportsOk(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "store.db")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "store.db")
 	db, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +119,7 @@ func TestIntegrityCheckReportsOk(t *testing.T) {
 	if ok || detail == "" || detail == "ok" {
 		t.Fatalf("a damaged database passed: ok=%v detail=%q", ok, detail)
 	}
-	if strings.Contains(detail, t.TempDir()) {
+	if strings.Contains(detail, dir) {
 		t.Errorf("the detail must not depend on the temporary path: %q", detail)
 	}
 }

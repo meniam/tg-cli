@@ -16,9 +16,19 @@ func TestUserParamsValidation(t *testing.T) {
 			t.Errorf("accepted %+v", p)
 		}
 	}
+	for _, p := range []ContactListParams{{}, {Limit: 1}, {Limit: 1000}, {Offset: 5, Local: true}} {
+		if err := ValidateContactListParams(p); err != nil {
+			t.Errorf("refused %+v: %v", p, err)
+		}
+	}
 	for _, p := range []ContactSearchParams{{Query: " "}, {Query: "a", Limit: -1}, {Query: "a", Limit: 101}} {
 		if ValidateContactSearchParams(p) == nil {
 			t.Errorf("accepted %+v", p)
+		}
+	}
+	for _, p := range []ContactSearchParams{{Query: "a"}, {Query: "a", Limit: 1}, {Query: "a", Limit: 100}} {
+		if err := ValidateContactSearchParams(p); err != nil {
+			t.Errorf("refused %+v: %v", p, err)
 		}
 	}
 }

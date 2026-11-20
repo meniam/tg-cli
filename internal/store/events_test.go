@@ -2,10 +2,9 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -47,13 +46,34 @@ func TestEventsDedupReplayFiltersAndPrune(t *testing.T) {
 	if err != nil || len(filtered) != 2 || filtered[0].ID != ids[0] || filtered[1].ID != ids[2] {
 		t.Errorf("filtered: %+v err=%v", filtered, err)
 	}
+	remaining := func() []int64 {
+		t.Helper()
+		kept, err := db.EventsAfter(ctx, 0, EventFilter{}, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []int64
+		for _, event := range kept {
+			out = append(out, event.ID)
+		}
+		return out
+	}
 	deleted, err := db.PruneEvents(ctx, base.Add(30*time.Minute), 2)
 	if err != nil || deleted != 1 {
 		t.Errorf("age prune: deleted=%d err=%v", deleted, err)
 	}
+	if got := remaining(); !slices.Equal(got, []int64{ids[1], ids[2]}) {
+		t.Errorf("after the age prune the journal holds %v, want the two newest %v", got, ids[1:])
+	}
 	deleted, err = db.PruneEvents(ctx, base, 1)
 	if err != nil || deleted != 1 {
 		t.Errorf("count prune: deleted=%d err=%v", deleted, err)
+	}
+	if got := remaining(); !slices.Equal(got, []int64{ids[2]}) {
+		t.Errorf("after the count prune the journal holds %v, want only the newest %d", got, ids[2])
+	}
+	if first, err := db.FirstEventID(ctx); err != nil || first != ids[2] {
+		t.Errorf("first event after the prunes = %d err=%v, want %d", first, err, ids[2])
 	}
 	id, inserted, err = db.AddEvent(ctx, Event{Type: "message.new", CreatedAt: base.Add(3 * time.Hour), Payload: json.RawMessage(`{}`)})
 	if err != nil || !inserted || id <= ids[2] {
@@ -83,28 +103,7 @@ func TestAccountStateReadWrite(t *testing.T) {
 
 func TestEventsMigrationUpgradesVersionTwoDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = f.Close()
-	for _, version := range []int{1, 2} {
-		body, err := migrationFiles.ReadFile("migrations/000" + string(rune('0'+version)) + "_" + map[int]string{1: "init", 2: "schema"}[version] + ".sql")
-		if err != nil {
-			t.Fatal(err)
-		}
-		plain, err := sql.Open("sqlite", path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := plain.Exec(string(body)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := plain.Exec("PRAGMA user_version=" + string(rune('0'+version))); err != nil {
-			t.Fatal(err)
-		}
-		_ = plain.Close()
-	}
+	buildDatabaseAt(t, path, []string{"0001_init.sql", "0002_schema.sql"}, 2)
 	db, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
