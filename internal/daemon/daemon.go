@@ -290,7 +290,8 @@ func Run(ctx context.Context, opts Options) error {
 		} else {
 			close(autoDone)
 		}
-		tgDone = d.supervisor.exits
+		// The supervisor restarts the client itself; tgDone stays nil so no client
+		// exit ends the daemon here.
 	} else {
 		d.logConnection(runCtx, opts.Telegram, nil)
 		close(switchDone)

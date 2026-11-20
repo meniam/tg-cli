@@ -118,11 +118,6 @@ func TestAutoTransportRestartsAfterConnectionFailure(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("replacement did not become ready")
 	}
-	select {
-	case err := <-supervisor.exits:
-		t.Fatalf("fallback reported failure: %v", err)
-	default:
-	}
 	cancel()
 	waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
 	defer waitCancel()

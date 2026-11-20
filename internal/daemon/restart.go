@@ -116,13 +116,12 @@ type clientSupervisor struct {
 	active     Telegram
 	changed    chan struct{}
 	restarting bool
-	exits      chan error
 	restarts   clientRestarter
 	watchers   sync.WaitGroup
 }
 
 func newClientSupervisor(ctx context.Context, gate *telegramAdmission, initial Telegram, factory func(context.Context) (Telegram, error), prepare func(Telegram), ignoreExit func() bool, onFailure func() bool, onReady func(), grace time.Duration) *clientSupervisor {
-	s := &clientSupervisor{ctx: ctx, gate: gate, factory: factory, prepare: prepare, ignoreExit: ignoreExit, onFailure: onFailure, onReady: onReady, grace: grace, exits: make(chan error, 1), active: initial, changed: make(chan struct{})}
+	s := &clientSupervisor{ctx: ctx, gate: gate, factory: factory, prepare: prepare, ignoreExit: ignoreExit, onFailure: onFailure, onReady: onReady, grace: grace, active: initial, changed: make(chan struct{})}
 	s.current = startClientRun(ctx, initial)
 	s.initial = s.current
 	s.watch(s.current)
