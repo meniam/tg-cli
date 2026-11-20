@@ -135,7 +135,8 @@ and `page_pause_max` strings, as written in the file or the defaults; the
 environment variables are not applied, see
 [Request throttle](overview.md#request-throttle-and-flood_wait)),
 `semantic_search` object (`enabled` boolean; `ollama_url`, `model` and
-`interval` strings and `batch` number, as written in the file or the defaults;
+`interval` strings and `batch` and `min_similarity` numbers, as written in the
+file or the defaults;
 the environment variables are not applied; the keys and the rules are in
 [overview.md](overview.md#request-throttle-and-flood_wait)), and `profiles`
 object keyed by profile name. Each profile contains `client`, `device`,

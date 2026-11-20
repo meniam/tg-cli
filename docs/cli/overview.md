@@ -342,6 +342,9 @@ Privacy: the Ollama address must be on this machine (`127.0.0.1`, `::1` or `loca
 | `semantic_search.model` | `TG_CLI_SEMANTIC_SEARCH_MODEL` | an Ollama embedding model, 1 to 128 characters, no control characters | `bge-m3` |
 | `semantic_search.batch` | `TG_CLI_SEMANTIC_SEARCH_BATCH` | texts per Ollama request, a whole number from 1 to 128 | `16` |
 | `semantic_search.interval` | `TG_CLI_SEMANTIC_SEARCH_INTERVAL` | the wait between two indexing runs, a Go duration from `1m` to `24h` | `10m` |
+| `semantic_search.min_similarity` | `TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY` | the lowest cosine similarity of a vector hit of `tg search --semantic`, a number from `0` to `1`; `0` turns the threshold off | `0.5` |
+
+`min_similarity` is the cosine of the `bge-m3` vectors of the query and of a fragment. Vector hits below it are dropped before the fusion and counted in `vector_dropped`; the word legs are not filtered. `tg search --semantic --min-similarity X` overrides it for one query. Unrelated fragments score a median near 0.40 and a 99th percentile near 0.5; good queries reach 0.6 to 0.7; so raise the value (`0.55`) against noise and lower it (`0.45`) when real matches vanish; see [notes-and-search.md](notes-and-search.md#semantic-search).
 
 Per-method buckets remain an open item: `getDialogs` can hit `FLOOD_WAIT` before the general bucket, so keep pauses between reads. Media parts go through `FileDC`, which retains the same middleware and the file-transfer lane; CDN is not enabled for these downloads. The init call, ping and ack bypass the throttle; the Telegram library keeps its own retries after `FLOOD_WAIT` in the updates manager, downloader and `QR.Auth`. See [FEATURES.md](../../FEATURES.md), item 11.4.
 
