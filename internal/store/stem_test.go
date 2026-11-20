@@ -102,8 +102,8 @@ func TestMigration0011FromVersion10(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if version, err := db.Version(); err != nil || version != 11 {
-		t.Fatalf("version = %d, %v, want 11", version, err)
+	if version, err := db.Version(); err != nil || version != newestMigrationVersion(t) {
+		t.Fatalf("version = %d, %v, want %d", version, err, newestMigrationVersion(t))
 	}
 	for id, text := range texts {
 		var got string
