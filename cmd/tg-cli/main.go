@@ -90,8 +90,10 @@ func main() {
 
 func newTelegram(cfg daemon.TelegramConfig) (daemon.Telegram, error) {
 	var state *stateKV
+	var persisted tgclient.StateKV // stays a nil interface when there is no path
 	if cfg.StatePath != "" {
 		state = &stateKV{path: cfg.StatePath}
+		persisted = state
 	}
 	client, err := tgclient.NewWithNetwork(tgclient.Config{
 		Network:     cfg.Network,
@@ -100,7 +102,7 @@ func newTelegram(cfg daemon.TelegramConfig) (daemon.Telegram, error) {
 		SessionPath: cfg.SessionPath,
 		DeviceModel: cfg.DeviceModel,
 		Throttle:    cfg.Throttle,
-		StateKV:     state,
+		StateKV:     persisted,
 	})
 	if err != nil {
 		return nil, err

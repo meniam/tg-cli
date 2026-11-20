@@ -93,6 +93,6 @@ func TestAudit01_NoStatePathLeavesTheClientStateKVNil(t *testing.T) {
 		t.Fatal("tgclient.Client no longer has a stateKV field: update this test")
 	}
 	if !field.IsNil() {
-		t.Skip("known defect G01-F19: newTelegram stores a typed nil *stateKV in tgclient.Config.StateKV when StatePath is empty, so the client believes it has persistent state and would dereference a nil receiver")
+		t.Fatal("newTelegram stores a typed nil *stateKV in tgclient.Config.StateKV when StatePath is empty: the client would believe it has persistent state")
 	}
 }
