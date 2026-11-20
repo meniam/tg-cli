@@ -10,9 +10,9 @@ PR: —
 
 ## Status
 
-- Current status: ready_to_merge (2026-11-21: шаги 2-10 сделаны, все потоки слиты в ветку плана, полный `-race` идёт; деплой по команде владельца)
+- Current status: deployed (2026-11-21 01:30: слит в `main` 41a6961, запушен, `just install` выполнен, схема 12, движок установлен `tg voice install`; `[voice_transcription] enabled = false`, включение за владельцем)
 - Last update: 2026-11-21
-- Next safe step: дождаться итогового `-race`, слить ветку в `main`, по команде владельца: копия базы, `just install`, `tg voice install`, включение, первая живая расшифровка.
+- Next safe step: владелец включает `[voice_transcription] enabled = true`, ставит метки `tg chat voice on` и по команде делает первую живую расшифровку (`tg message transcribe` на своём голосовом).
 - Связь с планом `20261120_1826_semantic_search_bge_m3`: шаг 15 того плана (расшифровки в поиске и индексе, поток voice) остаётся там и нужен этому плану как потребитель текста. Шаги 16 и 18 того плана перенесены сюда (отмечены в нём ссылкой).
 
 ## Context and sources
@@ -181,8 +181,8 @@ threads = 4
 
 ## Deploy / rollback
 
-- [ ] Копия `~/.config/tg-cli/db/default`: миграция необратима для старых бинарников.
-- [ ] `just install`, затем `tg voice install` (скачивание около 190 МБ рантайма и модели), проверка `tg voice status`.
+- [x] Копия базы 2026-11-21 01:22: `~/.config/tg-cli/.db-backup-20261121-voice/default/store.db` (`.backup`, quick_check ok): миграция необратима для старых бинарников.
+- [x] (2026-11-21) `just install`, затем `tg voice install` (скачивание около 190 МБ рантайма и модели), проверка `tg voice status`.
 - [ ] Включение владельцем: `[voice_transcription] enabled = true`, метки `tg chat voice on <чат>` для нужных чатов, перезапуск демона; первые сутки следить за `tg voice status` и `throttled_ms`.
 - [ ] Откат: `enabled = false` и перезапуск, очередь остаётся в базе и не обрабатывается; движок можно удалить (`<home>/models/gigaam`); откат миграции только из копии базы.
 
