@@ -97,6 +97,7 @@ func TestRegisteredMethodsHaveAccessClass(t *testing.T) {
 		rpc.MethodNoteAdd: "chat-notes", rpc.MethodNoteList: "chat-notes", rpc.MethodNoteDelete: "chat-notes", rpc.MethodNoteDeleteByAuthor: "none", rpc.MethodSearch: "chat-search", rpc.MethodSearchSemantic: "chat-search",
 		rpc.MethodHistorySyncStart: "chat-ref", rpc.MethodHistorySyncStatus: "chat-search", rpc.MethodHistorySyncCancel: "chat-ref",
 		rpc.MethodSearchIndexStart: "none", rpc.MethodSearchIndexStatus: "none", rpc.MethodSearchIndexCancel: "none",
+		rpc.MethodVoiceStatus: "none", rpc.MethodVoiceCancel: "chat-ref", rpc.MethodVoiceRetry: "chat-ref", rpc.MethodVoiceBackfill: "chat-list",
 		rpc.MethodSubscribe: "chat-stream", rpc.MethodUnsubscribe: "none",
 	}
 	methods := d.srv.Methods()

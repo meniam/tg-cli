@@ -36,6 +36,8 @@ type Config struct {
 	BackgroundSync BackgroundSync `toml:"background_sync"`
 	// SemanticSearch holds the local semantic index settings.
 	SemanticSearch SemanticSearch `toml:"semantic_search"`
+	// VoiceTranscription holds the local voice transcription settings.
+	VoiceTranscription VoiceTranscription `toml:"voice_transcription"`
 	// Profiles holds settings for each named profile.
 	Profiles map[string]Profile `toml:"profiles"`
 	// Warnings contains diagnostics that do not reveal proxy credentials.
@@ -184,6 +186,9 @@ func Load(path string) (Config, error) {
 	if _, err := c.SemanticSearch.Resolve(); err != nil {
 		return Config{}, err
 	}
+	if _, err := c.VoiceTranscription.Resolve(); err != nil {
+		return Config{}, err
+	}
 	for name, p := range c.Profiles {
 		proxy, err := validateProfile(name, p)
 		if err != nil {
@@ -197,7 +202,7 @@ func Load(path string) (Config, error) {
 }
 
 func defaults(home string) Config {
-	return Config{Home: home, DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}, BackgroundSync: defaultBackgroundSync(), SemanticSearch: defaultSemanticSearch()}
+	return Config{Home: home, DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}, BackgroundSync: defaultBackgroundSync(), SemanticSearch: defaultSemanticSearch(), VoiceTranscription: defaultVoiceTranscription()}
 }
 
 func validateHome(path string) (string, error) {

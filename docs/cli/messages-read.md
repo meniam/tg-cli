@@ -619,7 +619,7 @@ No command flags.
 
 ### tg message transcribe
 
-Request Telegram's transcription of a voice message or video note. The command does not send anything to a chat. It accepts a chat and message id, or a `t.me` message link.
+Turns a voice message, video note or video into text with the local speech engine ([Voice transcription](voice.md)). The command puts the message at the front of the voice queue and waits for the text; Telegram is asked for the file only, never to transcribe. It does not send anything to a chat. It accepts a chat and message id, or a `t.me` message link. `--telegram` asks Telegram itself instead (Premium needed); it is the single path that calls `messages.transcribeAudio`.
 
 ```text
 tg message transcribe <chat> <id>
@@ -629,14 +629,15 @@ tg message transcribe <message-link>
 <!-- schema:flags tg message transcribe -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--wait` | duration | `30s` | wait for transcription, up to 90s |
+| `--telegram` | bool | `false` | ask Telegram to transcribe instead of the local engine (needs Premium) |
+| `--wait` | duration | `1m0s` | wait for the text, up to 600s (up to 90s with --telegram) |
 <!-- /schema:flags -->
 
-The result has `chat_id`, `id`, `transcription_id`, `text`, `pending`, and `cached`. `text` is untrusted Telegram data. A completed result is saved in the local profile database; a later request returns it with `cached: true` and does not ask Telegram again. If Telegram is still working when the wait ends, the command succeeds with `pending: true`; a later repeat can ask Telegram again and consume a free-trial attempt. `--wait 0s` returns immediately after the initial Telegram response.
+The result has `chat_id`, `id`, `transcription_id`, `text`, `pending`, `cached`, `source`, `engine` and `queued`. `text` is untrusted Telegram data. `source` is `local` for the local engine and `telegram` for Telegram's text; `engine` names the local engine (`gigaam-v3`). `cached: true` means a stored text was returned at once, without any work or request. `queued: true` means the local queue produced the answer. A finished text is saved in the local profile database; a later request returns it with `cached: true`. If the job is not done when `--wait` ends, the command succeeds with `pending: true` and the job goes on: ask again later. `--wait 0s` returns at once. The manual job runs before every other job and ignores the daily budget; it works with `[voice_transcription] enabled = false` too, but needs the engine and `ffmpeg` installed (`tg voice install`). A message that is not in the local database is read from Telegram first and saved.
 
-Only messages with `media_type` `voice` or `video_note` can be transcribed. Another message, a non-positive id, or a wait outside the range is exit code 2. A closed or unknown chat is exit code 7. Telegram refusals are exit code 5; a Premium or exhausted free-trial refusal has `error.reason: "premium_required"`, and another transcription refusal has `error.reason: "transcription_failed"`. `trial_remains` and `trial_resets_at` appear in a successful response when Telegram provides free-trial values.
+Only messages with `media_type` `voice`, `video_note` or `video` can be transcribed through the queue; with `--telegram` only `voice` and `video_note`. Another message, a non-positive id, or a wait outside the range is exit code 2, as is a missing engine (`error.reason: "engine_missing"`). A job that ends `skipped` for the limits (`too_large`, `too_long`, `no_media`) is exit code 2 and one that fails or is cancelled is exit code 1; both name the reason in `error.reason`. A closed or unknown chat is exit code 7. With `--telegram`, Telegram refusals are exit code 5; a Premium or exhausted free-trial refusal has `error.reason: "premium_required"`, and another transcription refusal has `error.reason: "transcription_failed"`. `trial_remains` and `trial_resets_at` appear in a `--telegram` response when Telegram provides free-trial values. `--telegram` replaces a text the local engine wrote earlier.
 
-The `transcriptions` table is added by the database migration for this command. An older binary refuses to open a profile database that has this newer migration; restore a database backup or use a current binary before rolling back.
+The `transcriptions` table is added by a database migration. An older binary refuses to open a profile database that has a newer migration; restore a database backup or use a current binary before rolling back.
 
 ### tg message translate
 

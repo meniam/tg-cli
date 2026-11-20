@@ -25,7 +25,7 @@ func TestAudit06_TranscribeIgnoresForeignTranscriptionID(t *testing.T) {
 	f.onCall = func() {
 		d.handleTranscription(rpc.Transcription{ChatID: 77, ID: 1, TranscriptionID: 5, Text: "foreign"})
 	}
-	v, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Chat: "77", ID: 1, WaitMS: 1}))
+	v, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Telegram: true, Chat: "77", ID: 1, WaitMS: 1}))
 	got := v.(rpc.Transcription)
 	if err != nil || !got.Pending || got.Text != "" {
 		t.Fatalf("foreign update: %+v %v", got, err)
@@ -35,7 +35,7 @@ func TestAudit06_TranscribeIgnoresForeignTranscriptionID(t *testing.T) {
 // With no update, a positive WaitMS ends at the deadline with the pending answer.
 func TestAudit06_TranscribeWaitExpires(t *testing.T) {
 	d, f, _ := audit06TranscribeCase(t)
-	v, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Chat: "77", ID: 1, WaitMS: 1}))
+	v, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Telegram: true, Chat: "77", ID: 1, WaitMS: 1}))
 	got := v.(rpc.Transcription)
 	if err != nil || !got.Pending || f.calls != 1 {
 		t.Fatalf("expired wait: %+v %v calls=%d", got, err, f.calls)
@@ -51,7 +51,7 @@ func TestAudit06_TranscribeCanceledWhileWaiting(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, err := d.messageTranscribe(ctx, params(t, rpc.TranscribeParams{Chat: "77", ID: 1, WaitMS: 90000}))
+		_, err := d.messageTranscribe(ctx, params(t, rpc.TranscribeParams{Telegram: true, Chat: "77", ID: 1, WaitMS: 90000}))
 		done <- err
 	}()
 	safety := time.After(10 * time.Second)
@@ -85,7 +85,7 @@ func TestAudit06_TranscribeUpdateAfterPendingStored(t *testing.T) {
 	done := make(chan rpc.Transcription, 1)
 	errs := make(chan error, 1)
 	go func() {
-		v, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Chat: "77", ID: 1, WaitMS: 90000}))
+		v, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Telegram: true, Chat: "77", ID: 1, WaitMS: 90000}))
 		if err != nil {
 			errs <- err
 			return

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/output"
@@ -23,7 +24,7 @@ func TestTranscribeCommand(t *testing.T) {
 	}
 	r = runDiscoveryCLI(t, []string{"message", "transcribe", "42", "7"}, func(_ string, raw json.RawMessage) (any, error) {
 		var p rpc.TranscribeParams
-		if err := json.Unmarshal(raw, &p); err != nil || p.WaitMS != 30000 {
+		if err := json.Unmarshal(raw, &p); err != nil || p.WaitMS != 60000 || p.Telegram {
 			return audit02Reject(t, "default wait: %+v %v", p, err)
 		}
 		return rpc.Transcription{ChatID: 42, ID: 7, Text: "ready"}, nil
@@ -31,11 +32,41 @@ func TestTranscribeCommand(t *testing.T) {
 	if r.code != 0 {
 		t.Fatalf("default: %+v", r)
 	}
-	for _, wait := range []string{"-1s", "91s"} {
+	for _, wait := range []string{"-1s", "601s"} {
 		r = runDiscoveryCLI(t, []string{"message", "transcribe", "42", "7", "--wait", wait}, nil, nil)
 		if r.code != 2 || r.method != "" {
 			t.Fatalf("wait %s: %+v", wait, r)
 		}
+	}
+	// The queue waits up to 600 seconds; a direct Telegram request only 90.
+	r = runDiscoveryCLI(t, []string{"message", "transcribe", "42", "7", "--wait", "600s"}, func(_ string, raw json.RawMessage) (any, error) {
+		var p rpc.TranscribeParams
+		if err := json.Unmarshal(raw, &p); err != nil || p.WaitMS != 600000 || p.Telegram {
+			return audit02Reject(t, "long wait: %+v %v", p, err)
+		}
+		return rpc.Transcription{ChatID: 42, ID: 7, Text: "ready", Source: "local", Engine: "gigaam-v3", Queued: true}, nil
+	}, nil)
+	if r.code != 0 || !strings.Contains(r.stdout, `"source":"local"`) || !strings.Contains(r.stdout, `"engine":"gigaam-v3"`) {
+		t.Fatalf("long wait: %+v", r)
+	}
+	for _, wait := range []string{"-1s", "91s"} {
+		r = runDiscoveryCLI(t, []string{"message", "transcribe", "42", "7", "--telegram", "--wait", wait}, nil, nil)
+		if r.code != 2 || r.method != "" {
+			t.Fatalf("telegram wait %s: %+v", wait, r)
+		}
+	}
+	r = runDiscoveryCLI(t, []string{"message", "transcribe", "42", "7", "--telegram", "--wait", "90s"}, func(_ string, raw json.RawMessage) (any, error) {
+		var p rpc.TranscribeParams
+		if err := json.Unmarshal(raw, &p); err != nil || p.WaitMS != 90000 || !p.Telegram {
+			return audit02Reject(t, "telegram: %+v %v", p, err)
+		}
+		return rpc.Transcription{ChatID: 42, ID: 7, Text: "ready", Source: "telegram"}, nil
+	}, nil)
+	if r.code != 0 || !strings.Contains(r.stdout, `"source":"telegram"`) {
+		t.Fatalf("telegram: %+v", r)
+	}
+	if got := (&app{deps: Deps{CallTimeout: time.Second}}).callTimeout(rpc.MethodMessageTranscribe); got < 610*time.Second {
+		t.Fatalf("the call timeout %s is shorter than the longest wait", got)
 	}
 }
 
