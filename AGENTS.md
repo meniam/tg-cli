@@ -7,6 +7,8 @@ A console tool for a personal Telegram account (MTProto, Go, gotd/td). Its main 
 
 This file is an index: what every task needs. Details live in the documents linked below; read them when the task touches them.
 
+**Search first through the skill `scout`.** Your first step on any question about the code, configs, documents or tests of this project ("how does it work", "where is it done", "who calls", "what will break") is to load [scout](.agents/skills/scout/SKILL.md). Do not run `rg`, `grep` or `find` before it, and do not answer from a hook's prefetched context alone: `scout` checks documents against code. Details: "Search".
+
 ## Where to read
 
 | You need | Read |
@@ -62,7 +64,7 @@ internal/             cli, daemon, rpc, tgclient, netconf, throttle, access, fil
 
 ## Search
 
-Before any search through code, configs, documents and tests of this project, load the skill [scout](.agents/skills/scout/SKILL.md), also for questions like "what do you know about X", "how does it work", "where is it done", "who calls". It checks documents against code through Atlas (`bin/atlas`) and fixes the report format with `path:line` links. Do not conclude about behavior from a document alone.
+The skill [scout](.agents/skills/scout/SKILL.md) is the only entry to a search through code, configs, documents and tests of this project, also for questions like "what do you know about X". It checks documents against code through Atlas (`bin/atlas`) and fixes the report format with `path:line` links. Do not conclude about behavior from a document alone.
 
 Order: documents and Atlas first, then a pointed `rg`. Commands and limits are in the skill. Atlas needs `uv` (https://docs.astral.sh/uv/getting-started/installation/); it installs Python 3.14 itself. `bin/apps/atlas` is a copy of a build: a bug or a missing feature goes to the owner, not into the copy.
 
