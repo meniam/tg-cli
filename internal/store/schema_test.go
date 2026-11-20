@@ -41,7 +41,7 @@ func ftsCount(t *testing.T, db *sql.DB, table, query string) int {
 
 func checkFTSIntegrity(t *testing.T, db *sql.DB) {
 	t.Helper()
-	for _, table := range []string{"chats_fts", "people_fts", "messages_fts", "notes_fts"} {
+	for _, table := range []string{"chats_fts", "people_fts", "messages_fts", "messages_stem_fts", "notes_fts"} {
 		schemaExec(t, db, fmt.Sprintf("INSERT INTO %s(%s, rank) VALUES('integrity-check', 1)", table, table))
 	}
 }
