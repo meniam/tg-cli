@@ -10,9 +10,9 @@ PR: —
 
 ## Status
 
-- Current status: in_progress (2026-11-20: волна 1 (store, sync, config) принята и слита, дальше волна 2: поток sched)
+- Current status: in_progress (2026-11-20: шаги 2-9 приняты и слиты, дальше поток status: шаг 10, затем документы шага 11)
 - Last update: 2026-11-20
-- Next safe step: поток sched (шаги 8 и 9) в worktree `../tg-cli-bgsync-sched`, затем поток status (шаги 10 и 11).
+- Next safe step: поток status (шаг 10: метод `dashboard` и `tg status`) в worktree `../tg-cli-bgsync-status`, затем шаг 11 (документы, тот же агент после приёмки кода).
 
 ## Context and sources
 
@@ -158,8 +158,8 @@ page_pause_max = "8s"
 - [x] Шаг 5 (2026-11-20, поток store, коммит 3ee6a90). Запрос выбора чата в `internal/store` (по образцу `ChatsForFullSync`): три группы, фильтр доступа внутри запроса, исключения по Q2.
 - [x] Шаг 6 (2026-11-20, поток sync, коммит ffe07d7). Вынести чтение и сохранение папок из обработчика `folder.list` в функцию демона; метод возраста снимка.
 - [x] Шаг 7 (2026-11-20, поток config, коммит 2a144ab, `isocheck.sh` и `-race` для config и cli зелёные). Секция `[background_sync]` в `internal/config` (разбор, проверка, шаблон), передача в демон, схема, переменные `TG_CLI_BACKGROUND_SYNC_*`.
-- [ ] Шаг 8. Планировщик `internal/daemon/background_sync.go`: окно, случайный интервал, часы подменяются интерфейсом, остановка вместе с демоном (канал `done` в списке ожидания `daemon.go`), отмена в конце окна, пропуск при `auth_lost`.
-- [ ] Шаг 9. Блок `background_sync` в ответе `daemon status` (состояние, окно, `next_run_at`, `last_run_at`, `last_result`, `current_chat_id`); схема и `--human` вывод `daemon status` дополнены.
+- [x] Шаг 8 (2026-11-20, поток sched, коммит 140c79e, `isocheck.sh` и `-race` для daemon, rpc, cli зелёные). Планировщик `internal/daemon/background_sync.go`: окно, случайный интервал, часы подменяются интерфейсом, остановка вместе с демоном (канал `done` в списке ожидания `daemon.go`), отмена в конце окна, пропуск при `auth_lost`.
+- [x] Шаг 9 (2026-11-20, поток sched, коммит 140c79e). Блок `background_sync` в ответе `daemon status` (состояние, окно, `next_run_at`, `last_run_at`, `last_result`, `current_chat_id`); схема и `--human` вывод `daemon status` дополнены.
 - [ ] Шаг 10. Метод демона `dashboard` (аккаунт, соединение, доступ, база, счётчики полноты по группам, планировщик, задачи `chat sync` и `chat full`, состояние дросселя, события потока) и команда `tg status` с текстовым выводом; без демона код 3 и подсказка.
 - [ ] Шаг 11. Документы: `docs/cli/chats.md`, `docs/cli/daemon-and-auth.md` (`daemon status`, `status`), `docs/cli/config.md`, `docs/cli/overview.md`, `docs/contracts.md`, `README.md`, FEATURES 10.12; `just docs` для сгенерированных таблиц.
 
@@ -201,6 +201,7 @@ page_pause_max = "8s"
 
 - 2026-11-20, профиль `default`: 245 чатов (27 `user`, 19 `bot`, 41 `group`, 59 `supergroup`, 99 `channel`); `sync_state` содержит 5 чатов, 4 полных; таблица `folders` пуста, снимка папок нет; `messages` 67 583 строки; `user_version` 9.
 - Страница истории до 100 сообщений (`tgclient/history_page.go:19`).
+- `--idle-timeout` (по умолчанию 0, никогда) планировщик активностью не считает: демон с явным флагом и включённым `background_sync` может остановиться по простою, не дойдя до окна. Оговорку нужно записать в документы (шаг 11). Состояние `running` в `daemon status` включает обновление папок перед выбором чата.
 - Дроссель: общий бакет 18 запросов в секунду, не больше 2 одновременно, `FLOOD_WAIT` ставит аккаунт на паузу.
 
 ## Open questions
