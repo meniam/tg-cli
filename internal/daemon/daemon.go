@@ -14,10 +14,12 @@ import (
 
 	"tg-cli/internal/access"
 	"tg-cli/internal/ctxlock"
+	"tg-cli/internal/embed"
 	"tg-cli/internal/netconf"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
 	"tg-cli/internal/throttle"
+	"tg-cli/internal/vectors"
 )
 
 // ErrAlreadyRunning means another daemon holds the lock of the profile.
@@ -87,6 +89,9 @@ type daemon struct {
 	sync                 *historySyncManager
 	full                 *chatFullSyncManager
 	background           *backgroundSync // nil when the scheduled history load is off
+	vectors              *vectors.Store  // nil when semantic search is off or vectors.db could not be opened
+	embedder             embed.Embedder  // nil when semantic search is off or the Ollama client could not be built
+	semanticFailure      string          // why vectors or embedder is nil while the feature is on; empty otherwise
 	cancel               context.CancelFunc
 	startedAt            time.Time // the start of the process; zero in handler tests
 	once                 sync.Once
@@ -199,6 +204,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore, startedAt: time.Now()}
 	d.admission.unblock(opts.Telegram)
+	defer d.openSemantic()()
 	d.sync = newHistorySyncManager(runCtx, d, nil)
 	d.full = newChatFullSyncManager(runCtx, d, nil)
 	// A daemon that has just started is not idle: the clock runs from now.
