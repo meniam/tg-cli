@@ -80,6 +80,7 @@ var realResponseCases = map[string][]string{
 	"message get":            {"message", "get", "@teamchat", "30"},
 	"message readers":        {"message", "readers", "@teamchat", "30"},
 	"message transcribe":     {"message", "transcribe", "@teamchat", "40", "--wait", "0s", "--telegram"},
+	"chat voice list":        {"chat", "voice", "list"},
 	"voice status":           {"voice", "status"},
 	"voice cancel":           {"voice", "cancel"},
 	"voice backfill":         {"voice", "backfill", "--dry-run"},
@@ -162,7 +163,7 @@ func realResponses(t *testing.T) map[string][]byte {
 	// The cases below run in map order. The commands that read the local
 	// database need its content first, so fill it here, not in a case that may
 	// run later than the one that reads it.
-	for _, prime := range [][]string{{"chat", "list"}, {"message", "history", "@teamchat"}, {"search", "third"}} {
+	for _, prime := range [][]string{{"chat", "list"}, {"message", "history", "@teamchat"}, {"search", "third"}, {"chat", "voice", "on", "77"}} {
 		if r := e.run(prime...); r.code != exitcode.OK {
 			t.Fatalf("%v: %q", prime, r.stdout)
 		}
@@ -279,6 +280,8 @@ var uncoveredCommands = map[string]string{
 	"chat full cancel":           "the background job is covered by daemon tests on a fake Telegram",
 	"search index start":         "answers an error while [semantic_search] is off; the indexer is covered by daemon tests on a fake embedder and the status shape by `search index status`",
 	"search index cancel":        "answers an error while [semantic_search] is off; the indexer is covered by daemon tests on a fake embedder and the status shape by `search index status`",
+	"chat voice on":              "marks a chat the local database knows, which the fake Telegram of this fixture never saved; the marks, the backfill and the refusals are covered by daemon and CLI tests (VoiceSource)",
+	"chat voice off":             "marks a chat the local database knows, which the fake Telegram of this fixture never saved; the marks, the backfill and the refusals are covered by daemon and CLI tests (VoiceSource)",
 	"voice retry":                "needs the speech engine installed, which no test downloads; the queue and the retry are covered by daemon tests on a fake engine",
 	"chat changes":               "local history is covered by daemon and store tests",
 	"message unread":             "access is covered by daemon tests",

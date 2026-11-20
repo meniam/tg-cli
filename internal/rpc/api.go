@@ -117,6 +117,10 @@ type StatusResult struct {
 	BackgroundSync BackgroundSyncStatus `json:"background_sync"`
 	// SemanticSearch is always present; state is "disabled" while the feature is off.
 	SemanticSearch SemanticIndexStatus `json:"semantic_search"`
+	// Voice is the local transcription queue; it is always present, with state
+	// "disabled" while [voice_transcription] enabled is off and no manual job ran.
+	// It holds machine words and counters, never message text or a path.
+	Voice VoiceStatus `json:"voice"`
 }
 
 // States of the scheduled history load in BackgroundSyncStatus.State.

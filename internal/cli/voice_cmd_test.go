@@ -30,7 +30,7 @@ func runVoiceCLI(t *testing.T, args []string, env map[string]string, reply func(
 		method string
 		params json.RawMessage
 	}, 10)
-	for _, method := range []string{rpc.MethodVoiceStatus, rpc.MethodVoiceCancel, rpc.MethodVoiceRetry, rpc.MethodVoiceBackfill} {
+	for _, method := range []string{rpc.MethodVoiceStatus, rpc.MethodVoiceCancel, rpc.MethodVoiceRetry, rpc.MethodVoiceBackfill, rpc.MethodChatVoiceOn, rpc.MethodChatVoiceOff, rpc.MethodChatVoiceList} {
 		server.Handle(method, func(_ context.Context, raw json.RawMessage) (any, error) {
 			calls <- struct {
 				method string
