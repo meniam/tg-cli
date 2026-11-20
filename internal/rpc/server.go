@@ -39,6 +39,7 @@ type Handler func(ctx context.Context, params json.RawMessage) (any, error)
 // parameters: they can carry login codes and passwords.
 type Server struct {
 	requestGuard func(Request) error
+	eventGuard   func(Event) bool
 	// RequestTimeout is the deadline of one request, DefaultRequestTimeout by default.
 	RequestTimeout time.Duration
 
@@ -86,6 +87,9 @@ func NewServer(log *slog.Logger) *Server {
 		listeners:      map[net.Listener]struct{}{},
 	}
 }
+
+// SetEventGuard checks visibility again immediately before event delivery.
+func (s *Server) SetEventGuard(guard func(Event) bool) { s.eventGuard = guard }
 
 // SetRequestGuard installs a check applied before all request handlers.
 func (s *Server) SetRequestGuard(guard func(Request) error) { s.requestGuard = guard }

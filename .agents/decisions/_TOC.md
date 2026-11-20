@@ -70,3 +70,5 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-20 — [Фраза владельца защищает только ключи access.*, остальные настройки пишутся без неё](20261120_2344_the_owner_passphrase_guards_only_access_settings.md)
 - 2026-11-20 — [Голосовые, кружки и видео расшифровывает локальная модель GigaAM через постоянную очередь](20261120_2238_voice_is_transcribed_locally_by_gigaam_through_a_persistent_queue.md)
 - 2026-11-20 — [Файлы для расшифровки качаются в закрытый временный каталог демона под суточным бюджетом](20261120_2239_voice_files_download_to_a_private_temp_dir_under_a_daily_budget.md)
+- 2026-11-21 — [Веб-сервер работает отдельным процессом и вызывает методы демона по белому списку](20261121_0146_web_uses_the_daemon_and_a_fixed_allowlist.md)
+- 2026-11-21 — [Панель Access показывает правила, запись защищает решение о парольной фразе](20261121_0146_web_access_panel_reads_current_policy.md)

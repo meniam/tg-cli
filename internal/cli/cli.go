@@ -216,6 +216,7 @@ func (a *app) rootCommand() *cobra.Command {
 		a.searchWithIndexCommand(),
 		a.voiceCommand(),
 		a.statusCommand(),
+		a.webCommand(),
 		a.versionCommand(),
 		a.schemaCommand(root),
 	)

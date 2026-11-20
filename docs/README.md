@@ -17,6 +17,7 @@ An index of the documentation of `tg`, a console client for a personal Telegram 
 | to send, edit, delete and forward messages, send files, react, pin and unpin, create polls, format text | [cli/messages-write.md](cli/messages-write.md) |
 | to keep notes, search the local database, print the version, read the machine description of all commands | [cli/notes-and-search.md](cli/notes-and-search.md) |
 | to turn voice messages, video notes and videos into text with the local engine: install the engine, watch the queue, mark chats, retry, backfill | [cli/voice.md](cli/voice.md) |
+| to browse local chats, search messages and manage settings in a browser | [cli/web.md](cli/web.md) |
 | to decide which chats the agent sees, where it may write and which directories it may send files from | [cli/access.md](cli/access.md) |
 | an agent skill with the working rules for an AI agent (English, Russian trigger phrases) | [skill/tg/SKILL.md](skill/tg/SKILL.md) |
 

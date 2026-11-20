@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tg web</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <aside class="sidebar" aria-label="Chats">
+    <header><strong>tg web</strong><button id="access" type="button">Access</button></header>
+    <form id="search" role="search">
+      <input name="query" type="search" aria-label="Search messages" placeholder="Search messages" required>
+      <label class="scope" hidden><input name="local" type="checkbox"> This chat</label>
+    </form>
+    <nav id="folders" aria-label="Folders"></nav>
+    <div id="chats" class="scroll"></div>
+  </aside>
+  <main>
+    <header><button id="back" type="button" aria-label="Back to chats">←</button><div id="chat-title">Messages</div><button id="details" type="button" disabled>Details</button></header>
+    <div id="partial" hidden>Local history is incomplete. Run <code>tg chat sync</code> to load older messages.</div>
+    <div id="options" hidden><label>Topic <select id="topics"></select></label></div>
+    <div id="pinned" hidden></div>
+    <div id="timeline" class="scroll" tabindex="0" aria-label="Messages">
+      <div id="older-row" hidden><button id="older" type="button">Load older messages</button></div>
+      <div id="messages"><p class="empty">Select a chat to view its local history.</p></div>
+    </div>
+  </main>
+  <aside id="panel" hidden aria-label="Details">
+    <header><strong id="panel-title">Details</strong><button id="close" type="button">Close</button></header>
+    <div id="panel-content" class="scroll"></div>
+  </aside>
+  <output id="status" role="status" hidden></output>
+</body>
+</html>

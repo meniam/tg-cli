@@ -214,6 +214,7 @@ Every command has its own section in the [command reference](docs/cli/overview.m
 | Notes and local full-text search | `note add\|list\|delete`, `search` | [notes-and-search.md](docs/cli/notes-and-search.md) |
 | Search by word forms and meaning | `search --semantic`, `search index start\|status\|cancel` | [notes-and-search.md](docs/cli/notes-and-search.md#semantic-search) |
 | Transcribe voice messages, video notes and videos locally | `message transcribe`, `voice install\|status\|cancel\|retry\|backfill`, `chat voice on\|off\|list` | [voice.md](docs/cli/voice.md) |
+| Browse saved chats and open chat settings | `web --open` | [web.md](docs/cli/web.md#tg-web) |
 | Machine description of the tool | `schema`, `version` | [notes-and-search.md](docs/cli/notes-and-search.md#the-tool-describes-itself) |
 
 The rules every command shares are in [overview.md](docs/cli/overview.md): [output formats and `--fields`](docs/cli/overview.md#output-formats), the [answer envelope](docs/cli/overview.md#the-answer-envelope), [exit codes](docs/cli/overview.md#exit-codes), [safety classes](docs/cli/overview.md#safety-classes-and-the-dangerous-mark), [untrusted text](docs/cli/overview.md#untrusted-text) and the [request throttle](docs/cli/overview.md#request-throttle-and-flood_wait). The whole documentation map is [docs/README.md](docs/README.md); the detailed behavior contracts are in [docs/contracts.md](docs/contracts.md).

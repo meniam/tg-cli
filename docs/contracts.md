@@ -212,3 +212,18 @@ only for a channel and a supergroup: a basic group and a user have no such flags
 record that knows no flags, such as a chat taken from an event, leaves the stored
 ones alone, so a partial save never clears what a fuller read found. The columns stay
 out of the version trigger.
+
+
+## Web interface
+
+`tg web` serves embedded assets and talks to the profile daemon over its
+Unix socket. The gateway checks the request host and uses same-origin POST
+requests. The browser exchanges the token in the URL fragment for an
+HttpOnly cookie. Settings writes require that cookie and a custom request
+header. The daemon applies the current access policy to data and settings.
+
+The gateway permits a fixed set of RPC methods. The history, folders and
+search read SQLite. Server-Sent Events follow the daemon event journal.
+On-demand thumbnail downloads use the daemon throttle and the authorized
+preview cache. Dialog and folder settings use the same permissions as CLI
+commands. The Access panel shows list counts, flags and file roots.

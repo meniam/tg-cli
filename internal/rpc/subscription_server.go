@@ -226,6 +226,9 @@ func (s *Server) sendLagged(w *frameWriter, cursor string) {
 // notify writes one server-to-client JSON-RPC notification without an ID.
 // The frame writer serializes it with ordinary responses on this connection.
 func (s *Server) notify(w *frameWriter, event Event) error {
+	if s.eventGuard != nil && !s.eventGuard(event) {
+		return nil
+	}
 	params, err := json.Marshal(event)
 	if err != nil {
 		return err

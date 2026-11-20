@@ -243,7 +243,14 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		}
 		logger = slog.New(slog.NewTextHandler(journal, &slog.HandlerOptions{Level: level}))
 	}
+	webTTL, err := a.config.Web.TTL()
+	if err != nil {
+		return err
+	}
 	err = runDaemon(cmd.Context(), daemon.Options{
+		WebCacheRoot:         filepath.Join(filepath.Dir(a.deps.ConfigPath), "downloads"),
+		WebCacheBytes:        a.config.Web.CacheBytes,
+		WebCacheTTL:          webTTL,
 		FileWarningsReported: true,
 		ClientPreset:         a.config.Profiles[profile].Client,
 		Profile:              profile,

@@ -100,7 +100,7 @@ func TestRawStoreReadGuard(t *testing.T) {
 	}
 	// voiceMessageMedia reads only the size and the duration of the media of a
 	// stored message for the voice worker; nothing of the object leaves it.
-	allowed := map[string]bool{"rpcStoredMessage": true, "convertStoredMessages": true, "voiceMessageMedia": true}
+	allowed := map[string]bool{"rpcStoredMessage": true, "convertStoredMessages": true, "voiceMessageMedia": true, "webMessage": true, "webThumb": true}
 	guarded := map[string]bool{"Chat": true, "Person": true, "Message": true, "MessageVersion": true}
 	for _, file := range pkgs[0].Syntax {
 		for _, decl := range file.Decls {

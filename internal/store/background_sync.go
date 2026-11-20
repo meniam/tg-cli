@@ -37,7 +37,8 @@ type BackgroundSyncChat struct {
 // requested from Telegram. exclude drops chats, for example the ones that failed
 // today; it does not make a chat a folder chat.
 //
-// Chats come group by group: people (type user), then chats with a pinned or an
+// Chats set to skip are omitted. Chats set to first precede the other chats.
+// Within each priority, chats come group by group: people (type user), then chats with a pinned or an
 // included folder entry, then the rest. Inside a group the chat with the most
 // recent stored message comes first, a chat without messages comes last, and equal
 // dates fall back to the chat id. A limit below 1 returns no chats.
@@ -60,8 +61,9 @@ func (db *DB) ChatsForBackgroundSync(ctx context.Context, filter ChatFilter, exc
 	       (SELECT MAX(m.date) FROM messages m WHERE m.chat_id = c.id) AS last_date
 	FROM chats c
 	LEFT JOIN sync_state s ON s.chat_id = c.id
-	WHERE (s.chat_id IS NULL OR s.complete = 0)`+cond+`
-	ORDER BY grp, last_date DESC, c.id
+ LEFT JOIN account_state cs ON cs.key = '`+chatHistoryModePrefix+`' || c.id
+	WHERE (s.chat_id IS NULL OR s.complete = 0) AND COALESCE(json_extract(cs.value, '$'), 'auto') <> 'skip'`+cond+`
+	ORDER BY (json_extract(cs.value, '$') IS 'first') DESC, grp, last_date DESC, c.id
 	LIMIT ?`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read chats for the background sync: %w", err)
