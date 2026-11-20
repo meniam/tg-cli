@@ -10,6 +10,7 @@ import (
 )
 
 func TestSecretInput(t *testing.T) {
+	t.Parallel()
 	p := filepath.Join(t.TempDir(), "password")
 	if err := os.WriteFile(p, []byte("  value  \r\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -36,6 +37,7 @@ func TestSecretInput(t *testing.T) {
 // TestAudit02_SecretInputRefusals covers every refusal of secretFile and
 // secretLine and checks that each is a usage error with its own reason.
 func TestAudit02_SecretInputRefusals(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	write := func(name, content string) string {
 		path := filepath.Join(dir, name)

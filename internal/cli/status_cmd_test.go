@@ -60,6 +60,7 @@ func statusBase() rpc.Dashboard {
 }
 
 func TestRenderDashboardMatchesGolden(t *testing.T) {
+	t.Parallel()
 	off := statusBase()
 	off.StartedAt = statusNow().Add(-90 * time.Second).Unix()
 	off.Access = rpc.AccessStatus{Enabled: true, Allow: 2, Block: 1}
@@ -127,6 +128,7 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 
 // The text depends on the time passed in, not on the machine clock or zone.
 func TestRenderDashboardUsesTheGivenTimeAndZone(t *testing.T) {
+	t.Parallel()
 	dash := statusBase()
 	utc := statusNow().UTC() // 09:00 on the same day
 	got := renderDashboard(dash, utc)
@@ -144,6 +146,7 @@ func TestRenderDashboardUsesTheGivenTimeAndZone(t *testing.T) {
 // A skipped run picked no chat: last_chat_id may hold the chat of an earlier run,
 // and the line must not blame it. A run without any chat on record prints none.
 func TestRenderDashboardLastRunChat(t *testing.T) {
+	t.Parallel()
 	dash := statusBase() // last run done in chat 123
 	dash.Background.LastResult = rpc.BackgroundSyncSkipped
 	if got := renderDashboard(dash, statusNow()); !strings.Contains(got, "last run 11:02 (skipped)\n") {
@@ -159,6 +162,7 @@ func TestRenderDashboardLastRunChat(t *testing.T) {
 // A name of Telegram is text of someone else: a control character in it must
 // not reach the terminal.
 func TestRenderDashboardStripsControlCharacters(t *testing.T) {
+	t.Parallel()
 	dash := statusBase()
 	dash.Account.User = &rpc.User{ID: 9, FirstName: "Ann\x1b[2J", LastName: "Lee"}
 	got := renderDashboard(dash, statusNow())

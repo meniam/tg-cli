@@ -140,6 +140,7 @@ func TestDocsGenerated(t *testing.T) {
 }
 
 func TestDocsGeneratedFormatting(t *testing.T) {
+	t.Parallel()
 	flags := pflag.NewFlagSet("sample", pflag.ContinueOnError)
 	flags.String("visible", "", "first | second\nline")
 	flags.String("hidden", "", "internal")

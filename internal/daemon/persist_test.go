@@ -14,6 +14,7 @@ import (
 
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
+	"tg-cli/internal/store/storetest"
 )
 
 func authorizeFake(tg *fakeTelegram) {
@@ -364,7 +365,7 @@ func TestChatInfoWithoutMemberCountKeepsTheStoredOne(t *testing.T) {
 // flag a fuller read stored: `chat list` and `chat resolve` save chats without a
 // channel object of their own, and `chat info` writes the flags.
 func TestSaveChatsKeepsKnownFlags(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "store.db"))
+	db, err := storetest.Open(filepath.Join(t.TempDir(), "store.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

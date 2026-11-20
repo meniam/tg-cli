@@ -13,6 +13,7 @@ import (
 	"tg-cli/internal/access"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
+	"tg-cli/internal/store/storetest"
 )
 
 // fakeChatFullTelegram answers the full-data job and counts the requests. A chat
@@ -109,7 +110,7 @@ func (c *fakeChatFullClock) slept() []time.Duration {
 // value means no access lists at all.
 func chatFullFixture(t *testing.T, accessJSON string, tg *fakeChatFullTelegram) (*chatFullSyncManager, *store.DB, *fakeChatFullClock) {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "store.db"))
+	db, err := storetest.Open(filepath.Join(t.TempDir(), "store.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

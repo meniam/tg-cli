@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"tg-cli/internal/store"
 )
@@ -408,9 +409,6 @@ func TestMoveLegacyDatabaseFinishesAnInterruptedMove(t *testing.T) {
 // old database, the checkpoint cannot drain it, the move stops with code 1 and the
 // old file stays as it was.
 func TestMoveLegacyDatabaseKeepsADatabaseInUse(t *testing.T) {
-	if testing.Short() {
-		t.Skip("the checkpoint waits the whole busy timeout of 5 s for the writer")
-	}
 	p, old := moveFixture(t)
 	// A checkpoint that fails on a busy database may still move pages, so the
 	// journal is folded first and "stays as it was" can be compared byte for byte.
@@ -421,7 +419,7 @@ func TestMoveLegacyDatabaseKeepsADatabaseInUse(t *testing.T) {
 	}
 	release := holdWriteLock(t, old)
 	defer release()
-	_, err = MoveLegacyDatabase(p)
+	_, err = moveLegacyDatabase(p, 50*time.Millisecond)
 	audit04WantMoveStep(t, err, "checkpoint the database")
 	if !strings.Contains(err.Error(), "in use") {
 		t.Errorf("the error must say the database is in use: %v", err)

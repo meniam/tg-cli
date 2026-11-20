@@ -12,11 +12,12 @@ import (
 
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
+	"tg-cli/internal/store/storetest"
 )
 
 func rpcTestDaemon(t *testing.T) (*rpc.Client, *store.DB, *fakeTelegram, *safeBuffer) {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "store.db"))
+	db, err := storetest.Open(filepath.Join(t.TempDir(), "store.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

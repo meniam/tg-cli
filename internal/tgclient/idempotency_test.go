@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"testing/synctest"
 
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/tg"
@@ -13,41 +14,43 @@ import (
 )
 
 func TestIdempotentInvokerIDsAndRetry(t *testing.T) {
-	var ids [][]int64
-	calls := 0
-	inv := writeInvoker(func(_ context.Context, input bin.Encoder, _ bin.Decoder) error {
-		calls++
-		switch req := input.(type) {
-		case *tg.MessagesSendMessageRequest:
-			ids = append(ids, []int64{req.RandomID})
-		case *tg.MessagesSendMediaRequest:
-			ids = append(ids, []int64{req.RandomID})
-		case *tg.MessagesSendMultiMediaRequest:
-			ids = append(ids, []int64{req.MultiMedia[0].RandomID, req.MultiMedia[1].RandomID})
-		case *tg.MessagesForwardMessagesRequest:
-			ids = append(ids, append([]int64(nil), req.RandomID...))
-		}
-		if calls == 1 {
-			return io.EOF
-		}
-		return nil
-	})
-	api, err := idempotentAPI(tg.NewClient(inv), 1, 2, "key")
-	if err != nil {
-		t.Fatal(err)
-	}
-	requests := []bin.Encoder{&tg.MessagesSendMessageRequest{}, &tg.MessagesSendMediaRequest{}, &tg.MessagesSendMultiMediaRequest{MultiMedia: make([]tg.InputSingleMedia, 2)}, &tg.MessagesForwardMessagesRequest{ID: []int{3, 4}}}
-	for _, req := range requests {
-		if err := api.Invoker().Invoke(context.Background(), req, nil); err != nil {
+	synctest.Test(t, func(t *testing.T) {
+		var ids [][]int64
+		calls := 0
+		inv := writeInvoker(func(_ context.Context, input bin.Encoder, _ bin.Decoder) error {
+			calls++
+			switch req := input.(type) {
+			case *tg.MessagesSendMessageRequest:
+				ids = append(ids, []int64{req.RandomID})
+			case *tg.MessagesSendMediaRequest:
+				ids = append(ids, []int64{req.RandomID})
+			case *tg.MessagesSendMultiMediaRequest:
+				ids = append(ids, []int64{req.MultiMedia[0].RandomID, req.MultiMedia[1].RandomID})
+			case *tg.MessagesForwardMessagesRequest:
+				ids = append(ids, append([]int64(nil), req.RandomID...))
+			}
+			if calls == 1 {
+				return io.EOF
+			}
+			return nil
+		})
+		api, err := idempotentAPI(tg.NewClient(inv), 1, 2, "key")
+		if err != nil {
 			t.Fatal(err)
 		}
-	}
-	if calls != 5 || ids[0][0] == 0 || ids[0][0] != ids[1][0] || ids[1][0] != ids[2][0] || ids[3][0] == ids[3][1] || ids[4][0] != ids[3][0] || ids[4][1] != ids[3][1] {
-		t.Fatalf("calls=%d ids=%v", calls, ids)
-	}
-	if deterministicID(2, 2, "key", 0) == ids[0][0] || deterministicID(1, 3, "key", 0) == ids[0][0] || deterministicID(1, 2, "other", 0) == ids[0][0] {
-		t.Fatal("ID does not depend on tuple")
-	}
+		requests := []bin.Encoder{&tg.MessagesSendMessageRequest{}, &tg.MessagesSendMediaRequest{}, &tg.MessagesSendMultiMediaRequest{MultiMedia: make([]tg.InputSingleMedia, 2)}, &tg.MessagesForwardMessagesRequest{ID: []int{3, 4}}}
+		for _, req := range requests {
+			if err := api.Invoker().Invoke(context.Background(), req, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if calls != 5 || ids[0][0] == 0 || ids[0][0] != ids[1][0] || ids[1][0] != ids[2][0] || ids[3][0] == ids[3][1] || ids[4][0] != ids[3][0] || ids[4][1] != ids[3][1] {
+			t.Fatalf("calls=%d ids=%v", calls, ids)
+		}
+		if deterministicID(2, 2, "key", 0) == ids[0][0] || deterministicID(1, 3, "key", 0) == ids[0][0] || deterministicID(1, 2, "other", 0) == ids[0][0] {
+			t.Fatal("ID does not depend on tuple")
+		}
+	})
 }
 
 func TestIdempotentInvokerDoesNotRetryPermanent(t *testing.T) {

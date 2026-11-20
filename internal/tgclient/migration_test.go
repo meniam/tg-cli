@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/gotd/td/session"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/dcs"
@@ -89,7 +90,7 @@ func TestMigrationAcrossDC(t *testing.T) {
 	}})
 	state := newConnection(netconf.Settings{})
 	storage := &session.StorageMemory{}
-	client := telegram.NewClient(telegram.TestAppID, telegram.TestAppHash, telegram.Options{DC: 2, DCList: dcs.List{Options: options}, Resolver: resolver, PublicKeys: cl.Keys(), SessionStorage: storage, NoUpdates: true, OnConnectionStateEvent: state.update})
+	client := telegram.NewClient(telegram.TestAppID, telegram.TestAppHash, telegram.Options{DC: 2, DCList: dcs.List{Options: options}, Resolver: resolver, PublicKeys: cl.Keys(), SessionStorage: storage, NoUpdates: true, OnConnectionStateEvent: state.update, ReconnectionBackoff: func() backoff.BackOff { return backoff.NewConstantBackOff(time.Millisecond) }})
 	err := client.Run(ctx, func(ctx context.Context) error {
 		var result tg.BoolTrue
 		if err := client.Invoke(ctx, &tg.AuthLogOutRequest{}, &result); err != nil {
@@ -164,7 +165,7 @@ func TestReconnectSameSession(t *testing.T) {
 	}})
 	state := newConnection(netconf.Settings{})
 	storage := &notifyingStorage{saved: make(chan struct{})}
-	client := telegram.NewClient(telegram.TestAppID, telegram.TestAppHash, telegram.Options{DC: 2, DCList: dcs.List{Options: options}, Resolver: resolver, PublicKeys: cl.Keys(), SessionStorage: storage, NoUpdates: true, OnConnectionStateEvent: state.update})
+	client := telegram.NewClient(telegram.TestAppID, telegram.TestAppHash, telegram.Options{DC: 2, DCList: dcs.List{Options: options}, Resolver: resolver, PublicKeys: cl.Keys(), SessionStorage: storage, NoUpdates: true, OnConnectionStateEvent: state.update, ReconnectionBackoff: func() backoff.BackOff { return backoff.NewConstantBackOff(time.Millisecond) }})
 	err := client.Run(ctx, func(ctx context.Context) error {
 		var result tg.NearestDC
 		if err := client.Invoke(ctx, &tg.HelpGetNearestDCRequest{}, &result); err != nil {
