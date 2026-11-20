@@ -42,10 +42,12 @@ func TestUnreadLocalAndClosedAccess(t *testing.T) {
 		t.Fatalf("local changes: %+v %v", v, err)
 	}
 	writeAccess(t, path, `{"block":[42]}`)
-	if _, err = d.chatChanges(ctx, params(t, rpc.ChatChangesParams{Chat: "42"})); err == nil {
-		t.Fatal("closed chat changes allowed")
+	_, err = d.chatChanges(ctx, params(t, rpc.ChatChangesParams{Chat: "42"}))
+	if err == nil || writeCode(t, err) != rpc.CodeNotFound {
+		t.Fatalf("closed chat changes: %v", err)
 	}
-	if _, err = d.messageUnread(ctx, params(t, rpc.MessageUnreadParams{Chat: "42"})); err == nil || f.calls != 0 {
+	_, err = d.messageUnread(ctx, params(t, rpc.MessageUnreadParams{Chat: "42"}))
+	if err == nil || writeCode(t, err) != rpc.CodeNotFound || f.calls != 0 {
 		t.Fatalf("closed unread: %v calls %d", err, f.calls)
 	}
 }
@@ -82,5 +84,46 @@ func TestUnreadListDoesNotPersistClosedChats(t *testing.T) {
 	}
 	if _, err = db.DialogState(ctx, 77, store.ChatFilter{}); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("closed state saved: %v", err)
+	}
+}
+
+// audit06UnreadLeakyFake ignores the allowed filter and returns every chat and
+// state, so the daemon's own filters are the only barrier for a closed chat.
+type audit06UnreadLeakyFake struct{ *fakeTelegram }
+
+func (f *audit06UnreadLeakyFake) UnreadChats(context.Context, int, bool, func(int64) bool) (rpc.UnreadChatsResult, []rpc.ChatState, error) {
+	out := rpc.UnreadChatsResult{
+		Chats:    []rpc.UnreadChat{{ID: 42, Type: "user", Title: "visible", Unread: 1}, {ID: 77, Type: "user", Title: "hidden", Unread: 1}},
+		Scanned:  2,
+		Complete: true,
+	}
+	return out, []rpc.ChatState{{ChatID: 42, Unread: 1}, {ChatID: 77, Unread: 1}}, nil
+}
+
+func TestAudit06_UnreadListFiltersWhatTelegramReturns(t *testing.T) {
+	d, base, db, path := accessTestDaemon(t)
+	d.opts.Telegram = &audit06UnreadLeakyFake{base}
+	writeAccess(t, path, `{"block":[77]}`)
+	ctx := context.Background()
+	v, err := d.chatUnread(ctx, params(t, rpc.ChatUnreadParams{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := v.(rpc.UnreadChatsResult)
+	if len(got.Chats) != 1 || got.Chats[0].ID != 42 {
+		t.Fatalf("closed chat in the answer: %+v", got)
+	}
+	if _, err = db.GetChat(ctx, 77); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("closed chat saved: %v", err)
+	}
+	if _, err = db.DialogState(ctx, 77, store.ChatFilter{}); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("closed state saved: %v", err)
+	}
+	chat, err := db.GetChat(ctx, 42)
+	if err != nil || chat.Title != "visible" {
+		t.Fatalf("open chat not saved: %+v %v", chat, err)
+	}
+	if _, err = db.DialogState(ctx, 42, store.ChatFilter{}); err != nil {
+		t.Fatalf("open state not saved: %v", err)
 	}
 }

@@ -68,6 +68,11 @@ func Filter(envelope any, paths []string) (any, error) {
 // keep returns the value with only the paths that start with one of paths. A
 // list is filtered element by element; any other value is filtered as an object.
 func keep(value any, paths []string) any {
+	for _, path := range paths {
+		if path == "" {
+			return value // ItemPaths marks the whole item with an empty path
+		}
+	}
 	switch t := value.(type) {
 	case obj:
 		return keepObject(t, paths)

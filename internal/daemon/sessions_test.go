@@ -23,10 +23,11 @@ type sessionFake struct {
 	*fakeTelegram
 	list  rpc.SessionsResult
 	calls int
+	err   error // returned by TerminateSession
 }
 
 func (f *sessionFake) Sessions(context.Context) (rpc.SessionsResult, error) { return f.list, nil }
-func (f *sessionFake) TerminateSession(context.Context, int64) error        { f.calls++; return nil }
+func (f *sessionFake) TerminateSession(context.Context, int64) error        { f.calls++; return f.err }
 
 func TestTerminateSessionBoundaries(t *testing.T) {
 	d, base, _, path := accessTestDaemon(t)

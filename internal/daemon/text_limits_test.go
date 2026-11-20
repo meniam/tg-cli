@@ -48,30 +48,33 @@ func TestTextLimitsBeforeTelegram(t *testing.T) {
 	}
 }
 
+// audit06LocalCheckSentinel is what the fake local check returns. Comparing to
+// it proves that the daemon called the local check, and that it did so before
+// any chat lookup, without repeating the 4096 limit in the fake.
+var audit06LocalCheckSentinel = rpc.NewError(rpc.CodeInvalidParams, "local text check ran")
+
 type textLimitFake struct{ *fakeTelegram }
 
-func (*textLimitFake) CheckTextLocal(p rpc.SendParams) error {
-	if len([]rune(p.Text)) > 4096 {
-		return rpc.NewError(rpc.CodeInvalidParams, "message text must be at most 4096 characters")
-	}
-	return nil
-}
+func (*textLimitFake) CheckTextLocal(rpc.SendParams) error { return audit06LocalCheckSentinel }
 
-func TestFormattedLengthBeforeChatLookup(t *testing.T) {
+// TestAudit06_FormattedLocalCheckRunsBeforeChatLookup: a formatted write asks Telegram's
+// local check about the text before it resolves the chat. The daemon here has no
+// store and no chat, so a lookup first would fail with another error.
+func TestAudit06_FormattedLocalCheckRunsBeforeChatLookup(t *testing.T) {
 	d := &daemon{}
 	d.opts.Telegram = &textLimitFake{}
-	text := strings.Repeat("x", 4097)
 	for _, dry := range []bool{false, true} {
 		for _, tc := range []struct {
+			name  string
 			run   func(*daemon, context.Context, json.RawMessage) (any, error)
 			value any
 		}{
-			{(*daemon).messageSend, rpc.SendParams{Chat: "@example", Text: text, Parse: "html", DryRun: dry}},
-			{(*daemon).messageEdit, rpc.EditParams{Chat: "@example", ID: 1, Text: text, Parse: "html", DryRun: dry}},
+			{"send", (*daemon).messageSend, rpc.SendParams{Chat: "@example", Text: "x", Parse: "html", DryRun: dry}},
+			{"edit", (*daemon).messageEdit, rpc.EditParams{Chat: "@example", ID: 1, Text: "x", Parse: "html", DryRun: dry}},
 		} {
 			_, err := tc.run(d, context.Background(), params(t, tc.value))
-			if err == nil || !strings.Contains(err.Error(), "4096") {
-				t.Fatalf("unexpected error: %v", err)
+			if err != error(audit06LocalCheckSentinel) {
+				t.Fatalf("%s dry=%v: error %v, want the local check sentinel", tc.name, dry, err)
 			}
 		}
 	}

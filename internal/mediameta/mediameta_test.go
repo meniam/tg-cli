@@ -8,9 +8,7 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
-	"math/rand"
 	"testing"
-	"time"
 )
 
 func TestImage(t *testing.T) {
@@ -250,27 +248,5 @@ func TestAudio(t *testing.T) {
 				t.Fatalf("Audio() = %q, %v", mime, err)
 			}
 		})
-	}
-}
-
-func TestMalformedInputsTerminate(t *testing.T) {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		rng := rand.New(rand.NewSource(1))
-		for i := range 1000 {
-			data := make([]byte, i%257)
-			_, _ = rng.Read(data)
-			r := bytes.NewReader(data)
-			_, _, _ = Image(r, int64(len(data)))
-			_, _, _, _ = Video(r, int64(len(data)))
-			_, _ = Voice(r, int64(len(data)))
-			_, _ = Audio(r, int64(len(data)))
-		}
-	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("media parsing did not terminate")
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log/slog"
 	"strings"
 	"testing"
 
@@ -123,16 +122,15 @@ func TestFormattedMessageStorage(t *testing.T) {
 				if edit {
 					storedMessage(t, db, 42, 11, "prior")
 				}
-				var journal bytes.Buffer
-				d.log = slog.New(slog.NewTextHandler(&journal, nil))
 				fake.check = rpc.TextCheck{Mode: tc.parse, PlainLength: len(tc.source), Rich: tc.rich}
 				fake.sendResult = rpc.SendResult{ID: 11, Date: "2026-11-14T10:00:00Z"}
 				fake.editResult = fake.sendResult
+				var journal string
 				var err error
 				if edit {
-					_, err = d.messageEdit(context.Background(), params(t, rpc.EditParams{Chat: "42", ID: 11, Text: tc.source, Parse: tc.parse, Entities: tc.entities}))
+					journal, err = audit06ServeJournal(t, d, rpc.MethodMessageEdit, rpc.EditParams{Chat: "42", ID: 11, Text: tc.source, Parse: tc.parse, Entities: tc.entities})
 				} else {
-					_, err = d.messageSend(context.Background(), params(t, rpc.SendParams{Chat: "42", Text: tc.source, Parse: tc.parse, Entities: tc.entities}))
+					journal, err = audit06ServeJournal(t, d, rpc.MethodMessageSend, rpc.SendParams{Chat: "42", Text: tc.source, Parse: tc.parse, Entities: tc.entities})
 				}
 				if err != nil || len(fake.calls) != 1 {
 					t.Fatalf("write=%v calls=%v", err, fake.calls)
@@ -155,8 +153,14 @@ func TestFormattedMessageStorage(t *testing.T) {
 				if getErr != nil || got.Text != tc.source {
 					t.Fatalf("stored=%+v err=%v want=%q", got, getErr, tc.source)
 				}
-				if strings.Contains(journal.String(), tc.source) && tc.source != "" {
-					t.Fatalf("journal leaked text: %s", journal.String())
+				method := rpc.MethodMessageSend
+				if edit {
+					method = rpc.MethodMessageEdit
+				}
+				// The method name proves the call reached the journal, so a
+				// missing source text means something.
+				if !strings.Contains(journal, method) || strings.Contains(journal, tc.source) {
+					t.Fatalf("journal must name %s and not the text %q: %s", method, tc.source, journal)
 				}
 			})
 		}

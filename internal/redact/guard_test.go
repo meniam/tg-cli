@@ -12,16 +12,158 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
+// audit06GuardException allows a function to embed error text in an RPC message. The
+// key is the package directory and the function ("daemon:parseChat"),
+// not a line number, so edits above it do not move or hide an exception. The
+// count is the number of messages it covers: a new unsafe message in the same
+// function is a failure, and so is an exception that nothing uses any more.
+type audit06GuardException struct {
+	reason string
+	count  int
+}
+
 // Existing validation messages pass through the RPC redaction boundary.
-var guardExceptions = map[string]string{
-	"daemon/read.go:29":         "chat reference validation",
-	"daemon/notes.go:18":        "note validation",
-	"daemon/notes.go:44":        "note validation",
-	"daemon/notes.go:258":       "constant store error",
-	"tgclient/discovery.go:424": "link validation",
+var guardExceptions = map[string]audit06GuardException{
+	"daemon:parseChat":                        {"chat reference validation", 1},
+	"daemon:storeError":                       {"note validation", 1},
+	"daemon:(*daemon).resolveStoredReference": {"note validation", 1},
+	"daemon:(*daemon).search":                 {"constant store error", 1},
+	"tgclient:invalidCursor":                  {"fmt.Sprint of a constant error", 1},
+	"tgclient:linkForChat":                    {"link validation", 1},
 }
 
 var errorVerb = regexp.MustCompile(`%[-+# 0]*[0-9]*(?:\.[0-9]+)?[vw]`)
+
+// audit06GuardEmbedsError reports whether the message expression can carry the text of
+// an error: err.Error(), fmt.Sprint*(..., err) or a message built in a variable
+// above, in the body of the same function.
+func audit06GuardEmbedsError(info *types.Info, message ast.Expr, body *ast.BlockStmt) bool {
+	errorType := types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
+	isError := func(e ast.Expr) bool {
+		typ := info.TypeOf(e)
+		return typ != nil && types.Implements(typ, errorType)
+	}
+	var embeds func(expr ast.Node, seen map[types.Object]bool) bool
+	embeds = func(expr ast.Node, seen map[types.Object]bool) bool {
+		found := false
+		ast.Inspect(expr, func(x ast.Node) bool {
+			switch v := x.(type) {
+			case *ast.Ident:
+				obj := info.ObjectOf(v)
+				if _, isVar := obj.(*types.Var); !isVar || seen[obj] || body == nil || obj.Parent() == obj.Pkg().Scope() {
+					return true
+				}
+				seen[obj] = true
+				ast.Inspect(body, func(y ast.Node) bool {
+					assign, ok := y.(*ast.AssignStmt)
+					if !ok || len(assign.Lhs) != len(assign.Rhs) {
+						return true
+					}
+					for i, lhs := range assign.Lhs {
+						if id, ok := lhs.(*ast.Ident); ok && info.ObjectOf(id) == obj && embeds(assign.Rhs[i], seen) {
+							found = true
+						}
+					}
+					return true
+				})
+			case *ast.CallExpr:
+				sel, ok := v.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				if sel.Sel.Name == "Error" && len(v.Args) == 0 && isError(sel.X) {
+					found = true
+					return true
+				}
+				id, ok := sel.X.(*ast.Ident)
+				if !ok {
+					return true
+				}
+				imported, ok := info.Uses[id].(*types.PkgName)
+				if !ok || imported.Imported().Path() != "fmt" {
+					return true
+				}
+				switch sel.Sel.Name {
+				case "Sprint", "Sprintln":
+					for _, arg := range v.Args {
+						if isError(arg) {
+							found = true
+						}
+					}
+				case "Sprintf":
+					if len(v.Args) < 2 {
+						return true
+					}
+					// A format that is not a literal is judged by its arguments alone.
+					if lit, ok := v.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
+						format, err := strconv.Unquote(lit.Value)
+						if err != nil || !errorVerb.MatchString(format) {
+							return true
+						}
+					}
+					for _, arg := range v.Args[1:] {
+						if isError(arg) {
+							found = true
+						}
+					}
+				}
+			}
+			return true
+		})
+		return found
+	}
+	return embeds(message, map[types.Object]bool{})
+}
+
+// audit06GuardFuncName names a function the way guardExceptions keys do: "name" or
+// "(*Type).name".
+func audit06GuardFuncName(fd *ast.FuncDecl) string {
+	if fd.Recv == nil || len(fd.Recv.List) == 0 {
+		return fd.Name.Name
+	}
+	switch recv := fd.Recv.List[0].Type.(type) {
+	case *ast.StarExpr:
+		if id, ok := recv.X.(*ast.Ident); ok {
+			return "(*" + id.Name + ")." + fd.Name.Name
+		}
+	case *ast.Ident:
+		return recv.Name + "." + fd.Name.Name
+	}
+	return fd.Name.Name
+}
+
+// audit06GuardMessage returns the message expression of an rpc.NewError call or an
+// rpc.Error literal, or nil for any other node.
+func audit06GuardMessage(info *types.Info, n ast.Node) ast.Expr {
+	rpcPkg := func(x ast.Expr) bool {
+		id, ok := x.(*ast.Ident)
+		if !ok {
+			return false
+		}
+		p, ok := info.Uses[id].(*types.PkgName)
+		return ok && p.Imported().Path() == "tg-cli/internal/rpc"
+	}
+	switch v := n.(type) {
+	case *ast.CallExpr:
+		sel, ok := v.Fun.(*ast.SelectorExpr)
+		if ok && sel.Sel.Name == "NewError" && len(v.Args) >= 2 && rpcPkg(sel.X) {
+			return v.Args[1]
+		}
+	case *ast.CompositeLit:
+		sel, ok := v.Type.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Error" || !rpcPkg(sel.X) {
+			return nil
+		}
+		for _, elt := range v.Elts {
+			if kv, ok := elt.(*ast.KeyValueExpr); ok {
+				if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "Message" {
+					return kv.Value
+				}
+			}
+		}
+	}
+	return nil
+}
 
 func TestRPCErrorMessagesDoNotEmbedErrors(t *testing.T) {
 	root, err := filepath.Abs("..")
@@ -36,99 +178,37 @@ func TestRPCErrorMessagesDoNotEmbedErrors(t *testing.T) {
 	if packages.PrintErrors(pkgs) > 0 {
 		t.Fatal("cannot type-check packages for RPC error guard")
 	}
-	errorType := types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
+	used := map[string]int{}
 	for _, pkg := range pkgs {
 		for _, file := range pkg.Syntax {
-			ast.Inspect(file, func(n ast.Node) bool {
-				var message ast.Expr
-				switch v := n.(type) {
-				case *ast.CallExpr:
-					sel, ok := v.Fun.(*ast.SelectorExpr)
-					if !ok || sel.Sel.Name != "NewError" || len(v.Args) < 2 {
-						break
-					}
-					id, ok := sel.X.(*ast.Ident)
-					if !ok {
-						break
-					}
-					p, ok := pkg.TypesInfo.Uses[id].(*types.PkgName)
-					if ok && p.Imported().Path() == "tg-cli/internal/rpc" {
-						message = v.Args[1]
-					}
-				case *ast.CompositeLit:
-					sel, ok := v.Type.(*ast.SelectorExpr)
-					if !ok || sel.Sel.Name != "Error" {
-						break
-					}
-					id, ok := sel.X.(*ast.Ident)
-					if !ok {
-						break
-					}
-					p, ok := pkg.TypesInfo.Uses[id].(*types.PkgName)
-					if !ok || p.Imported().Path() != "tg-cli/internal/rpc" {
-						break
-					}
-					for _, elt := range v.Elts {
-						if kv, ok := elt.(*ast.KeyValueExpr); ok {
-							if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "Message" {
-								message = kv.Value
-							}
-						}
-					}
+			for _, decl := range file.Decls {
+				fd, ok := decl.(*ast.FuncDecl)
+				if !ok || fd.Body == nil {
+					continue
 				}
-				if message == nil {
-					return true
+				pos := pkg.Fset.Position(fd.Pos())
+				rel, err := filepath.Rel(root, filepath.Dir(pos.Filename))
+				if err != nil {
+					t.Fatal(err)
 				}
-				unsafe := false
-				ast.Inspect(message, func(x ast.Node) bool {
-					call, ok := x.(*ast.CallExpr)
-					if !ok {
+				key := filepath.ToSlash(rel) + ":" + audit06GuardFuncName(fd)
+				ast.Inspect(fd.Body, func(n ast.Node) bool {
+					message := audit06GuardMessage(pkg.TypesInfo, n)
+					if message == nil || !audit06GuardEmbedsError(pkg.TypesInfo, message, fd.Body) {
 						return true
 					}
-					if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Error" {
-						if typ := pkg.TypesInfo.TypeOf(sel.X); typ != nil && types.Implements(typ, errorType) {
-							unsafe = true
-						}
-					}
-					sel, ok := call.Fun.(*ast.SelectorExpr)
-					if !ok || sel.Sel.Name != "Sprintf" || len(call.Args) < 2 {
-						return true
-					}
-					id, ok := sel.X.(*ast.Ident)
-					if !ok {
-						return true
-					}
-					imported, ok := pkg.TypesInfo.Uses[id].(*types.PkgName)
-					if !ok || imported.Imported().Path() != "fmt" {
-						return true
-					}
-					lit, ok := call.Args[0].(*ast.BasicLit)
-					if !ok || lit.Kind != token.STRING {
-						return true
-					}
-					format, err := strconv.Unquote(lit.Value)
-					if err != nil || !errorVerb.MatchString(format) {
-						return true
-					}
-					for _, arg := range call.Args[1:] {
-						if typ := pkg.TypesInfo.TypeOf(arg); typ != nil && types.Implements(typ, errorType) {
-							unsafe = true
-						}
+					used[key]++
+					if _, allowed := guardExceptions[key]; !allowed {
+						t.Errorf("%s: avoid embedding error text in RPC messages", pkg.Fset.Position(message.Pos()))
 					}
 					return true
 				})
-				pos := pkg.Fset.Position(message.Pos())
-				rel, err := filepath.Rel(root, pos.Filename)
-				if err != nil {
-					t.Error(err)
-					return true
-				}
-				key := filepath.ToSlash(rel) + ":" + strconv.Itoa(pos.Line)
-				if unsafe && guardExceptions[key] == "" {
-					t.Errorf("%s: avoid embedding error text in RPC messages", pos)
-				}
-				return true
-			})
+			}
+		}
+	}
+	for key, exception := range guardExceptions {
+		if used[key] != exception.count {
+			t.Errorf("exception %s (%s) covers %d unsafe messages, expected %d: remove or update it", key, exception.reason, used[key], exception.count)
 		}
 	}
 }

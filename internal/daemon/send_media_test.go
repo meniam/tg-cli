@@ -139,7 +139,6 @@ func TestSendMediaDenialsBeforeTelegram(t *testing.T) {
 		{"negative metadata", func(c *mediaCase) { c.p.Duration = -1 }, rpc.CodeInvalidParams, ""},
 		{"not logged in", func(c *mediaCase) { c.tg.user = nil }, rpc.CodeNotAuthorized, ""},
 		{"closed chat", func(c *mediaCase) {
-			c.policy(true, c.root)
 			writeAccess(c.t, c.accessPath, fmt.Sprintf(`{"allow":[77],"write":[42],"files":[%q]}`, c.root))
 		}, rpc.CodeNotFound, ""},
 		{"outside write", func(c *mediaCase) { c.policy(false, c.root) }, rpc.CodeWriteDisabled, ""},
@@ -150,7 +149,9 @@ func TestSendMediaDenialsBeforeTelegram(t *testing.T) {
 		{"dotdot outside", func(c *mediaCase) { c.p.Files = []string{c.root + "/../outside"} }, rpc.CodeInvalidParams, mediaOutsideRoots},
 		{"symlink outside", func(c *mediaCase) {
 			outside := filepath.Join(c.base, "outside")
-			_ = os.WriteFile(outside, []byte("x"), 0o600)
+			if err := os.WriteFile(outside, []byte("x"), 0o600); err != nil {
+				c.t.Fatal(err)
+			}
 			link := filepath.Join(c.root, "link")
 			if err := os.Symlink(outside, link); err != nil {
 				c.t.Fatal(err)
@@ -165,9 +166,13 @@ func TestSendMediaDenialsBeforeTelegram(t *testing.T) {
 		{"missing file", func(c *mediaCase) { c.p.Files = []string{filepath.Join(c.root, "missing")} }, rpc.CodeNotFound, "file not found"},
 		{"directory", func(c *mediaCase) { c.p.Files = []string{c.root} }, rpc.CodeInvalidParams, ""},
 		{"empty", func(c *mediaCase) { c.p.Files = []string{c.file("empty", nil)} }, rpc.CodeInvalidParams, "file is empty"},
-		{"over size", func(c *mediaCase) { c.p.Files = []string{c.sparse("large", fileroot.MaxFileSize+1)} }, rpc.CodeInvalidParams, ""},
+		{"over size", func(c *mediaCase) { c.p.Files = []string{c.sparse("large", fileroot.MaxFileSize+1)} }, rpc.CodeInvalidParams, "file exceeds 100 MiB"},
 		{"album total over size", func(c *mediaCase) { c.p.Files = []string{c.sparse("first", 60<<20), c.sparse("second", 50<<20)} }, rpc.CodeInvalidParams, "files exceed 100 MiB in total"},
-		{"voice album", func(c *mediaCase) { c.p.As = "voice"; c.p.Files = []string{c.document, c.document} }, rpc.CodeInvalidParams, ""},
+		{"voice album", func(c *mediaCase) {
+			// Two valid Opus files: only the one-file rule for voice can refuse them.
+			c.p.As = "voice"
+			c.p.Files = []string{c.file("one.ogg", opusVoice()), c.file("two.ogg", opusVoice())}
+		}, rpc.CodeInvalidParams, "voice requires one file"},
 		{"eleven files", func(c *mediaCase) {
 			c.p.Files = make([]string, 11)
 			for i := range c.p.Files {
@@ -394,5 +399,43 @@ func TestSendMediaSelfDestructRejectsGroupBeforeOpening(t *testing.T) {
 	_, err := c.d.messageSendMedia(context.Background(), params(t, c.p))
 	if writeCode(t, err) != rpc.CodeInvalidParams || len(c.opened) != 0 || c.tg.calls != 0 {
 		t.Fatalf("group: err=%v opened=%d writes=%d", err, len(c.opened), c.tg.calls)
+	}
+}
+
+func TestAudit06_SendMediaTelegramAnswerChecks(t *testing.T) {
+	cases := []struct {
+		name    string
+		change  func(*mediaCase)
+		code    int
+		message string
+	}{
+		{"fewer ids than files", func(c *mediaCase) {
+			c.tg.result = rpc.SendMediaResult{Messages: []rpc.MessageRef{{ID: 100, Date: "2026-11-14T10:00:00Z"}}}
+			c.p.Files = []string{c.document, c.file("second.unknown", []byte("more data"))}
+		}, rpc.CodeTelegram, "Telegram did not return all sent message ids"},
+		{"zero id", func(c *mediaCase) {
+			c.tg.result = rpc.SendMediaResult{Messages: []rpc.MessageRef{{ID: 0, Date: "2026-11-14T10:00:00Z"}}}
+		}, rpc.CodeTelegram, "Telegram did not return a message id and date"},
+		{"missing date", func(c *mediaCase) {
+			c.tg.result = rpc.SendMediaResult{Messages: []rpc.MessageRef{{ID: 100}}}
+		}, rpc.CodeTelegram, "Telegram did not return a message id and date"},
+		{"foreign error is replaced", func(c *mediaCase) {
+			c.tg.err = errors.New("dial tcp 10.0.0.1: secret transport detail")
+		}, rpc.CodeTelegram, "media send failed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newMediaCase(t)
+			tc.change(c)
+			_, err := c.run()
+			var rpcErr *rpc.Error
+			if !errors.As(err, &rpcErr) || rpcErr.Code != tc.code || rpcErr.Message != tc.message {
+				t.Fatalf("err = %v, want code %d message %q", err, tc.code, tc.message)
+			}
+			if strings.Contains(err.Error(), "secret transport detail") {
+				t.Fatalf("transport detail leaked: %v", err)
+			}
+			c.assertClosed()
+		})
 	}
 }

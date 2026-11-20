@@ -138,8 +138,11 @@ func (p *Proxy) Redacted() string {
 	}
 	return string(p.Kind) + "://" + p.Address()
 }
-func (p *Proxy) String() string   { return p.Redacted() }
-func (p *Proxy) GoString() string { return p.Redacted() }
+
+// String and GoString use a value receiver so printing a Proxy value, or a
+// struct that holds one, never shows the password, secret or raw address.
+func (p Proxy) String() string   { return p.Redacted() }
+func (p Proxy) GoString() string { return p.Redacted() }
 func (p *Proxy) Encode() string {
 	if p == nil {
 		return "none"
