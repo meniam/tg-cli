@@ -633,6 +633,30 @@ tg message transcribe <message-link>
 | `--wait` | duration | `1m0s` | wait for the text, up to 600s (up to 90s with --telegram) |
 <!-- /schema:flags -->
 
+**Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon. For the local engine: the engine and `ffmpeg` installed (`tg voice install --check`); `[voice_transcription] enabled` may be off. The message must be in the local database or readable from Telegram. For `--telegram`: a connected, logged-in account (Premium, or a free trial).
+
+**Example.**
+
+```sh
+tg message transcribe @alice 4711 --wait 120s
+```
+
+**Answer** (a finished text of the local engine):
+
+```json
+{"ok":true,"data":{"chat_id":123456789,"id":4711,"transcription_id":0,"text":"Привет, перезвони мне, как освободишься.","pending":false,"cached":false,"source":"local","engine":"gigaam-v3","queued":true}}
+```
+
+**Answer** (the job is not done when `--wait` ends; ask again, nothing is queued twice):
+
+```json
+{"ok":true,"data":{"chat_id":123456789,"id":4711,"transcription_id":0,"text":"","pending":true,"cached":false,"source":"local","engine":"gigaam-v3","queued":true}}
+```
+
+`transcription_id` is 0 for a local text (Telegram assigns the id of its own transcriptions).
+
 The result has `chat_id`, `id`, `transcription_id`, `text`, `pending`, `cached`, `source`, `engine` and `queued`. `text` is untrusted Telegram data. `source` is `local` for the local engine and `telegram` for Telegram's text; `engine` names the local engine (`gigaam-v3`). `cached: true` means a stored text was returned at once, without any work or request. `queued: true` means the local queue produced the answer. A finished text is saved in the local profile database; a later request returns it with `cached: true`. If the job is not done when `--wait` ends, the command succeeds with `pending: true` and the job goes on: ask again later. `--wait 0s` returns at once. The manual job runs before every other job and ignores the daily budget; it works with `[voice_transcription] enabled = false` too, but needs the engine and `ffmpeg` installed (`tg voice install`). A message that is not in the local database is read from Telegram first and saved.
 
 Only messages with `media_type` `voice`, `video_note` or `video` can be transcribed through the queue; with `--telegram` only `voice` and `video_note`. Another message, a non-positive id, or a wait outside the range is exit code 2, as is a missing engine (`error.reason: "engine_missing"`). A job that ends `skipped` for the limits (`too_large`, `too_long`, `no_media`) is exit code 2 and one that fails or is cancelled is exit code 1; both name the reason in `error.reason`. A closed or unknown chat is exit code 7. With `--telegram`, Telegram refusals are exit code 5; a Premium or exhausted free-trial refusal has `error.reason: "premium_required"`, and another transcription refusal has `error.reason: "transcription_failed"`. `trial_remains` and `trial_resets_at` appear in a `--telegram` response when Telegram provides free-trial values. `--telegram` replaces a text the local engine wrote earlier.
