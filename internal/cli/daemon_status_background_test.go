@@ -19,7 +19,7 @@ func TestBackgroundSyncStatusAppearsInSchemaAndHuman(t *testing.T) {
 		"background_sync": false, "background_sync.enabled": false, "background_sync.window": false,
 		"background_sync.window.start": false, "background_sync.window.end": false,
 		"background_sync.state": false, "background_sync.next_run_at": false, "background_sync.last_run_at": false,
-		"background_sync.last_result": false, "background_sync.current_chat_id": false,
+		"background_sync.last_result": false, "background_sync.last_chat_id": false, "background_sync.current_chat_id": false,
 	}
 	for _, field := range cmd.Fields {
 		if _, ok := want[field.Path]; ok {

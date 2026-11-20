@@ -47,6 +47,8 @@ type backgroundSync struct {
 	nextRun    time.Time
 	lastRunAt  *int64
 	lastResult string
+	// lastChat is the chat of the last run that picked one.
+	lastChat *int64
 	// failed holds the chats whose load failed on failedDay, a local date.
 	failedDay string
 	failed    map[int64]struct{}
@@ -182,6 +184,11 @@ func (s *backgroundSync) finish(result string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.running = false
+	if s.current != nil {
+		// A run that picked no chat leaves the chat of the earlier run in place.
+		chat := *s.current
+		s.lastChat = &chat
+	}
 	s.current = nil
 	s.lastRunAt = &unix
 	s.lastResult = result
@@ -384,7 +391,7 @@ func (s *backgroundSync) status() rpc.BackgroundSyncStatus {
 	now := s.clock.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st := rpc.BackgroundSyncStatus{Enabled: true, Window: backgroundWindow(s.cfg), LastResult: s.lastResult, LastRunAt: s.lastRunAt}
+	st := rpc.BackgroundSyncStatus{Enabled: true, Window: backgroundWindow(s.cfg), LastResult: s.lastResult, LastRunAt: s.lastRunAt, LastChatID: s.lastChat}
 	switch {
 	case s.running:
 		st.State = rpc.BackgroundSyncRunning

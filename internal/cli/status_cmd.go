@@ -205,7 +205,12 @@ func dashboardBackground(b rpc.BackgroundSyncStatus, now time.Time) []string {
 	}
 	switch {
 	case b.LastRunAt != nil && b.LastResult != "":
-		runs = append(runs, fmt.Sprintf("last run %s (%s)", dashboardClock(*b.LastRunAt, now), plainText(b.LastResult)))
+		// A skipped run picked no chat, so last_chat_id may still hold an earlier one.
+		result := plainText(b.LastResult)
+		if b.LastChatID != nil && b.LastResult != rpc.BackgroundSyncSkipped {
+			result = fmt.Sprintf("chat %d, %s", *b.LastChatID, result)
+		}
+		runs = append(runs, fmt.Sprintf("last run %s (%s)", dashboardClock(*b.LastRunAt, now), result))
 	case b.LastRunAt != nil:
 		runs = append(runs, "last run "+dashboardClock(*b.LastRunAt, now))
 	case b.State != rpc.BackgroundSyncRunning:

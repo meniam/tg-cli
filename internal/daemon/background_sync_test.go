@@ -557,6 +557,43 @@ func TestBackgroundScheduleFailedChatWaitsForNextDay(t *testing.T) {
 	}
 }
 
+// last_chat_id follows last_result: every run that picked a chat records it, a
+// run that picked none leaves the earlier chat in place.
+func TestBackgroundScheduleRecordsTheLastChat(t *testing.T) {
+	env := newSchedEnv(t, schedConfig(), schedAt(0, 9, 0))
+	env.chat(1, "user", 100)
+	env.chat(2, "user", 200)
+	var failOnce sync.Once
+	env.tg.page = func(_ context.Context, ref chatref.Ref, _ int) (rpc.HistoryPage, error) {
+		var err error
+		if ref.ID == 2 {
+			failOnce.Do(func() { err = errors.New("boom") })
+		}
+		return syncPage(ref.ID), err
+	}
+	env.start()
+	if st := env.status(); st.LastChatID != nil {
+		t.Fatalf("before the first run: %+v", st)
+	}
+	chatOf := func(st rpc.BackgroundSyncStatus) int64 {
+		if st.LastChatID == nil {
+			return 0
+		}
+		return *st.LastChatID
+	}
+	// The fresher chat 2 comes first and fails.
+	if st := env.step(); st.LastResult != rpc.BackgroundSyncFailed || chatOf(st) != 2 {
+		t.Fatalf("failed run: %+v", st)
+	}
+	if st := env.step(); st.LastResult != rpc.BackgroundSyncDone || chatOf(st) != 1 {
+		t.Fatalf("done run: %+v", st)
+	}
+	// Nothing is left for today: the run is skipped and the chat stays.
+	if st := env.step(); st.LastResult != rpc.BackgroundSyncSkipped || chatOf(st) != 1 {
+		t.Fatalf("skipped run: %+v", st)
+	}
+}
+
 func TestBackgroundScheduleWindowEndCancelsLoad(t *testing.T) {
 	env := newSchedEnv(t, schedConfig(), schedAt(0, 18, 0))
 	env.chat(1, "user", 0)

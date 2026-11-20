@@ -49,7 +49,7 @@ func statusBase() rpc.Dashboard {
 		},
 		Background: rpc.BackgroundSyncStatus{
 			Enabled: true, Window: rpc.BackgroundSyncWindow{Start: "08:00", End: "20:00"},
-			State: rpc.BackgroundSyncWaitingInterval, NextRunAt: statusAt(20, 14, 35), LastRunAt: statusAt(20, 11, 2), LastResult: rpc.BackgroundSyncDone,
+			State: rpc.BackgroundSyncWaitingInterval, NextRunAt: statusAt(20, 14, 35), LastRunAt: statusAt(20, 11, 2), LastResult: rpc.BackgroundSyncDone, LastChatID: func() *int64 { id := int64(123); return &id }(),
 		},
 		Jobs:   rpc.DashboardJobs{Sync: []rpc.DashboardSyncJob{}, Full: rpc.DashboardFullJob{State: rpc.ChatFullIdle}},
 		Events: rpc.DashboardEvents{LastHour: 12, Total: 71052},
@@ -84,7 +84,7 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 	busy.History = rpc.DashboardHistory{}
 	busy.Background = rpc.BackgroundSyncStatus{
 		Enabled: true, Window: rpc.BackgroundSyncWindow{Start: "08:00", End: "20:00"}, State: rpc.BackgroundSyncRunning,
-		LastRunAt: statusAt(19, 19, 40), LastResult: rpc.BackgroundSyncCancelled, CurrentChatID: func() *int64 { id := int64(-1001); return &id }(),
+		LastRunAt: statusAt(19, 19, 40), LastResult: rpc.BackgroundSyncCancelled, LastChatID: func() *int64 { id := int64(-1001); return &id }(), CurrentChatID: func() *int64 { id := int64(-1001); return &id }(),
 	}
 	busy.Jobs = rpc.DashboardJobs{
 		Sync: []rpc.DashboardSyncJob{
@@ -123,13 +123,28 @@ func TestRenderDashboardUsesTheGivenTimeAndZone(t *testing.T) {
 	utc := statusNow().UTC() // 09:00 on the same day
 	got := renderDashboard(dash, utc)
 	// 14:35 in the zone +3 is 11:35 UTC; 11:02 is 08:02 UTC; the day is still the 20th.
-	if !strings.Contains(got, "next run 11:35, last run 08:02 (done)") {
+	if !strings.Contains(got, "next run 11:35, last run 08:02 (chat 123, done)") {
 		t.Errorf("times are not shown in the zone of the given time:\n%s", got)
 	}
 	// A moment past midnight of the given zone is another day: the date is shown.
 	dash.Background.NextRunAt = statusAt(21, 0, 30)
 	if got := renderDashboard(dash, statusNow()); !strings.Contains(got, "next run 2026-11-21 00:30,") {
 		t.Errorf("another day lacks its date:\n%s", got)
+	}
+}
+
+// A skipped run picked no chat: last_chat_id may hold the chat of an earlier run,
+// and the line must not blame it. A run without any chat on record prints none.
+func TestRenderDashboardLastRunChat(t *testing.T) {
+	dash := statusBase() // last run done in chat 123
+	dash.Background.LastResult = rpc.BackgroundSyncSkipped
+	if got := renderDashboard(dash, statusNow()); !strings.Contains(got, "last run 11:02 (skipped)\n") {
+		t.Errorf("a skipped run names a chat:\n%s", got)
+	}
+	dash.Background.LastResult = rpc.BackgroundSyncDone
+	dash.Background.LastChatID = nil
+	if got := renderDashboard(dash, statusNow()); !strings.Contains(got, "last run 11:02 (done)\n") {
+		t.Errorf("a run without a chat on record:\n%s", got)
 	}
 }
 
