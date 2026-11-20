@@ -30,9 +30,9 @@ const (
 	semBaseDate = int64(1_700_000_000)
 )
 
-// fakeEmbedder stands in for Ollama: it returns a fixed vector for any query
+// fakeQueryEmbedder stands in for Ollama: it returns a fixed vector for any query
 // and records what it was asked.
-type fakeEmbedder struct {
+type fakeQueryEmbedder struct {
 	info     embed.ModelInfo
 	infoErr  error
 	embedErr error
@@ -45,7 +45,7 @@ type fakeEmbedder struct {
 	texts      []string
 }
 
-func (f *fakeEmbedder) Info(ctx context.Context) (embed.ModelInfo, error) {
+func (f *fakeQueryEmbedder) Info(ctx context.Context) (embed.ModelInfo, error) {
 	f.infoCalls++
 	if f.block {
 		<-ctx.Done()
@@ -54,7 +54,7 @@ func (f *fakeEmbedder) Info(ctx context.Context) (embed.ModelInfo, error) {
 	return f.info, f.infoErr
 }
 
-func (f *fakeEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+func (f *fakeQueryEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	f.embedCalls++
 	f.texts = append(f.texts, texts...)
 	if f.block {
@@ -71,15 +71,15 @@ func (f *fakeEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, 
 	return out, nil
 }
 
-func newFakeEmbedder() *fakeEmbedder {
-	return &fakeEmbedder{info: embed.ModelInfo{Name: semModel, Digest: semDigest, Dim: 2}, vector: []float32{1, 0}}
+func newFakeQueryEmbedder() *fakeQueryEmbedder {
+	return &fakeQueryEmbedder{info: embed.ModelInfo{Name: semModel, Digest: semDigest, Dim: 2}, vector: []float32{1, 0}}
 }
 
 type semanticEnv struct {
 	d        *daemon
 	db       *store.DB
 	vectors  *vectors.Store
-	embedder *fakeEmbedder
+	embedder *fakeQueryEmbedder
 	access   string
 }
 
@@ -162,7 +162,7 @@ func newSemanticEnv(t *testing.T) *semanticEnv {
 		t.Fatal(err)
 	}
 
-	emb := newFakeEmbedder()
+	emb := newFakeQueryEmbedder()
 	d.vectors, d.embedder = vs, emb
 	writeAccess(t, accessPath, fmt.Sprintf(`{"block":[%d]}`, semClosedChat))
 	return &semanticEnv{d: d, db: db, vectors: vs, embedder: emb, access: accessPath}
