@@ -58,6 +58,9 @@ type Options struct {
 	// BackgroundSync holds the settings of the scheduled history load; the
 	// zero value is off.
 	BackgroundSync BackgroundSyncConfig
+	// SemanticSearch holds the settings of the local semantic index; the zero
+	// value is off.
+	SemanticSearch SemanticSearchConfig
 }
 
 // idleCheckEvery is how often the idle stop looks at the daemon. It is finer

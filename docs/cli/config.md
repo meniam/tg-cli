@@ -123,7 +123,7 @@ tg config show
 **Answer.**
 
 ```json
-{"ok":true,"data":{"home":"/Users/alice/Library/Application Support/tg-cli","db_dir":"/Users/alice/.config/tg-cli/db","default_profile":"default","files":{"database":"store.db","session":"session.json","log":"daemon.log","deletions":"deletions.jsonl","access":"access.json"},"behavior":{"throttle_percent":60,"flood_autowait":"10s","expect_user":""},"background_sync":{"enabled":false,"window_start":"08:00","window_end":"20:00","interval_min":"40m","interval_max":"3h","page_pause_min":"2s","page_pause_max":"8s"},"profiles":{"default":{"client":"desktop","device":"MacBook","transport":"tcp","proxy":"socks5://127.0.0.1:1080"}}}}
+{"ok":true,"data":{"home":"/Users/alice/Library/Application Support/tg-cli","db_dir":"/Users/alice/.config/tg-cli/db","default_profile":"default","files":{"database":"store.db","session":"session.json","log":"daemon.log","deletions":"deletions.jsonl","access":"access.json"},"behavior":{"throttle_percent":60,"flood_autowait":"10s","expect_user":""},"background_sync":{"enabled":false,"window_start":"08:00","window_end":"20:00","interval_min":"40m","interval_max":"3h","page_pause_min":"2s","page_pause_max":"8s"},"semantic_search":{"enabled":false,"ollama_url":"http://127.0.0.1:11434","model":"bge-m3","batch":16,"interval":"10m"},"profiles":{"default":{"client":"desktop","device":"MacBook","transport":"tcp","proxy":"socks5://127.0.0.1:1080"}}}}
 ```
 
 **Answer fields** (`data`): `home` and `db_dir` strings, `default_profile`
@@ -133,11 +133,14 @@ strings), `behavior` object (`throttle_percent` number, `flood_autowait` and
 `window_start`, `window_end`, `interval_min`, `interval_max`, `page_pause_min`
 and `page_pause_max` strings, as written in the file or the defaults; the
 environment variables are not applied, see
-[Request throttle](overview.md#request-throttle-and-flood_wait)), and `profiles`
+[Request throttle](overview.md#request-throttle-and-flood_wait)),
+`semantic_search` object (`enabled` boolean; `ollama_url`, `model` and
+`interval` strings and `batch` number, as written in the file or the defaults;
+the environment variables are not applied), and `profiles`
 object keyed by profile name. Each profile contains `client`, `device`,
 `transport`, and redacted `proxy` strings.
 
-**Exit codes.** 0 success, 2 invalid configuration (including a wrong `[background_sync]` value) or an invalid socket path,
+**Exit codes.** 0 success, 2 invalid configuration (including a wrong `[background_sync]` or `[semantic_search]` value) or an invalid socket path,
 1 a local migration error.
 
 ### tg config migrate

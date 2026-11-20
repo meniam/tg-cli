@@ -331,6 +331,16 @@ A `FLOOD_WAIT_X` from Telegram pauses the whole account for X seconds. A request
 | `background_sync.page_pause_min` | `TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MIN` | a Go duration of at least `1s`; the shortest random pause between pages | `2s` |
 | `background_sync.page_pause_max` | `TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MAX` | a Go duration, not below `page_pause_min` | `8s` |
 
+`[semantic_search]` holds the settings of the local semantic index: the Daemon will cut local messages into conversation fragments and ask a local Ollama service for a vector of each. It is off by default; while it is off the Daemon makes no request to Ollama and creates no `vectors.db`. The Ollama address must be on this machine, so the text of your conversations never leaves it. The rules for the environment are those of `[background_sync]`: a variable overrides the file for one start, and a bad value is exit code 2 before the Daemon starts:
+
+| Config key | Environment variable | Values | Default |
+| --- | --- | --- | --- |
+| `semantic_search.enabled` | `TG_CLI_SEMANTIC_SEARCH_ENABLED` | `true` or `false` | `false` |
+| `semantic_search.ollama_url` | `TG_CLI_SEMANTIC_SEARCH_OLLAMA_URL` | an `http` or `https` address whose host is `127.0.0.1`, `::1` or `localhost`, without credentials or path | `http://127.0.0.1:11434` |
+| `semantic_search.model` | `TG_CLI_SEMANTIC_SEARCH_MODEL` | an Ollama embedding model, 1 to 128 characters, no control characters | `bge-m3` |
+| `semantic_search.batch` | `TG_CLI_SEMANTIC_SEARCH_BATCH` | texts per Ollama request, a whole number from 1 to 128 | `16` |
+| `semantic_search.interval` | `TG_CLI_SEMANTIC_SEARCH_INTERVAL` | the wait between two indexing runs, a Go duration from `1m` to `24h` | `10m` |
+
 Per-method buckets remain an open item: `getDialogs` can hit `FLOOD_WAIT` before the general bucket, so keep pauses between reads. Media parts go through `FileDC`, which retains the same middleware and the file-transfer lane; CDN is not enabled for these downloads. The init call, ping and ack bypass the throttle; the Telegram library keeps its own retries after `FLOOD_WAIT` in the updates manager, downloader and `QR.Auth`. See [FEATURES.md](../../FEATURES.md), item 11.4.
 
 ## The tool describes itself
