@@ -135,6 +135,49 @@
 # page_pause_min = "2s"
 # page_pause_max = "8s"
 
+# --- Semantic search index ---------------------------------------------------
+# The daemon can index your local messages by meaning: it cuts them into
+# conversation fragments and asks a local Ollama service for a vector of each
+# (file vectors.db next to the message database; it holds no message text and
+# can be deleted). It reads only the local database; it never calls Telegram,
+# never indexes chats closed by access.json, and talks to Ollama only on this
+# machine. While it is off, the daemon makes no request to Ollama and creates
+# no vectors.db.
+
+# [semantic_search]
+# Turn the indexer on.
+# Default: false
+# Values:  true or false
+# Overrides: environment TG_CLI_SEMANTIC_SEARCH_ENABLED
+# enabled = false
+#
+# Address of the Ollama service.
+# Default: "http://127.0.0.1:11434"
+# Values:  an http or https address with the host 127.0.0.1, ::1 or localhost
+#          (no credentials, no path); any other host is refused so that the
+#          text of your conversations stays on this machine
+# Overrides: environment TG_CLI_SEMANTIC_SEARCH_OLLAMA_URL
+# ollama_url = "http://127.0.0.1:11434"
+#
+# Embedding model. Pull it first: `ollama pull bge-m3`. Changing the model marks
+# the index stale and rebuilds it.
+# Default: "bge-m3"
+# Values:  1 to 128 characters, no control characters
+# Overrides: environment TG_CLI_SEMANTIC_SEARCH_MODEL
+# model = "bge-m3"
+#
+# Texts sent to Ollama in one request.
+# Default: 16
+# Values:  a whole number from 1 to 128
+# Overrides: environment TG_CLI_SEMANTIC_SEARCH_BATCH
+# batch = 16
+#
+# Wait between two indexing runs.
+# Default: "10m"
+# Values:  a duration from "1m" to "24h"
+# Overrides: environment TG_CLI_SEMANTIC_SEARCH_INTERVAL
+# interval = "10m"
+
 # --- Per-profile settings ----------------------------------------------------
 # One table per profile: [profiles.<name>]. `tg daemon start` writes these
 # keys when you pass --client, --device, --transport or --proxy. Every key below

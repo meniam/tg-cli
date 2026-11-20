@@ -192,6 +192,10 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	semanticSearch, err := a.daemonSemanticSearch()
+	if err != nil {
+		return err
+	}
 	if !foreground {
 		return a.startBackground(cmd, profile, paths, idle)
 	}
@@ -241,6 +245,7 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		Log:                  logger,
 		IdleTimeout:          idle,
 		BackgroundSync:       backgroundSync,
+		SemanticSearch:       semanticSearch,
 	})
 	if err != nil {
 		return a.daemonStartError(err)

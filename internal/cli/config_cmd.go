@@ -38,6 +38,13 @@ type configBackgroundSyncResult struct {
 	PagePauseMin string `json:"page_pause_min"`
 	PagePauseMax string `json:"page_pause_max"`
 }
+type configSemanticSearchResult struct {
+	Enabled   bool   `json:"enabled"`
+	OllamaURL string `json:"ollama_url"`
+	Model     string `json:"model"`
+	Batch     int    `json:"batch"`
+	Interval  string `json:"interval"`
+}
 type configProfileResult struct {
 	Client    string `json:"client"`
 	Device    string `json:"device"`
@@ -53,6 +60,7 @@ type configShowResult struct {
 	Files          configFilesResult              `json:"files"`
 	Behavior       configBehaviorResult           `json:"behavior"`
 	BackgroundSync configBackgroundSyncResult     `json:"background_sync"`
+	SemanticSearch configSemanticSearchResult     `json:"semantic_search"`
 	Profiles       map[string]configProfileResult `json:"profiles"`
 }
 type configInitResult struct {
@@ -114,7 +122,7 @@ func (a *app) configShow(cmd *cobra.Command, _ []string) error {
 			return fail(exitcode.Usage, "%v", err)
 		}
 	}
-	result := configShowResult{Home: a.config.Home, DBDir: dbRoot, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}, Behavior: configBehaviorResult{a.config.Behavior.ThrottlePercent, a.config.Behavior.FloodAutoWait, a.config.Behavior.ExpectUser}, BackgroundSync: configBackgroundSyncResult(a.config.BackgroundSync), Profiles: map[string]configProfileResult{}}
+	result := configShowResult{Home: a.config.Home, DBDir: dbRoot, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}, Behavior: configBehaviorResult{a.config.Behavior.ThrottlePercent, a.config.Behavior.FloodAutoWait, a.config.Behavior.ExpectUser}, BackgroundSync: configBackgroundSyncResult(a.config.BackgroundSync), SemanticSearch: configSemanticSearchResult(a.config.SemanticSearch), Profiles: map[string]configProfileResult{}}
 	for name, p := range a.config.Profiles {
 		proxy, err := netconf.ParseProxy(p.Proxy)
 		if err != nil {
