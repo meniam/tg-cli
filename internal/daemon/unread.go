@@ -60,7 +60,7 @@ func (d *daemon) chatUnread(ctx context.Context, raw json.RawMessage) (any, erro
 	for _, v := range out.Chats {
 		if d.policy().Allowed(v.ID) {
 			visible = append(visible, v)
-			chats = append(chats, rpc.Chat{ID: v.ID, Type: v.Type, Title: v.Title, Username: v.Username, Unread: v.Unread})
+			chats = append(chats, rpc.Chat{Raw: v.Raw, ID: v.ID, Type: v.Type, Title: v.Title, Username: v.Username, Unread: v.Unread})
 		}
 	}
 	out.Chats = visible

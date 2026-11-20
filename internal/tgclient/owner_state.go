@@ -28,7 +28,7 @@ func dialogState(d *tg.Dialog) (rpc.ChatState, bool) {
 		return rpc.ChatState{}, false
 	}
 	folder, _ := d.GetFolderID()
-	return rpc.ChatState{ChatID: id, ReadInboxMaxID: d.ReadInboxMaxID, ReadOutboxMaxID: d.ReadOutboxMaxID, Unread: d.UnreadCount, UnreadMentions: d.UnreadMentionsCount, UnreadReactions: d.UnreadReactionsCount, UnreadMark: d.UnreadMark, Pinned: d.Pinned, Archived: folder == 1, TopMessage: d.TopMessage, TTLPeriod: optInt(d.GetTTLPeriod()), MuteUntil: optInt(d.NotifySettings.GetMuteUntil()), Silent: optBool(d.NotifySettings.GetSilent()), ShowPreviews: optBool(d.NotifySettings.GetShowPreviews())}, true
+	return rpc.ChatState{Raw: messageRaw(d), ChatID: id, ReadInboxMaxID: d.ReadInboxMaxID, ReadOutboxMaxID: d.ReadOutboxMaxID, Unread: d.UnreadCount, UnreadMentions: d.UnreadMentionsCount, UnreadReactions: d.UnreadReactionsCount, UnreadMark: d.UnreadMark, Pinned: d.Pinned, Archived: folder == 1, TopMessage: d.TopMessage, TTLPeriod: optInt(d.GetTTLPeriod()), MuteUntil: optInt(d.NotifySettings.GetMuteUntil()), Silent: optBool(d.NotifySettings.GetSilent()), ShowPreviews: optBool(d.NotifySettings.GetShowPreviews())}, true
 }
 func peerDialogsAPI(ctx context.Context, api *tg.Client, peer tg.InputPeerClass) (*tg.MessagesPeerDialogs, error) {
 	response, err := api.MessagesGetPeerDialogs(ctx, []tg.InputDialogPeerClass{&tg.InputDialogPeer{Peer: peer}})
@@ -124,7 +124,7 @@ func sessionsAPI(ctx context.Context, api *tg.Client) (rpc.SessionsResult, error
 	}
 	out := rpc.SessionsResult{AuthorizationTTLDays: response.AuthorizationTTLDays, Sessions: make([]rpc.Session, 0, len(response.Authorizations))}
 	for _, a := range response.Authorizations {
-		out.Sessions = append(out.Sessions, rpc.Session{Hash: a.Hash, Current: a.Current, OfficialApp: a.OfficialApp, PasswordPending: a.PasswordPending, Unconfirmed: a.Unconfirmed, DeviceModel: a.DeviceModel, Platform: a.Platform, SystemVersion: a.SystemVersion, APIID: a.APIID, AppName: a.AppName, AppVersion: a.AppVersion, DateCreated: a.DateCreated, DateActive: a.DateActive, Country: a.Country, Region: a.Region})
+		out.Sessions = append(out.Sessions, rpc.Session{Raw: messageRaw(&a), Hash: a.Hash, Current: a.Current, OfficialApp: a.OfficialApp, PasswordPending: a.PasswordPending, Unconfirmed: a.Unconfirmed, DeviceModel: a.DeviceModel, Platform: a.Platform, SystemVersion: a.SystemVersion, APIID: a.APIID, AppName: a.AppName, AppVersion: a.AppVersion, DateCreated: a.DateCreated, DateActive: a.DateActive, Country: a.Country, Region: a.Region})
 	}
 	return out, nil
 }
@@ -160,7 +160,7 @@ func blockedPage(ctx context.Context, api *tg.Client, p rpc.BlockedParams) (rpc.
 		if !ok {
 			continue
 		}
-		item := rpc.BlockedPeer{PeerID: id, Date: b.Date}
+		item := rpc.BlockedPeer{Raw: messageRaw(&b), PeerID: id, Date: b.Date}
 		switch b.PeerID.(type) {
 		case *tg.PeerUser:
 			item.Type = "user"
@@ -229,7 +229,7 @@ func notifyDefaultsAPI(ctx context.Context, api *tg.Client) (rpc.NotifyDefaultsR
 		if err != nil {
 			return rpc.NotifyDefaultsResult{}, mapError(err)
 		}
-		out.Defaults = append(out.Defaults, rpc.NotifyDefault{Scope: v.scope, MuteUntil: optInt(s.GetMuteUntil()), Silent: optBool(s.GetSilent()), ShowPreviews: optBool(s.GetShowPreviews())})
+		out.Defaults = append(out.Defaults, rpc.NotifyDefault{Raw: messageRaw(s), Scope: v.scope, MuteUntil: optInt(s.GetMuteUntil()), Silent: optBool(s.GetSilent()), ShowPreviews: optBool(s.GetShowPreviews())})
 	}
 	return out, nil
 }

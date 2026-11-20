@@ -2,6 +2,7 @@ package tgclient
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/gotd/td/bin"
@@ -72,9 +73,17 @@ func TestContactRequests(t *testing.T) {
 	if err != nil || profile.ID != 7 || profile.Bio != "bio" || !profile.Blocked {
 		t.Fatalf("profile %+v %v", profile, err)
 	}
+	var profileRaw map[string]json.RawMessage
+	if err := json.Unmarshal(profile.Raw, &profileRaw); err != nil || len(profileRaw[rawFullUser]) == 0 {
+		t.Fatalf("profile raw=%s err=%v", profile.Raw, err)
+	}
 	contacts, err := contactsAPI(ctx, api, mgr)
 	if err != nil || len(contacts) != 1 || !*contacts[0].Mutual {
 		t.Fatalf("contacts %+v %v", contacts, err)
+	}
+	var contactsRaw map[string]json.RawMessage
+	if err := json.Unmarshal(contacts[0].Raw, &contactsRaw); err != nil || len(contactsRaw[rawContacts]) == 0 {
+		t.Fatalf("contact raw=%s err=%v", contacts[0].Raw, err)
 	}
 	hits, err := searchContactsAPI(ctx, api, mgr, "ivan", 10)
 	if err != nil || len(hits) != 2 || hits[0].Source != "contacts" || hits[1].Source != "global" {

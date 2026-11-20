@@ -132,3 +132,19 @@ func TestForwardProtectedBatchMarksEveryItem(t *testing.T) {
 		}
 	}
 }
+
+func TestForwardCarriesMessageRaw(t *testing.T) {
+	api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, out bin.Decoder) error {
+		req := input.(*tg.MessagesForwardMessagesRequest)
+		return respond(out, &tg.Updates{Date: 1700000000, Updates: []tg.UpdateClass{
+			&tg.UpdateMessageID{ID: 12, RandomID: req.RandomID[0]},
+			&tg.UpdateNewMessage{Message: &tg.Message{ID: 12, Date: 1700000000, PeerID: &tg.PeerUser{UserID: 1}}},
+		}})
+	}))
+	p := &tg.InputPeerUser{UserID: 1}
+	result, err := forwardMessages(context.Background(), api, p, p, 1, rpc.ForwardParams{IDs: []int{4}})
+	if err != nil || len(result.Messages) != 1 {
+		t.Fatalf("forward = %+v, err = %v", result, err)
+	}
+	assertMessageRaw(t, result.Messages[0].Raw)
+}

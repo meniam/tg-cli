@@ -55,6 +55,7 @@ func TestDiscoverySearchFilterAndCursor(t *testing.T) {
 	if err != nil || len(first.Messages) != 1 || first.NextCursor == "" {
 		t.Fatalf("first: %+v %v", first, err)
 	}
+	assertMessageRaw(t, first.Messages[0].Raw)
 	offset, err := decodeCursor(first.NextCursor, -42)
 	if err != nil || offset != 11 {
 		t.Fatalf("cursor: %d %v", offset, err)
@@ -88,6 +89,7 @@ func TestDiscoveryPublicSearchCursor(t *testing.T) {
 	if err != nil || len(first.Hits) != 1 || first.Hits[0].ChatID != -42 || first.NextCursor == "" {
 		t.Fatalf("global first: %+v %v", first, err)
 	}
+	assertMessageRaw(t, first.Hits[0].Message.Raw)
 	cursor, err := decodePublicCursor(first.NextCursor, "#topic")
 	if err != nil || cursor.ID != 11 || cursor.PeerID != 42 {
 		t.Fatalf("global cursor: %+v %v", cursor, err)
@@ -115,6 +117,9 @@ func TestDiscoveryContextCommentsAndReadRequests(t *testing.T) {
 	if err != nil || len(result.Messages) != 3 || result.Messages[0].ID != 8 || result.Messages[2].ID != 10 {
 		t.Fatalf("context: %+v %v", result, err)
 	}
+	for _, m := range result.Messages {
+		assertMessageRaw(t, m.Raw)
+	}
 	api = tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
 		req, ok := input.(*tg.MessagesGetRepliesRequest)
 		if !ok || req.MsgID != 20 || req.OffsetID != 5 || req.Limit != 2 {
@@ -126,6 +131,7 @@ func TestDiscoveryContextCommentsAndReadRequests(t *testing.T) {
 	if err != nil || len(result.Messages) != 1 || result.Messages[0].ChatID != -42 || result.NextCursor == "" {
 		t.Fatalf("comments: %+v %v", result, err)
 	}
+	assertMessageRaw(t, result.Messages[0].Raw)
 	post := &tg.Message{ID: 20}
 	if postHasDiscussion(post) {
 		t.Fatal("post without replies has discussion")

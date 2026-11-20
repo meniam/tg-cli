@@ -41,7 +41,7 @@ func (d *daemon) handleTranscription(v rpc.Transcription) {
 		}
 		return
 	}
-	_, _ = d.store.UpdateTranscription(context.Background(), store.Transcription{ChatID: v.ChatID, MessageID: v.ID, TranscriptionID: v.TranscriptionID, Text: v.Text, Pending: v.Pending})
+	_, _ = d.store.UpdateTranscription(context.Background(), store.Transcription{Raw: v.Raw, ChatID: v.ChatID, MessageID: v.ID, TranscriptionID: v.TranscriptionID, Text: v.Text, Pending: v.Pending})
 }
 
 func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -78,7 +78,7 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 		d.transcriptionMu.Lock()
 		for _, u := range w.updates {
 			if d.policy().Allowed(u.ChatID) {
-				_, _ = d.store.UpdateTranscription(context.Background(), store.Transcription{ChatID: u.ChatID, MessageID: u.ID, TranscriptionID: u.TranscriptionID, Text: u.Text, Pending: u.Pending})
+				_, _ = d.store.UpdateTranscription(context.Background(), store.Transcription{Raw: u.Raw, ChatID: u.ChatID, MessageID: u.ID, TranscriptionID: u.TranscriptionID, Text: u.Text, Pending: u.Pending})
 			}
 		}
 		delete(d.transcriptionWaiters, k)
@@ -97,7 +97,7 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 			if result.ChatID != chat.ID || result.ID != p.ID {
 				return nil, rpc.ErrChatNotFound()
 			}
-			if err = d.store.PutTranscription(ctx, store.Transcription{ChatID: chat.ID, MessageID: p.ID, TranscriptionID: result.TranscriptionID, Text: result.Text, Pending: result.Pending}); err != nil {
+			if err = d.store.PutTranscription(ctx, store.Transcription{Raw: result.Raw, ChatID: chat.ID, MessageID: p.ID, TranscriptionID: result.TranscriptionID, Text: result.Text, Pending: result.Pending}); err != nil {
 				return nil, err
 			}
 		}
@@ -119,7 +119,7 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 		if result.ChatID != chat.ID || result.ID != p.ID {
 			return nil, rpc.ErrChatNotFound()
 		}
-		if err = d.store.PutTranscription(ctx, store.Transcription{ChatID: chat.ID, MessageID: p.ID, TranscriptionID: result.TranscriptionID, Text: result.Text, Pending: result.Pending}); err != nil {
+		if err = d.store.PutTranscription(ctx, store.Transcription{Raw: result.Raw, ChatID: chat.ID, MessageID: p.ID, TranscriptionID: result.TranscriptionID, Text: result.Text, Pending: result.Pending}); err != nil {
 			return nil, err
 		}
 	} else {
@@ -140,7 +140,7 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 				continue
 			}
 			var updated bool
-			if updated, err = d.store.UpdateTranscription(ctx, store.Transcription{ChatID: chat.ID, MessageID: p.ID, TranscriptionID: u.TranscriptionID, Text: u.Text, Pending: u.Pending}); err != nil {
+			if updated, err = d.store.UpdateTranscription(ctx, store.Transcription{Raw: u.Raw, ChatID: chat.ID, MessageID: p.ID, TranscriptionID: u.TranscriptionID, Text: u.Text, Pending: u.Pending}); err != nil {
 				break
 			}
 			if updated {

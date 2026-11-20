@@ -1,6 +1,9 @@
 package rpc
 
-import "strconv"
+import (
+	"encoding/json"
+	"strconv"
+)
 
 const (
 	MethodFolderList      = "folder.list"
@@ -50,6 +53,8 @@ type Folder struct {
 	Include  []FolderPeer `json:"include"`
 	Exclude  []FolderPeer `json:"exclude"`
 	SyncedAt *int64       `json:"synced_at"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 type FoldersResult struct {
 	Folders  []Folder `json:"folders"`
@@ -71,6 +76,8 @@ type ChatState struct {
 	Silent          *bool  `json:"silent"`
 	ShowPreviews    *bool  `json:"show_previews"`
 	SyncedAt        *int64 `json:"synced_at"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 type ChatStatesResult struct {
 	States   []ChatState `json:"states"`
@@ -93,6 +100,8 @@ type Session struct {
 	DateActive      int    `json:"date_active"`
 	Country         string `json:"country"`
 	Region          string `json:"region"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 type SessionsResult struct {
 	Sessions             []Session `json:"sessions"`
@@ -105,6 +114,8 @@ type BlockedPeer struct {
 	Title    string `json:"title" untrusted:"true"`
 	Username string `json:"username,omitempty" untrusted:"true"`
 	Date     int    `json:"date"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 type BlockedResult struct {
 	Peers      []BlockedPeer `json:"peers"`
@@ -117,6 +128,8 @@ type NotifyDefault struct {
 	Silent       *bool  `json:"silent"`
 	ShowPreviews *bool  `json:"show_previews"`
 	SyncedAt     *int64 `json:"synced_at"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 type NotifyDefaultsResult struct {
 	Defaults []NotifyDefault `json:"defaults"`

@@ -22,6 +22,7 @@ func toChat(e dialogs.Elem) (rpc.Chat, bool) {
 	case *tg.PeerUser:
 		chat.ID, chat.Type = p.UserID, "user"
 		if u, ok := e.Entities.User(p.UserID); ok {
+			chat.Raw = methodRaw(rawDialogs, u)
 			chat.Title = displayName(u)
 			chat.Username, _ = u.GetUsername()
 			if u.Bot {
@@ -31,11 +32,13 @@ func toChat(e dialogs.Elem) (rpc.Chat, bool) {
 	case *tg.PeerChat:
 		chat.ID, chat.Type = -p.ChatID, "group"
 		if c, ok := e.Entities.Chat(p.ChatID); ok {
+			chat.Raw = methodRaw(rawDialogs, c)
 			chat.Title = c.Title
 		}
 	case *tg.PeerChannel:
 		chat.ID, chat.Type = -channelIDBase-p.ChannelID, "channel"
 		if c, ok := e.Entities.Channel(p.ChannelID); ok {
+			chat.Raw = methodRaw(rawDialogs, c)
 			chat.Title = c.Title
 			chat.Username, _ = c.GetUsername()
 			if c.Megagroup {

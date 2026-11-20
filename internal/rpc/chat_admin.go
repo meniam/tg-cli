@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"encoding/json"
 	"time"
 	"unicode/utf8"
 )
@@ -23,13 +24,15 @@ type ChatJoinParams struct {
 	DryRun bool   `json:"dry_run,omitempty"`
 }
 type ChatJoinResult struct {
-	ChatID        int64  `json:"chat_id"`
-	Type          string `json:"type,omitempty"`
-	AlreadyMember bool   `json:"already_member,omitempty"`
-	Requested     bool   `json:"requested,omitempty"`
-	DryRun        bool   `json:"dry_run,omitempty"`
-	Action        string `json:"action,omitempty"`
-	Count         int    `json:"count,omitempty"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw           json.RawMessage `json:"-"`
+	ChatID        int64           `json:"chat_id"`
+	Type          string          `json:"type,omitempty"`
+	AlreadyMember bool            `json:"already_member,omitempty"`
+	Requested     bool            `json:"requested,omitempty"`
+	DryRun        bool            `json:"dry_run,omitempty"`
+	Action        string          `json:"action,omitempty"`
+	Count         int             `json:"count,omitempty"`
 }
 type ChatLeaveParams struct {
 	Chat   string `json:"chat"`
@@ -49,15 +52,17 @@ type ChatCreateParams struct {
 	DryRun bool   `json:"dry_run,omitempty"`
 }
 type ChatCreateResult struct {
-	ID          int64  `json:"id"`
-	Type        string `json:"type"`
-	Title       string `json:"title,omitempty"`
-	Closed      bool   `json:"closed,omitempty"`
-	DryRun      bool   `json:"dry_run,omitempty"`
-	Action      string `json:"action,omitempty"`
-	Count       int    `json:"count,omitempty"`
-	TitleLength *int   `json:"title_length,omitempty"`
-	AboutLength *int   `json:"about_length,omitempty"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw         json.RawMessage `json:"-"`
+	ID          int64           `json:"id"`
+	Type        string          `json:"type"`
+	Title       string          `json:"title,omitempty"`
+	Closed      bool            `json:"closed,omitempty"`
+	DryRun      bool            `json:"dry_run,omitempty"`
+	Action      string          `json:"action,omitempty"`
+	Count       int             `json:"count,omitempty"`
+	TitleLength *int            `json:"title_length,omitempty"`
+	AboutLength *int            `json:"about_length,omitempty"`
 }
 type ChatEditParams struct {
 	Chat   string  `json:"chat"`

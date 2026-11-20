@@ -23,7 +23,7 @@ func (c *Client) transcribedAudio(u *tg.UpdateTranscribedAudio) {
 	sink := c.transcriptionSink
 	c.sinkMu.RUnlock()
 	if sink != nil {
-		sink(rpc.Transcription{ChatID: botPeerID(u.Peer), ID: u.MsgID, TranscriptionID: u.TranscriptionID, Text: u.Text, Pending: u.Pending})
+		sink(rpc.Transcription{Raw: methodRaw(rawTranscribed, u), ChatID: botPeerID(u.Peer), ID: u.MsgID, TranscriptionID: u.TranscriptionID, Text: u.Text, Pending: u.Pending})
 	}
 }
 
@@ -46,7 +46,7 @@ func transcribeResolved(ctx context.Context, api *tg.Client, p peers.Peer, id in
 		}
 		return rpc.Transcription{}, mapError(err)
 	}
-	out := rpc.Transcription{ChatID: toChatOf(p).ID, ID: id, TranscriptionID: v.TranscriptionID, Text: v.Text, Pending: v.Pending}
+	out := rpc.Transcription{Raw: methodRaw(rawTranscribe, v), ChatID: toChatOf(p).ID, ID: id, TranscriptionID: v.TranscriptionID, Text: v.Text, Pending: v.Pending}
 	if remains, ok := v.GetTrialRemainsNum(); ok {
 		out.TrialRemains = &remains
 	}

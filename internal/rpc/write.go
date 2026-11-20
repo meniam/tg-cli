@@ -1,6 +1,9 @@
 package rpc
 
-import "os"
+import (
+	"encoding/json"
+	"os"
+)
 
 // SendParams sends text to a chat. The caller validates authorization.
 type SendParams struct {
@@ -161,6 +164,8 @@ type SendResult struct {
 	RichMode        *bool    `json:"rich,omitempty"`
 	PremiumDropped  []string `json:"premium_dropped,omitempty"`
 	PremiumFeatures []string `json:"premium_features,omitempty"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 
 // TextCheck is a local formatting preview without a Telegram write.
@@ -204,6 +209,8 @@ type ForwardedMessage struct {
 	SourceID int    `json:"source_id,omitempty"`
 	ID       int    `json:"id"`
 	Date     string `json:"date"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 
 type ForwardResult struct {

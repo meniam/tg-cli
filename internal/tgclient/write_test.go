@@ -88,6 +88,7 @@ func TestWriteEditDeleteAndForwardRequests(t *testing.T) {
 		if err != nil || out.ID != 5 || out.ChatID != 42 || out.Date == "" {
 			t.Fatalf("edit=%+v %v", out, err)
 		}
+		assertMessageRaw(t, out.Raw)
 	})
 	for _, tc := range []struct {
 		name    string

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"path/filepath"
 	"slices"
@@ -15,7 +16,7 @@ func TestEventsDedupReplayFiltersAndPrune(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0).UTC()
 	chat1, chat2 := int64(1), int64(2)
 	events := []Event{
-		{Type: "message.new", ChatID: &chat1, CreatedAt: base, Payload: json.RawMessage(`{"text":"one"}`), DedupKey: "one"},
+		{Type: "message.new", ChatID: &chat1, CreatedAt: base, Payload: json.RawMessage(`{"text":"one"}`), Raw: json.RawMessage(`{"_":"updateNewMessage","pts":1}`), DedupKey: "one"},
 		{Type: "reaction", ChatID: &chat2, CreatedAt: base.Add(time.Hour), Payload: json.RawMessage(`{"emoji":"+"}`), DedupKey: "two"},
 		{Type: "message.edit", ChatID: &chat1, CreatedAt: base.Add(2 * time.Hour), Payload: json.RawMessage(`{"text":"edited"}`), DedupKey: "three"},
 	}
@@ -30,9 +31,19 @@ func TestEventsDedupReplayFiltersAndPrune(t *testing.T) {
 	if !(ids[0] < ids[1] && ids[1] < ids[2]) {
 		t.Fatalf("IDs not increasing: %v", ids)
 	}
-	id, inserted, err := db.AddEvent(ctx, events[0])
+	duplicate := events[0]
+	duplicate.Raw = json.RawMessage(`{"_":"updateNewMessage","pts":2}`)
+	id, inserted, err := db.AddEvent(ctx, duplicate)
 	if err != nil || inserted || id != ids[0] {
 		t.Errorf("duplicate: id=%d inserted=%v err=%v", id, inserted, err)
+	}
+	var raw, payload string
+	if err := db.read.QueryRowContext(ctx, `SELECT raw,payload FROM events WHERE id=?`, ids[0]).Scan(&raw, &payload); err != nil || raw != string(events[0].Raw) || payload != string(events[0].Payload) {
+		t.Fatalf("raw=%s payload=%s err=%v", raw, payload, err)
+	}
+	var rawNull sql.NullString
+	if err := db.read.QueryRowContext(ctx, `SELECT raw FROM events WHERE id=?`, ids[1]).Scan(&rawNull); err != nil || rawNull.Valid {
+		t.Fatalf("missing raw=%+v err=%v", rawNull, err)
 	}
 	last, err := db.LastEventID(ctx)
 	if err != nil || last != ids[2] {

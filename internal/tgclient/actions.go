@@ -154,5 +154,5 @@ func sendPoll(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, chatI
 	if err != nil {
 		return rpc.SendResult{}, err
 	}
-	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date}, nil
+	return rpc.SendResult{ChatID: chatID, ID: messages[0].ID, Date: messages[0].Date, Raw: messages[0].Raw}, nil
 }

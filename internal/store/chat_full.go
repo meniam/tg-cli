@@ -60,6 +60,7 @@ type ChatFull struct {
 	// Settings is the settings object of the chat, the same one `chat info`
 	// builds.
 	Settings json.RawMessage
+	Raw      json.RawMessage
 	// SyncedAt is the time of a successful read in Unix seconds.
 	SyncedAt *int64
 	// Error is why the last read failed; an empty value clears it.
@@ -80,10 +81,12 @@ func (db *DB) SaveChatFull(ctx context.Context, chatID int64, full ChatFull) err
 	if len(full.Settings) > 0 {
 		settings = string(full.Settings)
 	}
+	path, value := oneRawKey(full.Raw)
 	result, err := db.write.ExecContext(ctx,
 		`UPDATE chats SET about=COALESCE(?,about), members=COALESCE(?,members), settings=COALESCE(?,settings),
-		        full_synced_at=COALESCE(?,full_synced_at), full_error=? WHERE id=?`,
-		full.About, full.Members, settings, full.SyncedAt, full.Error, chatID)
+		        full_synced_at=COALESCE(?,full_synced_at), full_error=?,
+                raw=CASE WHEN ? IS NULL THEN raw ELSE json_set(CASE WHEN json_type(raw)='object' AND EXISTS (SELECT 1 FROM json_each(raw) WHERE instr(key,'.')>0 OR key GLOB 'update*') THEN raw ELSE '{}' END, ?, json(?)) END WHERE id=?`,
+		full.About, full.Members, settings, full.SyncedAt, full.Error, value, path, value, chatID)
 	if err != nil {
 		return fmt.Errorf("save the full chat %d: %w", chatID, err)
 	}

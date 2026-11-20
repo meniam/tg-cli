@@ -49,7 +49,7 @@ func unreadChatsAPI(ctx context.Context, api *tg.Client, limit int, archived boo
 				forum = ch.Forum
 			}
 		}
-		out.Chats = append(out.Chats, rpc.UnreadChat{ID: chat.ID, Type: chat.Type, Title: chat.Title, Username: chat.Username, Forum: forum, Unread: state.Unread, UnreadMentions: state.UnreadMentions, UnreadReactions: state.UnreadReactions, UnreadMark: state.UnreadMark, Muted: state.MuteUntil != nil && int64(*state.MuteUntil) > time.Now().Unix(), Archived: state.Archived, ReadInboxMaxID: state.ReadInboxMaxID, TopMessage: state.TopMessage})
+		out.Chats = append(out.Chats, rpc.UnreadChat{Raw: chat.Raw, ID: chat.ID, Type: chat.Type, Title: chat.Title, Username: chat.Username, Forum: forum, Unread: state.Unread, UnreadMentions: state.UnreadMentions, UnreadReactions: state.UnreadReactions, UnreadMark: state.UnreadMark, Muted: state.MuteUntil != nil && int64(*state.MuteUntil) > time.Now().Unix(), Archived: state.Archived, ReadInboxMaxID: state.ReadInboxMaxID, TopMessage: state.TopMessage})
 		states = append(states, state)
 	}
 	if err := it.Err(); err != nil {

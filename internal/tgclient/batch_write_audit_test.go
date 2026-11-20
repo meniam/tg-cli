@@ -129,6 +129,10 @@ func TestAudit08_ForwardBatchDates(t *testing.T) {
 			}))
 			peer := &tg.InputPeerUser{UserID: 1}
 			res, err := forwardMessages(context.Background(), api, peer, peer, 1, rpc.ForwardParams{IDs: []int{4}})
+			// Raw is checked by the raw column tests; this test is about dates.
+			for i := range res.Messages {
+				res.Messages[i].Raw = nil
+			}
 			if err != nil || !reflect.DeepEqual(res.Messages, tc.want) {
 				t.Fatalf("messages=%+v err=%v, want %+v", res.Messages, err, tc.want)
 			}

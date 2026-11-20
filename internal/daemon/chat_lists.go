@@ -185,7 +185,7 @@ func (d *daemon) chatCommon(ctx context.Context, raw json.RawMessage) (any, erro
 	if len(result.Chats) > 0 {
 		chats := make([]rpc.Chat, 0, len(result.Chats))
 		for _, chat := range result.Chats {
-			chats = append(chats, rpc.Chat{ID: chat.ID, Type: chat.Type, Title: chat.Title, Username: chat.Username})
+			chats = append(chats, rpc.Chat{Raw: chat.Raw, ID: chat.ID, Type: chat.Type, Title: chat.Title, Username: chat.Username})
 		}
 		d.saveChats(ctx, rpc.MethodChatCommon, chats, false)
 	}

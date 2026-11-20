@@ -35,7 +35,7 @@ func TestAudit08_JoinSpecialTelegramAnswers(t *testing.T) {
 				p = peers.Options{}.Build(api).Channel(&tg.Channel{ID: 42, AccessHash: 99, Megagroup: true})
 			}
 			got, err := joinAdminChat(context.Background(), api, hash, p)
-			if err != nil || got != tc.want {
+			if err != nil || !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("got %+v err=%v, want %+v", got, err, tc.want)
 			}
 		})

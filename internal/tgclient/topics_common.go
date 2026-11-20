@@ -3,6 +3,7 @@ package tgclient
 import (
 	"context"
 
+	"github.com/gotd/td/tdp"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
 
@@ -155,6 +156,9 @@ func commonChatsAPI(ctx context.Context, api *tg.Client, peer peers.Peer, token 
 		chat, id, ok := commonChatOf(raw)
 		if !ok {
 			continue
+		}
+		if obj, ok := raw.(tdp.Object); ok {
+			chat.Raw = methodRaw(rawCommonChats, obj)
 		}
 		result.Chats = append(result.Chats, chat)
 		lastID = id

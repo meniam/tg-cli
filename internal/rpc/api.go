@@ -222,6 +222,8 @@ type Chat struct {
 	// A record that leaves them out must not clear what the database already
 	// knows: a move from a dialog, a peer or an event knows no flags.
 	FlagsKnown bool `json:"-"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 
 // ChatListResult is the result of MethodChatList.
@@ -257,6 +259,8 @@ type ChatInfo struct {
 	// RestrictionReason explains a restriction: platform, reason and the text
 	// shown to the user. It is absent when the chat is not restricted.
 	RestrictionReason []RestrictionReason `json:"restriction_reason,omitempty"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 
 // RestrictionReason is why Telegram restricts a chat. Text is what Telegram shows
@@ -301,6 +305,8 @@ type Message struct {
 	Edited             bool    `json:"edited,omitempty"`
 	Pinned             bool    `json:"pinned,omitempty"`
 	Service            string  `json:"service,omitempty"` // the kind of a service message
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 
 // ExportMessage is a locally stored message with an optional deletion marker.

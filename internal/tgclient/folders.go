@@ -84,8 +84,10 @@ func convertFolders(filters []tg.DialogFilterClass, self int64) (rpc.FoldersResu
 		var pinned, include, exclude []tg.InputPeerClass
 		switch v := raw.(type) {
 		case *tg.DialogFilterDefault:
+			f.Raw = messageRaw(v)
 			f.Kind = "all"
 		case *tg.DialogFilter:
+			f.Raw = messageRaw(v)
 			f.ID = v.ID
 			f.Kind = "filter"
 			f.Title = v.Title.Text
@@ -94,6 +96,7 @@ func convertFolders(filters []tg.DialogFilterClass, self int64) (rpc.FoldersResu
 			f.Rules = &rpc.FolderRules{Contacts: v.Contacts, NonContacts: v.NonContacts, Groups: v.Groups, Broadcasts: v.Broadcasts, Bots: v.Bots, ExcludeMuted: v.ExcludeMuted, ExcludeRead: v.ExcludeRead, ExcludeArchived: v.ExcludeArchived}
 			pinned, include, exclude = v.PinnedPeers, v.IncludePeers, v.ExcludePeers
 		case *tg.DialogFilterChatlist:
+			f.Raw = messageRaw(v)
 			f.ID = v.ID
 			f.Kind = "chatlist"
 			f.Title = v.Title.Text

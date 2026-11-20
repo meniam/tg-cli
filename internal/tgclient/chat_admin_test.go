@@ -22,14 +22,14 @@ func TestChatAdminBannedRights(t *testing.T) {
 	}
 }
 func TestChatAdminJoinResult(t *testing.T) {
-	got, err := joinResult(&tg.MessagesChatInviteJoinResultOk{Updates: &tg.Updates{Chats: []tg.ChatClass{&tg.Channel{ID: 42, Title: "test", Megagroup: true}}}})
+	got, err := joinResult(&tg.MessagesChatInviteJoinResultOk{Updates: &tg.Updates{Chats: []tg.ChatClass{&tg.Channel{ID: 42, Title: "test", Megagroup: true}}}}, rawImportInvite)
 	if err != nil || got.ChatID != -1000000000042 || got.Type != "supergroup" {
 		t.Fatalf("got %+v: %v", got, err)
 	}
-	if _, err = joinResult(&tg.MessagesChatInviteJoinResultWebView{}); err == nil {
+	if _, err = joinResult(&tg.MessagesChatInviteJoinResultWebView{}, rawImportInvite); err == nil {
 		t.Fatal("web view accepted")
 	}
-	if _, err = joinResult(&tg.MessagesChatInviteJoinResultOk{Updates: &tg.Updates{}}); err == nil {
+	if _, err = joinResult(&tg.MessagesChatInviteJoinResultOk{Updates: &tg.Updates{}}, rawImportInvite); err == nil {
 		t.Fatal("empty result accepted")
 	}
 }

@@ -31,6 +31,7 @@ func TestUnreadChatsReadOnlyAndArchive(t *testing.T) {
 		if err != nil || calls != 1 || len(result.Chats) != 1 || len(states) != 1 || !result.Chats[0].UnreadMark || !result.Complete {
 			t.Fatalf("result %+v states %+v calls %d err %v", result, states, calls, err)
 		}
+		assertOwnerRaw(t, states[0].Raw, "dialog")
 	}
 }
 
@@ -62,6 +63,8 @@ func TestUnreadMessagesReadMarkerAndFilterOutgoing(t *testing.T) {
 	if err != nil || len(calls) != 2 || len(out.Messages) != 1 || out.Messages[0].ID != 12 || out.NextCursor == "" || state == nil || state.ReadInboxMaxID != 9 || out.Unread != 2 || out.ReadInboxMaxID != 9 {
 		t.Fatalf("result %+v state %+v calls %v error %v", out, state, calls, err)
 	}
+	assertMessageRaw(t, out.Messages[0].Raw)
+	assertOwnerRaw(t, state.Raw, "dialog")
 }
 
 func TestUnreadForumTopic(t *testing.T) {

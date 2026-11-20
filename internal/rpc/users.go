@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"encoding/json"
 	"strings"
 	"tg-cli/internal/chatref"
 )
@@ -37,6 +38,8 @@ type UserProfile struct {
 	Status           string   `json:"status"`
 	LastSeen         string   `json:"last_seen,omitempty"`
 	CommonChatsCount int      `json:"common_chats_count"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 type ContactListParams struct {
 	Limit  int  `json:"limit,omitempty"`
@@ -52,6 +55,8 @@ type Contact struct {
 	Mutual    *bool  `json:"mutual,omitempty"`
 	Deleted   bool   `json:"deleted"`
 	IsBot     bool   `json:"-"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw json.RawMessage `json:"-"`
 }
 type ContactListResult struct {
 	Contacts   []Contact `json:"contacts"`
@@ -65,12 +70,14 @@ type ContactAddParams struct {
 	DryRun    bool   `json:"dry_run,omitempty"`
 }
 type ContactAddResult struct {
-	UserID    int64  `json:"user_id"`
-	FirstName string `json:"first_name" untrusted:"true"`
-	LastName  string `json:"last_name" untrusted:"true"`
-	IsContact bool   `json:"is_contact"`
-	Mutual    bool   `json:"mutual"`
-	DryRun    bool   `json:"dry_run,omitempty"`
+	// Raw carries the Telegram object as received; never encoded in responses.
+	Raw       json.RawMessage `json:"-"`
+	UserID    int64           `json:"user_id"`
+	FirstName string          `json:"first_name" untrusted:"true"`
+	LastName  string          `json:"last_name" untrusted:"true"`
+	IsContact bool            `json:"is_contact"`
+	Mutual    bool            `json:"mutual"`
+	DryRun    bool            `json:"dry_run,omitempty"`
 }
 type ContactDeleteParams struct {
 	User   string `json:"user"`

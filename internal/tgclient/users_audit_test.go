@@ -2,6 +2,7 @@ package tgclient
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/gotd/td/bin"
@@ -30,7 +31,11 @@ func TestAudit10_ContactWriteResults(t *testing.T) {
 	peer := mgr.User(u)
 
 	added, err := addContactAPI(ctx, api, mgr, peer, rpc.ContactAddParams{Phone: "123"})
-	if want := (rpc.ContactAddResult{UserID: 7, FirstName: "Ivan", LastName: "Petrov", IsContact: true, Mutual: true}); err != nil || added != want {
+	if len(added.Raw) == 0 {
+		t.Errorf("added raw is empty")
+	}
+	added.Raw = nil
+	if want := (rpc.ContactAddResult{UserID: 7, FirstName: "Ivan", LastName: "Petrov", IsContact: true, Mutual: true}); err != nil || !reflect.DeepEqual(added, want) {
 		t.Fatalf("added=%+v err=%v, want %+v", added, err, want)
 	}
 	renamed, err := addContactAPI(ctx, api, mgr, peer, rpc.ContactAddParams{FirstName: "Vanya", LastName: "P"})
