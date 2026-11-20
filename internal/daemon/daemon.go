@@ -83,6 +83,7 @@ type daemon struct {
 	store                *store.DB
 	sync                 *historySyncManager
 	full                 *chatFullSyncManager
+	background           *backgroundSync // nil when the scheduled history load is off
 	cancel               context.CancelFunc
 	once                 sync.Once
 	eventMu              sync.Mutex
@@ -225,6 +226,7 @@ func Run(ctx context.Context, opts Options) error {
 	go func() { defer close(idempotencyDone); d.pruneIdempotency(runCtx) }()
 	pruneDone := make(chan struct{})
 	go func() { defer close(pruneDone); d.pruneEvents(runCtx, eventPruneEvery, eventRetention, eventKeep) }()
+	d.startBackgroundSync(runCtx, nil, nil)
 
 	var tgDone <-chan error
 	switchDone := make(chan struct{})
@@ -395,6 +397,9 @@ func Run(ctx context.Context, opts Options) error {
 	<-switchDone
 	<-autoDone
 	<-pruneDone
+	if d.background != nil {
+		d.background.wait()
+	}
 	<-contactsDone
 	<-idempotencyDone
 	<-accountDone
@@ -575,6 +580,7 @@ func (d *daemon) status(ctx context.Context, _ json.RawMessage) (any, error) {
 		AuthLost:   d.getAuthLost(),
 		// The status request itself is active while it runs, do not count it.
 		ActiveRequests: max(d.srv.Active()-1, 0),
+		BackgroundSync: d.backgroundSyncStatus(),
 	}
 	if policy := d.policy(); policy.Enabled() || policy.WriteCount() > 0 || policy.AdminCount() > 0 || policy.CreateAllowed() || policy.ProfileAllowed() || policy.DialogsAllowed() || policy.SessionsAllowed() {
 		st.Access = &rpc.AccessStatus{Enabled: policy.Enabled(), Allow: policy.AllowCount(), Block: policy.BlockCount(), Write: policy.WriteCount(), Admin: policy.AdminCount(), Create: policy.CreateAllowed(), Profile: policy.ProfileAllowed(), Dialogs: policy.DialogsAllowed(), Sessions: policy.SessionsAllowed(), Closed: policy.Closed()}

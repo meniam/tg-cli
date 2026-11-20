@@ -112,6 +112,47 @@ type StatusResult struct {
 	AuthLost        string        `json:"auth_lost,omitempty"`
 	ActiveRequests  int           `json:"active_requests"`
 	Access          *AccessStatus `json:"access,omitempty"`
+	// BackgroundSync is always present, also when the scheduler is off.
+	BackgroundSync BackgroundSyncStatus `json:"background_sync"`
+}
+
+// States of the scheduled history load in BackgroundSyncStatus.State.
+const (
+	BackgroundSyncDisabled        = "disabled"         // the scheduler is off
+	BackgroundSyncWaitingWindow   = "waiting_window"   // outside the daily window
+	BackgroundSyncWaitingInterval = "waiting_interval" // inside the window, waiting for the next run
+	BackgroundSyncRunning         = "running"          // a chat is being loaded
+)
+
+// Results of the last run of the scheduled history load in
+// BackgroundSyncStatus.LastResult.
+const (
+	BackgroundSyncDone      = "done"      // the chat was loaded to its first message
+	BackgroundSyncCancelled = "cancelled" // the window ended or a manual load took over
+	BackgroundSyncFailed    = "failed"    // the load ended with an error
+	BackgroundSyncSkipped   = "skipped"   // nothing was loaded: no chat, no login or a busy manager
+)
+
+// BackgroundSyncStatus is the state of the scheduled history load.
+type BackgroundSyncStatus struct {
+	Enabled bool                 `json:"enabled"`
+	Window  BackgroundSyncWindow `json:"window"`
+	// State is one of the BackgroundSync* state constants.
+	State string `json:"state"`
+	// NextRunAt is a Unix time in seconds; null when disabled or running.
+	NextRunAt *int64 `json:"next_run_at"`
+	// LastRunAt is the Unix time in seconds the last run ended; null before the first run.
+	LastRunAt *int64 `json:"last_run_at"`
+	// LastResult is one of the BackgroundSync* result constants, empty before the first run.
+	LastResult string `json:"last_result"`
+	// CurrentChatID is the chat being loaded; null when nothing is loading.
+	CurrentChatID *int64 `json:"current_chat_id"`
+}
+
+// BackgroundSyncWindow is the daily window of the scheduled load, local clock "HH:MM".
+type BackgroundSyncWindow struct {
+	Start string `json:"start"`
+	End   string `json:"end"`
 }
 
 // AccessStatus reports access-list state without revealing chat IDs.
