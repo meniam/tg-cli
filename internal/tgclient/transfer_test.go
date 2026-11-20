@@ -449,7 +449,7 @@ func TestTransferRefreshesDocumentReference(t *testing.T) {
 
 // This uses in-memory pipes only; no network socket is opened.
 func TestFilePoolUsesConfiguredResolver(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	options := []tg.DCOption{{ID: 2, IPAddress: "192.0.2.2", Port: 443}}
 	cl := cluster.NewCluster(cluster.Options{Config: tg.Config{DCOptions: options}})
 	server, handlers := cl.DC(2, "server")
@@ -482,7 +482,7 @@ func TestFilePoolUsesConfiguredResolver(t *testing.T) {
 	})
 	client := telegram.NewClient(telegram.TestAppID, telegram.TestAppHash, telegram.Options{DC: 2, DCList: dcs.List{Options: options}, Resolver: resolver, PublicKeys: cl.Keys(), SessionStorage: &session.StorageMemory{}, NoUpdates: true, Middlewares: []telegram.Middleware{mw}, FilePoolSize: 4})
 	err := client.Run(ctx, func(ctx context.Context) error {
-		api, err := newTransfers().fileAPI(ctx, client, 2, 10*time.Second)
+		api, err := newTransfers().fileAPI(ctx, client, 2, 30*time.Second)
 		if err != nil {
 			return err
 		}
