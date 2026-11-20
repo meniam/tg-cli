@@ -85,15 +85,17 @@ tg chat overview --limit 2 --format jsonl
 **Answer.**
 
 ```json
-{"ok":true,"data":{"chats":[{"chat_id":-1001234567890,"type":"channel","title":"Release team","username":"release_team","created_at":1700000000,"muted":false,"unread":3,"messages":420,"my_messages":12,"first_message":{"id":10,"date":1700000100,"text":"Hello"},"last_message":{"id":430,"date":1700009000,"text":"Bye"},"history_complete":true}]}}
+{"ok":true,"data":{"chats":[{"chat_id":-1001234567890,"type":"channel","title":"Release team","username":"release_team","created_at":1700000000,"muted":false,"unread":3,"messages":420,"my_messages":12,"first_message":{"id":10,"date":1700000100,"text":"Hello"},"last_message":{"id":430,"date":1700009000,"text":"Bye"},"history_complete":true,"history_first_message_date":1700000100}]}}
 ```
 
 **Answer fields** (`data`): `chats` array; each row has `chat_id` integer, `type` string, `title` string (untrusted),
 `username` string (optional, untrusted), `created_at` integer (optional), `muted` bool, `mute_until`, `archived`,
 `pinned`, `unread`, `unread_mentions`, `unread_mark`, `state_synced_at` (optional), `messages` and `my_messages`
 integers, `first_message` and `last_message` objects with `id`, `date` and `text` (optional, text untrusted), and
-`history_complete` bool (optional). A field is absent when the database never learned it: a chat without a saved
+`history_complete` bool (optional), and `history_first_message_date` integer (optional). A field is absent when the database never learned it: a chat without a saved
 dialog state has no `unread`, a chat without stored messages has no `first_message`, and `history_complete` is absent when there is no saved sync state; it can be `false` while loading is incomplete.
+
+`history_first_message_date` is the Unix time of the first message of the chat. The history load saves it when it reaches the start of the chat, so it is absent until then. `first_message.date` is the oldest message the database holds now: it exists for a partly loaded chat too and changes while older pages arrive. It also moves when that message is deleted locally, while `history_first_message_date` stays as saved.
 
 **Exit codes.** 0; 2 `--limit` outside 1 to 500, or an unknown `--type`; 3 no Daemon; 4 the login was lost (`auth_lost`), or `--expect-user` does not match or cannot be verified.
 
@@ -714,6 +716,8 @@ No command flags.
 
 **Preconditions.** A running Daemon and a login. Put `--` before a negative chat id. `start` on a chat that is already queued or running changes nothing and returns the job; on a `complete` chat it answers `done` with no pages and no Telegram call; after `failed` or `cancelled` it continues from `oldest_id`.
 
+A manual start has priority over the scheduled load (see [background_sync in `daemon status`](daemon-and-auth.md#tg-daemon-status)): when the chat is not `complete`, the Daemon cancels any scheduled job, queued or running, and the manual job waits only for the manual jobs ahead of it. The pages the scheduled job saved stay, and the scheduler does not start a new run while any job is active. A manual job pauses 2 seconds between pages; a scheduled job pauses a random 2 to 8 seconds by default.
+
 **Example.**
 
 ```sh
@@ -724,10 +728,12 @@ tg chat sync start -- -1001234567890
 **Answer.**
 
 ```json
-{"ok":true,"data":{"chat_id":-1001234567890,"state":"queued","pages":0,"loaded":0,"complete":false,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:00Z"}}
+{"ok":true,"data":{"chat_id":-1001234567890,"state":"queued","source":"manual","pages":0,"loaded":0,"oldest_id":null,"newest_id":null,"complete":false,"first_message_date":null,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:00Z"}}
 ```
 
-**Answer fields** (`data`): `chat_id` integer, `state` string, `pages` integer, `loaded` integer, `oldest_id` integer (optional), `newest_id` integer (optional), `complete` boolean, `wait_seconds` integer (optional), `error_code` integer (optional), `error` string (optional), `started_at` string, `updated_at` string.
+**Answer fields** (`data`): `chat_id` integer, `state` string, `source` string (optional), `pages` integer, `loaded` integer, `oldest_id` integer (optional), `newest_id` integer (optional), `complete` boolean, `first_message_date` integer or null, `wait_seconds` integer (optional), `error_code` integer (optional), `error` string (optional), `started_at` string, `updated_at` string.
+
+`source` is `manual` for a job a command started and `background` for a job the scheduler started; it is absent when the chat has no job in this Daemon run. `first_message_date` is the Unix time of the first message of the chat; it is null until the load reaches the start of the chat.
 
 **Exit codes.** 0; 3, 4; 7 an unknown or closed chat.
 
@@ -760,7 +766,7 @@ tg chat sync status @release_team --fields state,pages,loaded,complete
 **Answer.** One job:
 
 ```json
-{"ok":true,"data":{"chat_id":-1001234567890,"state":"running","pages":3,"loaded":300,"oldest_id":3801,"newest_id":4102,"complete":false,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:07Z"}}
+{"ok":true,"data":{"chat_id":-1001234567890,"state":"running","source":"background","pages":3,"loaded":300,"oldest_id":3801,"newest_id":4102,"complete":false,"first_message_date":null,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:07Z"}}
 ```
 
 All jobs of the Daemon run (empty when nothing was started):
@@ -769,9 +775,9 @@ All jobs of the Daemon run (empty when nothing was started):
 {"ok":true,"data":{"jobs":[]}}
 ```
 
-**Answer fields** (`data`): `jobs` array, `jobs.chat_id` integer, `jobs.state` string, `jobs.pages` integer, `jobs.loaded` integer, `jobs.oldest_id` integer (optional), `jobs.newest_id` integer (optional), `jobs.complete` boolean, `jobs.wait_seconds` integer (optional), `jobs.error_code` integer (optional), `jobs.error` string (optional), `jobs.started_at` string, `jobs.updated_at` string.
+**Answer fields** (`data`): `jobs` array, `jobs.chat_id` integer, `jobs.state` string, `jobs.source` string (optional), `jobs.pages` integer, `jobs.loaded` integer, `jobs.oldest_id` integer (optional), `jobs.newest_id` integer (optional), `jobs.complete` boolean, `jobs.first_message_date` integer or null, `jobs.wait_seconds` integer (optional), `jobs.error_code` integer (optional), `jobs.error` string (optional), `jobs.started_at` string, `jobs.updated_at` string.
 
-With a chat the job fields are at the top level of `data`; without a chat they are inside `jobs`.
+With a chat the job fields are at the top level of `data`; without a chat they are inside `jobs`. The list shows the jobs of manual and of scheduled loads alike; `source` tells them apart. For a chat without a job in this Daemon run (`idle`) `source` is absent, and `first_message_date` comes from the saved progress. `source`, `pages` and `loaded` describe the job of this run; `oldest_id`, `newest_id`, `complete` and `first_message_date` describe the chat.
 
 **Exit codes.** 0 (also for a `failed` job); 2 `--format jsonl` with a chat; 3; 4 a chat reference that needs Telegram without a login; 7 an unknown or closed chat.
 
@@ -792,7 +798,7 @@ No command flags.
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon and a login. Put `--` before a negative chat id. `cancel` removes a job from the queue or aborts the current request. A new `start` continues from the saved `oldest_id`.
+**Preconditions.** A running Daemon and a login. Put `--` before a negative chat id. `cancel` removes a job from the queue or aborts the current request, a scheduled job included. A new `start` continues from the saved `oldest_id`.
 
 **Example.**
 
@@ -803,10 +809,12 @@ tg chat sync cancel @release_team
 **Answer.**
 
 ```json
-{"ok":true,"data":{"chat_id":-1001234567890,"state":"cancelled","pages":2,"loaded":200,"oldest_id":3901,"newest_id":4102,"complete":false,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:05Z"}}
+{"ok":true,"data":{"chat_id":-1001234567890,"state":"cancelled","source":"manual","pages":2,"loaded":200,"oldest_id":3901,"newest_id":4102,"complete":false,"first_message_date":null,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:05Z"}}
 ```
 
-**Answer fields** (`data`): `chat_id` integer, `state` string, `pages` integer, `loaded` integer, `oldest_id` integer (optional), `newest_id` integer (optional), `complete` boolean, `wait_seconds` integer (optional), `error_code` integer (optional), `error` string (optional), `started_at` string, `updated_at` string.
+**Answer fields** (`data`): `chat_id` integer, `state` string, `source` string (optional), `pages` integer, `loaded` integer, `oldest_id` integer (optional), `newest_id` integer (optional), `complete` boolean, `first_message_date` integer or null, `wait_seconds` integer (optional), `error_code` integer (optional), `error` string (optional), `started_at` string, `updated_at` string.
+
+`source` is `manual` for a job a command started and `background` for a job the scheduler started; it is absent when the chat has no job in this Daemon run. `first_message_date` is the Unix time of the first message of the chat; it is null until the load reaches the start of the chat.
 
 **Exit codes.** 0; 3, 4; 7 an unknown or closed chat.
 

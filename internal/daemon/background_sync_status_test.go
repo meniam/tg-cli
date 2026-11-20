@@ -295,7 +295,7 @@ func TestDaemonStatusBackgroundSyncJSON(t *testing.T) {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		t.Fatal(err)
 	}
-	const want = `{"enabled":false,"window":{"start":"08:00","end":"20:00"},"state":"disabled","next_run_at":null,"last_run_at":null,"last_result":"","current_chat_id":null}`
+	const want = `{"enabled":false,"window":{"start":"08:00","end":"20:00"},"state":"disabled","next_run_at":null,"last_run_at":null,"last_result":"","last_chat_id":null,"current_chat_id":null}`
 	if got := string(fields["background_sync"]); got != want {
 		t.Fatalf("background_sync = %s, want %s", got, want)
 	}

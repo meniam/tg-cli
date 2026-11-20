@@ -6,7 +6,7 @@ This page covers what every command shares: installation, profiles, the Daemon l
 
 | Page | Commands |
 | --- | --- |
-| [daemon-and-auth.md](daemon-and-auth.md) | `daemon start`, `status`, `stop`, `logs`; `auth login`, `status`, `resend`, `cancel` |
+| [daemon-and-auth.md](daemon-and-auth.md) | `daemon start`, `status`, `stop`, `logs`; the top-level `status`; `auth login`, `status`, `resend`, `cancel` |
 | [config.md](config.md) | `config path`, `init`, `show`, `migrate` |
 | [chats.md](chats.md) | `chat` reads, unread, changes, state, drafts, typing, administration and `sync` |
 | [messages-read.md](messages-read.md) | `message history`, `get`, `pinned`, `search`, `context`, `comments`, `link`, `export`, `watch` |
@@ -122,7 +122,7 @@ One Daemon runs per profile and holds the Telegram connection, the session, the 
 
 1. `tg daemon start` launches the Daemon as a detached background process and returns when its socket answers (up to 15 seconds). Credentials come from `TG_API_ID` and `TG_API_HASH` (your own application from https://my.telegram.org) or from `--client <preset>`, an official client preset, never both. The Daemon runs until `tg daemon stop` or a failure. With `--idle-timeout 30m` it stops itself after that long without a request; a running history load or an active `message watch` keeps it alive.
 2. `tg auth login` logs the profile in through the Daemon. The login is stored in the session and survives Daemon restarts.
-3. Most other commands send a request to the running Daemon. `config` commands and session import run locally; session export also works with a stopped Daemon. Without one the command exits with code 3 and the message ``the daemon is not running for profile "<name>": start it with `tg daemon start` ``.
+3. Most other commands send a request to the running Daemon. `config` commands and session import run locally; session export also works with a stopped Daemon. Without one the command exits with code 3 and the message ``the daemon is not running for profile "<name>": start it with `tg daemon start` ``. The exception is [`tg status`](daemon-and-auth.md#tg-status), a text command: it prints `daemon is not running` and the hint on stderr and leaves stdout empty, with the same exit code 3.
 4. `tg daemon stop` asks the Daemon to stop and waits until the process is gone (it fails if the process is alive after 10 seconds).
 
 Starting again on a profile whose Daemon is running is not an error: the command reports the PID of the Daemon that is there and starts no second one. Details, flags and the journal are in [daemon-and-auth.md](daemon-and-auth.md).
@@ -134,7 +134,7 @@ What each group of commands needs:
 | `schema`, `version`, `daemon logs`, `config *`, `session import` | no | no |
 | `session export` | no | an authorized saved session |
 | `daemon start` | no (it starts one) | no |
-| `daemon status`, `daemon stop`, `auth *` | yes | no |
+| `daemon status`, `status`, `daemon stop`, `auth *` | yes | no |
 | `note add`, `note list`, `note delete`, `search`, `message export --local`, `message context --local`, `chat sync status` without a chat | yes | no |
 | `message export-month`, `message export-verify` | yes | no; monthly export requires a known account ID |
 | `chat sync status <chat>` | yes | the reference is resolved like in other commands: a check with a numeric id unknown to the session gave exit code 4 |
@@ -212,6 +212,8 @@ The commands that do not follow the envelope: `message watch` prints one event p
 - `message watch` and `message export` default to it: one whole event or message per line, no envelope.
 - A command that does not support it is exit code 2: `{"ok":false,"error":{"code":"usage","message":"--format jsonl is for commands that return a list, \"tg version\" is not one"}}`.
 
+`tg status` prints text only and has no JSON form: an explicit `--format json`, `jsonl` or `toon` is exit code 2, and `--human` is accepted and changes nothing.
+
 ```console
 $ tg chat list --limit 2 --format jsonl
 {"id":-1001234567890,"type":"supergroup","title":"Release team","username":"release_team","unread":3}
@@ -280,7 +282,7 @@ Every command in `tg schema` has a safety class (`safety`) and a `dangerous` mar
 
 | Safety class | Meaning | Commands |
 | --- | --- | --- |
-| `read` | only reads | `auth status`, `daemon status`, `daemon logs`, `chat list`, `chat resolve`, `chat info`, `chat invite-info`, `chat members`, `chat topics`, `chat common`, `chat sync status`, `message history`, `message get`, `message pinned`, `message search`, `message context`, `message comments`, `message link`, `message export`, `message watch`, `note list`, `search`, `schema`, `version` |
+| `read` | only reads | `auth status`, `daemon status`, `status`, `daemon logs`, `chat list`, `chat resolve`, `chat info`, `chat invite-info`, `chat members`, `chat topics`, `chat common`, `chat sync status`, `message history`, `message get`, `message pinned`, `message search`, `message context`, `message comments`, `message link`, `message export`, `message watch`, `note list`, `search`, `schema`, `version` |
 | `local_write` | writes to the local database or starts and stops the Daemon | `daemon start`, `daemon stop`, `chat sync start`, `chat sync cancel`, `note add`, `note delete` |
 | `account_write` | changes the Telegram account or its login state | `auth login`, `auth resend`, `auth cancel`, `chat mark-read`, `message send`, `message edit`, `message delete`, `message forward`, `message send-media`, `message react`, `message pin`, `message unpin`, `message poll` |
 

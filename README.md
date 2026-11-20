@@ -122,6 +122,19 @@ tg search "invoice" --scope chats,messages --prefix   # local database, no login
 echo "Follow up on Monday" | tg note add --chat @username --author ai --tag followup -
 ```
 
+**4. See what the daemon is doing.** `tg status` prints one text screen for a person: the account, the connection, the access lists, the size of the database, how many chats are loaded to their first message, the background load, the active jobs, the throttle and the events. It has no JSON form (`tg daemon status` has the same facts as JSON) and without a running daemon it exits with code 3.
+
+```sh
+tg status
+```
+
+**Optional: load old history on a schedule.** It is off by default, and while it is off the daemon makes no extra request to Telegram. With the setting below the daemon takes one chat per run, a random 40 to 180 minutes apart and only between 08:00 and 20:00 of the local time of the machine, and loads its history to the first message with random 2 to 8 second pauses. It goes through the same throttle as every request, takes people first, then chats from folders, then the rest, skips chats the access lists close, and gives way to a manual `tg chat sync start`. The state is the `background_sync` block of `tg daemon status` and the `Background` row of `tg status`. With `--idle-timeout` set the daemon may stop before a run. The schedule is checked by tests on a fake client and clock and has not run on a live account. Keys and limits: [overview.md](docs/cli/overview.md#request-throttle-and-flood_wait).
+
+```toml
+[background_sync]
+enabled = true
+```
+
 A chat is addressed as `@username`, a Bot API id (users positive, groups negative, channels from `-1000000000000`), the phone number of a contact, or a `t.me` link. More: [install and run](docs/cli/overview.md#install-and-run), [profiles](docs/cli/overview.md#profiles-and-the-data-directory), [global flags](docs/cli/overview.md#global-flags).
 
 ## What it can do
@@ -175,7 +188,7 @@ What is not checked on a live account is listed only in [`FEATURES.md`](FEATURES
 
 Planned, not implemented. [`FEATURES.md`](FEATURES.md) is the source of truth.
 
-- **Local history.** Loading many chats with one command or on a schedule, export from Telegram, earlier versions of edits, writing an export to a file. Today the database holds what you read, what `chat sync` loaded on request one chat at a time, and the description, member count and settings that `chat full` read; `chat overview` summarises it offline and `message export --local` prints it.
+- **Local history.** Loading many chats with one command, export from Telegram, earlier versions of edits, writing an export to a file. Today the database holds what you read, what `chat sync` loaded on request one chat at a time or, when you enable `[background_sync]`, on a schedule, and the description, member count and settings that `chat full` read; `chat overview` summarises it offline and `message export --local` prints it.
 - And more: see the full list in `FEATURES.md`.
 
 Not goals: the Bot API and bots, a TUI client for humans, replacing the official apps, an MCP interface in the first stage (a decision for now, not forever), a generic `execute` method that runs any command as argv (the daemon serves typed methods, and `tg schema` lists the commands).

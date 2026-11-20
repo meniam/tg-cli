@@ -44,7 +44,7 @@ Both sources together are exit code 2 (`use either --client or TG_API_ID and TG_
 - The command waits up to 15 seconds for the socket. If the process exits earlier, the command fails and shows the tail of the journal; if the socket does not answer in time, the error names the journal file. Errors of a background start are never hidden by `--quiet`.
 - Starting again on a profile whose Daemon is running is not an error: the command answers `running: true` with the PID of the running Daemon, starts nothing, and needs no credentials, because two processes must never share one Telegram session.
 - `--foreground` keeps the Daemon in the terminal. Its journal goes to stderr, there is no `daemon.log`, and after the Daemon stops the command returns `{"stopped":true}`. A second `--foreground` Daemon on a profile that already has one is refused (exit code 1, `a daemon is already running for this profile`).
-- `--idle-timeout 30m` stops the Daemon after that long without a request. The default is `0`, never. A negative value is exit code 2. A running history load and an active `message watch` count as activity and keep the Daemon alive.
+- `--idle-timeout 30m` stops the Daemon after that long without a request. The default is `0`, never. A negative value is exit code 2. A running history load and an active `message watch` count as activity and keep the Daemon alive. The wait of the [scheduled history load](#tg-daemon-status) for its next run is not activity: with `--idle-timeout` set and `[background_sync] enabled = true` the Daemon can stop before the window opens or before a run is due, and no scheduled load happens. Leave the flag at `0` for a Daemon that has to run scheduled loads.
 - The background process is the same binary started again with `--foreground` and a hidden `--journal <path>` flag.
 
 **Example.**
@@ -68,7 +68,7 @@ TG_API_ID=12345 TG_API_HASH=0123456789abcdef0123456789abcdef tg daemon start --i
 
 ### tg daemon status
 
-Shows the state of the Daemon and of the account: whether it is connected and logged in, who the user is, how many requests are active, and the state of the chat access lists.
+Shows the state of the Daemon and of the account: whether it is connected and logged in, who the user is, how many requests are active, the state of the chat access lists and the state of the scheduled history load. For a text overview of all of this, with the database and the jobs, use [`tg status`](#tg-status).
 
 ```text
 tg daemon status [flags]
@@ -94,20 +94,31 @@ tg daemon status
 **Answer.** A logged-in profile with the read filter on and one chat in `write`:
 
 ```json
-{"ok":true,"data":{"transport":"auto","active_transport":"wss","transport_switches":1,"connection":"ready","dc":2,"reconnects":0,"profile":"default","pid":48213,"connected":true,"authorized":true,"user":{"id":123456789,"username":"me"},"active_requests":0,"access":{"enabled":true,"allow":1,"block":0,"write":1}}}
+{"ok":true,"data":{"transport":"auto","active_transport":"wss","transport_switches":1,"connection":"ready","dc":2,"reconnects":0,"profile":"default","pid":48213,"connected":true,"authorized":true,"user":{"id":123456789,"username":"me"},"active_requests":0,"access":{"enabled":true,"allow":1,"block":0,"write":1},"background_sync":{"enabled":false,"window":{"start":"08:00","end":"20:00"},"state":"disabled","next_run_at":null,"last_run_at":null,"last_result":"","last_chat_id":null,"current_chat_id":null}}}
 ```
 
 A fresh profile without a login and without `access.json`:
 
 ```json
-{"ok":true,"data":{"transport":"tcp","transport_switches":0,"connection":"connecting","reconnects":0,"profile":"default","pid":48213,"connected":false,"authorized":false,"active_requests":0}}
+{"ok":true,"data":{"transport":"tcp","transport_switches":0,"connection":"connecting","reconnects":0,"profile":"default","pid":48213,"connected":false,"authorized":false,"active_requests":0,"background_sync":{"enabled":false,"window":{"start":"08:00","end":"20:00"},"state":"disabled","next_run_at":null,"last_run_at":null,"last_result":"","last_chat_id":null,"current_chat_id":null}}}
 ```
 
-**Answer fields** (`data`): `transport` string, `active_transport` string (optional, `tcp` or `wss` after a connection), `transport_switches` integer, `proxy` string (optional, without credentials), `connection` string, `dc` integer (optional), `reconnects` integer, `profile` string, `pid` integer, `connected` boolean, `authorized` boolean, `user` object (optional), `user.id` integer (optional), `user.username` string (optional), `user.first_name` string (optional), `user.last_name` string (optional), `login_state` string (optional), `auth_lost` string (optional), `active_requests` integer, `access` object (optional), `access.enabled` boolean (optional), `access.allow` integer (optional), `access.block` integer (optional), `access.write` integer (optional), `access.closed` boolean (optional).
+**Answer fields** (`data`): `transport` string, `active_transport` string (optional, `tcp` or `wss` after a connection), `transport_switches` integer, `proxy` string (optional, without credentials), `connection` string, `dc` integer (optional), `reconnects` integer, `profile` string, `pid` integer, `connected` boolean, `authorized` boolean, `user` object (optional), `user.id` integer (optional), `user.username` string (optional), `user.first_name` string (optional), `user.last_name` string (optional), `login_state` string (optional), `auth_lost` string (optional), `active_requests` integer, `access` object (optional), `access.enabled` boolean (optional), `access.allow` integer (optional), `access.block` integer (optional), `access.write` integer (optional), `access.closed` boolean (optional), `background_sync` object, `background_sync.enabled` boolean, `background_sync.window` object, `background_sync.window.start` string, `background_sync.window.end` string, `background_sync.state` string, `background_sync.next_run_at` integer or null, `background_sync.last_run_at` integer or null, `background_sync.last_result` string, `background_sync.last_chat_id` integer or null, `background_sync.current_chat_id` integer or null.
 
 `connection` is `connecting`, `ready`, `disconnected`, `restarting` or `offline`; `connected` is true when it is `ready`. During a client restart, Telegram operations return exit code 10 (`offline`), while requests admitted before the restart are given 30 seconds to finish before their contexts are cancelled. While offline, the last cached account is shown without a Telegram request. A Telegram request waits up to 15 seconds for a connection and then returns exit code 10 (`offline`). Local operations remain available.
 
 `login_state` is present while a login is in progress: `qr_scan`, `code_required`, `password_required` or `authorized` (see [auth login](#tg-auth-login)). The `access` object is shown when the read filter is on, `write` or `admin` is nonempty, or `create`, `profile`, `dialogs` or `sessions` is enabled. `enabled` tells whether the read filter is on, `allow`, `block` and `write` are counts (`write` is shown when it is not empty), and `closed: true` means that `access.json` could not be read, parsed or has a mode that is too wide, so everything is closed. It never shows chat IDs. See [access.md](access.md).
+
+**The `background_sync` block.** It is always present and describes the scheduled history load: while `[background_sync] enabled = true`, the Daemon loads older history of one chat per run, in a daily window (see [`[background_sync]`](overview.md#request-throttle-and-flood_wait) for the settings). `enabled` repeats the setting, and `window.start` and `window.end` are the local times of the Daemon machine, `HH:MM`. `state` is one of four values:
+
+| `state` | Meaning |
+| --- | --- |
+| `disabled` | The scheduler is off, the default. The Daemon makes no request for it; `window` still shows the configured times, and the run fields are `null` or empty. |
+| `waiting_window` | It is on and the clock is outside the window; the next run is at the window start or later. |
+| `waiting_interval` | It is on, the clock is inside the window, and the next run is not due yet. |
+| `running` | A run is in progress. It starts with the refresh of the folder snapshot when that snapshot is missing or older than 4 hours, so `running` can hold for a while before any chat is picked. |
+
+`next_run_at` is a Unix time in seconds; it is `null` when the state is `disabled` or `running`. After a Daemon start the first run is a random 40 to 180 minutes away (with the default settings), and each later run is counted from the end of the previous one and moved to the window start when it would fall outside the window. `last_run_at` is the Unix time the last run ended, `null` before the first run. `last_result` is `done` (the chat was loaded to its first message), `cancelled` (the window ended or a manual load took over), `failed` (the load ended with an error; the chat is not picked again until the next local day) or `skipped` (nothing was loaded: no chat left to pick, no login, a busy history manager, or the window ended during the folder refresh); it is an empty string before the first run. `last_chat_id` is the chat of the last run that picked one, `null` until then; a `skipped` run that picked none leaves the earlier value unchanged, so read it together with `last_result`. `current_chat_id` is the chat being loaded; it is `null` while no chat is loading, also during the folder refresh. The scheduler state is kept in memory: after a Daemon restart the schedule starts again. An active `chat sync` job of a chat shows its `source` in [`chat sync status`](chats.md#tg-chat-sync-status).
 
 **Exit codes.** 0; 3 no Daemon is running for the profile.
 
@@ -115,7 +126,7 @@ A fresh profile without a login and without `access.json`:
 
 ### tg status
 
-Prints a text dashboard for a person: account, connection, access lists, database, history completeness, the background history load, jobs, throttle and events. The Daemon collects the numbers in one request (`dashboard`) that only reads and makes no Telegram request.
+Prints a text dashboard for a person: what the Daemon is doing, who the account is, how full the local database is and how far the history load has come. The Daemon collects the numbers in one request (the `dashboard` method) that only reads: it makes no Telegram request, and the answer has chat IDs but no chat title or message text. The command prints the answer and adds nothing of its own.
 
 ```text
 tg status [flags]
@@ -127,11 +138,52 @@ No command flags.
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `human`.
 
-**Preconditions.** A running Daemon. No login: without one the `Account` row says `not signed in`.
+**Preconditions.** A running Daemon. No login and no connection: after a lost login the command still prints what the Daemon knows, and the `Account` row says `not signed in`.
 
-The output is text and has no JSON form: `--format json`, `jsonl` and `toon` exit with code 2, `--human` changes nothing. For the same facts as JSON use [daemon status](#tg-daemon-status).
+The output is text and has no JSON form: an explicit `--format json`, `jsonl` or `toon` exits with code 2 before the Daemon is asked, `--human` and `--format human` are accepted and change nothing. For the same facts as JSON use [daemon status](#tg-daemon-status).
 
-**Exit codes.** 0; 2 a JSON format was requested; 3 no Daemon is running for the profile (the hint is on stderr).
+**Example.**
+
+```sh
+tg status
+```
+
+**Output.**
+
+```text
+tg status  profile default  daemon pid 80307, up 3d 4h
+
+Account      @name (id 114954417), signed in
+Connection   ready, tcp, dc 2, reconnects 0
+Access       lists off, writes allowed in 1 chat
+Database     107.3 MB, schema 9, 245 chats, 67583 messages
+History      4 of 245 chats loaded to the first message
+             people 3 of 27 | in folders 0 of 12 | others 1 of 206
+Background   on, window 08:00-20:00, waiting for the next run
+             next run 14:35, last run 11:02 (chat 123, done)
+Jobs         chat sync: none | chat full: none
+Throttle     no flood wait, 0 queued
+Events       12 in the last hour, 71052 stored
+```
+
+**How to read the blocks.**
+
+- **Header.** The profile, the PID of the Daemon and its uptime (`3d 4h`, `4h 12m`, `1m 30s`).
+- **Account.** `@username (id N), signed in`, or the name when the account has no username. `not signed in` when nobody is logged in or the login was lost.
+- **Connection.** The state (`ready`, `connecting`, `disconnected`, `restarting` or `offline`), the transport (`auto (using wss)` when the Daemon picked it), the data center and the number of reconnects. `unavailable` when the client reports nothing.
+- **Access.** `lists off`, or `lists on (allow N, block M)` when the read filter is on, or `access file unreadable, every chat closed`; then `writes off` or `writes allowed in N chats`. The counts are those of [`daemon status`](#tg-daemon-status), and no ID is shown.
+- **Database.** The size of the `store.db` file in decimal megabytes (the write-ahead log is not counted), the schema version, and the number of chats and of messages that the access lists show. A closed chat is in no count; a message marked deleted is not counted either.
+- **History.** How many of the visible chats are loaded to their first message (`complete`), in total and in three groups: people (type `user`), chats the owner pinned or included in a folder, and the others, bots included. The groups are the ones the scheduled load picks from, in that order.
+- **Background.** The scheduled history load: `off (enable with [background_sync] enabled = true)`, or `on`, the window and the state (`waiting for the window to open`, `waiting for the next run`, `running`). The second line has the next run and the last run with its chat and result (`done`, `cancelled`, `failed` or `skipped`; a `skipped` run names no chat), or `no run yet`. The fields are those of the `background_sync` block of [`daemon status`](#tg-daemon-status).
+- **Jobs.** The active `chat sync` jobs, each with its chat, state, source (`manual` or `background`), pages and loaded messages, and the state of `chat full` while that job runs; `none` when idle.
+- **Throttle.** The rest of the account-wide `FLOOD_WAIT` pause, and the number of requests that wait in the throttle queue.
+- **Events.** The events of the stream stored in the last hour and in the whole `events` table.
+
+Clock times are in the local time of the machine that runs `tg status`: `HH:MM` for today, the date and time for another day.
+
+**Exit codes.** 0; 2 a JSON format was requested; 3 no Daemon is running for the profile: stdout stays empty, and stderr says `daemon is not running` and `start it with tg daemon start` (with `--profile <name>` added when another profile was chosen); a Daemon that does not know the `dashboard` method, such as an older one, answers with an error envelope.
+
+**Verification.** The text is checked against golden files and the method against a fake Telegram client in tests; it was not run on a live account. See [FEATURES.md](../../FEATURES.md), item 12.4.
 
 ### tg daemon stop
 

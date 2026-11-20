@@ -145,6 +145,9 @@ type BackgroundSyncStatus struct {
 	LastRunAt *int64 `json:"last_run_at"`
 	// LastResult is one of the BackgroundSync* result constants, empty before the first run.
 	LastResult string `json:"last_result"`
+	// LastChatID is the chat of the last run that picked one; null until a run has picked a chat.
+	// A run that ended as skipped without a chat leaves it unchanged.
+	LastChatID *int64 `json:"last_chat_id"`
 	// CurrentChatID is the chat being loaded; null when nothing is loading.
 	CurrentChatID *int64 `json:"current_chat_id"`
 }
