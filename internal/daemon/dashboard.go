@@ -44,6 +44,7 @@ func (d *daemon) dashboard(ctx context.Context, _ json.RawMessage) (any, error) 
 		History:        dashboardHistory(stats),
 		Background:     d.backgroundSyncStatus(),
 		SemanticSearch: d.semanticIndexStatus(),
+		Voice:          d.voiceStatusBlock(ctx),
 		Jobs:           d.dashboardJobs(),
 		Events:         rpc.DashboardEvents{LastHour: stats.EventsSince, Total: stats.EventsTotal},
 	}

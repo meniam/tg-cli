@@ -27,9 +27,12 @@ type Dashboard struct {
 	// SemanticSearch is the state of the semantic indexer, the same value as the
 	// semantic_search block of the daemon status; it is always present.
 	SemanticSearch SemanticIndexStatus `json:"semantic_search"`
-	Jobs           DashboardJobs       `json:"jobs"`
-	Throttle       DashboardThrottle   `json:"throttle"`
-	Events         DashboardEvents     `json:"events"`
+	// Voice is the state of the local transcription queue, the same value as the
+	// voice block of the daemon status; it is always present.
+	Voice    VoiceStatus       `json:"voice"`
+	Jobs     DashboardJobs     `json:"jobs"`
+	Throttle DashboardThrottle `json:"throttle"`
+	Events   DashboardEvents   `json:"events"`
 }
 
 // DashboardAccount is the account the daemon serves. User is null and

@@ -163,6 +163,10 @@ func (d *daemon) handleEvent(event rpc.Event) {
 			if !d.retryEventWrite(ctx, func() error { return d.persistMessages(ctx, event.Type, []rpc.Message{message}) }) {
 				return
 			}
+			// A new voice message goes to the transcription queue once it is saved.
+			if event.Type == rpc.EventMessageNew {
+				d.voiceIncoming(ctx, message)
+			}
 		}
 	case rpc.EventMessageDelete:
 		var data rpc.MessageDeleteData

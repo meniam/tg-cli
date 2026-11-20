@@ -47,6 +47,18 @@ type configSemanticSearchResult struct {
 	// MinSimilarity is the lowest cosine of a vector hit; 0 turns the threshold off.
 	MinSimilarity float64 `json:"min_similarity"`
 }
+type configVoiceTranscriptionResult struct {
+	Enabled         bool   `json:"enabled"`
+	FFmpeg          string `json:"ffmpeg"`
+	MaxVoiceMB      int    `json:"max_voice_mb"`
+	MaxVideoNoteMB  int    `json:"max_video_note_mb"`
+	MaxVideoMB      int    `json:"max_video_mb"`
+	MaxVideoMinutes int    `json:"max_video_minutes"`
+	DailyDownloadMB int    `json:"daily_download_mb"`
+	DailyFiles      int    `json:"daily_files"`
+	Pause           string `json:"pause"`
+	Threads         int    `json:"threads"`
+}
 type configProfileResult struct {
 	Client    string `json:"client"`
 	Device    string `json:"device"`
@@ -57,13 +69,14 @@ type configShowResult struct {
 	Home string `json:"home"`
 	// DBDir is the directory of the profile databases next to the configuration
 	// file. home no longer says where the history lives.
-	DBDir          string                         `json:"db_dir"`
-	DefaultProfile string                         `json:"default_profile"`
-	Files          configFilesResult              `json:"files"`
-	Behavior       configBehaviorResult           `json:"behavior"`
-	BackgroundSync configBackgroundSyncResult     `json:"background_sync"`
-	SemanticSearch configSemanticSearchResult     `json:"semantic_search"`
-	Profiles       map[string]configProfileResult `json:"profiles"`
+	DBDir              string                         `json:"db_dir"`
+	DefaultProfile     string                         `json:"default_profile"`
+	Files              configFilesResult              `json:"files"`
+	Behavior           configBehaviorResult           `json:"behavior"`
+	BackgroundSync     configBackgroundSyncResult     `json:"background_sync"`
+	SemanticSearch     configSemanticSearchResult     `json:"semantic_search"`
+	VoiceTranscription configVoiceTranscriptionResult `json:"voice_transcription"`
+	Profiles           map[string]configProfileResult `json:"profiles"`
 }
 type configInitResult struct {
 	Path    string `json:"path"`
@@ -124,7 +137,7 @@ func (a *app) configShow(cmd *cobra.Command, _ []string) error {
 			return fail(exitcode.Usage, "%v", err)
 		}
 	}
-	result := configShowResult{Home: a.config.Home, DBDir: dbRoot, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}, Behavior: configBehaviorResult{a.config.Behavior.ThrottlePercent, a.config.Behavior.FloodAutoWait, a.config.Behavior.ExpectUser}, BackgroundSync: configBackgroundSyncResult(a.config.BackgroundSync), SemanticSearch: configSemanticSearchResult(a.config.SemanticSearch), Profiles: map[string]configProfileResult{}}
+	result := configShowResult{Home: a.config.Home, DBDir: dbRoot, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}, Behavior: configBehaviorResult{a.config.Behavior.ThrottlePercent, a.config.Behavior.FloodAutoWait, a.config.Behavior.ExpectUser}, BackgroundSync: configBackgroundSyncResult(a.config.BackgroundSync), SemanticSearch: configSemanticSearchResult(a.config.SemanticSearch), VoiceTranscription: configVoiceTranscriptionResult(a.config.VoiceTranscription), Profiles: map[string]configProfileResult{}}
 	for name, p := range a.config.Profiles {
 		proxy, err := netconf.ParseProxy(p.Proxy)
 		if err != nil {

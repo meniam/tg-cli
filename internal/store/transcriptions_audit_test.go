@@ -50,7 +50,7 @@ func TestAudit08_TranscriptionPutOverwritesAndStampsTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := db.GetTranscription(ctx, 1, 2)
-	want := Transcription{ChatID: 1, MessageID: 2, TranscriptionID: 6, Text: "new", Pending: true, UpdatedAt: 400}
+	want := Transcription{ChatID: 1, MessageID: 2, TranscriptionID: 6, Text: "new", Pending: true, UpdatedAt: 400, Source: TranscriptionSourceTelegram}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, %v; want %+v", got, err, want)
 	}

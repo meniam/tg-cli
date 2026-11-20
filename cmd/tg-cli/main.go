@@ -6,11 +6,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 
+	"tg-cli/internal/chatref"
 	"tg-cli/internal/cli"
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/store"
@@ -67,6 +69,26 @@ type managedTelegram struct {
 	*tgclient.Client
 	state *stateKV
 }
+
+// DownloadVoiceFile and CleanVoiceTempDir make the client the voice downloader
+// of the Daemon. The Daemon declares its own types so that it does not import
+// tgclient; this adapter translates the two limit errors the worker acts on.
+func (m *managedTelegram) DownloadVoiceFile(ctx context.Context, ref chatref.Ref, messageID int, req daemon.VoiceDownload) (daemon.VoiceFile, error) {
+	file, err := m.Client.DownloadToFile(ctx, ref, messageID, tgclient.FileDownload{Dir: req.Dir, MaxBytes: req.MaxBytes, ExpectedSize: req.ExpectedSize})
+	switch {
+	case errors.Is(err, tgclient.ErrFileTooLarge):
+		return daemon.VoiceFile{}, daemon.ErrVoiceTooLarge
+	case errors.Is(err, tgclient.ErrFileSizeMismatch):
+		return daemon.VoiceFile{}, daemon.ErrVoiceSizeMismatch
+	case err != nil:
+		return daemon.VoiceFile{}, err
+	}
+	return daemon.VoiceFile{Path: file.Path, Size: file.Size}, nil
+}
+
+var _ daemon.VoiceDownloader = (*managedTelegram)(nil)
+
+func (m *managedTelegram) CleanVoiceTempDir(dir string) error { return tgclient.CleanTempDir(dir) }
 
 func (m *managedTelegram) Run(ctx context.Context) error {
 	if m.state != nil {

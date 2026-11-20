@@ -22,7 +22,7 @@ func (a *app) statusCommand() *cobra.Command {
 	return a.annotate(&cobra.Command{
 		Use:   "status",
 		Short: "Show a text dashboard of the daemon, the account, the database and the background history load (read only)",
-		Long: "Print one readable block per topic: account, connection, access lists, database, history completeness, the background load, jobs, throttle and events.\n" +
+		Long: "Print one readable block per topic: account, connection, access lists, database, history completeness, the background load, the semantic index, the voice queue, jobs, throttle and events.\n" +
 			"The output is text for a person and has no JSON form: --format json, jsonl and toon are refused with exit code 2, --human is accepted and changes nothing.\n" +
 			"The data comes from the daemon in one request that only reads, so the command works while the login is lost and makes no Telegram request. For the same facts as JSON use `daemon status`.\n" +
 			"Without a running daemon the command prints a hint on stderr and exits with code 3.",
@@ -86,6 +86,7 @@ func renderDashboard(d rpc.Dashboard, now time.Time) string {
 	row("History", dashboardHistory(d.History)...)
 	row("Background", dashboardBackground(d.Background, now)...)
 	row("Semantic", dashboardSemantic(d.SemanticSearch, now))
+	row("Voice", dashboardVoice(d.Voice, now))
 	row("Jobs", dashboardJobs(d.Jobs))
 	row("Throttle", dashboardThrottle(d.Throttle))
 	row("Events", fmt.Sprintf("%d in the last hour, %d stored", d.Events.LastHour, d.Events.Total))
@@ -254,6 +255,42 @@ func dashboardSemantic(s rpc.SemanticIndexStatus, now time.Time) string {
 			state += " (" + plainText(s.Reason) + ")"
 		}
 		parts = append(parts, state)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// dashboardVoice is the one line of the local transcription queue: off, or on
+// with the queue, today's work and the downloads, and the reason the queue waits
+// or the last failure. Every word is a machine word or a number.
+func dashboardVoice(v rpc.VoiceStatus, now time.Time) string {
+	if !v.Enabled {
+		return "off (enable with [voice_transcription] enabled = true)"
+	}
+	if !v.Installed {
+		line := "on, engine not installed"
+		if len(v.Missing) > 0 {
+			missing := make([]string, 0, len(v.Missing))
+			for _, m := range v.Missing {
+				missing = append(missing, plainText(m))
+			}
+			line += " (missing " + strings.Join(missing, ", ") + ")"
+		}
+		return line
+	}
+	parts := []string{"on", fmt.Sprintf("%d queued", v.Queue.Queued)}
+	if v.Queue.Running > 0 {
+		parts = append(parts, fmt.Sprintf("%d running", v.Queue.Running))
+	}
+	parts = append(parts, fmt.Sprintf("%d done today", v.DoneToday), fmt.Sprintf("%d MB", v.BytesToday>>20))
+	if v.Paused != "" {
+		pause := "paused: " + plainText(v.Paused)
+		if v.PausedUntil != nil {
+			pause += " until " + dashboardClock(*v.PausedUntil, now)
+		}
+		parts = append(parts, pause)
+	}
+	if v.LastFailure != "" {
+		parts = append(parts, "last failure: "+plainText(v.LastFailure))
 	}
 	return strings.Join(parts, ", ")
 }

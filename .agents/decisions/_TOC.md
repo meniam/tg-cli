@@ -68,3 +68,5 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-20 — [tg settings показывает id чатов из allow и block только с фразой владельца](20261120_2344_tg_settings_shows_chat_ids_of_allow_and_block_only_with_the_owner_passphrase.md)
 - 2026-11-20 — [Первую фразу владельца задаёт tg settings token init, пока хэша в базе нет](20261120_2344_the_first_owner_passphrase_is_set_by_token_init_while_no_hash_exists.md)
 - 2026-11-20 — [Фраза владельца защищает только ключи access.*, остальные настройки пишутся без неё](20261120_2344_the_owner_passphrase_guards_only_access_settings.md)
+- 2026-11-20 — [Голосовые, кружки и видео расшифровывает локальная модель GigaAM через постоянную очередь](20261120_2238_voice_is_transcribed_locally_by_gigaam_through_a_persistent_queue.md)
+- 2026-11-20 — [Файлы для расшифровки качаются в закрытый временный каталог демона под суточным бюджетом](20261120_2239_voice_files_download_to_a_private_temp_dir_under_a_daily_budget.md)

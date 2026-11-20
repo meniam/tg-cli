@@ -53,12 +53,25 @@ func (d *daemon) applyTranscriptionUpdate(ctx context.Context, t store.Transcrip
 	}
 }
 
+// messageTranscribe serves `message transcribe`. By default it goes through the
+// local voice queue; only an explicit Telegram request asks Telegram to
+// transcribe (messages.transcribeAudio), the single path that does.
 func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (any, error) {
 	var p rpc.TranscribeParams
 	if err := decodeParams(raw, &p); err != nil {
 		return nil, err
 	}
-	if p.ID <= 0 || p.WaitMS < 0 || p.WaitMS > 90000 {
+	if p.Telegram {
+		return d.messageTranscribeTelegram(ctx, p)
+	}
+	if p.ID <= 0 || p.WaitMS < 0 || p.WaitMS > rpc.MaxTranscribeWaitMS {
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "message id must be positive and wait must be between 0 and 600 seconds")
+	}
+	return d.messageTranscribeLocal(ctx, p)
+}
+
+func (d *daemon) messageTranscribeTelegram(ctx context.Context, p rpc.TranscribeParams) (any, error) {
+	if p.ID <= 0 || p.WaitMS < 0 || p.WaitMS > rpc.MaxTelegramTranscribeWaitMS {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "message id must be positive and wait must be between 0 and 90 seconds")
 	}
 	ref, chat, err := d.listChat(ctx, p.Chat)
@@ -95,14 +108,20 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 	}()
 
 	stored, err := d.store.GetTranscription(ctx, chat.ID, p.ID)
+	// A text the local engine wrote is not Telegram's: an explicit Telegram
+	// request asks Telegram and replaces it.
+	if err == nil && stored.Source == store.TranscriptionSourceLocal {
+		err = store.ErrNotFound
+	}
 	var result rpc.Transcription
 	if err == nil {
-		result = rpc.Transcription{ChatID: chat.ID, ID: p.ID, TranscriptionID: stored.TranscriptionID, Text: stored.Text, Pending: stored.Pending, Cached: !stored.Pending}
+		result = rpc.Transcription{ChatID: chat.ID, ID: p.ID, TranscriptionID: stored.TranscriptionID, Text: stored.Text, Pending: stored.Pending, Cached: !stored.Pending, Source: rpc.TranscriptionSourceTelegram}
 		if stored.Pending {
 			result, err = client.Transcribe(ctx, ref, p.ID)
 			if err != nil {
 				return nil, err
 			}
+			result.Source = rpc.TranscriptionSourceTelegram
 			if result.ChatID != chat.ID || result.ID != p.ID {
 				return nil, rpc.ErrChatNotFound()
 			}
@@ -128,6 +147,7 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 		if err != nil {
 			return nil, err
 		}
+		result.Source = rpc.TranscriptionSourceTelegram
 		if result.ChatID != chat.ID || result.ID != p.ID {
 			return nil, rpc.ErrChatNotFound()
 		}
