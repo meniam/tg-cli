@@ -2,7 +2,10 @@ package tgclient
 
 import (
 	"context"
+	"errors"
 	"github.com/gotd/td/telegram"
+	"runtime"
+	"strings"
 	"testing"
 	"tg-cli/internal/netconf"
 	"time"
@@ -48,6 +51,45 @@ func TestConnectionWaitCancellation(t *testing.T) {
 		t.Fatal("did not honor cancellation")
 	}
 }
+func TestAudit09_ConnectionWaitReady(t *testing.T) {
+	ready := telegram.ConnectionStateEvent{State: telegram.ConnectionStateReady, DC: 2}
+	t.Run("already ready", func(t *testing.T) {
+		c := &Client{connection: newConnection(netconf.Settings{})}
+		c.connection.update(ready)
+		if err := c.WaitConnected(context.Background(), time.Minute); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("becomes ready", func(t *testing.T) {
+		c := &Client{connection: newConnection(netconf.Settings{})}
+		done := make(chan error, 1)
+		go func() { done <- c.WaitConnected(context.Background(), time.Minute) }()
+		// Update only after the waiter is parked in select, so the wake-up on the
+		// changed channel is what delivers the state, not the entry check.
+		deadline := time.Now().Add(10 * time.Second)
+		for !audit09WaitConnectedParked() {
+			if time.Now().After(deadline) {
+				t.Fatal("WaitConnected never reached its wait")
+			}
+			runtime.Gosched()
+		}
+		c.connection.update(ready)
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("WaitConnected did not wake up on ready")
+		}
+	})
+	t.Run("timeout", func(t *testing.T) {
+		c := &Client{connection: newConnection(netconf.Settings{})}
+		if err := c.WaitConnected(context.Background(), time.Millisecond); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("error %v, want deadline exceeded", err)
+		}
+	})
+}
 func TestNetworkResolver(t *testing.T) {
 	r, err := resolverFor(netconf.Settings{})
 	if err != nil || r != nil {
@@ -63,4 +105,16 @@ func TestNetworkResolver(t *testing.T) {
 			t.Fatalf("missing resolver %s: %v", tr, err)
 		}
 	}
+}
+
+// audit09WaitConnectedParked reports whether a goroutine sits in WaitConnected blocked in select.
+func audit09WaitConnectedParked() bool {
+	buf := make([]byte, 1<<20)
+	buf = buf[:runtime.Stack(buf, true)]
+	for _, g := range strings.Split(string(buf), "\n\n") {
+		if strings.Contains(g, "(*Client).WaitConnected") && strings.Contains(strings.SplitN(g, "\n", 2)[0], "[select") {
+			return true
+		}
+	}
+	return false
 }

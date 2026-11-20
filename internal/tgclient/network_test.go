@@ -143,8 +143,15 @@ func TestProxyResolverNeverDialsDestination(t *testing.T) {
 				if rec.credentials[i] != "alice:password" {
 					t.Fatal("credentials did not reach proxy")
 				}
-				if transport == netconf.WSS && !strings.HasPrefix(rec.targets[i], "dc") {
-					t.Fatalf("domain not sent to proxy: %s", rec.targets[i])
+				switch transport {
+				case netconf.WSS:
+					if want := fmt.Sprintf("dc%d.test:", i+1); !strings.HasPrefix(rec.targets[i], want) {
+						t.Fatalf("domain not sent to proxy: %s, want prefix %s", rec.targets[i], want)
+					}
+				case netconf.TCP:
+					if want := fmt.Sprintf("192.0.2.%d:443", i+1); rec.targets[i] != want {
+						t.Fatalf("target %s, want %s", rec.targets[i], want)
+					}
 				}
 			}
 		})

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/tg"
+	"slices"
 	"testing"
 	"tg-cli/internal/rpc"
 )
@@ -12,11 +13,14 @@ import (
 func TestFolderOrderRequiresCompleteSet(t *testing.T) {
 	writes := 0
 	api := tg.NewClient(writeInvoker(func(_ context.Context, in bin.Encoder, out bin.Decoder) error {
-		switch in.(type) {
+		switch v := in.(type) {
 		case *tg.MessagesGetDialogFiltersRequest:
 			return respond(out, &tg.MessagesDialogFilters{Filters: []tg.DialogFilterClass{&tg.DialogFilterDefault{}, &tg.DialogFilter{ID: 2}, &tg.DialogFilterChatlist{ID: 3}}})
 		case *tg.MessagesUpdateDialogFiltersOrderRequest:
 			writes++
+			if !slices.Equal(v.Order, []int{3, 2}) {
+				t.Errorf("order %v", v.Order)
+			}
 			return respond(out, &tg.BoolTrue{})
 		}
 		t.Fatalf("unexpected %T", in)
@@ -26,6 +30,10 @@ func TestFolderOrderRequiresCompleteSet(t *testing.T) {
 	var re *rpc.Error
 	if !errors.As(err, &re) || re.Code != rpc.CodeInvalidParams || writes != 0 {
 		t.Fatalf("partial order: %v writes=%d", err, writes)
+	}
+	err = orderFoldersAPI(context.Background(), api, []int{2, 2}, false)
+	if !errors.As(err, &re) || re.Code != rpc.CodeInvalidParams || writes != 0 {
+		t.Fatalf("duplicate order: %v writes=%d", err, writes)
 	}
 	if err = orderFoldersAPI(context.Background(), api, []int{3, 2}, true); err != nil || writes != 0 {
 		t.Fatalf("dry-run: %v writes=%d", err, writes)

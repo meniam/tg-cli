@@ -92,8 +92,7 @@ func TestToMessageService(t *testing.T) {
 }
 
 func TestToMessageSkipsEmpty(t *testing.T) {
-	// An empty message is not a NotEmptyMessage, so nothing reaches toMessage;
-	// an unknown NotEmptyMessage type is skipped rather than guessed at.
+	// An empty message is not a NotEmptyMessage, so nothing reaches toMessage.
 	if _, ok := toMessage(1, nil, peer.Entities{}, nil); ok {
 		t.Error("nil must not convert")
 	}

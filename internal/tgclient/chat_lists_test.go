@@ -132,7 +132,9 @@ func TestMembersForbiddenAndErrors(t *testing.T) {
 	if _, err := membersAPI(context.Background(), api, mgr.Chat(&tg.Chat{ID: 4}), rpc.MembersParams{}, 1); rpcErrorCode(t, err) != rpc.CodeTelegram {
 		t.Fatal(err)
 	}
-	if _, err := membersAPI(context.Background(), api, mgr.Channel(channel(9, "News", "news", true, false)), rpc.MembersParams{}, 1); rpcErrorCode(t, err) != rpc.CodeTelegram {
+	_, err := membersAPI(context.Background(), api, mgr.Channel(channel(9, "News", "news", true, false)), rpc.MembersParams{}, 1)
+	var re *rpc.Error
+	if rpcErrorCode(t, err) != rpc.CodeTelegram || !errors.As(err, &re) || re.Message != "CHAT_ADMIN_REQUIRED: administrator access is required to list channel members" {
 		t.Fatal(err)
 	}
 	if _, err := membersAPI(context.Background(), api, mgr.User(user(1, "Ann", "", "", false)), rpc.MembersParams{}, 1); rpcErrorCode(t, err) != rpc.CodeInvalidParams {

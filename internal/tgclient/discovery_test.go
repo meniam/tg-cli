@@ -3,6 +3,7 @@ package tgclient
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/gotd/td/bin"
@@ -16,9 +17,14 @@ func testRawMessage(chat, id int) tg.MessageClass {
 }
 
 func TestDiscoverySearchFilterAndCursor(t *testing.T) {
-	for _, media := range []string{"", "photo", "video", "document", "voice", "audio", "link", "gif", "pinned"} {
-		if _, err := searchMediaFilter(media); err != nil {
-			t.Errorf("media %s: %v", media, err)
+	for media, want := range map[string]string{
+		"": "inputMessagesFilterEmpty", "photo": "inputMessagesFilterPhotos", "video": "inputMessagesFilterVideo",
+		"document": "inputMessagesFilterDocument", "voice": "inputMessagesFilterVoice", "audio": "inputMessagesFilterMusic",
+		"link": "inputMessagesFilterUrl", "gif": "inputMessagesFilterGif", "pinned": "inputMessagesFilterPinned",
+	} {
+		got, err := searchMediaFilter(media)
+		if err != nil || got.TypeName() != want {
+			t.Errorf("media %q: filter %v err %v, want %s", media, got, err, want)
 		}
 	}
 	if _, err := searchMediaFilter("unknown"); err == nil {
@@ -41,7 +47,10 @@ func TestDiscoverySearchFilterAndCursor(t *testing.T) {
 		return respond(output, &tg.MessagesMessages{Messages: []tg.MessageClass{testRawMessage(42, 11), testRawMessage(42, 10)}})
 	}))
 	chat := rpc.Chat{ID: -42, Type: "group", Title: "Group"}
-	filter, _ := searchMediaFilter("photo")
+	filter, err := searchMediaFilter("photo")
+	if err != nil {
+		t.Fatal(err)
+	}
 	first, err := searchMessagesAPI(context.Background(), api, &tg.InputPeerChat{ChatID: 42}, chat, "needle", filter, 1, 0)
 	if err != nil || len(first.Messages) != 1 || first.NextCursor == "" {
 		t.Fatalf("first: %+v %v", first, err)
@@ -62,6 +71,7 @@ func TestDiscoveryPublicSearchCursor(t *testing.T) {
 		req, ok := input.(*tg.MessagesSearchGlobalRequest)
 		if !ok || req.Q != "#topic" || req.Limit != 1 {
 			t.Errorf("global: %+v", input)
+			return errors.New("wrong request")
 		}
 		if calls == 1 {
 			if req.OffsetID != 11 {
@@ -135,13 +145,23 @@ func TestDiscoveryContextCommentsAndReadRequests(t *testing.T) {
 			api := tg.NewClient(writeInvoker(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
 				if tc.channel {
 					req, ok := input.(*tg.ChannelsReadHistoryRequest)
-					if !ok || req.MaxID <= 0 {
+					if !ok {
+						t.Errorf("channel read: %T", input)
+						return errors.New("wrong request")
+					}
+					channel, isChannel := req.Channel.(*tg.InputChannel)
+					if req.MaxID != math.MaxInt32 || !isChannel || channel.ChannelID != 9 || channel.AccessHash != 1 {
 						t.Errorf("channel read: %+v", input)
 					}
 					return respond(output, &tg.BoolTrue{})
 				}
 				req, ok := input.(*tg.MessagesReadHistoryRequest)
-				if !ok || req.MaxID <= 0 {
+				if !ok {
+					t.Errorf("chat read: %T", input)
+					return errors.New("wrong request")
+				}
+				chatPeer, isChat := req.Peer.(*tg.InputPeerChat)
+				if req.MaxID != math.MaxInt32 || !isChat || chatPeer.ChatID != 42 {
 					t.Errorf("chat read: %+v", input)
 				}
 				return respond(output, &tg.MessagesAffectedMessages{Pts: 1, PtsCount: 1})
