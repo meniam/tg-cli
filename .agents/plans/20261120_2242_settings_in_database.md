@@ -3,25 +3,23 @@
 ID: 20261120_2242_settings_in_database
 Created: 2026-11-20
 Owner: Eugene Myazin
-Branch: — до in_progress (будет `feature/20261120_2242_settings_in_database`)
+Branch: `feature/20261120_2242_settings_in_database`
 PR: —
 
 ## Status
 
-- Current status: approved (2026-11-20: владелец ответил на Q1-Q13, все
-  вопросы закрыты, см. «Open questions»)
-- Last update: 2026-11-20
-- Next safe step: менеджер создаёт ветку
-  `feature/20261120_2242_settings_in_database` и worktree потока, переводит план
-  в `in_progress` и отдаёт coder этап Э1 (реестр настроек, `internal/config/settings.go`).
-  Параллельно и без блокировки Э1: менеджер согласует с владельцем разведение
+- Current status: in_progress (2026-11-21: ветка и worktree `../tg-cli-settings`
+  созданы, coder взял Э1; 2026-11-20 владелец ответил на Q1-Q13)
+- Last update: 2026-11-21
+- Next safe step: coder выполняет Э1 (реестр настроек, `internal/config/settings.go`),
+  менеджер проверяет `just check` и diff. Параллельно и без блокировки Э1: менеджер согласует с владельцем разведение
   с `web_viewer` и текст для `AGENTS.md` (раздел «Предложения менеджеру»); оба
   нужны до Э8.
 - Восемь строк Decision log с `Confirmed: no` (реестр в `internal/config`,
   `expect_user` из базы в Daemon, коды отказа по фразе, ограничение подбора,
   ключ `[files] access`, цепочка старых файлов профиля, `settings.*` без
   Telegram, журнал записи) владелец не отклонил; они действуют и ждут его вето.
-- Этапы: Э1-Э9 не начаты.
+- Этапы: Э1 в работе, Э2-Э9 не начаты.
 
 ## Context and sources
 
