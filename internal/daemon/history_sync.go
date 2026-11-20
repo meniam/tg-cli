@@ -464,6 +464,8 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 				return
 			}
 			m.recordPage(task, &progress, len(messages))
+			// The page is saved: queue its recent voice messages (no Telegram call).
+			m.d.voiceSyncPage(ctx, task.ChatID, messages, m.clock.Now())
 		} else {
 			m.recordPage(task, nil, 0)
 		}

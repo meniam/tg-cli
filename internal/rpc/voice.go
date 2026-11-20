@@ -121,6 +121,74 @@ type VoiceRetryResult struct {
 	State  string `json:"state"`
 }
 
+// The chat marks tell the Daemon which chats it transcribes besides the personal
+// ones. They live in the local database; none of these methods calls Telegram.
+const (
+	// MethodChatVoiceOn marks a chat for transcription of its voice messages and
+	// video notes (and of videos too with Video), optionally queueing the ones
+	// already saved.
+	MethodChatVoiceOn = "chat.voice.on"
+	// MethodChatVoiceOff removes the mark of a chat.
+	MethodChatVoiceOff = "chat.voice.off"
+	// MethodChatVoiceList lists the marked chats.
+	MethodChatVoiceList = "chat.voice.list"
+)
+
+// ChatVoiceOnParams names the chat to mark. Video adds videos to the mark (a
+// second call with another Video value changes it). Backfill queues the voice
+// messages and video notes already saved for the chat that have no text yet, and
+// the videos too when Video is set.
+type ChatVoiceOnParams struct {
+	Chat     string `json:"chat"`
+	Video    bool   `json:"video,omitempty"`
+	Backfill bool   `json:"backfill,omitempty"`
+}
+
+// ChatVoiceOnResult reports the mark. Enabled is the state of
+// [voice_transcription] enabled: while it is off the mark does nothing yet.
+// Candidates and Queued count the backfill (zero without it); EnabledAt is Unix
+// seconds of the first mark.
+type ChatVoiceOnResult struct {
+	ChatID     int64 `json:"chat_id"`
+	Video      bool  `json:"video"`
+	EnabledAt  int64 `json:"enabled_at"`
+	Enabled    bool  `json:"enabled"`
+	Candidates int   `json:"candidates"`
+	Queued     int   `json:"queued"`
+}
+
+// ChatVoiceOffParams names the chat whose mark is removed.
+type ChatVoiceOffParams struct {
+	Chat string `json:"chat"`
+}
+
+// ChatVoiceOffResult says whether the chat had a mark. Jobs already in the queue
+// stay.
+type ChatVoiceOffResult struct {
+	ChatID  int64 `json:"chat_id"`
+	Removed bool  `json:"removed"`
+}
+
+// ChatVoiceListParams carries no field.
+type ChatVoiceListParams struct{}
+
+// ChatVoiceEntry is one marked chat. Title and Username are names from Telegram
+// (untrusted data); they are empty when the database does not know the chat.
+type ChatVoiceEntry struct {
+	ChatID    int64  `json:"chat_id"`
+	Title     string `json:"title,omitempty" untrusted:"true"`
+	Username  string `json:"username,omitempty" untrusted:"true"`
+	Video     bool   `json:"video"`
+	EnabledAt int64  `json:"enabled_at"`
+}
+
+// ChatVoiceListResult lists the marked chats that access.json leaves open, by
+// chat id. Enabled is the state of [voice_transcription] enabled.
+type ChatVoiceListResult struct {
+	Enabled bool             `json:"enabled"`
+	Chats   []ChatVoiceEntry `json:"chats"`
+}
+
 // VoiceBackfillParams selects a dry run, which counts and queues nothing.
 type VoiceBackfillParams struct {
 	DryRun bool `json:"dry_run,omitempty"`

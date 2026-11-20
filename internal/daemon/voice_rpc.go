@@ -13,11 +13,10 @@ import (
 	"tg-cli/internal/store"
 )
 
-// maxVoiceBackfillChats bounds the personal chats one backfill looks at: the
-// most recently active ones, as the chat overview orders them.
-const maxVoiceBackfillChats = 500
-
 func (d *daemon) registerVoice() {
+	d.handle(rpc.MethodChatVoiceOn, d.chatVoiceOn)
+	d.handle(rpc.MethodChatVoiceOff, d.chatVoiceOff)
+	d.handle(rpc.MethodChatVoiceList, d.chatVoiceList)
 	d.handle(rpc.MethodVoiceStatus, d.voiceStatus)
 	d.handle(rpc.MethodVoiceCancel, d.voiceCancel)
 	d.handle(rpc.MethodVoiceRetry, d.voiceRetry)
@@ -203,54 +202,16 @@ func (d *daemon) voiceBackfill(ctx context.Context, params json.RawMessage) (any
 			return nil, err
 		}
 	}
-	rows, err := d.store.ChatsOverview(ctx, chatFilter(d.policy()), maxVoiceBackfillChats, "user")
-	if err != nil {
+	if res.Chats, err = d.store.VoicePrivateChats(ctx, chatFilter(d.policy())); err != nil {
 		return nil, err
 	}
-	for _, row := range rows {
-		if !d.policy().Allowed(row.ChatID) {
-			continue
-		}
-		res.Chats++
-		after := 0
-		for {
-			page, err := d.store.ExportMessages(ctx, store.ExportQuery{ChatID: row.ChatID, After: after, Limit: store.MaxExportPageSize})
-			if err != nil {
-				return nil, err
-			}
-			for _, m := range page.Messages {
-				after = max(after, m.ID)
-				if m.MediaType == nil || (*m.MediaType != store.VoiceKindVoice && *m.MediaType != store.VoiceKindVideoNote) || m.DeletedAt != nil || (m.Out != nil && *m.Out) {
-					continue
-				}
-				if t, err := d.store.GetTranscription(ctx, m.ChatID, m.ID); err == nil && !t.Pending {
-					continue
-				} else if err != nil && !errors.Is(err, store.ErrNotFound) {
-					return nil, err
-				}
-				// A message that has a job row (queued, done, failed or skipped) is
-				// not a candidate: a failed one is queued again by `voice retry`.
-				if _, err := d.store.GetVoiceJob(ctx, m.ChatID, m.ID); err == nil {
-					continue
-				} else if !errors.Is(err, store.ErrNotFound) {
-					return nil, err
-				}
-				res.Candidates++
-				if p.DryRun {
-					continue
-				}
-				outcome, err := w.enqueue(ctx, store.VoiceJob{ChatID: m.ChatID, MessageID: m.ID, Kind: *m.MediaType, Source: store.VoiceSourceBackfill, Priority: store.VoicePriorityBackfill}, false)
-				if err != nil {
-					return nil, err
-				}
-				if outcome == store.VoiceEnqueued {
-					res.Queued++
-				}
-			}
-			if page.Last || len(page.Messages) == 0 {
-				break
-			}
-		}
+	// One query selects the candidates of every personal chat the access lists
+	// leave open: a message with no finished text and no job row (a failed one is
+	// queued again by `voice retry`), not the owner's, not deleted. Videos are
+	// left out.
+	res.Candidates, res.Queued, err = d.backfillVoice(ctx, w, store.VoiceCandidateQuery{Private: true, Kinds: voiceBackfillKinds(false)}, p.DryRun)
+	if err != nil {
+		return nil, err
 	}
 	return res, nil
 }

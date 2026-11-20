@@ -145,7 +145,7 @@ tg voice retry @alice 4711
 
 ### tg voice backfill
 
-Queues the saved voice messages and video notes of the personal chats that have no finished text and no job yet, at the lowest priority, so that manual and incoming jobs go first. Chats that `access.json` closes, your own messages and deleted messages are left out. Videos are never queued here. It sees the 500 most recently active personal chats.
+Queues the saved voice messages and video notes of the personal chats that have no finished text and no job yet, at the lowest priority, so that manual and incoming jobs go first. Chats that `access.json` closes, your own messages and deleted messages are left out. Videos are never queued here. One database query selects the candidates page by page, so every personal chat counts: there is no ceiling on the number of chats.
 
 ```text
 tg voice backfill [--dry-run]
@@ -173,6 +173,117 @@ tg voice backfill --dry-run
 {"ok":true,"data":{"enabled":true,"dry_run":true,"chats":14,"candidates":238,"queued":0}}
 ```
 
-**Answer fields** (`data`): `enabled` boolean (the setting); `dry_run` boolean; `chats` integer (personal chats looked at); `candidates` integer (messages that qualify); `queued` integer (jobs this call queued, always 0 for a dry run).
+**Answer fields** (`data`): `enabled` boolean (the setting); `dry_run` boolean; `chats` integer (personal chats with saved messages that `access.json` leaves open); `candidates` integer (messages that qualify); `queued` integer (jobs this call queued, always 0 for a dry run).
 
 **Exit codes.** 0; 2 voice transcription is off (not for `--dry-run`) or the engine is not installed; 3 no Daemon.
+
+## Chat marks
+
+Personal chats (chats of type `user`; bots, groups and channels are not personal) need no mark. For any other chat a mark in the local database says "transcribe the voice messages and video notes here", and with the video flag the videos too. The marks work through three commands. They read and write only the local database: no Telegram call, and the chat is found there (a numeric id or a `@username` the database knows; put `--` before a negative id).
+
+Who gets queued, and when, is one rule. A message is queued only if `access.json` leaves its chat open, it is not your own, and it is not deleted. A voice message or video note needs a personal chat or a mark; a video needs a mark with `--video`. The sources are:
+
+- a new message of the event stream, after it is saved: priority 10 (`incoming`);
+- the messages a `tg chat sync` or the background sync has just saved, only those whose date is less than 90 days old: priority 20 (`sync`); older ones wait for a backfill;
+- `--backfill` of a mark and `tg voice backfill`: priority 30 (`backfill`).
+
+A source never queues a message twice (the queue keeps one row per message) and makes no Telegram request. Without `[voice_transcription] enabled = true` no source queues anything.
+
+### tg chat voice on
+
+Marks a chat. Marking a marked chat again changes only its video flag and keeps the time of the first mark. With `--backfill` it also queues the voice messages and video notes already saved for the chat that have no finished text and no job yet (and the videos, with `--video`); the answer counts them. With the setting off the mark is stored but `--backfill` fails with exit code 2 (`error.reason` is `disabled`); a missing engine fails it the same way (`engine_missing`).
+
+```text
+tg chat voice on <chat> [--video] [--backfill]
+```
+
+<!-- schema:flags tg chat voice on -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--backfill` | bool | `false` | queue the messages already saved for the chat |
+| `--video` | bool | `false` | transcribe the videos of the chat too |
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon. The chat is known to the local database. The mark takes effect only with `[voice_transcription] enabled = true`; while it is off the command warns on stderr.
+
+**Example.**
+
+```sh
+tg chat voice on @team --backfill
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"video":false,"enabled_at":1795000000,"enabled":true,"candidates":31,"queued":31}}
+```
+
+**Answer fields** (`data`): `chat_id` integer; `video` boolean (the flag of the mark after the call); `enabled_at` integer (Unix seconds of the first mark); `enabled` boolean (the setting; the mark does nothing while it is false); `candidates` and `queued` integers (the backfill; both 0 without it).
+
+**Exit codes.** 0; 2 no chat, a chat reference that cannot be resolved locally, `--backfill` while the setting is off or the engine is not installed (the mark is stored anyway); 3 no Daemon; 7 a closed or unknown chat.
+
+### tg chat voice off
+
+Removes the mark. Jobs already in the queue stay; `tg voice cancel` skips them. Personal chats are transcribed with or without a mark.
+
+```text
+tg chat voice off <chat>
+```
+
+<!-- schema:flags tg chat voice off -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon.
+
+**Example.**
+
+```sh
+tg chat voice off @team
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"removed":true}}
+```
+
+**Answer fields** (`data`): `chat_id` integer; `removed` boolean (false when the chat had no mark).
+
+**Exit codes.** 0; 2 no chat or a chat reference that cannot be resolved locally; 3 no Daemon; 7 a closed chat.
+
+### tg chat voice list
+
+Lists the marked chats that `access.json` leaves open, ordered by chat id.
+
+```text
+tg chat voice list
+```
+
+<!-- schema:flags tg chat voice list -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
+
+**Preconditions.** A running Daemon.
+
+**Example.**
+
+```sh
+tg chat voice list
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"enabled":true,"chats":[{"chat_id":-1001234567890,"title":"Team","username":"team","video":false,"enabled_at":1795000000}]}}
+```
+
+**Answer fields** (`data`): `enabled` boolean (the setting); `chats` array of `chat_id` integer, `title` string and `username` string (both untrusted Telegram data, omitted when the database does not know the chat), `video` boolean, `enabled_at` integer (Unix seconds). With `--format jsonl` each line is one chat.
+
+**Exit codes.** 0; 3 no Daemon.

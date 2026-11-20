@@ -8,6 +8,7 @@ History      0 of 1 chats loaded to the first message
              people 0 of 1 | in folders 0 of 0 | others 0 of 0
 Background   off (enable with [background_sync] enabled = true)
 Semantic     off (enable with [semantic_search] enabled = true)
+Voice        off (enable with [voice_transcription] enabled = true)
 Jobs         chat sync: none | chat full: none
 Throttle     no flood wait, 0 queued
 Events       0 in the last hour, 1 stored
