@@ -2,10 +2,11 @@ package daemon
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"tg-cli/internal/config"
 )
 
 // MaxSocketPath is the longest socket path accepted. Unix socket paths are
@@ -63,8 +64,8 @@ type Paths struct {
 const maxLogBytes = 10 << 20 // 10 MiB
 
 // ResolvePaths returns the paths of a profile. home is the base directory of
-// the profile data (the TG_CLI_HOME value); when empty, the user config
-// directory is used. dbRoot is the base directory of the profile databases, the
+// the profile data (the TG_CLI_HOME value); when empty, config.DefaultHome is
+// used. dbRoot is the base directory of the profile databases, the
 // db directory next to the configuration file; it is required.
 func ResolvePaths(home, dbRoot, profile string, files FileNames) (Paths, error) {
 	if !profileName.MatchString(profile) {
@@ -77,11 +78,10 @@ func ResolvePaths(home, dbRoot, profile string, files FileNames) (Paths, error) 
 		return Paths{}, fmt.Errorf("the database directory is empty: it is the db directory next to the configuration file")
 	}
 	if home == "" {
-		cfg, err := os.UserConfigDir()
-		if err != nil {
-			return Paths{}, fmt.Errorf("find the config directory: %w", err)
+		var err error
+		if home, err = config.DefaultHome(); err != nil {
+			return Paths{}, err
 		}
-		home = filepath.Join(cfg, "tg-cli")
 	}
 	dir := filepath.Join(home, profile)
 	dbDir := filepath.Join(dbRoot, profile)

@@ -157,6 +157,11 @@ func (a *app) deviceModel(cmd *cobra.Command, paths daemon.Paths) (string, error
 }
 
 func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
+	// The previous data directory moves first: its legacy profile files belong
+	// to the migration that follows.
+	if err := a.moveLegacyHome(cmd); err != nil {
+		return err
+	}
 	if err := a.migrateProfiles(); err != nil {
 		return err
 	}

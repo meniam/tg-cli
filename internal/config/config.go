@@ -2,8 +2,10 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -21,6 +23,9 @@ import (
 type Config struct {
 	// Home is the base directory for profile data.
 	Home string `toml:"home"`
+	// HomeSet reports that the file sets home itself. Home then holds that value;
+	// otherwise it holds DefaultHome.
+	HomeSet bool `toml:"-"`
 	// DefaultProfile is used when no profile flag is supplied.
 	DefaultProfile string `toml:"default_profile"`
 	// Files holds profile file names.
@@ -112,11 +117,11 @@ func invalidProfileName(name, key string) error {
 
 // Load reads path; a missing file yields the defaults. It does not create files.
 func Load(path string) (Config, error) {
-	dir, err := os.UserConfigDir()
+	home, err := DefaultHome()
 	if err != nil {
-		return Config{}, fmt.Errorf("find config directory: %w", err)
+		return Config{}, err
 	}
-	c := defaults(dir)
+	c := defaults(home)
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return c, nil
@@ -132,7 +137,11 @@ func Load(path string) (Config, error) {
 	if info.Mode().Perm()&0o022 != 0 {
 		return Config{}, invalid("config file is writable by group or others")
 	}
-	err = toml.NewDecoder(f).DisallowUnknownFields().Decode(&c)
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return Config{}, fmt.Errorf("read config: %w", err)
+	}
+	err = toml.NewDecoder(bytes.NewReader(content)).DisallowUnknownFields().Decode(&c)
 	if err != nil {
 		var strict *toml.StrictMissingError
 		if errors.As(err, &strict) && len(strict.Errors) > 0 {
@@ -146,6 +155,12 @@ func Load(path string) (Config, error) {
 		}
 		return Config{}, invalid("invalid TOML configuration")
 	}
+	// The decode above succeeded, so this one cannot fail on the same text.
+	var probe struct {
+		Home *string `toml:"home"`
+	}
+	_ = toml.Unmarshal(content, &probe)
+	c.HomeSet = probe.Home != nil
 	c.Home, err = validateHome(c.Home)
 	if err != nil {
 		return Config{}, err
@@ -181,8 +196,8 @@ func Load(path string) (Config, error) {
 	return c, nil
 }
 
-func defaults(dir string) Config {
-	return Config{Home: filepath.Join(dir, "tg-cli"), DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}, BackgroundSync: defaultBackgroundSync(), SemanticSearch: defaultSemanticSearch()}
+func defaults(home string) Config {
+	return Config{Home: home, DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}, BackgroundSync: defaultBackgroundSync(), SemanticSearch: defaultSemanticSearch()}
 }
 
 func validateHome(path string) (string, error) {

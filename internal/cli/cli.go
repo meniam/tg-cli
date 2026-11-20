@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -55,6 +54,10 @@ type Deps struct {
 	CallTimeout time.Duration
 	// DialRPC replaces the daemon connection in transport-level tests.
 	DialRPC func(context.Context, string, string) (*rpc.Client, error)
+	// LegacyHome names the previous default data directory, or returns an empty
+	// string when there is none. A nil function turns the move of the data
+	// directory off, so that a test never touches the real profile.
+	LegacyHome func() string
 }
 
 // cmdError carries the exit code of a failed command.
@@ -75,6 +78,9 @@ type app struct {
 	deps        Deps
 	config      config.Config
 	throttledMS int64
+	// homeChecked is set once the move of the previous data directory has been
+	// looked at in this process.
+	homeChecked bool
 	// specs holds the annotation of every runnable command, filled while the
 	// command tree is built and read by `schema`.
 	specs map[*cobra.Command]commandSpec
@@ -158,11 +164,11 @@ func (a *app) rootCommand() *cobra.Command {
 		}
 		path := a.deps.ConfigPath
 		if path == "" {
-			home, err := os.UserHomeDir()
+			dir, err := config.DefaultConfigDir()
 			if err != nil {
-				return fail(exitcode.Failure, "find home directory: %v", err)
+				return fail(exitcode.Failure, "%v", err)
 			}
-			path = filepath.Join(home, ".config", "tg-cli", "config.toml")
+			path = filepath.Join(dir, "config.toml")
 		}
 		a.deps.ConfigPath = path
 		cfg, err := config.Load(path)

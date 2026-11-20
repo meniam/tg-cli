@@ -45,7 +45,7 @@ type configKeyDoc struct {
 
 func configKeyDocs() []configKeyDoc {
 	return []configKeyDoc{
-		{"home", "string", "os.UserConfigDir()/tg-cli", "TG_CLI_HOME", "", ""},
+		{"home", "string", "~/.config/tg-cli", "TG_CLI_HOME", "", "on macOS the data of the previous default, ~/Library/Application Support/tg-cli, moves here at the first command; on Linux with XDG_CONFIG_HOME set the default is tg-cli inside it; a home set here or in TG_CLI_HOME is never moved"},
 		{"default_profile", "string", "default", "", "--profile", ""},
 		{"files.database", "string", "store.db", "", "", "the file inside db/<profile>/ next to the configuration file"},
 		{"files.session", "string", "session.json", "", "", ""},

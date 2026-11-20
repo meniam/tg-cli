@@ -14,6 +14,7 @@ import (
 	"golang.org/x/term"
 
 	"tg-cli/internal/clientpreset"
+	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
 )
 
@@ -33,6 +34,7 @@ func DefaultDeps(newTelegram func(daemon.TelegramConfig) (daemon.Telegram, error
 		Getenv:       os.Getenv,
 		NewTelegram:  newTelegram,
 		LaunchDaemon: daemon.Launch,
+		LegacyHome:   config.LegacyHome,
 		FetchPresets: func(ctx context.Context) ([]byte, error) {
 			return clientpreset.Fetch(ctx, &http.Client{Timeout: presetFetchTimeout})
 		},

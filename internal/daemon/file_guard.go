@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"tg-cli/internal/config"
 )
 
 // FileConflictError reports data that a start would hide or leave behind.
@@ -53,11 +55,11 @@ func CheckFileNames(p Paths) ([]string, error) {
 		return nil, fmt.Errorf("inspect profile directory: %w", err)
 	}
 	if errors.Is(err, os.ErrNotExist) {
-		base, e := os.UserConfigDir()
+		base, e := config.DefaultHome()
 		if e != nil {
-			return nil, fmt.Errorf("find config directory: %w", e)
+			return nil, e
 		}
-		old := filepath.Join(base, "tg-cli", filepath.Base(p.Dir))
+		old := filepath.Join(base, filepath.Base(p.Dir))
 		if filepath.Clean(old) != filepath.Clean(p.Dir) {
 			if info, e := os.Stat(old); e == nil && info.IsDir() {
 				warnings = append(warnings, fmt.Sprintf("profile directory %s does not exist; default profile directory %s exists", p.Dir, old))

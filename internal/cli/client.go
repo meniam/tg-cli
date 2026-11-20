@@ -22,6 +22,9 @@ func (a *app) profile(cmd *cobra.Command) (string, daemon.Paths, error) {
 	if !cmd.Flags().Changed("profile") {
 		profile = a.config.DefaultProfile
 	}
+	if err := a.moveLegacyHome(cmd); err != nil {
+		return "", daemon.Paths{}, err
+	}
 	home := a.deps.Getenv("TG_CLI_HOME")
 	if home == "" {
 		home = a.config.Home
