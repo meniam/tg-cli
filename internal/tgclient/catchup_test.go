@@ -67,7 +67,7 @@ func TestCatchupCoalescesUntilManagerFinishes(t *testing.T) {
 	event(telegram.ConnectionStateReady)
 	select {
 	case <-api.entered:
-	case <-time.After(time.Second):
+	case <-time.After(audit08Safety):
 		t.Fatal("difference did not start")
 	}
 	for i := 0; i < 3; i++ {
@@ -78,21 +78,16 @@ func TestCatchupCoalescesUntilManagerFinishes(t *testing.T) {
 	if got := api.calls.Load(); got != 2 {
 		t.Fatalf("difference calls while blocked: %d", got)
 	}
+	// Events are applied synchronously, and catchupPending stays set until the
+	// worker finishes, so no extra catch-up marker may be queued behind the
+	// running one.
+	if n := len(c.connection.catchup); n != 0 {
+		t.Fatalf("%d extra catch-up markers queued while difference is blocked", n)
+	}
 	close(api.release)
-	deadline := time.After(time.Second)
-	for {
-		c.connection.mu.Lock()
-		pending := c.connection.catchupPending
-		c.connection.mu.Unlock()
-		if !pending {
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatal("catch-up barrier not processed")
-		default:
-			time.Sleep(time.Millisecond)
-		}
+	audit08WaitFor(t, "catch-up barrier not processed", func() bool { return !audit08CatchupPending(c) })
+	if n := len(c.connection.catchup); n != 0 {
+		t.Fatalf("%d catch-up markers left queued after the barrier", n)
 	}
 	if got := api.calls.Load(); got != 2 {
 		t.Fatalf("duplicate difference: %d", got)
@@ -102,7 +97,7 @@ func TestCatchupCoalescesUntilManagerFinishes(t *testing.T) {
 	event(telegram.ConnectionStateReady)
 	select {
 	case <-api.entered:
-	case <-time.After(time.Second):
+	case <-time.After(audit08Safety):
 		t.Fatal("later reconnect did not trigger difference")
 	}
 	if got := api.calls.Load(); got != 3 {
@@ -149,42 +144,18 @@ func TestCatchupWaitsForBufferedStartupReplay(t *testing.T) {
 	for _, state := range []telegram.ConnectionState{telegram.ConnectionStateReady, telegram.ConnectionStateDisconnected, telegram.ConnectionStateConnecting, telegram.ConnectionStateReady} {
 		c.connection.update(telegram.ConnectionStateEvent{State: state, DC: 2})
 	}
-	deadline := time.After(time.Second)
-	for {
+	audit08WaitFor(t, "probe was not queued", func() bool {
 		c.connection.mu.Lock()
-		probe := len(c.connection.barriers) > 0
-		c.connection.mu.Unlock()
-		if probe {
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatal("probe was not queued")
-		default:
-			time.Sleep(time.Millisecond)
-		}
-	}
+		defer c.connection.mu.Unlock()
+		return len(c.connection.barriers) > 0
+	})
 	close(resume)
 	select {
 	case <-api.entered:
-	case <-time.After(2 * time.Second):
+	case <-time.After(audit08Safety):
 		t.Fatal("catch-up did not recover after startup replay")
 	}
-	deadline = time.After(time.Second)
-	for {
-		c.connection.mu.Lock()
-		pending := c.connection.catchupPending
-		c.connection.mu.Unlock()
-		if !pending {
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatal("catch-up did not complete")
-		default:
-			time.Sleep(time.Millisecond)
-		}
-	}
+	audit08WaitFor(t, "catch-up did not complete", func() bool { return !audit08CatchupPending(c) })
 	cancel()
 	<-workerDone
 	<-managerDone

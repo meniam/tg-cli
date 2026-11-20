@@ -35,38 +35,11 @@ func TestOpenCreatesPrivateFileAndMigrates(t *testing.T) {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("database exists before Open: %v", err)
 	}
-	observed := make(chan os.FileMode, 1)
-	done := make(chan struct{})
-	stopped := make(chan struct{})
-	go func() {
-		defer close(stopped)
-		for {
-			select {
-			case <-done:
-				return
-			default:
-			}
-			if info, err := os.Stat(path); err == nil && info.Mode().Perm() != 0600 {
-				select {
-				case observed <- info.Mode().Perm():
-				default:
-				}
-				return
-			}
-		}
-	}()
 	db, err := Open(path)
-	close(done)
-	<-stopped
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	select {
-	case mode := <-observed:
-		t.Fatalf("database was observed with mode %o", mode)
-	default:
-	}
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)

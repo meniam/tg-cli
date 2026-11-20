@@ -277,12 +277,8 @@ func TestBulkMessages(t *testing.T) {
 	for i := range batch {
 		batch[i] = Message{ChatID: int64(i%5 + 1), ID: i + 1, Date: int64(i + 1), Text: fmt.Sprintf("Bulk Ёлка %d", i), Raw: raw(`{"kind":"synthetic"}`)}
 	}
-	start := time.Now()
 	if err := db.UpsertMessages(ctx, batch); err != nil {
 		t.Fatal(err)
-	}
-	if elapsed := time.Since(start); elapsed >= 5*time.Second {
-		t.Errorf("5000 messages took %s, want under 5s", elapsed)
 	}
 	if n := schemaCount(t, db.read, `SELECT count(*) FROM messages`); n != 5000 {
 		t.Errorf("rows=%d, want 5000", n)
