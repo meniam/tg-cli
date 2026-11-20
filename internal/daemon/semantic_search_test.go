@@ -616,3 +616,65 @@ func sortPairs(in [][2]int64) [][2]int64 {
 	}
 	return out
 }
+
+func TestSemanticSearchCachesTheModelInfo(t *testing.T) {
+	e := newSemanticEnv(t)
+	now := time.Unix(1_800_000_000, 0)
+	e.d.modelInfo.now = func() time.Time { return now }
+	search := func() rpc.SemanticSearchResult {
+		return e.search(t, rpc.SemanticSearchParams{Query: "доставка"})
+	}
+
+	if r := search(); r.VectorSkipped != "" {
+		t.Fatalf("the first search skipped the vector leg: %q", r.VectorSkipped)
+	}
+	if r := search(); r.VectorSkipped != "" {
+		t.Fatalf("the second search skipped the vector leg: %q", r.VectorSkipped)
+	}
+	if e.embedder.infoCalls != 1 {
+		t.Fatalf("Info was asked %d times for two searches, want 1", e.embedder.infoCalls)
+	}
+	if e.embedder.embedCalls != 2 {
+		t.Fatalf("Embed was called %d times, want 2 (one per search)", e.embedder.embedCalls)
+	}
+
+	now = now.Add(semanticModelInfoTTL - time.Second)
+	search()
+	if e.embedder.infoCalls != 1 {
+		t.Fatalf("a fresh cache was asked again: %d calls", e.embedder.infoCalls)
+	}
+	now = now.Add(2 * time.Second)
+	search()
+	if e.embedder.infoCalls != 2 {
+		t.Fatalf("an expired cache was not refreshed: %d calls", e.embedder.infoCalls)
+	}
+}
+
+func TestSemanticSearchDoesNotCacheAFailedModelInfo(t *testing.T) {
+	e := newSemanticEnv(t)
+	e.embedder.infoErr = fmt.Errorf("%w: connection refused", embed.ErrUnavailable)
+	if r := e.search(t, rpc.SemanticSearchParams{Query: "доставка"}); r.VectorSkipped != "unavailable" {
+		t.Fatalf("vector_skipped = %q, want unavailable", r.VectorSkipped)
+	}
+	e.embedder.infoErr = nil
+	if r := e.search(t, rpc.SemanticSearchParams{Query: "доставка"}); r.VectorSkipped != "" {
+		t.Fatalf("after Ollama came back vector_skipped = %q, a failure must not stay cached", r.VectorSkipped)
+	}
+	if e.embedder.infoCalls != 2 {
+		t.Fatalf("Info calls = %d, want 2", e.embedder.infoCalls)
+	}
+}
+
+func TestSemanticSearchForgetsTheModelInfoAfterAnEmbedFailure(t *testing.T) {
+	e := newSemanticEnv(t)
+	e.search(t, rpc.SemanticSearchParams{Query: "доставка"})
+	e.embedder.embedErr = fmt.Errorf("%w: model removed", embed.ErrModelMissing)
+	if r := e.search(t, rpc.SemanticSearchParams{Query: "доставка"}); r.VectorSkipped != "model_missing" {
+		t.Fatalf("vector_skipped = %q, want model_missing", r.VectorSkipped)
+	}
+	e.embedder.embedErr = nil
+	e.search(t, rpc.SemanticSearchParams{Query: "доставка"})
+	if e.embedder.infoCalls != 2 {
+		t.Fatalf("Info calls = %d, want 2: the failure must reset the cache", e.embedder.infoCalls)
+	}
+}

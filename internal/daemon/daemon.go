@@ -93,6 +93,7 @@ type daemon struct {
 	vectors              *vectors.Store   // nil when semantic search is off or vectors.db could not be opened
 	embedder             embed.Embedder   // nil when semantic search is off or the Ollama client could not be built
 	semanticFailure      string           // why vectors or embedder is nil while the feature is on; empty otherwise
+	modelInfo            modelInfoCache   // the model name and digest a search read from Ollama a moment ago
 	cancel               context.CancelFunc
 	startedAt            time.Time // the start of the process; zero in handler tests
 	once                 sync.Once

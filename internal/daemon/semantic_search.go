@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"sync"
 	"time"
 
 	"tg-cli/internal/access"
@@ -159,7 +160,7 @@ func (d *daemon) vectorLeg(ctx context.Context, query string, k int, chatID *int
 	}
 	callCtx, cancel := context.WithTimeout(ctx, semanticQueryTimeout)
 	defer cancel()
-	info, err := d.embedder.Info(callCtx)
+	info, err := d.modelInfo.get(callCtx, d.embedder)
 	if err != nil {
 		return skip(err)
 	}
@@ -178,6 +179,8 @@ func (d *daemon) vectorLeg(ctx context.Context, query string, k int, chatID *int
 	}
 	embedded, err := d.embedder.Embed(callCtx, []string{query})
 	if err != nil {
+		// The model may be gone or replaced: look it up again next time.
+		d.modelInfo.reset()
 		return skip(err)
 	}
 	if len(embedded) != 1 {
@@ -192,6 +195,54 @@ func (d *daemon) vectorLeg(ctx context.Context, query string, k int, chatID *int
 		return skip(err)
 	}
 	return vectorResult{hits: hits, metas: metas}, nil
+}
+
+// semanticModelInfoTTL is how long a search trusts the model name and digest it
+// read from Ollama. Without the cache every search spent two extra Ollama calls
+// (the tag list and a probe embedding), about 35 ms of the 59 ms measured. A
+// model replaced in Ollama is noticed within this time or at the next failed
+// embedding, whichever comes first.
+const semanticModelInfoTTL = time.Minute
+
+// modelInfoCache keeps the last successful answer of Embedder.Info. Failures
+// are never cached: the next search asks again.
+type modelInfoCache struct {
+	mu   sync.Mutex
+	info embed.ModelInfo
+	at   time.Time
+	now  func() time.Time // nil means time.Now; a test replaces it
+}
+
+func (c *modelInfoCache) clock() time.Time {
+	if c.now != nil {
+		return c.now()
+	}
+	return time.Now()
+}
+
+// get returns the cached answer while it is fresh and asks the embedder
+// otherwise. The lock is held during the call, so concurrent searches share one
+// lookup; the call is bounded by the context of the caller.
+func (c *modelInfoCache) get(ctx context.Context, e embed.Embedder) (embed.ModelInfo, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.at.IsZero() && c.clock().Sub(c.at) < semanticModelInfoTTL {
+		return c.info, nil
+	}
+	info, err := e.Info(ctx)
+	if err != nil {
+		c.at = time.Time{}
+		return embed.ModelInfo{}, err
+	}
+	c.info, c.at = info, c.clock()
+	return info, nil
+}
+
+// reset forgets the cached answer.
+func (c *modelInfoCache) reset() {
+	c.mu.Lock()
+	c.at = time.Time{}
+	c.mu.Unlock()
 }
 
 // vectorSkipReason classifies a failure of the vector leg. The error text
