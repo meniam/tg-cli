@@ -295,7 +295,7 @@ PR: —
 
 ### Э2. Таблицы и миграция схемы (Terra)
 
-- [x] `internal/store/migrations/0012_settings.sql` (номер сверить перед
+- [x] `internal/store/migrations/0013_settings.sql` (в плане 0012; `0012_voice.sql` влит в main, номер 0013 с 2026-11-21; сверить перед
   началом: `ls internal/store/migrations`): таблицы по решению Q1
   (`20261120_2344_settings_are_one_key_value_table_and_the_passphrase_hash_has_its_own_table`): `settings(key TEXT PRIMARY KEY, value TEXT NOT NULL CHECK
   (json_valid(value)), updated_at INTEGER NOT NULL)`, `owner_secret(id INTEGER
