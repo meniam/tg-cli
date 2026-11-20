@@ -201,6 +201,10 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	voiceTranscription, err := a.daemonVoiceTranscription()
+	if err != nil {
+		return err
+	}
 	if !foreground {
 		return a.startBackground(cmd, profile, paths, idle)
 	}
@@ -251,6 +255,7 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		IdleTimeout:          idle,
 		BackgroundSync:       backgroundSync,
 		SemanticSearch:       semanticSearch,
+		VoiceTranscription:   voiceTranscription,
 	})
 	if err != nil {
 		return a.daemonStartError(err)

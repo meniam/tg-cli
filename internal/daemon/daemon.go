@@ -63,6 +63,12 @@ type Options struct {
 	// SemanticSearch holds the settings of the local semantic index; the zero
 	// value is off.
 	SemanticSearch SemanticSearchConfig
+	// VoiceTranscription holds the settings of the local voice transcription;
+	// the zero value is off.
+	VoiceTranscription VoiceTranscriptionConfig
+	// VoiceEngine replaces the real ffmpeg and speech engine; nil means the
+	// real one under VoiceTranscription.Home. Tests set it.
+	VoiceEngine VoiceEngine
 }
 
 // idleCheckEvery is how often the idle stop looks at the daemon. It is finer
@@ -93,6 +99,7 @@ type daemon struct {
 	vectors              *vectors.Store   // nil when semantic search is off or vectors.db could not be opened
 	embedder             embed.Embedder   // nil when semantic search is off or the Ollama client could not be built
 	semanticFailure      string           // why vectors or embedder is nil while the feature is on; empty otherwise
+	voice                *voiceWorker     // nil only in handler tests; its goroutine runs when voice transcription is on or a manual job asks
 	modelInfo            modelInfoCache   // the model name and digest a search read from Ollama a moment ago
 	cancel               context.CancelFunc
 	startedAt            time.Time // the start of the process; zero in handler tests
@@ -209,6 +216,7 @@ func Run(ctx context.Context, opts Options) error {
 	defer d.openSemantic()()
 	// The indexer starts before anything that can send it a trigger exists.
 	d.startSemanticIndex(runCtx, nil)
+	d.startVoice(runCtx)
 	d.sync = newHistorySyncManager(runCtx, d, nil)
 	d.full = newChatFullSyncManager(runCtx, d, nil)
 	// A daemon that has just started is not idle: the clock runs from now.
@@ -417,6 +425,9 @@ func Run(ctx context.Context, opts Options) error {
 	if d.semanticIndex != nil {
 		d.semanticIndex.wait()
 	}
+	if d.voice != nil {
+		d.voice.wait()
+	}
 	<-contactsDone
 	<-idempotencyDone
 	<-accountDone
@@ -450,7 +461,7 @@ func watchIdle(ctx context.Context, cancel context.CancelFunc, log *slog.Logger,
 			return
 		case now := <-ticker.C:
 			// A request in flight is work that must finish, whatever its age.
-			if d.inFlight.Load() > 0 || d.hub.Subscribers() > 0 || d.sync != nil && d.sync.hasActive() || d.full != nil && d.full.hasActive() {
+			if d.inFlight.Load() > 0 || d.hub.Subscribers() > 0 || d.sync != nil && d.sync.hasActive() || d.full != nil && d.full.hasActive() || d.voice != nil && d.voice.busy() {
 				continue
 			}
 			last := time.Unix(0, d.lastActivity.Load())
@@ -523,7 +534,9 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodMessageReaders, d.messageReaders)
 	d.handle(rpc.MethodMessageTranscribe, d.messageTranscribe)
 	d.handle(rpc.MethodMessageTranslate, d.messageTranslate)
-	d.srv.SetMethodTimeout(rpc.MethodMessageTranscribe, 100*time.Second)
+	// The local queue waits up to 600 seconds for the job, plus a margin.
+	d.srv.SetMethodTimeout(rpc.MethodMessageTranscribe, 630*time.Second)
+	d.registerVoice()
 	d.handle(rpc.MethodAccountProfile, d.accountProfile)
 	d.handle(rpc.MethodAccountPrivacyGet, d.accountPrivacyGet)
 	d.handle(rpc.MethodAccountPrivacySet, d.accountPrivacySet)

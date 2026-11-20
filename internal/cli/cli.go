@@ -22,9 +22,16 @@ import (
 const defaultCallTimeout = 2 * time.Minute
 const mediaCallTimeout = 600 * time.Second
 
+// transcribeCallTimeout covers the longest wait of message transcribe through
+// the local queue (600 seconds) and a margin for the answer.
+const transcribeCallTimeout = 630 * time.Second
+
 func (a *app) callTimeout(method string) time.Duration {
 	if method == rpc.MethodMessageSendMedia || method == rpc.MethodMessageEditMedia {
 		return mediaCallTimeout
+	}
+	if method == rpc.MethodMessageTranscribe {
+		return transcribeCallTimeout
 	}
 	return a.deps.CallTimeout
 }
@@ -207,6 +214,7 @@ func (a *app) rootCommand() *cobra.Command {
 		a.accountCommand(),
 		a.noteCommand(),
 		a.searchWithIndexCommand(),
+		a.voiceCommand(),
 		a.statusCommand(),
 		a.versionCommand(),
 		a.schemaCommand(root),

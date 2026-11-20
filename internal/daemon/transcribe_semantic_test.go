@@ -27,7 +27,7 @@ func transcriptIndexDaemon(t *testing.T) (*daemon, *transcriptionFake) {
 func TestTranscriptUpdateWakesTheSemanticIndexer(t *testing.T) {
 	d, _ := transcriptIndexDaemon(t)
 	ctx := context.Background()
-	if _, err := d.messageTranscribe(ctx, params(t, rpc.TranscribeParams{Chat: "77", ID: 1})); err != nil {
+	if _, err := d.messageTranscribe(ctx, params(t, rpc.TranscribeParams{Telegram: true, Chat: "77", ID: 1})); err != nil {
 		t.Fatal(err)
 	}
 	if n := semanticWakeups(d); n != 0 {
@@ -56,7 +56,7 @@ func TestTranscriptForeignUpdateDoesNotWakeTheSemanticIndexer(t *testing.T) {
 func TestTranscriptFinishedAnswerWakesTheSemanticIndexer(t *testing.T) {
 	d, f := transcriptIndexDaemon(t)
 	f.answer = rpc.Transcription{ChatID: 77, ID: 1, TranscriptionID: 4, Text: "оплата прошла"}
-	if _, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Chat: "77", ID: 1})); err != nil {
+	if _, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Telegram: true, Chat: "77", ID: 1})); err != nil {
 		t.Fatal(err)
 	}
 	if n := semanticWakeups(d); n != 1 {
@@ -71,7 +71,7 @@ func TestTranscriptUpdateWhileWaitingWakesTheSemanticIndexer(t *testing.T) {
 	f.onCall = func() {
 		go d.handleTranscription(rpc.Transcription{ChatID: 77, ID: 1, TranscriptionID: 4, Text: "привет"})
 	}
-	v, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Chat: "77", ID: 1, WaitMS: 1000}))
+	v, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Telegram: true, Chat: "77", ID: 1, WaitMS: 1000}))
 	if err != nil || v.(rpc.Transcription).Text != "привет" {
 		t.Fatalf("wait: %+v, %v", v, err)
 	}
