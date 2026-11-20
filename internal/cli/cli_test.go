@@ -1160,12 +1160,20 @@ func TestInvalidDeviceNames(t *testing.T) {
 // loggedInEnv starts a daemon with a logged-in account and a few messages.
 func loggedInEnv(t *testing.T) *testEnv {
 	t.Helper()
+	return loggedInEnvWithSetup(t, nil)
+}
+
+func loggedInEnvWithSetup(t *testing.T, setup func(*testEnv)) *testEnv {
+	t.Helper()
 	e := newEnv(t)
 	e.tg.user = &rpc.User{ID: 1, Username: "me"}
 	e.tg.messages = []rpc.Message{
 		{ID: 30, ChatID: 77, Date: "2026-01-03T10:00:00Z", Text: "third", Sender: &rpc.Sender{ID: 5, Name: "Ann"}},
 		{ID: 20, ChatID: 77, Date: "2026-01-02T10:00:00Z", Text: "second", MediaType: "photo"},
 		{ID: 10, ChatID: 77, Date: "2026-01-01T10:00:00Z", Text: "first"},
+	}
+	if setup != nil {
+		setup(e)
 	}
 	e.startDaemon()
 	return e

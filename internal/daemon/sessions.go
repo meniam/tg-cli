@@ -56,7 +56,7 @@ func (d *daemon) terminateSession(ctx context.Context, raw json.RawMessage) (any
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "cannot terminate the current session")
 	}
 	if !d.policy().SessionsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("session termination requires sessions: true in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "session termination requires access.sessions")
 	}
 	if p.DryRun {
 		return rpc.TerminateResult{ID: p.ID, DryRun: true, Action: "terminate", DeviceModel: target.DeviceModel, Platform: target.Platform, AppName: target.AppName, DateActive: target.DateActive}, nil
@@ -73,7 +73,7 @@ func (d *daemon) terminateSession(ctx context.Context, raw json.RawMessage) (any
 		return nil, fmt.Errorf("record session termination intent: %w", err)
 	}
 	if !d.policy().SessionsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("session termination requires sessions: true in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "session termination requires access.sessions")
 	}
 	err = d.telegram(ctx).TerminateSession(ctx, target.Hash)
 	record["time"] = time.Now().UTC().Format(time.RFC3339)

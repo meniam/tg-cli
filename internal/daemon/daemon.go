@@ -84,6 +84,9 @@ type daemon struct {
 	authLost             string
 	idempotencyLocks     keyLocks
 	transcriptionLocks   keyLocks
+	accessMu             sync.RWMutex
+	accessSnapshot       *access.Policy
+	ownerSecrets         *OwnerSecrets
 	phoneLimit           phoneLimiter
 	phoneResolveMu       sync.Mutex
 	opts                 Options
@@ -208,10 +211,11 @@ func Run(ctx context.Context, opts Options) error {
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	if opts.Access == nil {
-		opts.Access = access.Open(opts.Paths.Access)
-	}
+	// Runtime access comes from the database, never from the legacy file.
+	opts.Access = nil
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore, startedAt: time.Now()}
+	d.ownerSecrets = NewOwnerSecrets(ownedStore)
+	d.refreshAccess(runCtx)
 	d.admission.unblock(opts.Telegram)
 	defer d.openSemantic()()
 	// The indexer starts before anything that can send it a trigger exists.

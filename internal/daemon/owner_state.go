@@ -338,7 +338,7 @@ func (d *daemon) folderOrder(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, err
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("folder management requires dialogs: true in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "folder management requires access.dialogs")
 	}
 	if err := d.telegram(ctx).OrderFolders(ctx, p.IDs, p.DryRun); err != nil {
 		return nil, err
@@ -401,7 +401,7 @@ func (d *daemon) folderWrite(ctx context.Context, raw json.RawMessage, action st
 		return nil, err
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("folder management requires dialogs: true in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "folder management requires access.dialogs")
 	}
 	var existing rpc.Folder
 	hidden := 0
@@ -440,7 +440,7 @@ func (d *daemon) folderWrite(ctx context.Context, raw json.RawMessage, action st
 		}
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("folder management requires dialogs: true in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "folder management requires access.dialogs")
 	}
 	if action == "delete" && !p.DryRun {
 		self, err := d.telegram(ctx).Self(ctx)

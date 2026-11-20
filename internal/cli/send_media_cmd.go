@@ -99,7 +99,9 @@ func (a *app) messageSendMedia(cmd *cobra.Command, args []string) error {
 	var result rpc.SendMediaResult
 	if err := a.callOne(cmd, rpc.MethodMessageSendMedia, keyed, &result); err != nil {
 		if ce, ok := err.(*cmdError); ok && ce.exit == exitcode.WriteDisabled {
-			if strings.Contains(ce.msg, "file roots to files") || strings.Contains(ce.msg, "files in access.json") {
+			if strings.Contains(ce.msg, "access.files") {
+				a.warn(cmd, "ask the owner to add the file directory to access.files")
+			} else if strings.Contains(ce.msg, "file roots to files") || strings.Contains(ce.msg, "files in access.json") {
 				a.warn(cmd, "ask the owner to add the file directory to files in this profile's %s", a.config.Files.Access)
 			} else {
 				a.warn(cmd, "add the chat to the write list in this profile's %s", a.config.Files.Access)

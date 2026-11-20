@@ -26,6 +26,9 @@ func TestPolicyRules(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.file != "" {
+				_, _ = parseCompared(t, []byte(tc.file))
+			}
 			path := filepath.Join(t.TempDir(), "access.json")
 			if err := os.WriteFile(path, []byte(tc.file), 0o600); err != nil {
 				t.Fatal(err)
@@ -70,7 +73,7 @@ func TestWriteRequiresExplicitVisibleChat(t *testing.T) {
 		{"blocked", `{"block":[42],"write":[42]}`, false, false, true, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			p, err := parse([]byte(tc.file))
+			p, err := parseCompared(t, []byte(tc.file))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -103,6 +106,7 @@ func TestInvalidFileDeniesAllAndDoesNotLeakContent(t *testing.T) {
 	}
 	for i, file := range cases {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
+			_, _ = parseCompared(t, []byte(file))
 			path := filepath.Join(t.TempDir(), "access.json")
 			if err := os.WriteFile(path, []byte(file), 0o600); err != nil {
 				t.Fatal(err)
@@ -217,7 +221,7 @@ func TestConcurrentPolicyCalls(t *testing.T) {
 }
 
 func TestFilterReturnsDetachedSortedLists(t *testing.T) {
-	policy, err := parse([]byte(`{"allow":[42,-1001234567890],"block":[42,-77]}`))
+	policy, err := parseCompared(t, []byte(`{"allow":[42,-1001234567890],"block":[42,-77]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,12 +242,12 @@ func TestFilterReturnsDetachedSortedLists(t *testing.T) {
 func TestFileRootsAreExplicitAndDetached(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "files")
 	for _, raw := range []string{"{}", `{"files":[]}`} {
-		p, err := parse([]byte(raw))
+		p, err := parseCompared(t, []byte(raw))
 		if err != nil || p.FilesAllowed() || len(p.FileRoots()) != 0 || p.Enabled() || !p.Allowed(42) {
 			t.Fatalf("files disabled: policy=%+v err=%v", p, err)
 		}
 	}
-	p, err := parse([]byte(fmt.Sprintf(`{"files":[%q],"write":[42]}`, root+string(filepath.Separator)+".")))
+	p, err := parseCompared(t, []byte(fmt.Sprintf(`{"files":[%q],"write":[42]}`, root+string(filepath.Separator)+".")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +276,7 @@ func TestInvalidFileRootsDenyAll(t *testing.T) {
 		fmt.Sprintf(`{"files":[%q,%q]}`, root, root+string(filepath.Separator)+"."),
 	}
 	for _, raw := range cases {
-		p, err := parse([]byte(raw))
+		p, err := parseCompared(t, []byte(raw))
 		if err == nil || p.FilesAllowed() {
 			t.Errorf("invalid roots accepted: %q, policy=%+v, err=%v", raw, p, err)
 		}
@@ -337,7 +341,7 @@ func TestDialogAndSessionPermissions(t *testing.T) {
 		{`{"dialogs":null}`, false, false, true},
 		{`{"sessions":1}`, false, false, true},
 	} {
-		p, err := parse([]byte(tc.raw))
+		p, err := parseCompared(t, []byte(tc.raw))
 		if (err != nil) != tc.invalid || p.DialogsAllowed() != tc.dialogs || p.SessionsAllowed() != tc.sessions {
 			t.Errorf("%s: %+v %v", tc.raw, p, err)
 		}

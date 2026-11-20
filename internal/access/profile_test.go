@@ -14,7 +14,7 @@ func TestProfilePolicy(t *testing.T) {
 		{`{"profile":null}`, false, true},
 		{`{"profile":1}`, false, true},
 	} {
-		p, err := parse([]byte(tc.input))
+		p, err := parseCompared(t, []byte(tc.input))
 		if (err != nil) != tc.invalid || p.ProfileAllowed() != tc.allowed {
 			t.Errorf("parse(%s): allowed=%v, err=%v", tc.input, p.ProfileAllowed(), err)
 		}

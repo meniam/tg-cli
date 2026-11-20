@@ -287,7 +287,7 @@ func (d *daemon) accountSet(ctx context.Context, raw json.RawMessage) (any, erro
 		return nil, err
 	}
 	if !d.policy().ProfileAllowed() {
-		return nil, &rpc.Error{Code: rpc.CodeWriteDisabled, Message: d.accessMessage("profile changes are disabled in access.json"), Data: map[string]any{"list": "profile"}}
+		return nil, &rpc.Error{Code: rpc.CodeWriteDisabled, Message: "profile changes require access.profile", Data: map[string]any{"list": "profile"}}
 	}
 	var channel *chatref.Ref
 	if p.PersonalChannel != nil && *p.PersonalChannel != "none" {
@@ -333,7 +333,7 @@ func (d *daemon) accountSet(ctx context.Context, raw json.RawMessage) (any, erro
 	var first error
 	for i, c := range changes {
 		if !d.policy().ProfileAllowed() {
-			err = &rpc.Error{Code: rpc.CodeWriteDisabled, Message: d.accessMessage("profile changes are disabled in access.json"), Data: map[string]any{"list": "profile"}}
+			err = &rpc.Error{Code: rpc.CodeWriteDisabled, Message: "profile changes require access.profile", Data: map[string]any{"list": "profile"}}
 		} else if c.Flag == "personal-channel" && channel != nil && !d.policy().Allowed(channel.ID) {
 			err = rpc.ErrChatNotFound()
 		} else {
@@ -469,7 +469,7 @@ func (d *daemon) accountPrivacySet(ctx context.Context, raw json.RawMessage) (an
 		return nil, err
 	}
 	if !d.policy().ProfileAllowed() {
-		return nil, &rpc.Error{Code: rpc.CodeWriteDisabled, Message: d.accessMessage("profile changes are disabled in access.json"), Data: map[string]any{"list": "profile"}}
+		return nil, &rpc.Error{Code: rpc.CodeWriteDisabled, Message: "profile changes require access.profile", Data: map[string]any{"list": "profile"}}
 	}
 	current, err := d.telegram(ctx).AccountPrivacyGet(ctx, p.Key)
 	if err != nil {
@@ -548,7 +548,7 @@ func (d *daemon) accountPrivacySet(ctx context.Context, raw json.RawMessage) (an
 	policy := d.policy()
 	var denied error
 	if !policy.ProfileAllowed() {
-		denied = &rpc.Error{Code: rpc.CodeWriteDisabled, Message: d.accessMessage("profile changes are disabled in access.json"), Data: map[string]any{"list": "profile"}}
+		denied = &rpc.Error{Code: rpc.CodeWriteDisabled, Message: "profile changes require access.profile", Data: map[string]any{"list": "profile"}}
 	}
 	if denied == nil {
 		for _, refs := range [][]chatref.Ref{au, du, ac, dc} {

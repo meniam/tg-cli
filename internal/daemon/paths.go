@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"tg-cli/internal/config"
 )
@@ -101,13 +100,4 @@ func ResolvePaths(home, dbRoot, profile string, files FileNames) (Paths, error) 
 		return Paths{}, fmt.Errorf("socket path %q is %d bytes, the limit is %d: set home in config.toml or TG_CLI_HOME to a shorter directory", p.Socket, len(p.Socket), MaxSocketPath)
 	}
 	return p, nil
-}
-
-// accessMessage substitutes the configured access file name in diagnostics.
-func (d *daemon) accessMessage(message string) string {
-	name := filepath.Base(d.opts.Paths.Access)
-	if name == "." || name == "" {
-		name = "access.json"
-	}
-	return strings.ReplaceAll(message, "access.json", name)
 }

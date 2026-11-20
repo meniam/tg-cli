@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/schema"
+	"tg-cli/internal/store"
 )
 
 // schemaCommands runs `schema` once and returns its commands by path.
@@ -129,7 +131,32 @@ var realResponseCases = map[string][]string{
 // and keeps the JSON of data.
 func realResponses(t *testing.T) map[string][]byte {
 	t.Helper()
-	e := loggedInEnv(t)
+	e := loggedInEnvWithSetup(t, func(e *testEnv) {
+		paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(paths.DatabaseDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		db, err := store.Open(paths.Database)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		roots, err := json.Marshal([]string{e.home})
+		if err != nil {
+			t.Fatal(err)
+		}
+		settings := map[string]json.RawMessage{
+			"access.write": []byte(`[1,5,42]`), "access.admin": []byte(`[77]`),
+			"access.profile": []byte(`true`), "access.dialogs": []byte(`true`),
+			"access.sessions": []byte(`true`), "access.files": roots, "access.downloads": roots,
+		}
+		if err := db.SetSettings(context.Background(), settings); err != nil {
+			t.Fatal(err)
+		}
+	})
 	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
@@ -145,10 +172,6 @@ func realResponses(t *testing.T) map[string][]byte {
 	e.tg.mu.Unlock()
 	mediaPath := filepath.Join(e.home, "fixture.dat")
 	if err := os.WriteFile(mediaPath, []byte("fixture"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	accessData, _ := json.Marshal(map[string]any{"write": []int{1, 5, 42}, "admin": []int{77}, "profile": true, "dialogs": true, "sessions": true, "files": []string{e.home}, "downloads": []string{e.home}})
-	if err := os.WriteFile(paths.Access, accessData, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if r := e.run("message", "inline-query", "5", "--bot", "@fixturebot", "--query", "test"); r.code != exitcode.OK {

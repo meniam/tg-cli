@@ -26,7 +26,7 @@ var exportMonthLimit int64 = 1 << 30
 func (d *daemon) exportDir(path string) (*fileroot.DownloadDir, error) {
 	policy := d.policy()
 	if !policy.DownloadsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, "downloads are disabled: ask the owner to add downloads to access.json")
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "downloads are disabled: ask the owner to set access.downloads")
 	}
 	dir, err := fileroot.OpenArchiveDownloadDir(policy.DownloadRoots(), path)
 	if err != nil {

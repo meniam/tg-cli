@@ -193,3 +193,36 @@ func (db *DB) SettingsMigrated(ctx context.Context) (bool, error) {
 	}
 	return true, nil
 }
+
+// CreateOwnerSecret atomically initializes a previously absent passphrase hash.
+func (db *DB) CreateOwnerSecret(ctx context.Context, hash string) (bool, error) {
+	if hash == "" {
+		return false, errors.New("owner secret hash is empty")
+	}
+	now := db.now().Unix()
+	result, err := db.write.ExecContext(ctx, `INSERT INTO owner_secret(id,hash,created_at,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO NOTHING`, hash, now, now)
+	if err != nil {
+		return false, fmt.Errorf("initialize owner secret: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("initialize owner secret: %w", err)
+	}
+	return n == 1, nil
+}
+
+// ReplaceOwnerSecret changes the hash only if it has not changed since it was read.
+func (db *DB) ReplaceOwnerSecret(ctx context.Context, previous, next string) (bool, error) {
+	if next == "" {
+		return false, errors.New("owner secret hash is empty")
+	}
+	result, err := db.write.ExecContext(ctx, `UPDATE owner_secret SET hash=?, updated_at=? WHERE id=1 AND hash=?`, next, db.now().Unix(), previous)
+	if err != nil {
+		return false, fmt.Errorf("change owner secret: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("change owner secret: %w", err)
+	}
+	return n == 1, nil
+}

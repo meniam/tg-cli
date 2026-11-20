@@ -7,7 +7,7 @@ func TestDownloadsPolicy(t *testing.T) {
 		input string
 		ok    bool
 	}{{`{"downloads":["/tmp/a"]}`, true}, {`{"downloads":["relative"]}`, false}, {`{"downloads":["/tmp/a","/tmp/a"]}`, false}, {`{"downloads":null}`, false}} {
-		p, err := parse([]byte(tc.input))
+		p, err := parseCompared(t, []byte(tc.input))
 		if (err == nil) != tc.ok {
 			t.Fatalf("%s: %v", tc.input, err)
 		}
@@ -18,7 +18,7 @@ func TestDownloadsPolicy(t *testing.T) {
 }
 
 func TestDownloadsWithOtherPolicyFields(t *testing.T) {
-	p, err := parse([]byte(`{"allow":[42],"block":[43],"write":[42],"admin":[42],"create":true,"profile":true,"files":["/tmp/source"],"downloads":["/tmp/target"]}`))
+	p, err := parseCompared(t, []byte(`{"allow":[42],"block":[43],"write":[42],"admin":[42],"create":true,"profile":true,"files":["/tmp/source"],"downloads":["/tmp/target"]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestDownloadsWithOtherPolicyFields(t *testing.T) {
 	if p.DownloadRoots()[0] != "/tmp/target" {
 		t.Fatal("roots are not detached")
 	}
-	empty, err := parse([]byte(`{"downloads":[]}`))
+	empty, err := parseCompared(t, []byte(`{"downloads":[]}`))
 	if err != nil || empty.DownloadsAllowed() {
 		t.Fatalf("empty downloads: %+v %v", empty, err)
 	}

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"os"
 
 	"tg-cli/internal/access"
 	"tg-cli/internal/chatref"
@@ -9,16 +10,49 @@ import (
 	"tg-cli/internal/store"
 )
 
-func (d *daemon) policy() access.Policy {
-	if d.opts.Access == nil {
-		return access.Policy{}
+// refreshAccess replaces the snapshot even on failure, so a stale permissive
+// policy cannot survive a failed database read or a pending legacy file.
+func (d *daemon) refreshAccess(ctx context.Context) {
+	policy := access.Denied()
+	ok := false
+	if d.store != nil {
+		// Until the legacy file has been migrated, it may contain restrictions
+		// absent from the database. Never silently open those chats.
+		_, statErr := os.Stat(d.opts.Paths.Access)
+		if d.opts.Paths.Access == "" || os.IsNotExist(statErr) {
+			values, err := d.store.Settings(ctx)
+			if err == nil {
+				policy, err = access.FromSettings(values)
+				ok = err == nil
+			}
+		}
 	}
-	policy, err := d.opts.Access.Policy()
-	if err != nil {
-		// The path and file content must not reach a request response or log.
+	d.accessMu.Lock()
+	d.accessSnapshot = &policy
+	d.accessMu.Unlock()
+	if !ok && d.log != nil {
 		d.log.Error("access policy unavailable")
 	}
-	return policy
+}
+
+func (d *daemon) policy() access.Policy {
+	d.accessMu.RLock()
+	if d.accessSnapshot != nil {
+		policy := *d.accessSnapshot
+		d.accessMu.RUnlock()
+		return policy
+	}
+	d.accessMu.RUnlock()
+	// Test fixtures may supply the legacy loader directly. Run always creates
+	// a database snapshot before serving requests.
+	if d.opts.Access != nil {
+		policy, err := d.opts.Access.Policy()
+		if err != nil && d.log != nil {
+			d.log.Error("access policy unavailable")
+		}
+		return policy
+	}
+	return access.Denied()
 }
 
 func chatFilter(policy access.Policy) store.ChatFilter {

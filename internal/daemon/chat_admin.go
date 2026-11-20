@@ -207,7 +207,7 @@ func (d *daemon) chatAdmin(ctx context.Context, action string, raw json.RawMessa
 			return nil, err
 		}
 		if !d.policy().CreateAllowed() {
-			return nil, &rpc.Error{Code: rpc.CodeWriteDisabled, Message: d.accessMessage("creating chats is disabled in access.json"), Data: map[string]any{"list": "create"}}
+			return nil, &rpc.Error{Code: rpc.CodeWriteDisabled, Message: "creating chats requires access.create", Data: map[string]any{"list": "create"}}
 		}
 		if p.Title == nil {
 			return nil, rpc.NewError(rpc.CodeInvalidParams, "title is required")

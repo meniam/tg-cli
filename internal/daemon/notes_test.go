@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
@@ -26,6 +27,13 @@ func rpcTestDaemon(t *testing.T) (*rpc.Client, *store.DB, *fakeTelegram, *safeBu
 	logs := &safeBuffer{}
 	logger := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	d := &daemon{opts: Options{Telegram: tg, Store: db}, store: db, log: logger, srv: rpc.NewServer(logger)}
+	if err := db.SetSettings(context.Background(), map[string]json.RawMessage{"access.block": json.RawMessage(`[]`)}); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshAccess(context.Background())
+	if d.policy().Closed() {
+		t.Fatal("access snapshot is closed")
+	}
 	d.register()
 	serverSide, clientSide := net.Pipe()
 	done := make(chan struct{})
