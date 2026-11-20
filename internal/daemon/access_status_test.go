@@ -27,7 +27,8 @@ func TestStatusAccessIsOptionalAndNeverShowsIDs(t *testing.T) {
 		return result.(rpc.StatusResult), string(data)
 	}
 	_, plain := status()
-	want := fmt.Sprintf(`{"profile":"","pid":%d,"connected":true,"authorized":true,"user":{"id":42},"active_requests":0}`, os.Getpid())
+	// The background_sync block is always present; the scheduler is off here.
+	want := fmt.Sprintf(`{"profile":"","pid":%d,"connected":true,"authorized":true,"user":{"id":42},"active_requests":0,"background_sync":{"enabled":false,"window":{"start":"00:00","end":"00:00"},"state":"disabled","next_run_at":null,"last_run_at":null,"last_result":"","current_chat_id":null}}`, os.Getpid())
 	if plain != want {
 		t.Fatalf("status without file changed: got %s, want %s", plain, want)
 	}
