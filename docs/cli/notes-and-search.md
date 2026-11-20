@@ -197,6 +197,110 @@ tg search contract --scope notes --author ai
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 10.9.
 
+The word `index` is also the name of a subcommand group (`tg search index`). To search for the word itself, put `--` before it: `tg search -- index`. Without it `tg search index` fails with exit code 2 and asks for a subcommand.
+
+### tg search index start
+
+Runs the semantic indexer of the Daemon now, without waiting for the next interval. The indexer cuts the local messages into fragments of conversation and keeps one embedding per fragment in `vectors.db`, next to the message database. It reads the local database, writes only `vectors.db`, never calls Telegram, and sends the text of fragments only to the local Ollama service (the address must be a loopback one). The command returns at once with the state; a run that is already in progress is reported unchanged. Check progress with `tg search index status`.
+
+```text
+tg search index start [flags]
+```
+
+<!-- schema:flags tg search index start -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon and `[semantic_search] enabled = true` in the configuration (restart the Daemon after the change). Without the setting the command fails with exit code 2 and the message `semantic search is off: set [semantic_search] enabled = true`. It needs no Telegram connection and works after the login is lost. Besides this command a run starts by itself one `interval` after the Daemon starts, then one `interval` after the end of each run, and when a history load or a background sync run ends. A fragment is embedded again when its text changed and it is closed (the last message is 30 minutes old) or has grown by 300 characters; fragments of closed chats are removed from `vectors.db`.
+
+**Example.**
+
+```sh
+tg search index start
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"enabled":true,"state":"indexing","model":"bge-m3:latest","model_digest":"790764642607","indexed":0,"total":0,"embedded":0,"removed":0,"started_at":1795176000}}
+```
+
+**Answer fields** (`data`): the state of the indexer, see [`tg search index status`](#tg-search-index-status).
+
+**Exit codes.** 0; 2 semantic search is off; 3 no Daemon; 1 the indexer could not start (the message says why, for example that `vectors.db` could not be opened).
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 13.1.
+
+### tg search index status
+
+Reports the state of the semantic indexer. It reads the state in memory and never asks Ollama, so it is cheap and works while the feature is off (it answers `disabled`).
+
+```text
+tg search index status [flags]
+```
+
+<!-- schema:flags tg search index status -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon. The states are `disabled` (the setting is off), `idle` (waiting for the next run; `reason` is `cancelled` after a cancelled run), `indexing`, `unavailable` (Ollama did not answer), `model_missing` (Ollama has no such model: run `ollama pull <model>`) and `error` (another failure, `reason` says which; also the state when `vectors.db` could not be opened). In the last three states the next run tries again. Search by words keeps working in every state.
+
+**Example.**
+
+```sh
+tg search index status
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"enabled":true,"state":"idle","model":"bge-m3:latest","model_digest":"790764642607","indexed":6382,"total":6382,"embedded":0,"removed":0,"started_at":1795176000,"finished_at":1795176004,"next_run_at":1795176604}}
+```
+
+**Answer fields** (`data`): `enabled` boolean, `state` string, `reason` string (optional, never message text), `model` and `model_digest` strings (optional), `indexed` (fragments stored for the current model), `total` (fragments long enough for the index), `embedded` and `removed` (what the last run computed and dropped) integers, `started_at`, `finished_at` and `next_run_at` Unix seconds (optional; `next_run_at` is present while no run is in progress).
+
+**Exit codes.** 0; 3 no Daemon.
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 13.1.
+
+### tg search index cancel
+
+Stops the run in progress. The fragments already stored stay, and the next run continues from there. Without a run it changes nothing and reports the state.
+
+```text
+tg search index cancel [flags]
+```
+
+<!-- schema:flags tg search index cancel -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon and `[semantic_search] enabled = true`. The answer carries the state at the moment of the call; the run ends a moment later, so check `tg search index status` for `idle` with the reason `cancelled`.
+
+**Example.**
+
+```sh
+tg search index cancel
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"enabled":true,"state":"indexing","model":"bge-m3:latest","model_digest":"790764642607","indexed":1200,"total":6382,"embedded":1200,"removed":0,"started_at":1795176000}}
+```
+
+**Answer fields** (`data`): the state of the indexer, see [`tg search index status`](#tg-search-index-status).
+
+**Exit codes.** 0; 2 semantic search is off; 3 no Daemon.
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 13.1.
+
 ## The tool describes itself
 
 ### tg version
