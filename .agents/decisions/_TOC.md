@@ -49,3 +49,4 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-16 — [Флаги чата пишутся в базу, только когда Telegram их вернул](20261116_1158_chat_flags_are_written_only_when_telegram_returned_them.md)
 - 2026-11-16 — [Каждая таблица с данными Telegram хранит полученный объект в raw как JSON](20261116_1336_every_telegram_table_keeps_the_received_object_in_raw_as_json.md)
 - 2026-11-18 — [raw хранит объект Telegram с ключом типа и без access_hash, сериализатор лежит в отдельном пакете tgraw](20261118_1211_raw_keeps_telegram_objects_with_type_keys_and_no_access_hash.md)
+- 2026-11-20 — [Поиск по проекту это скилл scout без отдельного агента](20261120_1551_scouting_is_the_scout_skill_without_an_agent.md)

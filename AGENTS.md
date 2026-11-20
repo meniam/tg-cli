@@ -31,7 +31,6 @@ bin/lib/, bin/just/   `just` help rendering and help texts (update them when you
 bin/apps/atlas/       Atlas build (code graph and docs index), a copy: do not edit; launcher `bin/atlas`
 .atlas.json           Atlas config: what is indexed; the index is in `var/cache/atlas`
 lefthook.yml         git hooks: after a branch switch or a pull the Atlas index is caught up in the background (`lefthook install` once per clone)
-.agents/agents/       project agents (`pathfinder`); profiles in `.claude/agents/` and `.codex/agents/`
 dist/                 build output (dist/tg), not tracked by git
 docs/                 documentation: cli/ (command reference), contracts.md, skill/ (agent skill)
 cmd/tg-cli/main.go    entry point and wiring only, no logic
@@ -56,16 +55,16 @@ internal/             cli, daemon, rpc, tgclient, netconf, throttle, access, fil
 
 ## Roles and models
 
-- Every agent runs in a herdr pane (see "Herdr layout"), not as a Claude subagent. The exception is `pathfinder`: read-only scouting runs as a Claude subagent on Haiku, see "Search".
+- Every agent runs in a herdr pane (see "Herdr layout"), not as a Claude subagent.
 - Planner: Claude Opus 5.5 (`herdr agent start <name> --kind claude -- --model opus`). It writes and revises plans: requirement audit, decision questions, the plan file.
 - Manager (the main session): Claude Sonnet 5.5, unless a skill or an agent definition sets another model.
 - Everything else (code, tests, audits, documents, checks) goes to Codex. The agent that starts the job picks the Codex model by the task and says which one it chose: Terra (`gpt-6.1-terra`) is the default for Go code, a lighter model for mechanical edits, a stronger one for hard design or review. Claude does other work only when a skill or agent definition requires it.
 
 ## Search
 
-Any search through code, configs, documents and tests of this project goes to the `pathfinder` agent ([pathfinder.md](.agents/agents/pathfinder.md)), also questions like "what do you know about X", "how does it work", "where is it done", "who calls". It checks documents against code through Atlas and returns a report with `path:line` links. Do not conclude about behavior from a document alone.
+Before any search through code, configs, documents and tests of this project, load the skill [scout](.agents/skills/scout/SKILL.md), also for questions like "what do you know about X", "how does it work", "where is it done", "who calls". It checks documents against code through Atlas (`bin/atlas`) and fixes the report format with `path:line` links. Do not conclude about behavior from a document alone.
 
-You may read files named by the user, an instruction or a scout's report yourself; finding new files and links stays with `pathfinder`. A subagent that already got a scouting job searches itself and delegates no further: first documents and Atlas (`bin/atlas`), then a pointed `rg`. Commands and limits are in the skill [pathfinder](.agents/skills/pathfinder/SKILL.md). Atlas needs `uv` (https://docs.astral.sh/uv/getting-started/installation/); it installs Python 3.14 itself. `bin/apps/atlas` is a copy of a build: a bug or a missing feature goes to the owner, not into the copy.
+Order: documents and Atlas first, then a pointed `rg`. Commands and limits are in the skill. Atlas needs `uv` (https://docs.astral.sh/uv/getting-started/installation/); it installs Python 3.14 itself. `bin/apps/atlas` is a copy of a build: a bug or a missing feature goes to the owner, not into the copy.
 
 ## Herdr layout
 
