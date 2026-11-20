@@ -107,7 +107,7 @@ PR: —
 | Висячие ссылки | `rg 'skill/tg-cli' --glob '!.agents/plans/**'` | пусто, кроме записи решения, где старый путь назван намеренно | passed |
 | Язык | `grep -rnP '[А-Яа-яЁё]' docs/skill/tg` | кириллица только в `description`, строках `task` и названиях чатов | passed |
 | Скрипт | `shellcheck docs/skill/tg/scripts/tg-doctor.sh` и запуск | без замечаний, 0 | passed (exit 0 на живом Daemon, только чтение) |
-| Тексты | `glavred` по `docs_chain.md` | замечаний нет | not_run |
+| Тексты | `glavred` по `docs_chain.md` | замечаний нет | passed (25 замечаний исправлены, повторный прогон не делался) |
 
 ## Deploy / rollback
 
