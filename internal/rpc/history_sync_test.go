@@ -20,9 +20,17 @@ func TestHistorySyncJobOptionalFields(t *testing.T) {
 			t.Fatalf("%s must be null when no message was saved: %s", name, raw)
 		}
 	}
-	for _, name := range []string{"wait_seconds", "error_code", "error"} {
+	for _, name := range []string{"wait_seconds", "error_code", "error", "source"} {
 		if _, exists := fields[name]; exists {
 			t.Fatalf("%s must be absent outside its state: %s", name, raw)
 		}
+	}
+	job.Source = HistorySyncBackground
+	raw, err = json.Marshal(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &fields); err != nil || fields["source"] != "background" {
+		t.Fatalf("source of a background job: %s", raw)
 	}
 }

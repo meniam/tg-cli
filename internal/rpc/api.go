@@ -390,12 +390,19 @@ const (
 	HistorySyncCancelled    = "cancelled"
 )
 
+// Sources of a history load: the owner's command or the Daemon's schedule.
+const (
+	HistorySyncManual     = "manual"
+	HistorySyncBackground = "background"
+)
+
 // HistorySyncJob is the in-memory state of one background history load.
 // FirstMessageDate is the Unix time of the first message of the chat, null until
 // the load has reached the start of the chat.
 type HistorySyncJob struct {
 	ChatID           int64  `json:"chat_id"`
 	State            string `json:"state"`
+	Source           string `json:"source,omitempty"` // HistorySyncManual or HistorySyncBackground; empty when idle
 	Pages            int    `json:"pages"`
 	Loaded           int    `json:"loaded"`
 	OldestID         *int   `json:"oldest_id"`

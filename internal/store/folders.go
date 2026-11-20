@@ -98,6 +98,13 @@ func (db *DB) ReplaceFolders(ctx context.Context, folders []rpc.Folder, filter C
 	return tx.Commit()
 }
 
+// FoldersSyncedAt returns the unix time of the folder snapshot, or nil when the
+// folders were never read from Telegram.
+func (db *DB) FoldersSyncedAt(ctx context.Context) (*int64, error) {
+	at, _, err := db.snapshot(ctx, "folders")
+	return at, err
+}
+
 func (db *DB) Folders(ctx context.Context, filter ChatFilter) (rpc.FoldersResult, error) {
 	out := rpc.FoldersResult{Folders: []rpc.Folder{}}
 	var err error
