@@ -3,16 +3,16 @@
 ID: 20261120_1551_background_history_sync
 Created: 2026-11-20
 Owner: Мязин Евгений
-Branch: — (будет `feature/20261120_1551_background_history_sync` при переходе в `in_progress`)
+Branch: `feature/20261120_1551_background_history_sync` (интеграционная, worktree `../tg-cli-bgsync`, собирает менеджер); потоки `_store`, `_sync`, `_config`, `_sched`, `_status`, worktree `../tg-cli-bgsync-<поток>`
 PR: —
 
-Исполнитель Go-кода (по выбору менеджера; по умолчанию Codex Terra, `gpt-6.1-terra`, в панели Herdr) загружает скиллы `expert-golang` и `expert-testing` перед первым изменением кода и держит их до конца плана. Каждый шаг проверяет Claude по таблице «Verification» до перехода к следующему.
+Исполнители Go-кода: пять агентов Claude Sonnet 5.5 в панелях Herdr (решение владельца 2026-11-20 вместо Codex по умолчанию), по одному на поток в своём worktree. Каждый загружает скиллы `expert-golang` и `expert-testing` перед первым изменением кода. Менеджер (Claude Sonnet 5.5, главная сессия) проверяет каждый поток по таблице «Verification», коммитит сам и сливает в интеграционную ветку.
 
 ## Status
 
-- Current status: approved (2026-11-20: все вопросы Q1-Q5 решены владельцем, код ещё не менялся)
+- Current status: in_progress (2026-11-20: Step 0 закрыт, запущена волна 1: потоки store, sync, config)
 - Last update: 2026-11-20
-- Next safe step: Step 0 (ветка и worktree, запись решения в `.agents/decisions/`), затем шаг 1.
+- Next safe step: принять потоки волны 1 (store, sync, config), слить в интеграционную ветку, запустить волну 2 (поток sched).
 
 ## Context and sources
 
@@ -123,14 +123,27 @@ page_pause_max = "8s"
 | 2026-11-20 | Q2: чат с ошибкой загрузки пропускается до следующего дня | Рекомендация принята | yes |
 | 2026-11-20 | Q3: первый запуск после старта демона через случайный интервал 40-180 минут от старта | Рекомендация принята | yes |
 | 2026-11-20 | Q4: время следующего запуска сразу в `daemon status` (блок `background_sync`), не отдельным планом | Ответ владельца | yes |
+| 2026-11-20 | Запись решения: [20261120_1651_background_history_sync_runs_in_a_daily_window_and_is_off_by_default](../decisions/20261120_1651_background_history_sync_runs_in_a_daily_window_and_is_off_by_default.md) | Решения плана переживают план | yes |
 | 2026-11-20 | Q5: дашборд показывает набросок плюс дроссель и события; без демона код 3 и подсказка, база напрямую не читается | Ответы владельца | yes |
 | 2026-11-20 | Новая команда `tg status`: дашборд для человека, не JSON, данные из нового метода демона `dashboard` | Просьба владельца | yes |
+
+## Streams
+
+Пять потоков, три волны. Конфликты правки общих файлов (`rpc`, `daemon.go`, `history_sync.go`) снимает порядок волн и слияние менеджером; потоки не правят `FEATURES.md` и `docs/` (кроме потока status).
+
+| Поток | Волна | Шаги | Ветка (суффикс) | Основные файлы |
+| ----- | ----- | ---- | --------------- | -------------- |
+| store | 1 | 2, 5 | `_store` | `internal/store` (миграция 0010, `sync_state.go`, запрос выбора), `internal/rpc` (поле даты), `chat overview`, `chat sync status` |
+| sync | 1 | 3, 4, 6 | `_sync` | `internal/daemon/history_sync.go`, `internal/rpc` (`source`), `internal/daemon/owner_state.go` (папки в функцию) |
+| config | 1 | 7 | `_config` | `internal/config`, `internal/cli/throttle_config.go`, `schema_cmd.go`, `just docs` |
+| sched | 2 | 8, 9 | `_sched` | `internal/daemon/background_sync.go`, `daemon.go`, блок `background_sync` в `daemon status` |
+| status | 3 | 10, 11 | `_status` | метод `dashboard`, команда `tg status`, `internal/output`, `docs/`, FEATURES.md 10.12 |
 
 ## Step 0. Fix decisions before changes
 
 - [x] Ответить на Q1-Q5 в «Open questions», записать ответы в Decision log, статус `approved` (2026-11-20).
-- [ ] Создать ветку `feature/20261120_1551_background_history_sync` и worktree `../tg-cli-background_sync` от `main`, записать в заголовок плана.
-- [ ] Записать решение в `.agents/decisions/` (планировщик в рабочем окне, источник задачи, `first_message_date`) и обновить решение `20261114_1353`: оговорка про `[background_sync]`.
+- [x] Создать ветку `feature/20261120_1551_background_history_sync` и worktree `../tg-cli-bgsync` от `main`, записать в заголовок плана (2026-11-20).
+- [x] Записать решение в `.agents/decisions/` (2026-11-20): `20261120_1651_background_history_sync_runs_in_a_daily_window_and_is_off_by_default`, оно `revises` `20261114_1353`.
 
 ## Step 1. Audit and baseline
 
