@@ -187,6 +187,11 @@ func (m *historySyncManager) setStateLocked(task *historySyncTask, state string,
 			close(task.final)
 		}
 	}
+	if state == rpc.HistorySyncDone {
+		// A finished load brings new messages for the semantic index. The trigger
+		// only sets a flag or sends on a buffered channel, so it never blocks here.
+		m.d.triggerSemanticIndex()
+	}
 }
 
 // cancelTaskLocked cancels a queued or running job and drops it from the

@@ -27,6 +27,8 @@ var audit03NoChatMethods = map[string]bool{
 	rpc.MethodStickerInstalled: true, rpc.MethodStickerSearch: true, rpc.MethodStickerSet: true,
 	rpc.MethodSavedList: true, rpc.MethodSavedTags: true, rpc.MethodSavedHistory: true, rpc.MethodSavedSearch: true, rpc.MethodSavedTagRename: true,
 	rpc.MethodMessageSearchPublic: true, rpc.MethodSubscribe: true, rpc.MethodUnsubscribe: true,
+	// The semantic index commands take no chat and answer counters only.
+	rpc.MethodSearchIndexStart: true, rpc.MethodSearchIndexStatus: true, rpc.MethodSearchIndexCancel: true,
 }
 
 // audit03ParamsFirst validate other parameters before the chat is looked at,

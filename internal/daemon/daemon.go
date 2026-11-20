@@ -88,10 +88,11 @@ type daemon struct {
 	store                *store.DB
 	sync                 *historySyncManager
 	full                 *chatFullSyncManager
-	background           *backgroundSync // nil when the scheduled history load is off
-	vectors              *vectors.Store  // nil when semantic search is off or vectors.db could not be opened
-	embedder             embed.Embedder  // nil when semantic search is off or the Ollama client could not be built
-	semanticFailure      string          // why vectors or embedder is nil while the feature is on; empty otherwise
+	background           *backgroundSync  // nil when the scheduled history load is off
+	semanticIndex        *semanticIndexer // nil when semantic search is off or its pieces could not be opened
+	vectors              *vectors.Store   // nil when semantic search is off or vectors.db could not be opened
+	embedder             embed.Embedder   // nil when semantic search is off or the Ollama client could not be built
+	semanticFailure      string           // why vectors or embedder is nil while the feature is on; empty otherwise
 	cancel               context.CancelFunc
 	startedAt            time.Time // the start of the process; zero in handler tests
 	once                 sync.Once
@@ -205,6 +206,8 @@ func Run(ctx context.Context, opts Options) error {
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore, startedAt: time.Now()}
 	d.admission.unblock(opts.Telegram)
 	defer d.openSemantic()()
+	// The indexer starts before anything that can send it a trigger exists.
+	d.startSemanticIndex(runCtx, nil)
 	d.sync = newHistorySyncManager(runCtx, d, nil)
 	d.full = newChatFullSyncManager(runCtx, d, nil)
 	// A daemon that has just started is not idle: the clock runs from now.
@@ -410,6 +413,9 @@ func Run(ctx context.Context, opts Options) error {
 	if d.background != nil {
 		d.background.wait()
 	}
+	if d.semanticIndex != nil {
+		d.semanticIndex.wait()
+	}
 	<-contactsDone
 	<-idempotencyDone
 	<-accountDone
@@ -566,6 +572,9 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodHistorySyncStart, d.historySyncStart)
 	d.handle(rpc.MethodHistorySyncStatus, d.historySyncStatus)
 	d.handle(rpc.MethodHistorySyncCancel, d.historySyncCancel)
+	d.handle(rpc.MethodSearchIndexStart, d.searchIndexStart)
+	d.handle(rpc.MethodSearchIndexStatus, d.searchIndexStatus)
+	d.handle(rpc.MethodSearchIndexCancel, d.searchIndexCancel)
 	d.registerOwnerState()
 	d.registerDialogs()
 	d.registerSaved()

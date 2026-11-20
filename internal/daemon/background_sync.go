@@ -194,6 +194,10 @@ func (s *backgroundSync) finish(result string) {
 	s.lastResult = result
 	s.nextRun = next
 	s.d.log.Info("background sync run ended", "result", result)
+	if result != rpc.BackgroundSyncSkipped {
+		// The run may have saved pages: the semantic index looks at them.
+		s.d.triggerSemanticIndex()
+	}
 }
 
 // runOnce is one run at now, inside the window. It returns the result for the
