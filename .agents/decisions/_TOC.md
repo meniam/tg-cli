@@ -53,3 +53,5 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 ||||||| 57f8dcc
 - 2026-11-20 — [Поиск по проекту это скилл scout без отдельного агента](20261120_1551_scouting_is_the_scout_skill_without_an_agent.md)
 - 2026-11-20 — [Скилл для агента называется tg и состоит из маршрутизатора, справочников и рецептов](20261120_1700_agent_skill_is_tg_with_references_and_recipes.md)
+- 2026-11-20 — [Векторы живут в vectors.db, эмбеддинги bge-m3 считает Ollama, индекс фрагменты разговора, слияние RRF](20261120_1850_vectors_live_in_vectors_db_and_bge_m3_embeds_through_ollama.md)
+- 2026-11-20 — [Поиск знает формы слов через Snowball и возвращает ссылки Telegram, построенные локально](20261120_1851_search_stems_russian_and_returns_local_telegram_links.md)
