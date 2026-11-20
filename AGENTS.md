@@ -37,11 +37,11 @@ dist/                 build output (dist/tg), not tracked by git
 docs/                 documentation: cli/ (command reference), contracts.md, skill/ (agent skill)
 cmd/tg-cli/main.go    entry point and wiring only, no logic
 internal/             cli, daemon, rpc, tgclient, netconf, throttle, access, fileroot, mediameta,
-                      clientpreset, chatref, store, textnorm, output, exitcode
+                      clientpreset, chatref, store, textnorm, output, exitcode, voice (gigaam, exec)
 ```
 
 - Code lives only in `cmd/` and `internal/`. Do not create `src/`, `pkg/`, `models/`, `utils/`.
-- `internal/cli` must not import `tgclient`, gotd or `store` (`store` is reachable only through `daemon`, which owns the database). It may import `config`, `rpc`, `output`, `exitcode`, `clientpreset`, `chatref`, `netconf` and `daemon` (paths and `Run`). `main` injects the Telegram client into the Daemon.
+- `internal/cli` must not import `tgclient`, gotd or `store` (`store` is reachable only through `daemon`, which owns the database). It may import `config`, `rpc`, `output`, `exitcode`, `clientpreset`, `chatref`, `netconf`, `voice/gigaam` (the engine install and its check) and `daemon` (paths and `Run`). `main` injects the Telegram client into the Daemon.
 - The package that uses an interface declares it.
 - Tests sit next to the code, fixtures in `testdata/`. Do not run tests against live Telegram by default. `internal/cli` has a test that fails when a command or flag of `tg schema` has no section in `docs/cli/` or when a Markdown link is broken: write the section together with the command.
 - The executor of Go code loads the `expert-golang` skill first.
