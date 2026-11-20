@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"tg-cli/internal/rpc"
@@ -448,26 +449,29 @@ func TestEventSubscriptionReplaysThenStreams(t *testing.T) {
 }
 
 func TestSubscriberPreventsIdleStop(t *testing.T) {
-	d := &daemon{hub: rpc.NewHub()}
-	d.lastActivity.Store(time.Now().Add(-time.Hour).UnixNano())
-	sub := d.hub.Subscribe()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	stopped := make(chan struct{})
-	go watchIdle(ctx, func() { close(stopped) }, slog.New(slog.DiscardHandler), d, 10*time.Millisecond)
-	// "Does not stop" cannot be awaited, so the test waits for several checks of
-	// the watcher: a missing subscriber condition stops the daemon at the first one.
-	select {
-	case <-stopped:
-		t.Fatal("active subscriber did not prevent idle stop")
-	case <-time.After(5 * idleCheckEvery):
-	}
-	sub.Close()
-	select {
-	case <-stopped:
-	case <-time.After(10 * time.Second):
-		t.Fatal("idle stop did not resume")
-	}
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		d := &daemon{hub: rpc.NewHub()}
+		d.lastActivity.Store(time.Now().Add(-time.Hour).UnixNano())
+		sub := d.hub.Subscribe()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		stopped := make(chan struct{})
+		go watchIdle(ctx, func() { close(stopped) }, slog.New(slog.DiscardHandler), d, 10*time.Millisecond)
+		synctest.Wait()
+		// Advance through several watcher checks before closing the subscription.
+		select {
+		case <-stopped:
+			t.Fatal("active subscriber did not prevent idle stop")
+		case <-time.After(5 * idleCheckEvery):
+		}
+		sub.Close()
+		select {
+		case <-stopped:
+		case <-time.After(10 * time.Second):
+			t.Fatal("idle stop did not resume")
+		}
+	})
 }
 
 func TestEventRawPersistsMessageWithoutChangingPayload(t *testing.T) {

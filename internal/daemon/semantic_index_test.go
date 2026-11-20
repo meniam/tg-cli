@@ -16,6 +16,7 @@ import (
 	"tg-cli/internal/embed"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
+	"tg-cli/internal/store/storetest"
 	"tg-cli/internal/vectors"
 )
 
@@ -111,7 +112,7 @@ type semanticFixture struct {
 func newSemanticFixture(t *testing.T) *semanticFixture {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "store.db"))
+	db, err := storetest.Open(filepath.Join(dir, "store.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -596,7 +597,7 @@ func TestSemanticIndexStopJoinsTheGoroutineEvenInsideARun(t *testing.T) {
 // asks the embedder, whatever triggers arrive.
 func TestSemanticIndexOffDoesNothing(t *testing.T) {
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "store.db"))
+	db, err := storetest.Open(filepath.Join(dir, "store.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

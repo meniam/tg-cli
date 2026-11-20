@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 )
 
 // Checkpoint folds the write-ahead journal of the database at path into the main
@@ -15,11 +16,19 @@ import (
 // journal may then still hold data. A missing file is an error, because a
 // checkpoint of nothing would hide a wrong path.
 func Checkpoint(path string) (busy bool, err error) {
+	return CheckpointTimeout(path, 5*time.Second)
+}
+
+// CheckpointTimeout runs a checkpoint with the specified SQLite busy timeout.
+func CheckpointTimeout(path string, busyTimeout time.Duration) (busy bool, err error) {
 	db, err := openInspect(path)
 	if err != nil {
 		return false, err
 	}
 	defer db.Close()
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeout.Milliseconds())); err != nil {
+		return false, fmt.Errorf("set busy timeout: %w", err)
+	}
 	// The pragma answers three columns: busy, the size of the journal and the
 	// pages the checkpoint moved. Only busy decides whether the journal is
 	// drained.

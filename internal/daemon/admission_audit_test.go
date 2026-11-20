@@ -10,6 +10,7 @@ import (
 
 // A canceled caller gets its own error, not an offline answer.
 func TestAudit03AcquireWithACanceledContext(t *testing.T) {
+	t.Parallel()
 	g := &telegramAdmission{client: &fakeTelegram{}}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -23,6 +24,7 @@ func TestAudit03AcquireWithACanceledContext(t *testing.T) {
 
 // Without a client the answer is offline, and no lease is taken.
 func TestAudit03AcquireWithoutAClientIsOffline(t *testing.T) {
+	t.Parallel()
 	g := &telegramAdmission{}
 	_, _, _, err := g.acquire(context.Background())
 	var rpcErr *rpc.Error

@@ -9,6 +9,7 @@ import (
 )
 
 func TestAccountMethod(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		method  string
 		covered bool
@@ -36,6 +37,7 @@ func TestAccountMethod(t *testing.T) {
 // status and the cancel of a background job work on in-memory state, so they stay
 // available while the client is offline; a start always needs the connection.
 func TestNeedsTelegram(t *testing.T) {
+	t.Parallel()
 	for _, method := range []string{
 		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel,
 		rpc.MethodChatFullStatus, rpc.MethodChatFullCancel,

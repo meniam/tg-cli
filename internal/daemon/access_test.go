@@ -12,12 +12,13 @@ import (
 	"tg-cli/internal/access"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
+	"tg-cli/internal/store/storetest"
 )
 
 func accessTestDaemon(t *testing.T) (*daemon, *fakeTelegram, *store.DB, string) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "store.db"))
+	db, err := storetest.Open(filepath.Join(dir, "store.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

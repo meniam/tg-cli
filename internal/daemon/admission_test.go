@@ -10,6 +10,7 @@ import (
 )
 
 func TestTelegramAdmissionDrainsAndCancels(t *testing.T) {
+	t.Parallel()
 	g := &telegramAdmission{client: &fakeTelegram{}}
 	ctx, _, release, err := g.acquire(context.Background())
 	if err != nil {
@@ -49,6 +50,7 @@ func TestTelegramAdmissionDrainsAndCancels(t *testing.T) {
 }
 
 func TestTelegramAdmissionConcurrentBlock(t *testing.T) {
+	t.Parallel()
 	g := &telegramAdmission{client: &fakeTelegram{}}
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
@@ -71,6 +73,7 @@ func TestTelegramAdmissionConcurrentBlock(t *testing.T) {
 }
 
 func TestTelegramAdmissionDrainWaitsAfterCancellation(t *testing.T) {
+	t.Parallel()
 	g := &telegramAdmission{client: &fakeTelegram{}}
 	ctx, _, release, err := g.acquire(context.Background())
 	if err != nil {
@@ -106,6 +109,7 @@ func TestTelegramAdmissionDrainWaitsAfterCancellation(t *testing.T) {
 }
 
 func TestTelegramAdmissionDrainContextCancellation(t *testing.T) {
+	t.Parallel()
 	g := &telegramAdmission{client: &fakeTelegram{}}
 	_, _, release, err := g.acquire(context.Background())
 	if err != nil {

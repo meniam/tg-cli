@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"tg-cli/internal/store"
 )
@@ -53,6 +54,10 @@ func moveTempName(database string, pid int) string {
 // disk; a call with nothing to do returns false, and so does a move that had
 // already finished.
 func MoveLegacyDatabase(p Paths) (moved bool, err error) {
+	return moveLegacyDatabase(p, 5*time.Second)
+}
+
+func moveLegacyDatabase(p Paths, busyTimeout time.Duration) (moved bool, err error) {
 	if err := removeMoveTemps(p); err != nil {
 		return false, err
 	}
@@ -73,7 +78,7 @@ func MoveLegacyDatabase(p Paths) (moved bool, err error) {
 		}
 		return true, nil
 	case legacy:
-		if err := moveDatabase(p); err != nil {
+		if err := moveDatabase(p, busyTimeout); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -91,13 +96,13 @@ func MoveLegacyDatabase(p Paths) (moved bool, err error) {
 
 // moveDatabase runs the move of one database: prepare, checkpoint, copy, verify,
 // rename and remove the old file.
-func moveDatabase(p Paths) error {
+func moveDatabase(p Paths, busyTimeout time.Duration) error {
 	if err := makeDatabaseDir(p.DatabaseDir); err != nil {
 		return err
 	}
 	// A journal with content may hold history the main file does not: the
 	// checkpoint folds it in, and a busy database is in use by someone else.
-	if err := checkpointLegacy(p); err != nil {
+	if err := checkpointLegacy(p, busyTimeout); err != nil {
 		return err
 	}
 	before, err := os.Stat(p.LegacyDatabase)
@@ -160,8 +165,8 @@ func makeDatabaseDir(dir string) error {
 
 // checkpointLegacy folds the journal of the old database into its main file. A
 // database held by another process cannot be copied whole, so the move stops.
-func checkpointLegacy(p Paths) error {
-	busy, err := store.Checkpoint(p.LegacyDatabase)
+func checkpointLegacy(p Paths, busyTimeout time.Duration) error {
+	busy, err := store.CheckpointTimeout(p.LegacyDatabase, busyTimeout)
 	if err != nil {
 		return moveError(p.LegacyDatabase, "checkpoint the database", err)
 	}
