@@ -109,6 +109,12 @@ func writeHumanList(b *strings.Builder, items []any, depth int, path string, unt
 		}
 	}
 	for _, item := range items {
+		if text, ok := item.(string); ok && untrusted[path] {
+			fmt.Fprintf(b, "%s-\n", indent)
+			frameText(b, text)
+			*framed = true
+			continue
+		}
 		if isScalar(item) {
 			fmt.Fprintf(b, "%s- %s\n", indent, scalar(item))
 			continue

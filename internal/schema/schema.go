@@ -234,7 +234,9 @@ func (w *walker) value(t reflect.Type, path string, optional bool, decl declarat
 			w.add(Field{Path: path, Type: TypeString, Optional: optional}, decl, depth)
 			return
 		}
-		w.add(Field{Path: path, Type: TypeArray, Element: elementName(t.Elem()), Optional: optional}, decl, depth)
+		element := elementName(t.Elem())
+		// An array of strings carries the mark of its tag: each item is text.
+		w.add(Field{Path: path, Type: TypeArray, Element: element, Optional: optional, Untrusted: untrusted && element == TypeString}, decl, depth)
 		w.element(t.Elem(), path, optional, decl, depth)
 	case reflect.Map:
 		// The keys of a map come from the data, so its members have no path.

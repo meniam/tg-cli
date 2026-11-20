@@ -38,6 +38,6 @@ func TestAudit07_UntrustedTagByShape(t *testing.T) {
 		t.Fatalf("names is %s of %s, want array of string", got.Type, got.Element)
 	}
 	if !fields["names"].Untrusted {
-		t.Skip("known defect G07-F01: a []string with untrusted:\"true\" loses the mark in the schema")
+		t.Fatal(`a []string with untrusted:"true" loses the mark in the schema`)
 	}
 }

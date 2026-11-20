@@ -26,7 +26,7 @@ func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 		"account profile":            {"first_name", "last_name", "username", "bio"},
 		"account emoji-statuses":     {"statuses.title", "statuses.slug"},
 		"account sessions":           {"sessions.device_model", "sessions.platform", "sessions.system_version", "sessions.app_name", "sessions.app_version"},
-		"user profile":               {"first_name", "last_name", "username", "bio"},
+		"user profile":               {"first_name", "last_name", "username", "usernames", "bio"},
 		"contact list":               {"contacts.first_name", "contacts.last_name", "contacts.username"},
 		"contact search":             {"contacts.first_name", "contacts.last_name", "contacts.username"},
 		"contact add":                {"first_name", "last_name"},
