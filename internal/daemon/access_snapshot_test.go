@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -60,5 +61,101 @@ func TestAccessSnapshotClosedOnErrorsAndLegacyFile(t *testing.T) {
 	d.refreshAccess(ctx)
 	if !d.policy().Closed() || d.policy().Allowed(43) {
 		t.Fatal("database failure kept open policy")
+	}
+}
+
+func TestAccessSnapshotRejectsNewLegacyEntry(t *testing.T) {
+	for _, kind := range []string{"file", "dangling symlink"} {
+		t.Run(kind, func(t *testing.T) {
+			dir := t.TempDir()
+			db, err := store.Open(filepath.Join(dir, "store.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			path := filepath.Join(dir, "access.json")
+			d := &daemon{store: db, opts: Options{Paths: Paths{Access: path}}}
+			d.refreshAccess(context.Background())
+			if d.policy().Closed() {
+				t.Fatal("initial snapshot closed")
+			}
+			if kind == "file" {
+				err = os.WriteFile(path, []byte(`{"block":[42]}`), 0600)
+			} else {
+				err = os.Symlink(filepath.Join(dir, "missing"), path)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p := d.policy(); !p.Closed() || p.Allowed(42) {
+				t.Fatal("new legacy entry did not close access")
+			}
+		})
+	}
+}
+
+func TestAccessSnapshotRejectsDanglingSymlinkOnStart(t *testing.T) {
+	dir := t.TempDir()
+	db, err := store.Open(filepath.Join(dir, "store.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	path := filepath.Join(dir, "access.json")
+	if err := os.Symlink(filepath.Join(dir, "missing"), path); err != nil {
+		t.Fatal(err)
+	}
+	d := &daemon{store: db, opts: Options{Paths: Paths{Access: path}}}
+	d.refreshAccess(context.Background())
+	if p := d.policy(); !p.Closed() || p.Allowed(42) {
+		t.Fatal("dangling symlink opened access")
+	}
+}
+
+func TestAccessRefreshSerializesReadAndPublication(t *testing.T) {
+	d := &daemon{}
+	ctx := context.Background()
+	firstStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	firstDone := make(chan struct{})
+	secondDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		d.refreshAccessFrom(ctx, func(context.Context) (map[string]json.RawMessage, error) {
+			close(firstStarted)
+			<-releaseFirst
+			return map[string]json.RawMessage{"access.block": []byte(`[]`)}, nil
+		})
+	}()
+	<-firstStarted
+	if d.accessRefreshMu.TryLock() {
+		d.accessRefreshMu.Unlock()
+		close(releaseFirst)
+		<-firstDone
+		t.Fatal("refresh does not hold the lock during the read")
+	}
+	go func() {
+		defer close(secondDone)
+		d.refreshAccessFrom(ctx, func(context.Context) (map[string]json.RawMessage, error) {
+			return nil, errors.New("unavailable")
+		})
+	}()
+	close(releaseFirst)
+	<-firstDone
+	<-secondDone
+	if p := d.policy(); !p.Closed() || p.Allowed(42) {
+		t.Fatal("older snapshot replaced the later denial")
+	}
+}
+
+func TestAccessFileGuardSeesDanglingSymlink(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "access.json")
+	if err := os.Symlink(filepath.Join(dir, "missing"), path); err != nil {
+		t.Fatal(err)
+	}
+	exists, err := fileExists(path)
+	if err != nil || !exists {
+		t.Fatalf("dangling symlink existence = %v, %v", exists, err)
 	}
 }

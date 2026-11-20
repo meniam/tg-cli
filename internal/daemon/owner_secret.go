@@ -184,23 +184,29 @@ func (o *OwnerSecrets) Change(ctx context.Context, oldPhrase, newPhrase string) 
 func ResetOwnerSecretOffline(ctx context.Context, paths Paths) error {
 	release, err := acquireLock(paths.Lock)
 	if err != nil {
-		return err
+		if errors.Is(err, ErrAlreadyRunning) {
+			return ErrAlreadyRunning
+		}
+		return errors.New("cannot lock profile for owner secret reset")
 	}
 	defer release()
 	releaseDB, err := LockDatabase(paths)
 	if err != nil {
-		return err
+		if errors.Is(err, ErrDatabaseInUse) {
+			return ErrDatabaseInUse
+		}
+		return errors.New("cannot lock database for owner secret reset")
 	}
 	defer releaseDB()
 	if _, err := os.Stat(paths.Database); err != nil {
-		return fmt.Errorf("inspect profile database: %w", err)
+		return errors.New("cannot inspect profile database")
 	}
 	if err := CheckDatabaseBinding(paths); err != nil {
-		return err
+		return errors.New("cannot verify profile database binding")
 	}
 	db, err := store.Open(paths.Database)
 	if err != nil {
-		return fmt.Errorf("open profile database: %w", err)
+		return errors.New("cannot open profile database")
 	}
 	defer db.Close()
 	if err := db.DeleteOwnerSecret(ctx); err != nil {

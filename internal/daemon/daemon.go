@@ -85,6 +85,7 @@ type daemon struct {
 	idempotencyLocks     keyLocks
 	transcriptionLocks   keyLocks
 	accessMu             sync.RWMutex
+	accessRefreshMu      sync.Mutex
 	accessSnapshot       *access.Policy
 	ownerSecrets         *OwnerSecrets
 	phoneLimit           phoneLimiter

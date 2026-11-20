@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 
 	"tg-cli/internal/access"
@@ -13,18 +14,25 @@ import (
 // refreshAccess replaces the snapshot even on failure, so a stale permissive
 // policy cannot survive a failed database read or a pending legacy file.
 func (d *daemon) refreshAccess(ctx context.Context) {
+	var read func(context.Context) (map[string]json.RawMessage, error)
+	if d.store != nil {
+		read = d.store.Settings
+	}
+	d.refreshAccessFrom(ctx, read)
+}
+
+// refreshAccessFrom serializes reads and publication: an earlier read cannot
+// overwrite a newer snapshot when concurrent refreshes finish out of order.
+func (d *daemon) refreshAccessFrom(ctx context.Context, read func(context.Context) (map[string]json.RawMessage, error)) {
+	d.accessRefreshMu.Lock()
+	defer d.accessRefreshMu.Unlock()
 	policy := access.Denied()
 	ok := false
-	if d.store != nil {
-		// Until the legacy file has been migrated, it may contain restrictions
-		// absent from the database. Never silently open those chats.
-		_, statErr := os.Stat(d.opts.Paths.Access)
-		if d.opts.Paths.Access == "" || os.IsNotExist(statErr) {
-			values, err := d.store.Settings(ctx)
-			if err == nil {
-				policy, err = access.FromSettings(values)
-				ok = err == nil
-			}
+	if read != nil && !d.legacyAccessPresent() {
+		values, err := read(ctx)
+		if err == nil {
+			policy, err = access.FromSettings(values)
+			ok = err == nil
 		}
 	}
 	d.accessMu.Lock()
@@ -35,11 +43,23 @@ func (d *daemon) refreshAccess(ctx context.Context) {
 	}
 }
 
+// legacyAccessPresent fails closed when the directory entry cannot be inspected.
+func (d *daemon) legacyAccessPresent() bool {
+	if d.opts.Paths.Access == "" {
+		return false
+	}
+	_, err := os.Lstat(d.opts.Paths.Access)
+	return !os.IsNotExist(err)
+}
+
 func (d *daemon) policy() access.Policy {
 	d.accessMu.RLock()
 	if d.accessSnapshot != nil {
 		policy := *d.accessSnapshot
 		d.accessMu.RUnlock()
+		if d.legacyAccessPresent() {
+			return access.Denied()
+		}
 		return policy
 	}
 	d.accessMu.RUnlock()

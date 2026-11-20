@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -136,5 +137,33 @@ func TestOwnerResetRequiresOfflineLock(t *testing.T) {
 	defer db.Close()
 	if _, found, err := db.OwnerSecret(ctx); err != nil || found {
 		t.Fatalf("hash still present: %v, %v", found, err)
+	}
+}
+
+func TestOwnerResetErrorsHidePaths(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbDir := filepath.Join(dir, "private-db")
+	if err := os.MkdirAll(dbDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	paths := Paths{Dir: dir, Lock: filepath.Join(dir, "daemon.lock"), DatabaseDir: dbDir, Database: filepath.Join(dbDir, "private-store.db")}
+	err := ResetOwnerSecretOffline(ctx, paths)
+	if err == nil || strings.Contains(err.Error(), dir) || strings.Contains(err.Error(), "private-store") {
+		t.Fatalf("missing database error leaks path: %v", err)
+	}
+	db, err := store.Open(paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(DatabaseBindingFile(paths), []byte(filepath.Join(dir, "other")+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err = ResetOwnerSecretOffline(ctx, paths)
+	if err == nil || strings.Contains(err.Error(), dir) || strings.Contains(err.Error(), "private-db") {
+		t.Fatalf("binding error leaks path: %v", err)
 	}
 }

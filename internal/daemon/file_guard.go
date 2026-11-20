@@ -314,7 +314,7 @@ func journalIsEmpty(path string) (bool, error) {
 }
 
 func fileExists(path string) (bool, error) {
-	_, err := os.Stat(path)
+	_, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
