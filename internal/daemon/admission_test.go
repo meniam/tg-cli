@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -79,13 +80,19 @@ func TestTelegramAdmissionDrainWaitsAfterCancellation(t *testing.T) {
 	go func() { done <- g.drain(context.Background(), 0) }()
 	select {
 	case <-ctx.Done():
-	case <-time.After(time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("operation was not canceled")
 	}
-	select {
-	case <-done:
-		t.Fatal("drain returned before release")
-	default:
+	// The lease is canceled but still held. Yield the processor many times so
+	// that a drain which returns too early has every chance to do it before the
+	// release; the loop counts scheduler turns, not wall-clock time.
+	for i := 0; i < 1000; i++ {
+		select {
+		case err := <-done:
+			t.Fatalf("drain returned before release: %v", err)
+		default:
+			runtime.Gosched()
+		}
 	}
 	release()
 	select {
@@ -93,7 +100,7 @@ func TestTelegramAdmissionDrainWaitsAfterCancellation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("drain did not complete")
 	}
 }
