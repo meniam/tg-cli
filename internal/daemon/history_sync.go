@@ -116,7 +116,8 @@ func (m *historySyncManager) start(chatID int64, ref chatref.Ref, state store.Sy
 		HistorySyncJob: rpc.HistorySyncJob{
 			ChatID: chatID, State: rpc.HistorySyncQueued,
 			OldestID: state.OldestID, NewestID: state.NewestID, Complete: state.Complete,
-			StartedAt: when, UpdatedAt: when,
+			FirstMessageDate: state.FirstMessageDate,
+			StartedAt:        when, UpdatedAt: when,
 		},
 		ref: ref, ctx: jobCtx, cancel: cancel,
 	}
@@ -288,6 +289,7 @@ func (m *historySyncManager) recordPage(task *historySyncTask, progress *store.S
 		task.OldestID = progress.OldestID
 		task.NewestID = progress.NewestID
 		task.Complete = progress.Complete
+		task.FirstMessageDate = progress.FirstMessageDate
 	}
 	task.UpdatedAt = m.now()
 }
@@ -483,5 +485,6 @@ func (d *daemon) idleHistorySyncJob(ctx context.Context, chat string) (rpc.Histo
 	return rpc.HistorySyncJob{
 		ChatID: chatID, State: rpc.HistorySyncIdle,
 		OldestID: progress.OldestID, NewestID: progress.NewestID, Complete: progress.Complete,
+		FirstMessageDate: progress.FirstMessageDate,
 	}, nil
 }

@@ -130,7 +130,7 @@ func TestChatSyncOutputFormatsFieldsAndQuiet(t *testing.T) {
 		t.Fatalf("filtered status object: %+v", statusOne)
 	}
 	toon := runSyncCLI(t, []string{"chat", "sync", "cancel", "42", "--format", "toon"}, reply)
-	wantToon := "ok: true\ndata:\n  chat_id: 42\n  state: queued\n  pages: 2\n  loaded: 6\n  oldest_id: 7\n  newest_id: 12\n  complete: false\n  started_at: \"2026-11-14T12:00:00Z\"\n  updated_at: \"2026-11-14T12:01:00Z\"\n"
+	wantToon := "ok: true\ndata:\n  chat_id: 42\n  state: queued\n  pages: 2\n  loaded: 6\n  oldest_id: 7\n  newest_id: 12\n  complete: false\n  first_message_date: null\n  started_at: \"2026-11-14T12:00:00Z\"\n  updated_at: \"2026-11-14T12:01:00Z\"\n"
 	if toon.code != exitcode.OK || toon.stdout != wantToon {
 		t.Fatalf("TOON cancel: %+v, want stdout %q", toon, wantToon)
 	}
@@ -189,7 +189,7 @@ func TestChatSyncSchema(t *testing.T) {
 	for _, field := range status.ChatFields {
 		paths = append(paths, field.Path)
 	}
-	for _, path := range []string{"chat_id", "state", "pages", "loaded", "oldest_id", "newest_id", "complete", "wait_seconds", "error_code", "error", "started_at", "updated_at"} {
+	for _, path := range []string{"chat_id", "state", "pages", "loaded", "oldest_id", "newest_id", "complete", "first_message_date", "wait_seconds", "error_code", "error", "started_at", "updated_at"} {
 		if !slices.Contains(paths, path) {
 			t.Errorf("chat result is missing %s", path)
 		}
