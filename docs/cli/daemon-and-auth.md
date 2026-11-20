@@ -113,6 +113,26 @@ A fresh profile without a login and without `access.json`:
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 12.1.
 
+### tg status
+
+Prints a text dashboard for a person: account, connection, access lists, database, history completeness, the background history load, jobs, throttle and events. The Daemon collects the numbers in one request (`dashboard`) that only reads and makes no Telegram request.
+
+```text
+tg status [flags]
+```
+
+<!-- schema:flags tg status -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Not dangerous. **Output formats:** `human`.
+
+**Preconditions.** A running Daemon. No login: without one the `Account` row says `not signed in`.
+
+The output is text and has no JSON form: `--format json`, `jsonl` and `toon` exit with code 2, `--human` changes nothing. For the same facts as JSON use [daemon status](#tg-daemon-status).
+
+**Exit codes.** 0; 2 a JSON format was requested; 3 no Daemon is running for the profile (the hint is on stderr).
+
 ### tg daemon stop
 
 Asks the Daemon to stop and waits until the process is gone.

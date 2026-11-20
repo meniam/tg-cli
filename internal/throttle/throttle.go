@@ -174,6 +174,15 @@ func (l *Limiter) PausedFor() time.Duration {
 	return max(0, l.pausedUntil.Sub(l.clock.Now()))
 }
 
+// Queued returns how many requests wait for admission now: the normal, the
+// background and the file queue together. A request that already holds a permit
+// is not counted.
+func (l *Limiter) Queued() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.queue) + len(l.backgroundQueue) + len(l.fileQueue)
+}
+
 // Permit holds one concurrency slot. Release must be called after the attempt.
 type Permit struct {
 	limiter *Limiter

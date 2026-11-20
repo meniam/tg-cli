@@ -284,6 +284,7 @@ var uncoveredCommands = map[string]string{
 	"chat restrict":              "account write is covered by net.Pipe CLI tests",
 	"chat permissions":           "account write is covered by net.Pipe CLI tests",
 	"chat slow-mode":             "account write is covered by net.Pipe CLI tests",
+	"status":                     "prints text, not an envelope; the text is checked against golden files and the dashboard answer against the daemon in status_cmd_test.go",
 	"daemon stop":                "runs last, after the cases that need the daemon it stops, so it is checked separately",
 	"session export":             "exports a secret to a separate owner-only file",
 	"session import":             "imports a secret into a separate stopped profile",

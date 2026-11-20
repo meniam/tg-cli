@@ -375,6 +375,37 @@ func TestDisabledAutoWaitKeepsNormalQueueing(t *testing.T) {
 	})
 }
 
+func TestQueuedCountsWaitingRequestsOfEveryQueue(t *testing.T) {
+	audit10Test(t, func(t *testing.T) {
+		l := limiterForTest(t, newFakeClock(), func(c *Config) { c.Concurrency = 1; c.GeneralBurst = 5 })
+		if got := l.Queued(); got != 0 {
+			t.Fatalf("an idle limiter queues %d", got)
+		}
+		hold, err := l.Acquire(context.Background(), General, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A request that holds a permit is not queued.
+		if got := l.Queued(); got != 0 {
+			t.Fatalf("a held permit counts as queued: %d", got)
+		}
+		normal := acquireAsync(l, context.Background(), General, "", nil)
+		awaitQueue(t, l, 1)
+		background := acquireAsync(l, WithBackground(context.Background()), General, "", nil)
+		awaitBackgroundQueue(t, l, 1)
+		if got := l.Queued(); got != 2 {
+			t.Fatalf("queued = %d, want 2", got)
+		}
+		hold.Release()
+		receive(t, normal).Release()
+		receive(t, background).Release()
+		synctest.Wait()
+		if got := l.Queued(); got != 0 {
+			t.Fatalf("queued after the drain = %d, want 0", got)
+		}
+	})
+}
+
 func TestPausedFor(t *testing.T) {
 	clock := newFakeClock()
 	l := limiterForTest(t, clock, nil)
