@@ -171,12 +171,8 @@ func Load(path string) (Config, error) {
 	if err := c.Files.validate(); err != nil {
 		return Config{}, err
 	}
-	if math.IsNaN(c.Behavior.ThrottlePercent) || c.Behavior.ThrottlePercent < 1 || c.Behavior.ThrottlePercent > 100 {
-		return Config{}, invalid("behavior.throttle_percent must be between 1 and 100")
-	}
-	duration, err := time.ParseDuration(c.Behavior.FloodAutoWait)
-	if err != nil || duration < 0 {
-		return Config{}, invalid("behavior.flood_autowait must be a non-negative duration")
+	if err := validateBehavior(c.Behavior); err != nil {
+		return Config{}, err
 	}
 	if _, err := c.BackgroundSync.Resolve(); err != nil {
 		return Config{}, err
@@ -194,6 +190,17 @@ func Load(path string) (Config, error) {
 		}
 	}
 	return c, nil
+}
+
+func validateBehavior(b Behavior) error {
+	if math.IsNaN(b.ThrottlePercent) || b.ThrottlePercent < 1 || b.ThrottlePercent > 100 {
+		return invalid("behavior.throttle_percent must be between 1 and 100")
+	}
+	duration, err := time.ParseDuration(b.FloodAutoWait)
+	if err != nil || duration < 0 {
+		return invalid("behavior.flood_autowait must be a non-negative duration")
+	}
+	return nil
 }
 
 func defaults(home string) Config {

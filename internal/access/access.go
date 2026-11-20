@@ -315,3 +315,9 @@ func parseIDs(data json.RawMessage) (map[int64]struct{}, error) {
 	}
 	return seen, nil
 }
+
+// ValidateJSON checks an access policy with the same rules used by Loader.
+func ValidateJSON(data []byte) error {
+	_, err := parse(data)
+	return err
+}

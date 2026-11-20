@@ -19,7 +19,7 @@ PR: —
   `expect_user` из базы в Daemon, коды отказа по фразе, ограничение подбора,
   ключ `[files] access`, цепочка старых файлов профиля, `settings.*` без
   Telegram, журнал записи) владелец не отклонил; они действуют и ждут его вето.
-- Этапы: Э1 в работе, Э2-Э9 не начаты.
+- Этапы: Э1 готов (2026-11-21), Э2 в работе, Э3-Э9 не начаты.
 
 ## Context and sources
 
@@ -279,17 +279,17 @@ PR: —
 
 ### Э1. Реестр настроек (Terra)
 
-- [ ] `internal/config/settings.go`: тип `SettingKey` с полями `Name`, `Type`
+- [x] `internal/config/settings.go`: тип `SettingKey` с полями `Name`, `Type`
   (`bool`, `number`, `int`, `duration`, `clock`, `string`, `ids`, `paths`),
   `Default`, `Env`, `Flag`, `Apply` (`live`, `restart`), `Protected` (фраза),
   `Secret`, функция проверки. Ключи по таблице выше; проверки берутся из
   существующих (`validateProfile`, `BackgroundSync.Resolve`,
   `SemanticSearch.Resolve`, правила `access.parse`).
-- [ ] Разбор значения из строки командной строки и из JSON базы; канонический
+- [x] Разбор значения из строки командной строки и из JSON базы; канонический
   вид в JSON (списки отсортированы, без повторов).
-- [ ] Проверка пар (`window_start < window_end`, `interval_min <= interval_max`,
+- [x] Проверка пар (`window_start < window_end`, `interval_min <= interval_max`,
   `transport` и `proxy`) по полному набору значений, а не по одному ключу.
-- [ ] Тесты: каждый ключ, каждое неверное значение, пары, канонический вид,
+- [x] Тесты: каждый ключ, каждое неверное значение, пары, канонический вид,
   умолчания совпадают с сегодняшними `defaults()` и шаблоном.
 - Проверка: `go test ./internal/config -count=1` зелёный.
 
