@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -25,11 +25,7 @@ type syncCLIRun struct {
 
 func runSyncCLI(t *testing.T, args []string, reply func(string, json.RawMessage) (any, error)) syncCLIRun {
 	t.Helper()
-	home, err := os.MkdirTemp("/tmp", "tgs")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	home := audit01Isolate(t)
 	serverSide, clientSide := net.Pipe()
 	server := rpc.NewServer(nil)
 	calls := make(chan struct {
@@ -51,6 +47,7 @@ func runSyncCLI(t *testing.T, args []string, reply func(string, json.RawMessage)
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), args, Deps{
 		Stdout: &stdout, Stderr: &stderr,
+		ConfigPath: filepath.Join(home, "config.toml"),
 		Getenv: func(key string) string {
 			if key == "TG_CLI_HOME" {
 				return home
@@ -133,8 +130,9 @@ func TestChatSyncOutputFormatsFieldsAndQuiet(t *testing.T) {
 		t.Fatalf("filtered status object: %+v", statusOne)
 	}
 	toon := runSyncCLI(t, []string{"chat", "sync", "cancel", "42", "--format", "toon"}, reply)
-	if toon.code != exitcode.OK || toon.stdout == "" {
-		t.Fatalf("TOON cancel: %+v", toon)
+	wantToon := "ok: true\ndata:\n  chat_id: 42\n  state: queued\n  pages: 2\n  loaded: 6\n  oldest_id: 7\n  newest_id: 12\n  complete: false\n  started_at: \"2026-11-14T12:00:00Z\"\n  updated_at: \"2026-11-14T12:01:00Z\"\n"
+	if toon.code != exitcode.OK || toon.stdout != wantToon {
+		t.Fatalf("TOON cancel: %+v, want stdout %q", toon, wantToon)
 	}
 }
 

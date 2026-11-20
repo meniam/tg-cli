@@ -36,6 +36,48 @@ type fakeTelegram struct {
 	missing       bool          // the read methods answer "not found"
 	resolveCalls  int
 	peopleFixture bool
+
+	audit01Calls map[string]int // calls of the chat and message read methods, by name
+	audit01Refs  map[string]chatref.Ref
+}
+
+// audit01Remember keeps the last reference a read method was asked about.
+func (f *fakeTelegram) audit01Remember(method string, ref chatref.Ref) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.audit01Refs == nil {
+		f.audit01Refs = make(map[string]chatref.Ref)
+	}
+	f.audit01Refs[method] = ref
+}
+
+func (f *fakeTelegram) audit01LastRef(method string) (chatref.Ref, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ref, ok := f.audit01Refs[method]
+	return ref, ok
+}
+
+// audit01Record counts a call of a read method so a test can prove that a command
+// answered without touching Telegram.
+func (f *fakeTelegram) audit01Record(method string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.audit01Calls == nil {
+		f.audit01Calls = make(map[string]int)
+	}
+	f.audit01Calls[method]++
+}
+
+// audit01CallSnapshot returns a copy of the call counters.
+func (f *fakeTelegram) audit01CallSnapshot() map[string]int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make(map[string]int, len(f.audit01Calls))
+	for k, v := range f.audit01Calls {
+		out[k] = v
+	}
+	return out
 }
 
 func (f *fakeTelegram) Run(ctx context.Context) error {
@@ -49,15 +91,19 @@ func (f *fakeTelegram) Ready() <-chan struct{}                       { return f.
 func (f *fakeTelegram) SetEventSink(func(rpc.Event))                 {}
 func (f *fakeTelegram) SetTranscriptionSink(func(rpc.Transcription)) {}
 func (f *fakeTelegram) ChatStats(_ context.Context, _ chatref.Ref, _ string) (rpc.ChatStats, error) {
+	f.audit01Record("ChatStats")
 	return rpc.ChatStats{ChatID: 77, Kind: "megagroup"}, nil
 }
 func (f *fakeTelegram) ChatBoosts(_ context.Context, _ chatref.Ref) (rpc.ChatBoosts, error) {
+	f.audit01Record("ChatBoosts")
 	return rpc.ChatBoosts{ChatID: 77}, nil
 }
 func (f *fakeTelegram) Transcribe(_ context.Context, _ chatref.Ref, id int) (rpc.Transcription, error) {
+	f.audit01Record("Transcribe")
 	return rpc.Transcription{ChatID: 77, ID: id, TranscriptionID: 1, Text: "fixture"}, nil
 }
 func (f *fakeTelegram) Translate(_ context.Context, _ chatref.Ref, p rpc.TranslateParams) (rpc.TranslateResult, error) {
+	f.audit01Record("Translate")
 	items := make([]rpc.TranslationItem, 0, len(p.IDs))
 	for _, id := range p.IDs {
 		items = append(items, rpc.TranslationItem{ID: id, Text: "fixture"})
@@ -67,76 +113,102 @@ func (f *fakeTelegram) Translate(_ context.Context, _ chatref.Ref, p rpc.Transla
 func (f *fakeTelegram) FloodWaitRemaining() time.Duration   { return 0 }
 func (f *fakeTelegram) CheckTextLocal(rpc.SendParams) error { return nil }
 func (f *fakeTelegram) CheckText(_ context.Context, p rpc.SendParams) (rpc.TextCheck, error) {
+	f.audit01Record("CheckText")
 	return rpc.TextCheck{Mode: "plain", PlainLength: len([]rune(p.Text))}, nil
 }
 
 func (f *fakeTelegram) Send(context.Context, chatref.Ref, rpc.SendParams) (rpc.SendResult, error) {
+	f.audit01Record("Send")
 	return rpc.SendResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) SendMedia(context.Context, chatref.Ref, rpc.SendMediaParams, []rpc.MediaFile) (rpc.SendMediaResult, error) {
+	f.audit01Record("SendMedia")
 	return rpc.SendMediaResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Edit(context.Context, chatref.Ref, rpc.EditParams) (rpc.SendResult, error) {
+	f.audit01Record("Edit")
 	return rpc.SendResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Delete(context.Context, chatref.Ref, rpc.DeleteParams) (rpc.DeleteResult, error) {
+	f.audit01Record("Delete")
 	return rpc.DeleteResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Forward(context.Context, chatref.Ref, chatref.Ref, rpc.ForwardParams) (rpc.ForwardResult, error) {
+	f.audit01Record("Forward")
 	return rpc.ForwardResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) React(context.Context, chatref.Ref, rpc.ReactParams) (rpc.ReactResult, error) {
+	f.audit01Record("React")
 	return rpc.ReactResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Pin(context.Context, chatref.Ref, rpc.PinParams) (rpc.PinResult, error) {
+	f.audit01Record("Pin")
 	return rpc.PinResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Unpin(context.Context, chatref.Ref, rpc.UnpinParams) (rpc.PinResult, error) {
+	f.audit01Record("Unpin")
 	return rpc.PinResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) SendPoll(context.Context, chatref.Ref, rpc.PollParams) (rpc.SendResult, error) {
+	f.audit01Record("SendPoll")
 	return rpc.SendResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) SearchMessages(context.Context, chatref.Ref, rpc.SearchMessagesParams) (rpc.MessagesResult, error) {
+	f.audit01Record("SearchMessages")
 	return rpc.MessagesResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) SearchPublic(context.Context, rpc.PublicSearchParams) (rpc.PublicSearchResult, error) {
+	f.audit01Record("SearchPublic")
 	return rpc.PublicSearchResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) MessageContext(context.Context, chatref.Ref, rpc.ContextParams) (rpc.MessagesResult, error) {
+	f.audit01Record("MessageContext")
 	return rpc.MessagesResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) Comments(context.Context, chatref.Ref, rpc.CommentsParams) (rpc.MessagesResult, error) {
+	f.audit01Record("Comments")
 	return rpc.MessagesResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) MessageLink(context.Context, chatref.Ref, rpc.LinkParams) (rpc.LinkResult, error) {
+	f.audit01Record("MessageLink")
 	return rpc.LinkResult{}, errors.New("not implemented")
 }
 func (f *fakeTelegram) DraftGet(context.Context, chatref.Ref) (rpc.Draft, error) {
+	f.audit01Record("DraftGet")
 	return rpc.Draft{}, nil
 }
-func (f *fakeTelegram) DraftList(context.Context) (rpc.DraftList, error) { return rpc.DraftList{}, nil }
+func (f *fakeTelegram) DraftList(context.Context) (rpc.DraftList, error) {
+	f.audit01Record("DraftList")
+	return rpc.DraftList{}, nil
+}
 func (f *fakeTelegram) DraftSet(context.Context, chatref.Ref, rpc.DraftParams) (rpc.DraftWriteResult, error) {
+	f.audit01Record("DraftSet")
 	return rpc.DraftWriteResult{}, nil
 }
 func (f *fakeTelegram) ScheduledList(context.Context, chatref.Ref) (rpc.ScheduledResult, error) {
+	f.audit01Record("ScheduledList")
 	return rpc.ScheduledResult{}, nil
 }
 func (f *fakeTelegram) ScheduledDelete(context.Context, chatref.Ref, []int) (rpc.ScheduledResult, error) {
+	f.audit01Record("ScheduledDelete")
 	return rpc.ScheduledResult{}, nil
 }
 func (f *fakeTelegram) ScheduledSendNow(context.Context, chatref.Ref, []int) (rpc.ScheduledResult, error) {
+	f.audit01Record("ScheduledSendNow")
 	return rpc.ScheduledResult{}, nil
 }
 func (f *fakeTelegram) Typing(context.Context, chatref.Ref, rpc.TypingParams) (rpc.TypingResult, error) {
+	f.audit01Record("Typing")
 	return rpc.TypingResult{}, nil
 }
 
 func (f *fakeTelegram) MarkRead(context.Context, chatref.Ref) (rpc.MarkReadResult, error) {
+	f.audit01Record("MarkRead")
 	return rpc.MarkReadResult{}, errors.New("not implemented")
 }
 
 func (f *fakeTelegram) Self(context.Context) (*rpc.User, error) {
+	f.audit01Record("Self")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.user == nil {
@@ -147,6 +219,7 @@ func (f *fakeTelegram) Self(context.Context) (*rpc.User, error) {
 }
 
 func (f *fakeTelegram) Login(ctx context.Context, _ string, code func(context.Context, rpc.CodePrompt) (string, bool, error), password func(context.Context) (string, error)) error {
+	f.audit01Record("Login")
 	prompt := rpc.CodePrompt{Delivery: rpc.DeliverySMS, NextDelivery: rpc.DeliveryCall, ResendAfterSeconds: 45}
 	var c string
 	for {
@@ -179,6 +252,7 @@ func (f *fakeTelegram) Login(ctx context.Context, _ string, code func(context.Co
 }
 
 func (f *fakeTelegram) LoginQR(ctx context.Context, show func(context.Context, rpc.QRToken) error, password func(context.Context) (string, error)) error {
+	f.audit01Record("LoginQR")
 	if err := show(ctx, rpc.QRToken{URL: "tg://login?token=FIRST", ExpiresInSeconds: 30}); err != nil {
 		return err
 	}
@@ -211,6 +285,7 @@ func (f *fakeTelegram) LoginQR(ctx context.Context, show func(context.Context, r
 }
 
 func (f *fakeTelegram) Chats(_ context.Context, limit int, chatType string) ([]rpc.Chat, error) {
+	f.audit01Record("Chats")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []rpc.Chat
@@ -223,18 +298,23 @@ func (f *fakeTelegram) Chats(_ context.Context, limit int, chatType string) ([]r
 }
 
 func (f *fakeTelegram) Members(context.Context, chatref.Ref, rpc.MembersParams) (rpc.MembersResult, error) {
+	f.audit01Record("Members")
 	return rpc.MembersResult{Members: []rpc.Member{{ID: 5, Name: "Ann", Username: "ann", Role: "admin"}}, NextOffset: 1}, nil
 }
 
 func (f *fakeTelegram) Topics(context.Context, chatref.Ref, rpc.TopicsParams) (rpc.TopicsResult, error) {
+	f.audit01Record("Topics")
 	return rpc.TopicsResult{Topics: []rpc.Topic{{ID: 7, Title: "Foreign topic", TopMessage: 30, Created: "2026-11-14T10:00:00Z"}}, NextCursor: "TOPIC-NEXT"}, nil
 }
 
 func (f *fakeTelegram) CommonChats(context.Context, chatref.Ref, rpc.CommonChatsParams) (rpc.CommonChatsResult, error) {
+	f.audit01Record("CommonChats")
 	return rpc.CommonChatsResult{Chats: []rpc.CommonChat{{ID: -77, Type: "group", Title: "Shared"}}, NextCursor: "COMMON-NEXT"}, nil
 }
 
 func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, error) {
+	f.audit01Record("Resolve")
+	f.audit01Remember("Resolve", ref)
 	f.mu.Lock()
 	f.resolveCalls++
 	f.mu.Unlock()
@@ -251,6 +331,8 @@ func (f *fakeTelegram) Resolve(_ context.Context, ref chatref.Ref) (rpc.Chat, er
 }
 
 func (f *fakeTelegram) ChatInfo(_ context.Context, ref chatref.Ref) (rpc.ChatInfo, error) {
+	f.audit01Record("ChatInfo")
+	f.audit01Remember("ChatInfo", ref)
 	if f.missing {
 		return rpc.ChatInfo{}, rpc.NewError(rpc.CodeNotFound, "not found: no such chat")
 	}
@@ -261,10 +343,12 @@ func (f *fakeTelegram) ChatInfo(_ context.Context, ref chatref.Ref) (rpc.ChatInf
 }
 
 func (f *fakeTelegram) InviteInfo(_ context.Context, ref chatref.Ref) (rpc.InviteInfo, error) {
+	f.audit01Record("InviteInfo")
 	return rpc.InviteInfo{Title: "Private team", Type: "group", Members: 5}, nil
 }
 
 func (f *fakeTelegram) History(_ context.Context, ref chatref.Ref, q rpc.HistoryQuery) (rpc.MessagesResult, error) {
+	f.audit01Record("History")
 	if f.missing {
 		return rpc.MessagesResult{}, rpc.NewError(rpc.CodeNotFound, "not found: no such chat")
 	}
@@ -277,10 +361,12 @@ func (f *fakeTelegram) History(_ context.Context, ref chatref.Ref, q rpc.History
 }
 
 func (f *fakeTelegram) HistoryPage(_ context.Context, _ chatref.Ref, _ int) (rpc.HistoryPage, error) {
+	f.audit01Record("HistoryPage")
 	return rpc.HistoryPage{}, nil
 }
 
 func (f *fakeTelegram) Message(_ context.Context, ref chatref.Ref, id int) (rpc.Message, error) {
+	f.audit01Record("Message")
 	for _, m := range f.messages {
 		if m.ID == id {
 			return m, nil
@@ -290,6 +376,7 @@ func (f *fakeTelegram) Message(_ context.Context, ref chatref.Ref, id int) (rpc.
 }
 
 func (f *fakeTelegram) Pinned(_ context.Context, ref chatref.Ref, limit int) (rpc.MessagesResult, error) {
+	f.audit01Record("Pinned")
 	return rpc.MessagesResult{Messages: f.messages[:min(limit, len(f.messages))]}, nil
 }
 
@@ -541,7 +628,9 @@ func TestLoginAndChatListEndToEnd(t *testing.T) {
 		t.Fatalf("login failed: exit %d, %q, stderr %q", login.code, login.stdout, login.stderr)
 	}
 	var res rpc.AuthResult
-	_ = json.Unmarshal(env.Data, &res)
+	if err := json.Unmarshal(env.Data, &res); err != nil {
+		t.Fatalf("decode %q: %v", env.Data, err)
+	}
 	if res.State != rpc.AuthAuthorized || res.User == nil || res.User.ID != 42 {
 		t.Errorf("unexpected login result %+v", res)
 	}
@@ -554,7 +643,9 @@ func TestLoginAndChatListEndToEnd(t *testing.T) {
 	list := e.run("chat", "list", "--limit", "2")
 	env = parse(t, list)
 	var chats rpc.ChatListResult
-	_ = json.Unmarshal(env.Data, &chats)
+	if err := json.Unmarshal(env.Data, &chats); err != nil {
+		t.Fatalf("decode %q: %v", env.Data, err)
+	}
 	if list.code != exitcode.OK || !env.OK || len(chats.Chats) != 2 || chats.Chats[1].Title != "Family" {
 		t.Errorf("chat list: exit %d, %q", list.code, list.stdout)
 	}
@@ -562,7 +653,9 @@ func TestLoginAndChatListEndToEnd(t *testing.T) {
 	status := e.run("daemon", "status")
 	env = parse(t, status)
 	var st rpc.StatusResult
-	_ = json.Unmarshal(env.Data, &st)
+	if err := json.Unmarshal(env.Data, &st); err != nil {
+		t.Fatalf("decode %q: %v", env.Data, err)
+	}
 	if status.code != exitcode.OK || !st.Authorized || !st.Connected || st.Profile != "default" {
 		t.Errorf("status: exit %d, %q", status.code, status.stdout)
 	}
@@ -829,12 +922,24 @@ func TestInterruptEndsLoginWaitingForInput(t *testing.T) {
 
 	var stdout, stderr safeBuffer
 	deps := e.deps(&stdout, &stderr)
-	deps.ReadLine = func(string) (string, error) { <-block; return "", errors.New("unreachable") }
+	entered := make(chan struct{}, 1)
+	deps.ReadLine = func(string) (string, error) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-block
+		return "", errors.New("unreachable")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
 	go func() { done <- Execute(ctx, []string{"auth", "login", "--phone", "+15550006666"}, deps) }()
-	time.Sleep(200 * time.Millisecond) // the login is now waiting for the code
+	select {
+	case <-entered: // the login is now waiting for the code
+	case <-time.After(10 * time.Second):
+		t.Fatal("the login never asked for the code")
+	}
 	cancel()
 
 	select {
@@ -871,8 +976,10 @@ func TestAuthCancel(t *testing.T) {
 
 	// The daemon still waits for the code, so another login is refused.
 	e.lines = []string{"CODE777"}
-	if r := e.run("auth", "login", "--phone", "+15550007777"); r.code == exitcode.OK {
-		t.Fatal("a login must be refused while another one waits")
+	refused := e.run("auth", "login", "--phone", "+15550007777")
+	wantFailure(t, refused, exitcode.Failure)
+	if !strings.Contains(refused.stdout, "a login is already in progress") {
+		t.Fatalf("a login must be refused because another one waits: %q", refused.stdout)
 	}
 	r := e.run("auth", "cancel")
 	if r.code != exitcode.OK || !strings.Contains(r.stdout, `"canceled":true`) {
@@ -956,7 +1063,9 @@ func TestAuthResendFromAnotherTerminal(t *testing.T) {
 	r := e.run("auth", "resend")
 	env := parse(t, r)
 	var res rpc.AuthResult
-	_ = json.Unmarshal(env.Data, &res)
+	if err := json.Unmarshal(env.Data, &res); err != nil {
+		t.Fatalf("decode %q: %v", env.Data, err)
+	}
 	if r.code != exitcode.OK || res.Delivery != rpc.DeliveryCall {
 		t.Errorf("auth resend: exit %d, %q", r.code, r.stdout)
 	}
@@ -973,7 +1082,9 @@ func TestLoginByQR(t *testing.T) {
 	r := e.run("auth", "login", "--qr")
 	env := parse(t, r)
 	var res rpc.AuthResult
-	_ = json.Unmarshal(env.Data, &res)
+	if err := json.Unmarshal(env.Data, &res); err != nil {
+		t.Fatalf("decode %q: %v", env.Data, err)
+	}
 	if r.code != exitcode.OK || !env.OK || res.State != rpc.AuthAuthorized || res.User == nil {
 		t.Fatalf("login --qr: exit %d, %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
@@ -1068,10 +1179,16 @@ func TestChatCommands(t *testing.T) {
 	if r.code != exitcode.OK || json.Unmarshal(parse(t, r).Data, &chat) != nil || chat.ID != 77 || chat.Type != "supergroup" {
 		t.Errorf("chat resolve: exit %d, %q", r.code, r.stdout)
 	}
+	if got, ok := e.tg.audit01LastRef("Resolve"); !ok || got != (chatref.Ref{Kind: chatref.Username, Username: "teamchat"}) {
+		t.Errorf("chat resolve sent %+v to Telegram (called: %v)", got, ok)
+	}
 	var info rpc.ChatInfo
 	r = e.run("chat", "info", "--", "-1001234567890")
 	if r.code != exitcode.OK || json.Unmarshal(parse(t, r).Data, &info) != nil || info.About != "About the team" || info.Members != 12 {
 		t.Errorf("chat info: exit %d, %q", r.code, r.stdout)
+	}
+	if got, ok := e.tg.audit01LastRef("ChatInfo"); !ok || got != (chatref.Ref{Kind: chatref.ID, ID: -1001234567890}) {
+		t.Errorf("chat info sent %+v to Telegram (called: %v)", got, ok)
 	}
 	var invite rpc.InviteInfo
 	r = e.run("chat", "invite-info", "https://t.me/+AbCdEfGh1234")
@@ -1086,7 +1203,6 @@ func TestChatCommands(t *testing.T) {
 	e.tg.missing = true
 	r = e.run("chat", "resolve", "@nosuchchat")
 	wantFailure(t, r, exitcode.NotFound)
-	e.tg.missing = false
 }
 
 func TestChatListTypeAndJSONL(t *testing.T) {
@@ -1210,8 +1326,12 @@ func TestNegativeIDNeedsDoubleDash(t *testing.T) {
 		t.Errorf("the hint about -- is missing: %q", r.stdout)
 	}
 	// An unrelated unknown flag gets no hint about ids.
-	if r := e.run("chat", "info", "--bogus"); strings.Contains(r.stdout, "negative chat ids") {
-		t.Errorf("no hint expected: %q", r.stdout)
+	for _, tc := range []struct{ flag, want string }{{"--bogus", "unknown flag: --bogus"}, {"-x", "unknown shorthand flag: 'x'"}} {
+		r := e.run("chat", "info", tc.flag)
+		wantFailure(t, r, exitcode.Usage)
+		if !strings.Contains(r.stdout, tc.want) || strings.Contains(r.stdout, "negative chat ids") {
+			t.Errorf("chat info %s: want %q and no hint about ids: %q", tc.flag, tc.want, r.stdout)
+		}
 	}
 	// With -- it works, also for a basic group id.
 	for _, id := range []string{"-1001234567890", "-12345"} {
@@ -1222,38 +1342,50 @@ func TestNegativeIDNeedsDoubleDash(t *testing.T) {
 }
 
 func (f *fakeTelegram) MessageReaders(_ context.Context, ref chatref.Ref, id int) (rpc.MessageReadersResult, error) {
+	f.audit01Record("MessageReaders")
 	return rpc.MessageReadersResult{ChatID: 77, ID: id, Readers: []rpc.MessageReader{{UserID: 5, Name: "Alice", Username: "alice", Date: "2026-01-01T00:00:00Z"}}}, nil
 }
 
 func (f *fakeTelegram) AccountProfile(context.Context) (rpc.AccountProfile, error) {
+	f.audit01Record("AccountProfile")
 	return rpc.AccountProfile{ID: 42, FirstName: "Alice"}, nil
 }
 
 func (f *fakeTelegram) AccountEmojiStatuses(context.Context, bool) (rpc.EmojiStatusesResult, error) {
+	f.audit01Record("AccountEmojiStatuses")
 	return rpc.EmojiStatusesResult{Statuses: []rpc.EmojiStatusOption{{DocumentID: 123}}}, nil
 }
 
 func (f *fakeTelegram) HandleJoinRequest(context.Context, chatref.Ref, chatref.Ref, bool) error {
+	f.audit01Record("HandleJoinRequest")
 	return nil
 }
 
 func (f *fakeTelegram) SetChannelSetting(context.Context, chatref.Ref, string, string, *string, *string) (bool, error) {
+	f.audit01Record("SetChannelSetting")
 	return true, nil
 }
 
 func (f *fakeTelegram) SetAccountField(context.Context, string, string, string, *chatref.Ref) (bool, error) {
+	f.audit01Record("SetAccountField")
 	return true, nil
 }
 
 func (f *fakeTelegram) ChatRequests(context.Context, chatref.Ref, rpc.JoinRequestsParams) (rpc.JoinRequestsResult, error) {
+	f.audit01Record("ChatRequests")
 	return rpc.JoinRequestsResult{Requests: []rpc.JoinRequest{{UserID: 5, Name: "Alice", Username: "alice", Date: "2026-01-01T00:00:00Z", About: "hello"}}}, nil
 }
 
 func (f *fakeTelegram) AccountPrivacyGet(_ context.Context, key string) (rpc.PrivacyRules, error) {
+	f.audit01Record("AccountPrivacyGet")
 	return rpc.PrivacyRules{Key: key, Default: "nobody", AllowUsers: []int64{}, DenyUsers: []int64{}, AllowChats: []int64{}, DenyChats: []int64{}}, nil
 }
 func (f *fakeTelegram) AccountPrivacySet(_ context.Context, p rpc.PrivacySetParams, _, _, _, _ []chatref.Ref) (rpc.PrivacyRules, error) {
+	f.audit01Record("AccountPrivacySet")
 	return rpc.PrivacyRules{Key: p.Key, Default: p.Default, AllowUsers: []int64{}, DenyUsers: []int64{}, AllowChats: []int64{}, DenyChats: []int64{}}, nil
 }
 
-func (f *fakeTelegram) CacheJoinRequestUsers(context.Context, []rpc.JoinRequest) error { return nil }
+func (f *fakeTelegram) CacheJoinRequestUsers(context.Context, []rpc.JoinRequest) error {
+	f.audit01Record("CacheJoinRequestUsers")
+	return nil
+}

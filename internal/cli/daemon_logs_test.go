@@ -56,48 +56,25 @@ func TestDaemonLogsFollowSurvivesRotation(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stdout, stderr safeBuffer
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// A safety net only: every phase below waits on its own deadline.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	done := make(chan int, 1)
 	go func() {
 		done <- Execute(ctx, []string{"daemon", "logs", "--follow", "--format", "jsonl"}, e.deps(&stdout, &stderr))
 	}()
-	deadline := time.After(2 * time.Second)
-	for !strings.Contains(stdout.String(), "initial") {
-		select {
-		case <-deadline:
-			t.Fatal("initial log line was not printed")
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-	f, err := os.OpenFile(paths.Log, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString("next\n"); err != nil {
-		t.Fatal(err)
-	}
-	_ = f.Close()
-	for !strings.Contains(stdout.String(), "next") {
-		select {
-		case <-deadline:
-			t.Fatal("appended log line was not printed")
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
+	audit01WaitFor(t, &stdout, "initial", "initial log line")
+	audit01Append(t, paths.Log, "next\n")
+	audit01WaitFor(t, &stdout, "next", "appended log line")
 	if err := os.Rename(paths.Log, paths.Log+".1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.Log, []byte("rotated\n"), 0o600); err != nil {
+	// The new journal is longer than the offset already read (13 bytes), so only the
+	// change of file identity, not the size, tells the follower about the rotation.
+	if err := os.WriteFile(paths.Log, []byte("rotated-journal-with-a-long-first-line\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for !strings.Contains(stdout.String(), "rotated") {
-		select {
-		case <-deadline:
-			t.Fatal("rotated log line was not printed")
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
+	audit01WaitFor(t, &stdout, "rotated-journal-with-a-long-first-line", "rotated log line")
 	cancel()
 	if code := <-done; code != exitcode.OK {
 		t.Errorf("follow exit = %d, stderr %q", code, stderr.String())

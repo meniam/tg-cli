@@ -13,28 +13,40 @@ import (
 )
 
 func actionReply(method string, raw json.RawMessage) (any, error) {
+	badParams := func(err error) (any, error) {
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "decode params: "+err.Error())
+	}
 	switch method {
 	case rpc.MethodMessageReact:
 		var p rpc.ReactParams
-		_ = json.Unmarshal(raw, &p)
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return badParams(err)
+		}
 		return rpc.ReactResult{ChatID: 42, ID: p.ID, Emoji: p.Emoji, Removed: p.Remove, DryRun: p.DryRun, Action: "react", Count: 1}, nil
 	case rpc.MethodMessagePin:
 		var p rpc.PinParams
-		_ = json.Unmarshal(raw, &p)
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return badParams(err)
+		}
 		return rpc.PinResult{ChatID: 42, ID: p.ID, Pinned: true, DryRun: p.DryRun, Action: "pin", Count: 1}, nil
 	case rpc.MethodMessageUnpin:
 		var p rpc.UnpinParams
-		_ = json.Unmarshal(raw, &p)
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return badParams(err)
+		}
 		return rpc.PinResult{ChatID: 42, ID: p.ID, Pinned: false, DryRun: p.DryRun, Action: "unpin", Count: 1}, nil
 	case rpc.MethodMessagePoll:
 		var p rpc.PollParams
-		_ = json.Unmarshal(raw, &p)
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return badParams(err)
+		}
 		return rpc.SendResult{ChatID: 42, ID: 11, Date: "2026-11-14T10:00:00Z", DryRun: p.DryRun, Action: "poll", Count: 1, TextLength: len(p.Question)}, nil
 	}
 	return nil, rpc.NewError(rpc.CodeMethodNotFound, "unexpected method")
 }
 
 func TestActionCLICommandsAndDryRun(t *testing.T) {
+	audit01Isolate(t)
 	for _, tc := range []struct {
 		name   string
 		method string
@@ -74,7 +86,7 @@ func TestActionCLICommandsAndDryRun(t *testing.T) {
 					}
 				case rpc.MethodMessagePin:
 					var p rpc.PinParams
-					if err := json.Unmarshal(r.params, &p); err != nil || p.ID != 7 || p.Silent != (tc.name == "pin silent") || p.DryRun != dry {
+					if err := json.Unmarshal(r.params, &p); err != nil || p.Chat != "42" || p.ID != 7 || p.Silent != (tc.name == "pin silent") || p.DryRun != dry {
 						t.Fatalf("pin params: %+v %v", p, err)
 					}
 					if !strings.Contains(r.stderr, "visible to all chat participants") || !strings.Contains(r.stderr, "tg message unpin") {
@@ -82,12 +94,12 @@ func TestActionCLICommandsAndDryRun(t *testing.T) {
 					}
 				case rpc.MethodMessageUnpin:
 					var p rpc.UnpinParams
-					if err := json.Unmarshal(r.params, &p); err != nil || p.ID != 7 || p.DryRun != dry {
+					if err := json.Unmarshal(r.params, &p); err != nil || p.Chat != "42" || p.ID != 7 || p.DryRun != dry {
 						t.Fatalf("unpin params: %+v %v", p, err)
 					}
 				case rpc.MethodMessagePoll:
 					var p rpc.PollParams
-					if err := json.Unmarshal(r.params, &p); err != nil || !reflect.DeepEqual(p.Options, []string{"first", "second"}) || p.DryRun != dry {
+					if err := json.Unmarshal(r.params, &p); err != nil || p.Chat != "42" || p.Question != "Question?" || !reflect.DeepEqual(p.Options, []string{"first", "second"}) || p.DryRun != dry {
 						t.Fatalf("poll params: %+v %v", p, err)
 					}
 					if p.Multiple != (tc.name == "poll multiple public") || p.Public != (tc.name == "poll multiple public") || p.Quiz != (tc.name == "poll quiz") {
@@ -107,36 +119,39 @@ func TestActionCLICommandsAndDryRun(t *testing.T) {
 }
 
 func TestActionCLILocalValidation(t *testing.T) {
+	audit01Isolate(t)
 	for _, tc := range []struct {
 		name string
 		args []string
+		want string
 	}{
-		{"reaction id", []string{"message", "react", "42", "0", "👍"}},
-		{"reaction nonnumber", []string{"message", "react", "42", "NaN", "👍"}},
-		{"reaction empty", []string{"message", "react", "42", "7", ""}},
-		{"reaction whitespace", []string{"message", "react", "42", "7", "a b"}},
-		{"pin id", []string{"message", "pin", "42", "0"}},
-		{"unpin id", []string{"message", "unpin", "42", "0"}},
-		{"question missing", []string{"message", "poll", "42", "--option", "A", "--option", "B"}},
-		{"question long", []string{"message", "poll", "42", "--question", strings.Repeat("Я", 256), "--option", "A", "--option", "B"}},
-		{"one option", []string{"message", "poll", "42", "--question", "Q", "--option", "A"}},
-		{"eleven options", append([]string{"message", "poll", "42", "--question", "Q"}, elevenOptions()...)},
-		{"option long", []string{"message", "poll", "42", "--question", "Q", "--option", strings.Repeat("Я", 101), "--option", "B"}},
-		{"option blank", []string{"message", "poll", "42", "--question", "Q", "--option", " ", "--option", "B"}},
-		{"duplicate", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", " A "}},
-		{"explanation long", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--quiz", "--correct", "1", "--explanation", strings.Repeat("Я", 201)}},
-		{"explanation line feeds", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--quiz", "--correct", "1", "--explanation", "a\nb\nc\nd"}},
-		{"quiz no correct", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--quiz"}},
-		{"correct outside range", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--quiz", "--correct", "3"}},
-		{"quiz multiple", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--quiz", "--correct", "1", "--multiple"}},
-		{"correct without quiz", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--correct", "0"}},
-		{"explanation without quiz", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--explanation", ""}},
+		{"reaction id", []string{"message", "react", "42", "0", "👍"}, "message id must be positive"},
+		{"reaction nonnumber", []string{"message", "react", "42", "NaN", "👍"}, "message id must be positive"},
+		{"reaction empty", []string{"message", "react", "42", "7", ""}, "emoji must be nonempty"},
+		{"reaction whitespace", []string{"message", "react", "42", "7", "a b"}, "emoji must be nonempty"},
+		{"pin id", []string{"message", "pin", "42", "0"}, "message id must be positive"},
+		{"unpin id", []string{"message", "unpin", "42", "0"}, "message id must be positive"},
+		{"question missing", []string{"message", "poll", "42", "--option", "A", "--option", "B"}, "poll question must be 1 to 255 characters"},
+		{"question long", []string{"message", "poll", "42", "--question", strings.Repeat("Я", 256), "--option", "A", "--option", "B"}, "poll question must be 1 to 255 characters"},
+		{"one option", []string{"message", "poll", "42", "--question", "Q", "--option", "A"}, "poll must have 2 to 10 options"},
+		{"eleven options", append([]string{"message", "poll", "42", "--question", "Q"}, elevenOptions()...), "poll must have 2 to 10 options"},
+		{"option long", []string{"message", "poll", "42", "--question", "Q", "--option", strings.Repeat("Я", 101), "--option", "B"}, "poll options must be 1 to 100 characters"},
+		{"option blank", []string{"message", "poll", "42", "--question", "Q", "--option", " ", "--option", "B"}, "poll options must be 1 to 100 characters"},
+		{"duplicate", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", " A "}, "poll options must be unique"},
+		{"explanation long", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--quiz", "--correct", "1", "--explanation", strings.Repeat("Я", 201)}, "quiz explanation must be at most 200 characters"},
+		{"explanation line feeds", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--quiz", "--correct", "1", "--explanation", "a\nb\nc\nd"}, "quiz explanation must be at most 200 characters"},
+		{"quiz no correct", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--quiz"}, "quiz correct answer must name an existing option"},
+		{"correct outside range", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--quiz", "--correct", "3"}, "quiz correct answer must name an existing option"},
+		{"quiz multiple", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--quiz", "--correct", "1", "--multiple"}, "quiz cannot allow multiple answers"},
+		{"correct without quiz", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--correct", "0"}, "--correct and --explanation require --quiz"},
+		{"explanation without quiz", []string{"message", "poll", "42", "--question", "Q", "--option", "A", "--option", "B", "--explanation", ""}, "--correct and --explanation require --quiz"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := runWriteCLI(t, tc.args, "", actionReply, nil)
-			if r.code != exitcode.Usage || r.method != "" {
+			if r.method != "" {
 				t.Fatalf("validation reached daemon: %+v", r)
 			}
+			audit01WantUsage(t, r.code, r.stdout, tc.want)
 		})
 	}
 }
@@ -150,6 +165,7 @@ func elevenOptions() []string {
 }
 
 func TestActionCLIPollAcceptedBoundary(t *testing.T) {
+	audit01Isolate(t)
 	args := []string{"message", "poll", "42", "--question", strings.Repeat("Я", 255), "--option", strings.Repeat("Я", 100), "--quiz", "--correct", "10", "--explanation", strings.Repeat("Я", 198) + "\n\n"}
 	for i := 1; i < 10; i++ {
 		args = append(args, "--option", string(rune('A'+i)))
@@ -165,6 +181,7 @@ func TestActionCLIPollAcceptedBoundary(t *testing.T) {
 }
 
 func TestActionCLIFormatsErrorsAndSchema(t *testing.T) {
+	audit01Isolate(t)
 	commands := schemaCommands(t)
 	for _, tc := range []struct {
 		name, method, result string
@@ -182,10 +199,8 @@ func TestActionCLIFormatsErrorsAndSchema(t *testing.T) {
 		if hasFlag(cmd.Flags, "yes") {
 			t.Errorf("%s unexpectedly requires --yes", tc.name)
 		}
-		for _, name := range []string{"dry-run"} {
-			if !hasFlag(cmd.Flags, name) {
-				t.Errorf("%s missing %s", tc.name, name)
-			}
+		if !hasFlag(cmd.Flags, "dry-run") {
+			t.Errorf("%s missing dry-run", tc.name)
 		}
 		if tc.name == "message poll" {
 			for _, name := range []string{"question", "multiple", "public", "quiz", "correct", "explanation", "reply-to", "topic", "silent"} {
@@ -263,6 +278,7 @@ func hasFlag(flags []flagDoc, name string) bool {
 }
 
 func TestActionCLINegativeChatID(t *testing.T) {
+	audit01Isolate(t)
 	for _, args := range [][]string{
 		{"message", "react", "--remove", "--", "-1001234567890", "7", "👍"},
 		{"message", "pin", "--silent", "--", "-1001234567890", "7"},

@@ -64,7 +64,8 @@ func TestDaemonStartInBackground(t *testing.T) {
 	if err := json.Unmarshal(parse(t, r).Data, &res); err != nil {
 		t.Fatal(err)
 	}
-	if !res.Running || res.PID <= 0 || res.Socket != paths.Socket || res.Log != paths.Log {
+	// The daemon runs inside this process, so its pid is ours, not the launcher's 4242.
+	if !res.Running || res.PID != os.Getpid() || res.Socket != paths.Socket || res.Log != paths.Log {
 		t.Errorf("the answer must name the running daemon: %+v", res)
 	}
 	want := "daemon start --foreground --profile default --journal " + paths.Log

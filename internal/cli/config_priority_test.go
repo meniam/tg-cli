@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"tg-cli/internal/config"
+	"tg-cli/internal/exitcode"
 
 	"github.com/spf13/cobra"
 )
@@ -55,7 +56,7 @@ func TestDaemonThrottleConfigurationPriority(t *testing.T) {
 	}
 }
 
-func TestDaemonThrottleConfigurationCLIConfig(t *testing.T) {
+func TestAudit01_ProfileSelectionConfigDefaultAndFlag(t *testing.T) {
 	e := newEnv(t)
 	path := filepath.Join(e.home, ".config", "tg-cli", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -88,7 +89,7 @@ func TestDaemonThrottleConfigurationCLIConfig(t *testing.T) {
 	}
 }
 
-func TestDaemonThrottleConfigurationLoadsOnce(t *testing.T) {
+func TestAudit01_ConfigWarningsPrintedOnceAndInvalidConfigExitsUsage(t *testing.T) {
 	e := newEnv(t)
 	path := filepath.Join(e.home, ".config", "tg-cli", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -99,7 +100,7 @@ func TestDaemonThrottleConfigurationLoadsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := e.run("schema")
-	if result.code != 0 || strings.Count(result.stderr, "warning:") != 1 || strings.Contains(result.stderr, "secret") {
+	if result.code != exitcode.OK || strings.Count(result.stderr, "warning:") != 1 || strings.Contains(result.stderr, "secret") {
 		t.Fatalf("code=%d stderr=%q", result.code, result.stderr)
 	}
 	if err := os.WriteFile(path, []byte("unknown = 1"), 0o600); err != nil {
@@ -108,7 +109,7 @@ func TestDaemonThrottleConfigurationLoadsOnce(t *testing.T) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if result := e.run("schema"); result.code != 2 {
+	if result := e.run("schema"); result.code != exitcode.Usage {
 		t.Fatalf("invalid config exit=%d", result.code)
 	}
 }

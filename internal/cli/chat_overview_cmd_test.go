@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"tg-cli/internal/exitcode"
@@ -20,7 +21,16 @@ func TestChatOverviewReadsOnlyTheDatabase(t *testing.T) {
 	if r := e.run("message", "history", "@TeamChat", "--limit", "3"); r.code != exitcode.OK {
 		t.Fatalf("history: exit %d, %q", r.code, r.stdout)
 	}
+	// The counters cover the methods of fakeTelegram defined in cli_test.go; methods
+	// that other test files add to the fake are not counted.
+	before := e.tg.audit01CallSnapshot()
+	if before["History"] == 0 || before["ChatInfo"] == 0 {
+		t.Fatalf("the setup did not reach the fake Telegram: %v", before)
+	}
 	r := e.run("chat", "overview")
+	if after := e.tg.audit01CallSnapshot(); !reflect.DeepEqual(before, after) {
+		t.Errorf("chat overview called Telegram: before %v, after %v", before, after)
+	}
 	if r.code != exitcode.OK {
 		t.Fatalf("overview: exit %d, %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
@@ -42,7 +52,7 @@ func TestChatOverviewReadsOnlyTheDatabase(t *testing.T) {
 	}
 	// The title comes from the chat info the daemon stored; the counts and the
 	// previews come from the messages of the history read.
-	if found.Title == "" || found.Messages != 3 || found.LastMessage == nil || found.FirstMessage == nil {
+	if found.Title != "Team" || found.Messages != 3 || found.LastMessage == nil || found.FirstMessage == nil {
 		t.Errorf("the row lacks stored data: %+v", found)
 	}
 }

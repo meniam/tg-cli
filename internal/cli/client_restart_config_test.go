@@ -76,6 +76,12 @@ func TestRestartFactoryPreservesConfiguredProfile(t *testing.T) {
 	if profile != "work" || cfg.SessionPath != filepath.Join(home, "work", "custom.session") || cfg.StatePath != filepath.Join(filepath.Dir(path), "db", "work", "archive.db") || cfg.DeviceModel != "Test device" || throttleCfg.Percent != 35 || cfg.Throttle.FloodAutoWait() != 3*time.Second {
 		t.Fatal("profile settings were not applied")
 	}
+	if got := cfg.Network.Proxy; got == nil || got.Kind != netconf.SOCKS5 || got.Host != "proxy.test" || got.Port != 1080 {
+		t.Fatalf("the configured proxy did not reach the client settings: %+v", got)
+	}
+	if calls[1].Network.Proxy == nil || calls[1].Network.Proxy.Host != "proxy.test" || calls[1].Network.Proxy.Port != 1080 {
+		t.Fatal("replacement lost the configured proxy")
+	}
 	initial := cfg
 	initial.Network.Transport = netconf.TCP
 	if !reflect.DeepEqual(calls[0], initial) || !reflect.DeepEqual(calls[1], replacement) || calls[1].Throttle != calls[0].Throttle {

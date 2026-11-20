@@ -1,6 +1,9 @@
 package chatref
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseValid(t *testing.T) {
 	tests := []struct {
@@ -42,7 +45,7 @@ func TestParseValid(t *testing.T) {
 func TestParseInvalid(t *testing.T) {
 	for _, in := range []string{
 		"", "   ", "@", "@a", "@abcd", "@1abcde", "@bad name", "@bad-name", "name with spaces",
-		"+", "+12", "+1234567890123456", "+12abc345678", "0", "-0", "-1000000000000", "12a",
+		"+", "+12", "+1 (2) 3-4", "+1234567890123456", "+12abc345678", "0", "-0", "-1000000000000", "12a",
 		"tg://join?invite=abc", "tg://resolve", "t.me/+short", "https://t.me/joinchat/", "javascript:alert(1)",
 		"t.me/addlist/AbCdEfGh", "https://t.me/ADDLIST/AbCdEfGh", "t.me/addlist/",
 	} {
@@ -76,25 +79,22 @@ func TestIDKinds(t *testing.T) {
 }
 
 func TestStringHidesSecrets(t *testing.T) {
-	phone, _ := Parse("+15551234567")
-	invite, _ := Parse("t.me/+AbCdEfGh1234")
-	for _, r := range []Ref{phone, invite} {
-		if s := r.String(); s == "" || containsAny(s, "15551234567", "AbCdEfGh1234") {
-			t.Errorf("String() must not repeat the secret: %q", s)
+	for _, tc := range []struct {
+		input, want, secret string
+	}{
+		{"+15551234567", "a phone number", "15551234567"},
+		{"t.me/+AbCdEfGh1234", "an invite link", "AbCdEfGh1234"},
+	} {
+		r, err := Parse(tc.input)
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", tc.input, err)
+		}
+		s := r.String()
+		if s != tc.want || strings.Contains(s, tc.secret) {
+			t.Errorf("String() of %q = %q, want %q without the secret", tc.input, s, tc.want)
 		}
 	}
 	if (Ref{Kind: Username, Username: "telegram"}).String() != "@telegram" {
 		t.Error("a username is printed with @")
 	}
-}
-
-func containsAny(s string, parts ...string) bool {
-	for _, p := range parts {
-		for i := 0; i+len(p) <= len(s); i++ {
-			if s[i:i+len(p)] == p {
-				return true
-			}
-		}
-	}
-	return false
 }
