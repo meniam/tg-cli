@@ -102,7 +102,7 @@ func TestLifecycleKeyedRequests(t *testing.T) {
 	other := p
 	other.IdempotencyKey = "other"
 	var otherResult rpc.SendResult
-	if err := noteCall(t, b, rpc.MethodMessageSend, other, &otherResult); err != nil {
+	if err := rpcCall(t, b, rpc.MethodMessageSend, other, &otherResult); err != nil {
 		t.Fatal(err)
 	}
 	if got := waitLifecycle(t, f.entered); got != "other" {
@@ -161,10 +161,10 @@ func TestLifecycleKeyedRequests(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	close(f.release)
-	if err := <-first; err != nil {
+	if err := audit05Recv(t, first, "first send result"); err != nil {
 		t.Fatal(err)
 	}
-	replay := <-replayed
+	replay := audit05Recv(t, replayed, "replayed send")
 	if replay.err != nil || !replay.value.Replayed {
 		t.Fatalf("replay=%+v err=%v", replay.value, replay.err)
 	}
@@ -240,14 +240,14 @@ func TestLifecycleHistoryCancelKeepsTelegram(t *testing.T) {
 	}
 	close(f.pageRelease)
 	var status rpc.StatusResult
-	if err := noteCall(t, b, rpc.MethodStatus, nil, &status); err != nil || !status.Connected || status.ActiveRequests != 0 {
+	if err := rpcCall(t, b, rpc.MethodStatus, nil, &status); err != nil || !status.Connected || status.ActiveRequests != 0 {
 		t.Fatalf("status %+v err=%v", status, err)
 	}
 	var chats rpc.ChatListResult
-	if err := noteCall(t, b, rpc.MethodChatList, rpc.ChatListParams{}, &chats); err != nil {
+	if err := rpcCall(t, b, rpc.MethodChatList, rpc.ChatListParams{}, &chats); err != nil {
 		t.Fatal(err)
 	}
-	<-done
+	audit05Recv(t, done, "history call")
 }
 
 func TestLifecycleMediaDoesNotBlockOtherKey(t *testing.T) {
@@ -263,7 +263,7 @@ func TestLifecycleMediaDoesNotBlockOtherKey(t *testing.T) {
 		t.Fatal(got)
 	}
 	var sent rpc.SendResult
-	err := noteCall(t, b, rpc.MethodMessageSend, rpc.SendParams{Chat: "42", Text: "hello", IdempotencyKey: "text"}, &sent)
+	err := rpcCall(t, b, rpc.MethodMessageSend, rpc.SendParams{Chat: "42", Text: "hello", IdempotencyKey: "text"}, &sent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestLifecycleMediaDoesNotBlockOtherKey(t *testing.T) {
 		t.Fatal(got)
 	}
 	close(f.release)
-	if err := <-done; err != nil {
+	if err := audit05Recv(t, done, "media call"); err != nil {
 		t.Fatal(err)
 	}
 }

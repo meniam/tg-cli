@@ -13,6 +13,24 @@ import (
 type extrasTelegram struct {
 	*fakeTelegram
 	presses, timers, queries, stickers int
+	// queryID and cacheTime shape the inline query answer; empty and zero
+	// keep the defaults below.
+	queryID   string
+	cacheTime int
+	// stickerLimits records the limit of every sticker search that reached
+	// Telegram.
+	stickerLimits []int
+	inlineSent    int
+}
+
+func (f *extrasTelegram) SearchStickerSets(_ context.Context, p rpc.StickerSearchParams) (rpc.StickerSetsResult, error) {
+	f.stickerLimits = append(f.stickerLimits, p.Limit)
+	return rpc.StickerSetsResult{Sets: []rpc.StickerSetSummary{}}, nil
+}
+
+func (f *extrasTelegram) SendInline(_ context.Context, _ chatref.Ref, _ rpc.SendInlineParams) (rpc.SendResult, *rpc.Message, error) {
+	f.inlineSent++
+	return rpc.SendResult{ID: 31}, nil, nil
 }
 
 func (f *extrasTelegram) PressButton(_ context.Context, _ chatref.Ref, p rpc.PressParams) (rpc.PressResult, error) {
@@ -70,10 +88,31 @@ func TestMessageExtrasAccessAndDryRun(t *testing.T) {
 }
 
 func TestSelfDestructRejectsAlbumsAndNonPhotoVideo(t *testing.T) {
-	for _, p := range []rpc.SendMediaParams{{As: "photo", Files: []string{"/a", "/b"}, SelfDestruct: "1"}, {As: "document", Files: []string{"/a"}, SelfDestruct: "1"}, {As: "video", Files: []string{"/a"}, SelfDestruct: "61"}} {
-		if err := validSendMediaParams(p); err == nil {
-			t.Errorf("accepted %+v", p)
+	for _, tc := range []struct {
+		name string
+		p    rpc.SendMediaParams
+		ok   bool
+	}{
+		{"album", rpc.SendMediaParams{As: "photo", Files: []string{"/a", "/b"}, SelfDestruct: "1"}, false},
+		{"document", rpc.SendMediaParams{As: "document", Files: []string{"/a"}, SelfDestruct: "1"}, false},
+		{"photo", rpc.SendMediaParams{As: "photo", Files: []string{"/a"}, SelfDestruct: "1"}, true},
+		{"video", rpc.SendMediaParams{As: "video", Files: []string{"/a"}, SelfDestruct: "view-once"}, true},
+	} {
+		err := validSendMediaParams(tc.p)
+		if tc.ok && err != nil {
+			t.Errorf("%s: rejected: %v", tc.name, err)
 		}
+		if !tc.ok && (err == nil || audit05GuardCode(t, err) != rpc.CodeInvalidParams) {
+			t.Errorf("%s: err=%v", tc.name, err)
+		}
+	}
+}
+
+// The TTL itself is a range the parser owns: out of range is refused by code.
+func TestAudit05_SelfDestructRejectsOutOfRangeTTL(t *testing.T) {
+	err := validSendMediaParams(rpc.SendMediaParams{As: "video", Files: []string{"/a"}, SelfDestruct: "61"})
+	if err == nil || audit05GuardCode(t, err) != rpc.CodeInvalidParams {
+		t.Fatalf("out of range TTL: %v", err)
 	}
 }
 
@@ -117,7 +156,14 @@ func TestEditMediaChecksBeforeUploading(t *testing.T) {
 
 func (f *extrasTelegram) InlineQuery(_ context.Context, _ chatref.Ref, _ chatref.Ref, _ rpc.InlineQueryParams) (rpc.InlineQueryResult, error) {
 	f.queries++
-	return rpc.InlineQueryResult{QueryID: "123", CacheTime: 1, Results: []rpc.InlineResult{{ID: "r"}}}, nil
+	id, cache := "123", 1
+	if f.queryID != "" {
+		id = f.queryID
+	}
+	if f.cacheTime != 0 {
+		cache = f.cacheTime
+	}
+	return rpc.InlineQueryResult{QueryID: id, CacheTime: cache, Results: []rpc.InlineResult{{ID: "r"}}}, nil
 }
 func TestInlineQueryRequiresWriteAndVisibleBot(t *testing.T) {
 	d, base, _, path := accessTestDaemon(t)

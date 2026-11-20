@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,10 +83,20 @@ func TestFileNameGuardStates(t *testing.T) {
 			} else if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// A check never creates a database: neither the configured file nor
-			// the original name may appear because of it.
-			for _, path := range []string{p.Database, p.LegacyDatabase, filepath.Join(p.Dir, "tg.db"), filepath.Join(p.DatabaseDir, "tg.db")} {
-				if tc.old != "" || tc.new != "" {
+			// A check never creates a database: every path the test did not
+			// create itself must still be absent afterwards.
+			created := map[string]bool{}
+			if tc.old != "" {
+				created[p.LegacyDatabase] = true
+			}
+			if tc.new != "" {
+				created[p.Database] = true
+			}
+			if tc.writeJournal {
+				created[p.LegacyDatabase+"-wal"] = true
+			}
+			for _, path := range []string{p.Database, p.LegacyDatabase, p.LegacyDatabase + "-wal", filepath.Join(p.Dir, "tg.db"), filepath.Join(p.DatabaseDir, "tg.db")} {
+				if created[path] {
 					continue
 				}
 				if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
@@ -186,17 +197,16 @@ func TestRunMovesAWaitingDatabase(t *testing.T) {
 
 func TestFileNameGuardRenamedSessionAndAccess(t *testing.T) {
 	for _, tc := range []struct {
-		name, oldName, newName, contents string
-		kind                             string
+		name, oldName, newName string
 	}{
-		{"access", "access.json", "acl.json", "", "access"},
-		{"session", "session.json", "key.json", "", "session"},
+		{"access", "access.json", "acl.json"},
+		{"session", "session.json", "key.json"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home := shortTempDir(t)
 			t.Setenv("HOME", home)
 			files := DefaultFileNames()
-			switch tc.kind {
+			switch tc.name {
 			case "access":
 				files.Access = tc.newName
 			case "session":
@@ -209,7 +219,7 @@ func TestFileNameGuardRenamedSessionAndAccess(t *testing.T) {
 			if err := os.MkdirAll(p.Dir, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(p.Dir, tc.oldName), []byte(tc.contents), 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(p.Dir, tc.oldName), nil, 0o600); err != nil {
 				t.Fatal(err)
 			}
 			err = Run(context.Background(), Options{Paths: p})
@@ -245,5 +255,64 @@ func TestFileNameGuardWarnings(t *testing.T) {
 	warnings, err := CheckFileNames(p)
 	if err != nil || len(warnings) != 2 {
 		t.Fatalf("warnings=%v err=%v", warnings, err)
+	}
+	for i, name := range []string{"daemon.log", "deletions.jsonl"} {
+		current := map[string]string{"daemon.log": p.Log, "deletions.jsonl": p.Deletions}[name]
+		want := fmt.Sprintf("%s exists but configured journal %s does not", filepath.Join(p.Dir, name), current)
+		if warnings[i] != want {
+			t.Errorf("warning %d = %q, want %q", i, warnings[i], want)
+		}
+	}
+}
+
+// A missing profile directory is not an error; a default profile directory that
+// does exist is worth a warning, because the profile may have been renamed.
+func TestAudit05_FileNameGuardMissingProfileDirectory(t *testing.T) {
+	home := shortTempDir(t)
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	p, err := ResolvePaths(home, dbRoot(t), "test", DefaultFileNames())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, statErr := os.Stat(p.Dir); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("the profile directory must not exist yet: %v", statErr)
+	}
+	warnings, err := CheckFileNames(p)
+	if err != nil || len(warnings) != 0 {
+		t.Fatalf("nothing to warn about: %v %v", warnings, err)
+	}
+	base, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := filepath.Join(base, "tg-cli", filepath.Base(p.Dir))
+	if filepath.Clean(old) == filepath.Clean(p.Dir) {
+		t.Fatalf("fixture: the default profile directory %s is the profile directory", old)
+	}
+	if err = os.MkdirAll(old, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	warnings, err = CheckFileNames(p)
+	want := fmt.Sprintf("profile directory %s does not exist; default profile directory %s exists", p.Dir, old)
+	if err != nil || len(warnings) != 1 || warnings[0] != want {
+		t.Fatalf("warnings=%q err=%v, want %q", warnings, err, want)
+	}
+}
+
+func TestAudit05_FileNameGuardProfilePathIsAFile(t *testing.T) {
+	home := shortTempDir(t)
+	t.Setenv("HOME", home)
+	p, err := ResolvePaths(home, dbRoot(t), "test", DefaultFileNames())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.MkdirAll(filepath.Dir(p.Dir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, p.Dir, "not a directory")
+	_, err = CheckFileNames(p)
+	if err == nil || !strings.Contains(err.Error(), "profile path is not a directory") {
+		t.Fatalf("got %v", err)
 	}
 }
