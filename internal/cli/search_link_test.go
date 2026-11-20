@@ -48,13 +48,15 @@ func TestSearchLinkOfEveryChatKind(t *testing.T) {
 	type want struct {
 		link        string // empty means a null link
 		unavailable string
+		title       string
+		username    string // empty means a null username
 	}
 	wants := map[int64]want{
-		1: {link: "https://t.me/pubgroup/1"},
-		2: {link: "https://t.me/c/1000000002/2"},
-		3: {unavailable: "private_chat"},
-		4: {unavailable: "basic_group"},
-		5: {link: "https://t.me/pubgroup/9/5"},
+		1: {link: "https://t.me/pubgroup/1", title: "Public group", username: "pubgroup"},
+		2: {link: "https://t.me/c/1000000002/2", title: "Private channel"},
+		3: {unavailable: "private_chat", title: "Alice"},
+		4: {unavailable: "basic_group", title: "Basic group"},
+		5: {link: "https://t.me/pubgroup/9/5", title: "Public group", username: "pubgroup"},
 	}
 	seen := 0
 	for _, line := range strings.Split(strings.TrimSpace(r.stdout), "\n") {
@@ -84,6 +86,18 @@ func TestSearchLinkOfEveryChatKind(t *testing.T) {
 		if got, _ := fields["link_unavailable"].(string); got != w.unavailable {
 			t.Errorf("message %d: link_unavailable = %q, want %q", id, got, w.unavailable)
 		}
+		// The chat name comes with every message hit; a chat without a username
+		// has an explicit null, not a missing field.
+		if got, _ := fields["chat_title"].(string); got != w.title {
+			t.Errorf("message %d: chat_title = %q, want %q", id, got, w.title)
+		}
+		username, present := fields["chat_username"]
+		switch {
+		case !present:
+			t.Errorf("message %d: no chat_username field (null expected): %s", id, line)
+		case w.username == "" && username != nil, w.username != "" && username != w.username:
+			t.Errorf("message %d: chat_username = %v, want %q", id, username, w.username)
+		}
 	}
 	if seen != len(wants) {
 		t.Errorf("%d of %d messages found: %q", seen, len(wants), r.stdout)
@@ -96,8 +110,8 @@ func TestSearchLinkIsMessageOnly(t *testing.T) {
 	if r.code != exitcode.OK || !strings.Contains(r.stdout, `"scope":"chats"`) {
 		t.Fatalf("search chats: exit %d, %q", r.code, r.stdout)
 	}
-	if strings.Contains(r.stdout, `"link"`) {
-		t.Errorf("a chat hit carries a link field: %q", r.stdout)
+	if strings.Contains(r.stdout, `"link"`) || strings.Contains(r.stdout, `"chat_title"`) || strings.Contains(r.stdout, `"chat_username"`) {
+		t.Errorf("a chat hit carries a message field: %q", r.stdout)
 	}
 }
 
@@ -107,11 +121,18 @@ func TestSearchHumanAndSchemaShowLinks(t *testing.T) {
 	if human.code != exitcode.OK || !strings.Contains(human.stdout, "link") || !strings.Contains(human.stdout, "https://t.me/pubgroup/1") || !strings.Contains(human.stdout, "private_chat") {
 		t.Errorf("--human lacks the link fields: exit %d, %q", human.code, human.stdout)
 	}
+	// The chat name is Telegram text: --human frames it, and the username line
+	// shows the value.
+	for _, want := range []string{"untrusted Telegram text", "chat_title", "| Public group", "| Alice", "chat_username", "| pubgroup"} {
+		if !strings.Contains(human.stdout, want) {
+			t.Errorf("--human lacks %q: %q", want, human.stdout)
+		}
+	}
 	search, ok := schemaCommands(t)["search"]
 	if !ok {
 		t.Fatal("search is not in the schema")
 	}
-	if missing := schema.Missing([]string{"hits.link", "hits.link_unavailable"}, search.Fields); len(missing) != 0 {
+	if missing := schema.Missing([]string{"hits.link", "hits.link_unavailable", "hits.chat_title", "hits.chat_username"}, search.Fields); len(missing) != 0 {
 		t.Errorf("schema lacks %v", missing)
 	}
 }

@@ -51,6 +51,11 @@ type SearchHit struct {
 	// link, nil if the chat has none; LinkUnavailable then says why.
 	Link            *string
 	LinkUnavailable string
+	// ChatTitle and ChatUsername are the title and the username of the chat of a
+	// message hit, from the same join that gives the link. They are empty when
+	// the chat is unknown or has no username.
+	ChatTitle    string
+	ChatUsername string
 }
 
 var searchScopeOrder = []string{"chats", "people", "messages", "notes"}
@@ -250,7 +255,7 @@ func fuseRRF(limit int, legs ...[]messageCandidate) []*fusedMessage {
 // bound argument. Filters (chat, closed chats, deleted) are identical in both
 // legs.
 func (db *DB) messageLeg(ctx context.Context, table, match string, limit int, options SearchOptions) ([]messageCandidate, error) {
-	query := `SELECT m.id,m.chat_id,m.text,COALESCE(t.text,''),m.date,m.deleted_at,m.topic_id,c.type,c.username FROM ` + table + ` JOIN messages m ON m.rowid=` + table + `.rowid` + transcriptJoin + ` LEFT JOIN chats c ON c.id=m.chat_id WHERE ` + table + ` MATCH ?`
+	query := `SELECT m.id,m.chat_id,m.text,COALESCE(t.text,''),m.date,m.deleted_at,m.topic_id,c.type,c.username,c.title FROM ` + table + ` JOIN messages m ON m.rowid=` + table + `.rowid` + transcriptJoin + ` LEFT JOIN chats c ON c.id=m.chat_id WHERE ` + table + ` MATCH ?`
 	args := []any{match}
 	if options.ChatID != nil {
 		query += ` AND m.chat_id=?`
@@ -274,9 +279,9 @@ func (db *DB) messageLeg(ctx context.Context, table, match string, limit int, op
 		var candidate messageCandidate
 		var deletedAt, topicID *int64
 		var chatID int64
-		var chatType, username sql.NullString
+		var chatType, username, chatTitle sql.NullString
 		var transcript string
-		if err := rows.Scan(&candidate.hit.ID, &chatID, &candidate.text, &transcript, &candidate.hit.Date, &deletedAt, &topicID, &chatType, &username); err != nil {
+		if err := rows.Scan(&candidate.hit.ID, &chatID, &candidate.text, &transcript, &candidate.hit.Date, &deletedAt, &topicID, &chatType, &username, &chatTitle); err != nil {
 			return nil, err
 		}
 		candidate.text = composeMessageText(candidate.text, transcript)
@@ -287,6 +292,7 @@ func (db *DB) messageLeg(ctx context.Context, table, match string, limit int, op
 			candidate.topicID = *topicID
 		}
 		candidate.hit.Link, candidate.hit.LinkUnavailable = MessageLink(chatID, candidate.hit.ID, chatType.String, username.String, topicID)
+		candidate.hit.ChatTitle, candidate.hit.ChatUsername = chatTitle.String, username.String
 		found = append(found, candidate)
 	}
 	return found, rows.Err()

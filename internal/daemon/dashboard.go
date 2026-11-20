@@ -40,11 +40,12 @@ func (d *daemon) dashboard(ctx context.Context, _ json.RawMessage) (any, error) 
 			Admin: policy.AdminCount(), Create: policy.CreateAllowed(), Profile: policy.ProfileAllowed(),
 			Dialogs: policy.DialogsAllowed(), Sessions: policy.SessionsAllowed(), Closed: policy.Closed(),
 		},
-		Database:   rpc.DashboardDatabase{SchemaVersion: version, Chats: stats.Chats, Messages: stats.Messages},
-		History:    dashboardHistory(stats),
-		Background: d.backgroundSyncStatus(),
-		Jobs:       d.dashboardJobs(),
-		Events:     rpc.DashboardEvents{LastHour: stats.EventsSince, Total: stats.EventsTotal},
+		Database:       rpc.DashboardDatabase{SchemaVersion: version, Chats: stats.Chats, Messages: stats.Messages},
+		History:        dashboardHistory(stats),
+		Background:     d.backgroundSyncStatus(),
+		SemanticSearch: d.semanticIndexStatus(),
+		Jobs:           d.dashboardJobs(),
+		Events:         rpc.DashboardEvents{LastHour: stats.EventsSince, Total: stats.EventsTotal},
 	}
 	if !d.startedAt.IsZero() {
 		out.StartedAt = d.startedAt.Unix()

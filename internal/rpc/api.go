@@ -115,6 +115,8 @@ type StatusResult struct {
 	Access          *AccessStatus `json:"access,omitempty"`
 	// BackgroundSync is always present, also when the scheduler is off.
 	BackgroundSync BackgroundSyncStatus `json:"background_sync"`
+	// SemanticSearch is always present; state is "disabled" while the feature is off.
+	SemanticSearch SemanticIndexStatus `json:"semantic_search"`
 }
 
 // States of the scheduled history load in BackgroundSyncStatus.State.
@@ -566,19 +568,28 @@ type SearchHit struct {
 	// basic_group, or nothing if the chat is unknown.
 	Link            *string `json:"link,omitempty"`
 	LinkUnavailable string  `json:"link_unavailable,omitempty"`
+	// ChatTitle and ChatUsername name the chat of a message hit. ChatTitle is an
+	// empty string for a chat the database does not know, ChatUsername is null
+	// for a chat without a username; both are always there for messages and
+	// absent for the other scopes.
+	ChatTitle    string  `json:"chat_title,omitempty" untrusted:"true"`
+	ChatUsername *string `json:"chat_username,omitempty" untrusted:"true"`
 }
 
-// MarshalJSON writes "link": null for a message hit without a link, so the
-// field is always there for messages, and leaves it out for other scopes.
+// MarshalJSON writes "link": null, "chat_title" and "chat_username": null for
+// a message hit that lacks them, so the fields are always there for messages,
+// and leaves them out for other scopes.
 func (h SearchHit) MarshalJSON() ([]byte, error) {
 	type plain SearchHit
-	if h.Scope != "messages" || h.Link != nil {
+	if h.Scope != "messages" {
 		return json.Marshal(plain(h))
 	}
 	return json.Marshal(struct {
 		plain
-		Link *string `json:"link"`
-	}{plain: plain(h)})
+		Link         *string `json:"link"`
+		ChatTitle    string  `json:"chat_title"`
+		ChatUsername *string `json:"chat_username"`
+	}{plain: plain(h), Link: h.Link, ChatTitle: h.ChatTitle, ChatUsername: h.ChatUsername})
 }
 
 // SearchResult contains hits grouped by scope.

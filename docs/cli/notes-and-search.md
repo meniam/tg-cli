@@ -155,7 +155,7 @@ tg note delete --author ai --yes
 
 ### tg search
 
-Full-text search in the local database: chats, people, messages and notes. It needs no Telegram connection and no login, only the running Daemon. It finds only what the Daemon has already loaded or saved: read a chat first (`message history`), load a whole chat with `chat sync start`, and search Telegram itself with [`message search`](messages-read.md#tg-message-search).
+Full-text search in the local database: chats, people, messages and notes. It needs no Telegram connection and no login, only the running Daemon. It finds only what the Daemon has already loaded or saved: read a chat first (`message history`), load a whole chat with `chat sync start`, and search Telegram itself with [`message search`](messages-read.md#tg-message-search). In the `messages` scope it knows word forms (stemming, see [Word forms](#word-forms-and-links-to-messages)), and with `--semantic` it also finds fragments of a conversation by meaning (see [Semantic search](#semantic-search)).
 
 ```text
 tg search [flags] <query>
@@ -176,7 +176,7 @@ tg search [flags] <query>
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon. Without `--scope` all four scopes are searched. Quote a multiword query in the shell, and put `--` before a query that starts with `-`. FTS5 syntax inside the query is harmless. `--limit` counts hits per scope (20 by default, 100 at most). `--chat` restricts message and note hits to one chat, `--author` filters note hits, `--prefix` matches the last query term as a prefix, `--deleted` includes messages marked deleted. `--scope` accepts repeated values or a comma-separated list; with `--format jsonl` each hit is a line, in scope order. Hits of closed chats are hidden; people (`people`) and notes about people are not filtered. The `snippet` and `title` of a hit are marked `untrusted` (also for a note hit), so `--human` frames them.
+**Preconditions.** A running Daemon. Without `--scope` all four scopes are searched. Quote a multiword query in the shell, and put `--` before a query that starts with `-`. FTS5 syntax inside the query is harmless. `--limit` counts hits per scope (20 by default, 100 at most). `--chat` restricts message and note hits to one chat, `--author` filters note hits, `--prefix` matches the last query term as a prefix, `--deleted` includes messages marked deleted. `--scope` accepts repeated values or a comma-separated list; with `--format jsonl` each hit is a line, in scope order. Hits of closed chats are hidden; people (`people`) and notes about people are not filtered. The `snippet` and `title` of a hit are marked `untrusted` (also for a note hit), and so are `chat_title` and `chat_username` of a message hit, so `--human` frames them. `--semantic` switches the command to another mode with its own answer; the rest of this block describes the ordinary mode, and [Semantic search](#semantic-search) the other.
 
 **Example.**
 
@@ -188,14 +188,42 @@ tg search contract --scope notes --author ai
 **Answer.**
 
 ```json
-{"ok":true,"data":{"hits":[{"scope":"notes","id":2,"chat_id":-1001234567890,"snippet":"Asked for the contract, follow up on Monday","author":"ai","model":"my-model","note_kind":"message","rank":-0.51351890473488}]}}
+{"ok":true,"data":{"hits":[{"scope":"messages","id":501,"chat_id":-1001234567890,"snippet":"Sent the invoice for March","date":"2026-11-20T09:15:00Z","rank":-0.0327868852459016,"link":"https://t.me/c/1234567890/501","chat_title":"Release team","chat_username":null},{"scope":"notes","id":2,"chat_id":-1001234567890,"snippet":"Asked for the contract, follow up on Monday","author":"ai","model":"my-model","note_kind":"message","rank":-0.51351890473488}]}}
 ```
 
-**Answer fields** (`data`): `hits` array, `hits.scope` string, `hits.id` integer, `hits.chat_id` integer (optional), `hits.title` string (optional, untrusted), `hits.snippet` string (untrusted), `hits.date` string (optional), `hits.deleted` boolean (optional), `hits.author` string (optional), `hits.model` string (optional), `hits.note_kind` string (optional), `hits.rank` number.
+**Answer fields** (`data`): `hits` array, `hits.scope` string, `hits.id` integer, `hits.chat_id` integer (optional), `hits.title` string (optional, untrusted), `hits.snippet` string (untrusted), `hits.date` string (optional), `hits.deleted` boolean (optional), `hits.author` string (optional), `hits.model` string (optional), `hits.note_kind` string (optional), `hits.rank` number (lower is better in every scope), `hits.link` string or null (message hits only; always present for them), `hits.link_unavailable` string (optional, message hits only), `hits.chat_title` string (message hits only; untrusted; empty for a chat the database does not know) and `hits.chat_username` string or null (message hits only; untrusted; `null` when the chat has no username). The chat fields come from the `chats` table in the same query as the hit and need no Telegram request; the `title` of a `chats` hit is unchanged.
 
-**Exit codes.** 0 (also with no hits); 2 a bad `--scope` or `--author`, no query; 3 no Daemon.
+**Exit codes.** 0 (also with no hits); 2 a bad `--scope` or `--author`, no query, or `--semantic` with a flag it does not accept (see below); 3 no Daemon.
 
-**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.9.
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.9 and 13.1.
+
+#### Word forms and links to messages
+
+In the `messages` scope the search runs two legs over the same query and fuses them by Reciprocal Rank Fusion (RRF, constant 60). The exact leg matches the words as written, so numbers, part numbers and names stay exact. The stemmed leg matches the stems of the words (Snowball, Russian and English), so `доставка`, `доставки` and `доставку` find each other without `--prefix`. A word with digits, a name or a word of another language stays as written. Each leg contributes its `--limit` times three best messages, and the fused list is cut to `--limit`. The stems are kept in the database next to the text (schema version 11). Opening a database of an older version converts it once, and an older binary refuses a converted one: copy `store.db` before the update. The other scopes are unchanged.
+
+`rank` of a message hit is the negated RRF score, so a smaller number is a better hit, as with the `bm25` rank of the other scopes. The value is not comparable with the `rank` of an earlier version.
+
+Every message hit carries `link`, the `t.me` link of the message, built from the chat type, the chat username and the forum topic in the local database, without a request to Telegram. A public chat gives `https://t.me/<username>/<id>`, a private channel or supergroup `https://t.me/c/<chat>/<id>`, and a message in a forum topic `https://t.me/c/<chat>/<topic>/<id>`. A direct chat and a basic group have no web link: `link` is `null` and `link_unavailable` says `private_chat` or `basic_group`. For a chat that is not in the local `chats` table `link` is `null` and `link_unavailable` is absent. A link names the chat and the message number only; it holds no text.
+
+#### Semantic search
+
+`--semantic` searches conversation fragments instead of single messages. A fragment is a stretch of one chat (and one forum topic) cut by pauses in the talk; see [contracts.md](../contracts.md#semantic-search). Three legs find fragments, and RRF fuses them (constant 60): the exact words and the stemmed words of the query over the messages, and the vector similarity of the query to the stored fragment vectors. A fragment found by several legs ranks higher. The rank of a fragment on a word leg is the best rank of its messages; a message that no stored fragment covers (a short one) is returned as a fragment of its own with `indexed` false.
+
+The vector leg runs only when `[semantic_search] enabled = true`, Ollama answers within 10 seconds and `vectors.db` holds fragments of the current model (see [`tg search index`](#tg-search-index-start) and [`[semantic_search]`](overview.md#request-throttle-and-flood_wait)). The Daemon embeds the query through Ollama at the moment of the call and sends it nothing else. When the leg cannot run, the answer is built from the word legs and `vector_skipped` says why. The search never fails because of the vector side.
+
+`--semantic` accepts `--chat`, `--limit` (fragments, 1 to 100, default 20) and `--prefix`. It refuses `--scope` with any scope but `messages`, `--author` and `--deleted` with exit code 2 and a message that names the flag; deleted messages are not searched. Hits of closed chats are hidden, and a closed chat is never indexed.
+
+```sh
+tg search --semantic "когда приедет заказ" --limit 5
+```
+
+```json
+{"ok":true,"data":{"fragments":[{"chat_id":-1001234567890,"topic_id":0,"first_id":480,"last_id":487,"starts_at":"2026-11-20T09:00:00Z","ends_at":"2026-11-20T09:40:00Z","score":0.03278688524590164,"sources":["exact","vector"],"indexed":true,"text":"Привезут завтра до обеда\nХорошо, жду","link":"https://t.me/c/1234567890/480","match_link":"https://t.me/c/1234567890/483","chat_title":"Release team","chat_username":null}]}}
+```
+
+**Answer fields** (`data`): `fragments` array (best first); `fragments.chat_id`, `topic_id` (0 when the chat has no topics), `first_id` and `last_id` integers; `starts_at` and `ends_at` strings (RFC 3339, UTC); `score` number (the RRF score, higher is better); `sources` array of `exact`, `stem` and `vector`, the legs that found the fragment; `indexed` boolean; `text` string (untrusted; the live messages of the fragment from the local database, one per line, at most 1500 characters, cut with `…`); `link` string or null (the first message of the fragment); `match_link` string or null (the message the word legs ranked best; null when only the vector leg found the fragment); `link_unavailable` string (optional, as for message hits); `chat_title` string (untrusted; empty for a chat the database does not know) and `chat_username` string or null (untrusted; `null` without a username), for every fragment, also for a short message returned as a fragment of its own and for one found by the vector leg alone. `vector_skipped` string (optional) is one of `disabled` (the setting is off), `unavailable` (Ollama did not answer in time), `model_missing` (Ollama has no such model), `index_empty` (no fragment is indexed with the current model) and `error` (any other failure); it is absent when the vector leg ran. The text of the query and of the messages never appears in `vector_skipped`. A fragment whose every message was deleted after indexing is dropped from the answer. With `--format jsonl` each fragment is a line.
+
+**Limits.** The quality of the vector leg on real conversations is not measured yet, see [FEATURES.md](../../FEATURES.md), item 13.1.
 
 The word `index` is also the name of a subcommand group (`tg search index`). To search for the word itself, put `--` before it: `tg search -- index`. Without it `tg search index` fails with exit code 2 and asks for a subcommand.
 

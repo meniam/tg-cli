@@ -161,7 +161,7 @@ func TestChatLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if links[-1001000000001] != (ChatLink{Type: "supergroup", Username: "pubgroup"}) || links[55] != (ChatLink{Type: "user"}) {
+	if links[-1001000000001] != (ChatLink{Type: "supergroup", Username: "pubgroup", Title: "Public"}) || links[55] != (ChatLink{Type: "user", Title: "Alice"}) {
 		t.Errorf("links = %+v", links)
 	}
 	if _, ok := links[777]; ok {

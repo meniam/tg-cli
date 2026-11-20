@@ -66,7 +66,12 @@ On failure the envelope is `{"ok":false,"error":{"code":"...","message":"..."}}`
 
 ## Quick start
 
-**Requirements:** Go (the version in [`go.mod`](go.mod)) and [`just`](https://github.com/casey/just) (`brew install just`). The daemon uses Unix sockets and file locks, so a Unix-like system is required; the supported platforms are not defined yet. There are no releases yet, so you build from source.
+**Requirements.** There are no releases yet, so you build from source.
+
+- **To build and run:** Go (the version in [`go.mod`](go.mod)), [`just`](https://github.com/casey/just) (`brew install just`) and a Unix-like system: the daemon uses Unix sockets and file locks, and the supported platforms are not defined yet. `go build` fetches the Go libraries from `go.mod`. They are all pure Go, with no cgo and no native library: SQLite is [`modernc.org/sqlite`](https://pkg.go.dev/modernc.org/sqlite), stemming is [`kljensen/snowball`](https://github.com/kljensen/snowball) and Telegram is [`gotd/td`](https://github.com/gotd/td).
+- **Telegram:** an account, and either an official client preset (`--client`, downloaded from `raw.githubusercontent.com` on every start that uses it, so the daemon needs network access to GitHub then) or your own `TG_API_ID` and `TG_API_HASH` (no download).
+- **Optional, for `tg search --semantic`:** [Ollama](https://ollama.com) on the same machine with the `bge-m3` model (`ollama pull bge-m3`, about 1.2 GB). The client accepts only a loopback address (`127.0.0.1`, `::1` or `localhost`) and refuses any other, and there is no cloud API. Without Ollama the search by words works as before; see "Optional: search by meaning" below. The maximum set of installs is in [Everything installed](#everything-installed-full-functionality).
+- **Optional, for development:** `uv` (`brew install uv`) for `just changelog` and `just atlas`, and `python3` for `just skill-check`. The `sqlite3` utility is not needed.
 
 ```sh
 git clone https://github.com/meniam/tg-cli.git
@@ -135,7 +140,30 @@ tg status
 enabled = true
 ```
 
+**Optional: search by meaning.** `tg search` already knows word forms: `доставка`, `доставки` and `доставку` find each other in `messages`, and every message hit has a `t.me` link built from the local database. With `tg search --semantic` the search returns fragments of a conversation (a stretch of one chat cut by pauses) found by three legs fused by RRF: exact words, stemmed words and vector similarity. The vector leg is off by default; while it is off the daemon makes no request to Ollama and creates no `vectors.db`. With the setting below the daemon cuts the local messages into fragments, asks the local Ollama for a vector of each (`bge-m3`) and keeps them in `vectors.db` next to `store.db`, without any message text. It never calls Telegram, skips chats the access lists close, and runs every 10 minutes or on `tg search index start`. If Ollama is down the answer comes from the word legs and says why in `vector_skipped`. You can delete `vectors.db`: the index is built again. The state is the `semantic_search` block of `tg daemon status` and the `Semantic` row of `tg status`. The feature is checked by tests on fakes and has not run on a live account or a live Ollama, and there are no measurements of its quality yet, see [`FEATURES.md`](FEATURES.md) item 13.1. Keys and limits: [overview.md](docs/cli/overview.md#request-throttle-and-flood_wait); the command: [notes-and-search.md](docs/cli/notes-and-search.md#semantic-search).
+
+```toml
+[semantic_search]
+enabled = true
+```
+
 A chat is addressed as `@username`, a Bot API id (users positive, groups negative, channels from `-1000000000000`), the phone number of a contact, or a `t.me` link. More: [install and run](docs/cli/overview.md#install-and-run), [profiles](docs/cli/overview.md#profiles-and-the-data-directory), [global flags](docs/cli/overview.md#global-flags).
+
+### Everything installed: full functionality
+
+The most you can install so that every part of `tg` works:
+
+```sh
+brew install go just ollama     # or the Ollama app: brew install --cask ollama-app
+ollama pull bge-m3
+brew install uv                 # development only: just changelog, just atlas (just skill-check needs python3)
+just install                    # builds and puts the binary into ~/.local/bin/tg
+```
+
+- **PATH.** `just install` writes `~/.local/bin/tg`: that directory has to be in your `PATH`.
+- **Two settings.** Both sections of `config.toml` are off by default. Turn them on, then restart the daemon: `[semantic_search] enabled = true` (the vector index and `tg search --semantic`) and `[background_sync] enabled = true` (the scheduled load of old history).
+- **Nothing else to install.** `tg` starts no other program: the only process it launches is itself, when `tg daemon start` runs the daemon in the background. It does not call `ffmpeg` or `sqlite3`, and media metadata is read in Go.
+- **What depends on the account, not on the installation.** `message transcribe` (Telegram gives a free-trial allowance, then asks for Premium), `message translate` and custom emoji in sent text need Telegram Premium; a refusal is exit code 5 with `error.reason: "premium_required"`. Writing works only in the chats of `write` in `access.json`, which only you edit; elsewhere it is exit code 9 `write_disabled`.
 
 ## What it can do
 
@@ -158,6 +186,7 @@ Every command has its own section in the [command reference](docs/cli/overview.m
 | Send files | `message send-media` | [messages-write.md](docs/cli/messages-write.md#files) |
 | Reactions, pins, polls | `message react\|pin\|unpin\|poll` | [messages-write.md](docs/cli/messages-write.md#reactions-pins-and-polls) |
 | Notes and local full-text search | `note add\|list\|delete`, `search` | [notes-and-search.md](docs/cli/notes-and-search.md) |
+| Search by word forms and meaning | `search --semantic`, `search index start\|status\|cancel` | [notes-and-search.md](docs/cli/notes-and-search.md#semantic-search) |
 | Machine description of the tool | `schema`, `version` | [notes-and-search.md](docs/cli/notes-and-search.md#the-tool-describes-itself) |
 
 The rules every command shares are in [overview.md](docs/cli/overview.md): [output formats and `--fields`](docs/cli/overview.md#output-formats), the [answer envelope](docs/cli/overview.md#the-answer-envelope), [exit codes](docs/cli/overview.md#exit-codes), [safety classes](docs/cli/overview.md#safety-classes-and-the-dangerous-mark), [untrusted text](docs/cli/overview.md#untrusted-text) and the [request throttle](docs/cli/overview.md#request-throttle-and-flood_wait). The whole documentation map is [docs/README.md](docs/README.md); the detailed behavior contracts are in [docs/contracts.md](docs/contracts.md).
@@ -180,7 +209,7 @@ Details: [access.md](docs/cli/access.md), [writing is off until the owner allows
 
 Every command of `tg schema` is implemented and covered by tests; the test suite never contacts Telegram. The main path was also run on a live account (checks of 2026-11-13 and 2026-11-14, write checks only in one test chat) for: reading, the local database, notes and search; the live event stream (new messages, edits, deletions, statuses, a resume from a cursor after a daemon restart, the chat filter); Telegram-side search, context and links, and `chat mark-read` (exit codes only); members, topics and common chats; the whole-chat load and the export of saved messages; sending, editing, deleting and forwarding, files, reactions, pins, polls and text formatting; the access lists; and the background daemon.
 
-What is not checked on a live account is listed only in [`FEATURES.md`](FEATURES.md): the items marked `[0]` in its status list and the paragraph "Не проверено на живом аккаунте". The status of every requirement is there too.
+What is not checked on a live account is listed only in [`FEATURES.md`](FEATURES.md): the items marked `[0]` in its status list and the paragraph "Не проверено на живом аккаунте". The status of every requirement is there too. The search by word forms and meaning (`tg search --semantic`, the vector index) is checked by tests on fakes only: it has not run on a live account or a live Ollama, and nothing measures its quality yet.
 
 **Account risk, plainly.** `tg` is an unofficial client for your personal account. With `--client` it presents itself with the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited this way are an open question in [`INTENT.md`](INTENT.md). This project has not assessed it. Do not point this at an account you cannot afford to lose.
 
@@ -208,8 +237,11 @@ internal/
   mediameta/     checks media by content and reads MP4 and Ogg Opus metadata
   clientpreset/  official client presets
   chatref/       parses @username, ids, phones, t.me chat links and message links
-  store/         SQLite: migrations, chats, people, messages, notes, search, event journal, load progress, export pages
+  store/         SQLite: migrations, chats, people, messages, notes, search (exact and stemmed), event journal, load progress, export pages
   textnorm/      search normalization and safe FTS5 queries
+  stem/          Snowball stems (Russian and English) for the stemmed search leg
+  vectors/       vectors.db: fragment vectors, brute-force search, cutting messages into fragments
+  embed/         the client of the local Ollama service
   output/        JSON envelope, JSONL, TOON, human format and `--fields`
   buildinfo/     version and build revision
   schema/        field lists of the results, built by reflection

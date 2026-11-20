@@ -39,12 +39,12 @@ func TestSearchSemanticAnswersFromWordsWhenTheIndexIsOff(t *testing.T) {
 	if len(byID) != 5 {
 		t.Fatalf("got %d fragments, want one per message: %+v", len(byID), data.Fragments)
 	}
-	wants := map[int64]struct{ link, unavailable string }{
-		1: {"https://t.me/pubgroup/1", ""},
-		2: {"https://t.me/c/1000000002/2", ""},
-		3: {"", "private_chat"},
-		4: {"", "basic_group"},
-		5: {"https://t.me/pubgroup/9/5", ""},
+	wants := map[int64]struct{ link, unavailable, title, username string }{
+		1: {"https://t.me/pubgroup/1", "", "Public group", "pubgroup"},
+		2: {"https://t.me/c/1000000002/2", "", "Private channel", ""},
+		3: {"", "private_chat", "Alice", ""},
+		4: {"", "basic_group", "Basic group", ""},
+		5: {"https://t.me/pubgroup/9/5", "", "Public group", "pubgroup"},
 	}
 	for id, w := range wants {
 		f := byID[id]
@@ -53,6 +53,9 @@ func TestSearchSemanticAnswersFromWordsWhenTheIndexIsOff(t *testing.T) {
 		}
 		if w.link == "" && f.Link != nil || w.link != "" && (f.Link == nil || *f.Link != w.link) || f.LinkUnavailable != w.unavailable {
 			t.Errorf("fragment %d link = %v (%q), want %q (%q)", id, f.Link, f.LinkUnavailable, w.link, w.unavailable)
+		}
+		if f.ChatTitle != w.title || w.username == "" && f.ChatUsername != nil || w.username != "" && (f.ChatUsername == nil || *f.ChatUsername != w.username) {
+			t.Errorf("fragment %d chat = %q, %v, want %q, %q", id, f.ChatTitle, f.ChatUsername, w.title, w.username)
 		}
 		// The best message is the only message.
 		if (f.Link == nil) != (f.MatchLink == nil) || f.Link != nil && *f.MatchLink != *f.Link {
@@ -63,6 +66,9 @@ func TestSearchSemanticAnswersFromWordsWhenTheIndexIsOff(t *testing.T) {
 	r := e.run("search", "--semantic", "доставки")
 	if !strings.Contains(r.stdout, `"match_link":null`) || !strings.Contains(r.stdout, `"link":null`) {
 		t.Errorf("null links are not written out: %q", r.stdout)
+	}
+	if !strings.Contains(r.stdout, `"chat_username":null`) || !strings.Contains(r.stdout, `"chat_title":"Alice"`) {
+		t.Errorf("the chat name is not written out: %q", r.stdout)
 	}
 }
 
@@ -135,7 +141,7 @@ func TestSearchSemanticJSONLAndHuman(t *testing.T) {
 	if human.code != exitcode.OK {
 		t.Fatalf("human: exit %d, %q", human.code, human.stdout)
 	}
-	for _, want := range []string{"untrusted Telegram text", "| Доставка задерживается", "https://t.me/pubgroup/1", "private_chat", "vector_skipped", "disabled"} {
+	for _, want := range []string{"untrusted Telegram text", "| Доставка задерживается", "https://t.me/pubgroup/1", "private_chat", "vector_skipped", "disabled", "chat_title", "| Public group", "chat_username", "| pubgroup"} {
 		if !strings.Contains(human.stdout, want) {
 			t.Errorf("--human output lacks %q: %q", want, human.stdout)
 		}
@@ -157,15 +163,17 @@ func TestSearchSemanticSchema(t *testing.T) {
 		t.Errorf("semantic flag = %+v", flag)
 	}
 	paths := []string{"hits.link", "fragments.chat_id", "fragments.topic_id", "fragments.first_id", "fragments.last_id", "fragments.starts_at", "fragments.ends_at",
-		"fragments.score", "fragments.sources", "fragments.indexed", "fragments.text", "fragments.link", "fragments.match_link", "fragments.link_unavailable", "vector_skipped"}
+		"fragments.score", "fragments.sources", "fragments.indexed", "fragments.text", "fragments.link", "fragments.match_link", "fragments.link_unavailable", "fragments.chat_title", "fragments.chat_username", "vector_skipped"}
 	if missing := schema.Missing(paths, search.Fields); len(missing) != 0 {
 		t.Errorf("schema lacks %v", missing)
 	}
+	// The text and the chat name are other people's text; the rest is ours.
+	untrusted := map[string]bool{"fragments.text": true, "fragments.chat_title": true, "fragments.chat_username": true}
 	for _, field := range search.Fields {
-		if field.Path == "fragments.text" && !field.Untrusted {
-			t.Error("fragments.text must be marked untrusted")
-		}
-		if strings.HasPrefix(field.Path, "fragments.") && field.Path != "fragments.text" && field.Untrusted {
+		switch {
+		case untrusted[field.Path] && !field.Untrusted:
+			t.Errorf("%s must be marked untrusted", field.Path)
+		case strings.HasPrefix(field.Path, "fragments.") && !untrusted[field.Path] && field.Untrusted:
 			t.Errorf("%s must not be untrusted", field.Path)
 		}
 	}
