@@ -10,9 +10,9 @@ PR: —
 
 ## Status
 
-- Current status: in_progress (2026-11-20: Step 0 закрыт, запущена волна 1: потоки store, sync, config)
+- Current status: in_progress (2026-11-20: волна 1 (store, sync, config) принята и слита, дальше волна 2: поток sched)
 - Last update: 2026-11-20
-- Next safe step: принять потоки волны 1 (store, sync, config), слить в интеграционную ветку, запустить волну 2 (поток sched).
+- Next safe step: поток sched (шаги 8 и 9) в worktree `../tg-cli-bgsync-sched`, затем поток status (шаги 10 и 11).
 
 ## Context and sources
 
@@ -153,10 +153,10 @@ page_pause_max = "8s"
 ## Implementation steps
 
 - [x] Шаг 2 (2026-11-20, поток store, коммит 3ee6a90, `isocheck.sh` и `-race` зелёные). Миграция `0010_first_message_date.sql` и запись даты в `SaveHistoryPage` при `complete = 1`; заполнение для уже полных чатов из `messages`; чтение даты в `SyncProgress`, `chat overview` и `chat sync status`.
-- [ ] Шаг 3. Случайная пауза у задачи: поле паузы (по умолчанию `historySyncPause`), источник `source`, поле в `rpc.HistorySyncJob`; ручная загрузка не меняется.
-- [ ] Шаг 4. Приоритет ручной загрузки: `start` с `source = manual` отменяет текущую и ставит выше очереди задачу планировщика; `hasActive()` различает источники.
+- [x] Шаг 3 (2026-11-20, поток sync, коммит ffe07d7). Случайная пауза у задачи: поле паузы (по умолчанию `historySyncPause`), источник `source`, поле в `rpc.HistorySyncJob`; ручная загрузка не меняется.
+- [x] Шаг 4 (2026-11-20, поток sync, коммит ffe07d7). Приоритет ручной загрузки: `start` с `source = manual` отменяет текущую и ставит выше очереди задачу планировщика; `hasActive()` различает источники.
 - [x] Шаг 5 (2026-11-20, поток store, коммит 3ee6a90). Запрос выбора чата в `internal/store` (по образцу `ChatsForFullSync`): три группы, фильтр доступа внутри запроса, исключения по Q2.
-- [ ] Шаг 6. Вынести чтение и сохранение папок из обработчика `folder.list` в функцию демона; метод возраста снимка.
+- [x] Шаг 6 (2026-11-20, поток sync, коммит ffe07d7). Вынести чтение и сохранение папок из обработчика `folder.list` в функцию демона; метод возраста снимка.
 - [x] Шаг 7 (2026-11-20, поток config, коммит 2a144ab, `isocheck.sh` и `-race` для config и cli зелёные). Секция `[background_sync]` в `internal/config` (разбор, проверка, шаблон), передача в демон, схема, переменные `TG_CLI_BACKGROUND_SYNC_*`.
 - [ ] Шаг 8. Планировщик `internal/daemon/background_sync.go`: окно, случайный интервал, часы подменяются интерфейсом, остановка вместе с демоном (канал `done` в списке ожидания `daemon.go`), отмена в конце окна, пропуск при `auth_lost`.
 - [ ] Шаг 9. Блок `background_sync` в ответе `daemon status` (состояние, окно, `next_run_at`, `last_run_at`, `last_result`, `current_chat_id`); схема и `--human` вывод `daemon status` дополнены.
