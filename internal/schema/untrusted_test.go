@@ -21,6 +21,8 @@ func TestEveryResponseStringHasTrustClassification(t *testing.T) {
 		{rpc.Sender{}, map[string]bool{"name": true, "username": true}},
 		{rpc.Message{}, map[string]bool{"date": false, "sender.name": true, "sender.username": true, "text": true, "media_type": false, "service": false}},
 		{rpc.SearchHit{}, map[string]bool{"scope": false, "title": true, "snippet": true, "date": false, "author": false, "model": false, "note_kind": false, "link": false, "link_unavailable": false}},
+		{rpc.SemanticFragment{}, map[string]bool{"starts_at": false, "ends_at": false, "text": true, "link": false, "match_link": false, "link_unavailable": false}},
+		{rpc.SemanticSearchResult{}, map[string]bool{"vector_skipped": false, "fragments.starts_at": false, "fragments.ends_at": false, "fragments.text": true, "fragments.link": false, "fragments.match_link": false, "fragments.link_unavailable": false}},
 	}
 	for _, tc := range cases {
 		t.Run(reflect.TypeOf(tc.value).Name(), func(t *testing.T) {

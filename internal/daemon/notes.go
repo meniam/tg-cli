@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"tg-cli/internal/access"
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
@@ -267,28 +268,14 @@ func (d *daemon) search(ctx context.Context, params json.RawMessage) (any, error
 	}
 	policy := d.policy()
 	options := store.SearchOptions{Query: p.Query, Scopes: p.Scopes, Author: p.Author, Limit: p.Limit, Prefix: p.Prefix, IncludeDeleted: p.IncludeDeleted, ChatFilter: chatFilter(policy)}
-	if p.Chat != "" {
-		id, found, err := d.resolveStoredReference(ctx, p.Chat, false, false)
-		if err != nil {
-			return nil, err
-		}
-		if !found {
-			return rpc.SearchResult{Hits: []rpc.SearchHit{}}, nil
-		}
-		if !policy.Allowed(id) {
-			return rpc.SearchResult{Hits: []rpc.SearchHit{}}, nil
-		}
-		if policy.Enabled() {
-			known, err := d.store.ChatKnown(ctx, id)
-			if err != nil {
-				return nil, err
-			}
-			if !known {
-				return rpc.SearchResult{Hits: []rpc.SearchHit{}}, nil
-			}
-		}
-		options.ChatID = &id
+	chatID, visible, err := d.searchChatScope(ctx, policy, p.Chat)
+	if err != nil {
+		return nil, err
 	}
+	if !visible {
+		return rpc.SearchResult{Hits: []rpc.SearchHit{}}, nil
+	}
+	options.ChatID = chatID
 	hits, err := d.store.Search(ctx, options)
 	if err != nil {
 		return nil, storeError(err)
@@ -306,4 +293,31 @@ func (d *daemon) search(ctx context.Context, params json.RawMessage) (any, error
 		result.Hits = append(result.Hits, out)
 	}
 	return result, nil
+}
+
+// searchChatScope resolves the optional chat restriction of a local search. An
+// empty reference restricts nothing. visible is false when the chat is unknown,
+// closed by the access lists, or (under an access policy) never stored: the
+// search then answers empty, like for a chat that does not exist.
+func (d *daemon) searchChatScope(ctx context.Context, policy access.Policy, chat string) (id *int64, visible bool, err error) {
+	if chat == "" {
+		return nil, true, nil
+	}
+	resolved, found, err := d.resolveStoredReference(ctx, chat, false, false)
+	if err != nil {
+		return nil, false, err
+	}
+	if !found || !policy.Allowed(resolved) {
+		return nil, false, nil
+	}
+	if policy.Enabled() {
+		known, err := d.store.ChatKnown(ctx, resolved)
+		if err != nil {
+			return nil, false, err
+		}
+		if !known {
+			return nil, false, nil
+		}
+	}
+	return &resolved, true, nil
 }

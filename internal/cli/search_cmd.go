@@ -20,9 +20,13 @@ func (a *app) searchCommand() *cobra.Command {
 			"chats, people, messages, and notes that the daemon has already loaded or saved.\n" +
 			"Quote a multiword query in the shell. Use -- before a query starting with -.\n" +
 			"--scope accepts repeated values or a comma-separated list. JSONL prints one hit\n" +
-			"per line in scope order.",
+			"per line in scope order.\n" +
+			"--semantic searches messages only and returns conversation fragments (result\n" +
+			"fields fragments and vector_skipped) found by exact words, stemmed words and\n" +
+			"vector similarity; JSONL then prints one fragment per line. It works without\n" +
+			"Ollama: the fragments then come from words alone and vector_skipped says why.",
 		Args: cobra.ExactArgs(1), RunE: a.search,
-	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.SearchResult](), Args: []argSpec{{Name: "query", Required: true}}, Choices: append(authorChoices(), scopeChoices()...), ItemPath: "hits"})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[localSearchResult](), Args: []argSpec{{Name: "query", Required: true}}, Choices: append(authorChoices(), scopeChoices()...), ItemPath: "hits"})
 	cmd.SetFlagErrorFunc(func(*cobra.Command, error) error {
 		return fail(exitcode.Usage, "invalid search flags")
 	})
@@ -32,6 +36,7 @@ func (a *app) searchCommand() *cobra.Command {
 	cmd.Flags().Int("limit", 20, "hits per scope, 1 to 100")
 	cmd.Flags().Bool("prefix", false, "match the last query term as a prefix")
 	cmd.Flags().Bool("deleted", false, "include messages marked deleted")
+	cmd.Flags().Bool("semantic", false, "search conversation fragments by words and meaning (messages only; --limit counts fragments)")
 	return cmd
 }
 
@@ -53,6 +58,9 @@ func (a *app) search(cmd *cobra.Command, args []string) error {
 	author, _ := cmd.Flags().GetString("author")
 	if author != "" && author != "owner" && author != "ai" {
 		return fail(exitcode.Usage, "--author must be owner or ai")
+	}
+	if semantic, _ := cmd.Flags().GetBool("semantic"); semantic {
+		return a.searchSemantic(cmd, args[0], scopes, author, settings)
 	}
 	p := rpc.SearchParams{Query: args[0], Scopes: scopes, Author: author}
 	p.Chat, _ = cmd.Flags().GetString("chat")

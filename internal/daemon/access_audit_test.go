@@ -23,7 +23,7 @@ var audit03NoChatMethods = map[string]bool{
 	rpc.MethodFolderCreate: true, rpc.MethodFolderDelete: true, rpc.MethodFolderEdit: true, rpc.MethodFolderInviteInfo: true,
 	rpc.MethodFolderList: true, rpc.MethodFolderOrder: true,
 	rpc.MethodNoteAdd: true, rpc.MethodNoteDelete: true, rpc.MethodNoteDeleteByAuthor: true, rpc.MethodNoteList: true,
-	rpc.MethodDashboard: true, rpc.MethodPing: true, rpc.MethodSearch: true, rpc.MethodSessionExport: true, rpc.MethodShutdown: true, rpc.MethodStatus: true,
+	rpc.MethodDashboard: true, rpc.MethodPing: true, rpc.MethodSearch: true, rpc.MethodSearchSemantic: true, rpc.MethodSessionExport: true, rpc.MethodShutdown: true, rpc.MethodStatus: true,
 	rpc.MethodStickerInstalled: true, rpc.MethodStickerSearch: true, rpc.MethodStickerSet: true,
 	rpc.MethodSavedList: true, rpc.MethodSavedTags: true, rpc.MethodSavedHistory: true, rpc.MethodSavedSearch: true, rpc.MethodSavedTagRename: true,
 	rpc.MethodMessageSearchPublic: true, rpc.MethodSubscribe: true, rpc.MethodUnsubscribe: true,

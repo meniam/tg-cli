@@ -170,7 +170,13 @@ const rrfK = 60
 type messageCandidate struct {
 	hit  SearchHit
 	text string
+	// topicID is the forum topic of the message, 0 if it has none.
+	topicID int64
 }
+
+// RRFK is the fusion constant of rrfK, for fusion done outside this package
+// (the semantic search fuses fragments, not messages).
+const RRFK = rrfK
 
 // searchMessages fuses two legs by RRF: the exact one over messages_fts (finds
 // numbers, part numbers and names as written) and the stemmed one over
@@ -275,7 +281,10 @@ func (db *DB) messageLeg(ctx context.Context, table, match string, limit int, op
 		candidate.hit.ChatID = &chatID
 		candidate.hit.Scope = "messages"
 		candidate.hit.Deleted = deletedAt != nil
-		candidate.hit.Link, candidate.hit.LinkUnavailable = messageLink(chatID, candidate.hit.ID, chatType.String, username.String, topicID)
+		if topicID != nil {
+			candidate.topicID = *topicID
+		}
+		candidate.hit.Link, candidate.hit.LinkUnavailable = MessageLink(chatID, candidate.hit.ID, chatType.String, username.String, topicID)
 		found = append(found, candidate)
 	}
 	return found, rows.Err()
@@ -287,13 +296,13 @@ const (
 	linkBasicGroup  = "basic_group"
 )
 
-// messageLink builds the t.me link of a stored message without asking Telegram,
+// MessageLink builds the t.me link of a stored message without asking Telegram,
 // from the chat type and username in chats and the message's forum topic. Only
 // channels and supergroups have web links. Direct chats and basic groups give
 // no link and a reason; an unknown chat or a username Telegram would not
 // accept gives no link and no reason. The link names the chat and the message
 // number only, never any text.
-func messageLink(chatID, messageID int64, chatType, username string, topicID *int64) (*string, string) {
+func MessageLink(chatID, messageID int64, chatType, username string, topicID *int64) (*string, string) {
 	switch chatType {
 	case "user", "bot":
 		return nil, linkPrivateChat

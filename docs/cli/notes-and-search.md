@@ -170,6 +170,7 @@ tg search [flags] <query>
 | `--limit` | int | `20` | hits per scope, 1 to 100 |
 | `--prefix` | bool | `false` | match the last query term as a prefix |
 | `--scope` | stringSlice | `[]` | scopes: chats, people, messages, notes; repeat or separate with commas |
+| `--semantic` | bool | `false` | search conversation fragments by words and meaning (messages only; --limit counts fragments) |
 <!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.

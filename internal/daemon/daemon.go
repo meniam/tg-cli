@@ -563,6 +563,7 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodNoteDelete, d.noteDelete)
 	d.handle(rpc.MethodNoteDeleteByAuthor, d.noteDeleteByAuthor)
 	d.handle(rpc.MethodSearch, d.search)
+	d.handle(rpc.MethodSearchSemantic, d.searchSemantic)
 	d.handle(rpc.MethodHistorySyncStart, d.historySyncStart)
 	d.handle(rpc.MethodHistorySyncStatus, d.historySyncStatus)
 	d.handle(rpc.MethodHistorySyncCancel, d.historySyncCancel)
@@ -828,7 +829,7 @@ func (d *daemon) getAuthLost() string {
 // needsTelegram excludes operations that are fully served by local storage.
 func needsTelegram(method string) bool {
 	switch method {
-	case rpc.MethodSearch, rpc.MethodNoteList, rpc.MethodNoteDelete, rpc.MethodNoteDeleteByAuthor,
+	case rpc.MethodSearch, rpc.MethodSearchSemantic, rpc.MethodNoteList, rpc.MethodNoteDelete, rpc.MethodNoteDeleteByAuthor,
 		rpc.MethodMessageExportLocal, rpc.MethodMessageExportVerify,
 		// The status and the cancel of a background job read and change the job
 		// state in memory: they need no connection, and a client that lost
