@@ -11,12 +11,13 @@ import (
 
 // semanticSearchEnv names, per config key, the environment variable that
 // overrides it.
-var semanticSearchEnv = struct{ enabled, ollamaURL, model, batch, interval string }{
+var semanticSearchEnv = struct{ enabled, ollamaURL, model, batch, interval, minSimilarity string }{
 	"TG_CLI_SEMANTIC_SEARCH_ENABLED",
 	"TG_CLI_SEMANTIC_SEARCH_OLLAMA_URL",
 	"TG_CLI_SEMANTIC_SEARCH_MODEL",
 	"TG_CLI_SEMANTIC_SEARCH_BATCH",
 	"TG_CLI_SEMANTIC_SEARCH_INTERVAL",
+	"TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY",
 }
 
 // daemonSemanticSearch is the only parser for the settings of the semantic
@@ -35,6 +36,7 @@ func (a *app) daemonSemanticSearch() (daemon.SemanticSearchConfig, error) {
 		{semanticSearchEnv.model, config.CheckSemanticModel, func(v string) { settings.Model = v }},
 		{semanticSearchEnv.batch, func(v string) error { _, err := config.ParseSemanticBatch(v); return err }, func(v string) { settings.Batch, _ = strconv.Atoi(v) }},
 		{semanticSearchEnv.interval, func(v string) error { _, err := config.ParseSemanticInterval(v); return err }, func(v string) { settings.Interval = v }},
+		{semanticSearchEnv.minSimilarity, func(v string) error { _, err := config.ParseSemanticMinSimilarity(v); return err }, func(v string) { settings.MinSimilarity, _ = config.ParseSemanticMinSimilarity(v) }},
 	} {
 		value := strings.TrimSpace(a.deps.Getenv(item.name))
 		if value == "" {
@@ -67,5 +69,7 @@ func (a *app) daemonSemanticSearch() (daemon.SemanticSearchConfig, error) {
 		Model:     values.Model,
 		Batch:     values.Batch,
 		Interval:  values.Interval,
+		// An unset key means 0.5 (the config default), 0 means off.
+		MinSimilarity: values.MinSimilarity,
 	}, nil
 }

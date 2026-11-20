@@ -44,6 +44,8 @@ type configSemanticSearchResult struct {
 	Model     string `json:"model"`
 	Batch     int    `json:"batch"`
 	Interval  string `json:"interval"`
+	// MinSimilarity is the lowest cosine of a vector hit; 0 turns the threshold off.
+	MinSimilarity float64 `json:"min_similarity"`
 }
 type configProfileResult struct {
 	Client    string `json:"client"`

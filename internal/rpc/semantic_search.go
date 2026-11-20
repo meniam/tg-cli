@@ -28,6 +28,9 @@ type SemanticSearchParams struct {
 	Chat   string `json:"chat,omitempty"`
 	Limit  int    `json:"limit,omitempty"`
 	Prefix bool   `json:"prefix,omitempty"`
+	// MinSimilarity overrides [semantic_search] min_similarity for this query: a
+	// cosine from 0 to 1, 0 turns the threshold off, nil takes the setting.
+	MinSimilarity *float64 `json:"min_similarity,omitempty"`
 }
 
 // SemanticFragment is a stretch of one conversation found by exact words,
@@ -73,4 +76,8 @@ type SemanticSearchResult struct {
 	// VectorSkipped names why the vector leg did not take part; the fragments
 	// then come from the word legs alone. Absent when the vector leg ran.
 	VectorSkipped string `json:"vector_skipped,omitempty"`
+	// VectorDropped is the number of vector hits left out because their cosine
+	// similarity was below the threshold. 0 when nothing was dropped or the
+	// vector leg did not run.
+	VectorDropped int `json:"vector_dropped"`
 }

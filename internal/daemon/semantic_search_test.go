@@ -344,7 +344,7 @@ func TestVectorLegFiltersClosedChats(t *testing.T) {
 	e := newSemanticEnv(t)
 	ctx := context.Background()
 	chats := func() map[int64]bool {
-		leg, err := e.d.vectorLeg(ctx, "q", 10, nil, e.d.policy())
+		leg, err := e.d.vectorLeg(ctx, "q", 10, nil, e.d.policy(), 0)
 		if err != nil || leg.skipped != "" {
 			t.Fatalf("vector leg: %v, skipped %q", err, leg.skipped)
 		}

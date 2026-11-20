@@ -17,4 +17,9 @@ type SemanticSearchConfig struct {
 	Batch int
 	// Interval is the wait between two indexing runs.
 	Interval time.Duration
+	// MinSimilarity is the lowest cosine a vector hit may have; 0 turns the
+	// threshold off, and so does the zero value of a hand-built Options. The
+	// default 0.5 comes from the configuration (config.DefaultSemanticMinSimilarity),
+	// not from here. A request can override it.
+	MinSimilarity float64
 }

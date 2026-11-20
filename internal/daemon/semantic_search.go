@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -51,6 +52,15 @@ func (d *daemon) searchSemantic(ctx context.Context, params json.RawMessage) (an
 	if limit < 1 || limit > semanticMaxLimit {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "limit must be between 1 and 100")
 	}
+	// The request overrides the setting; a hand-built Options has no setting, so
+	// its zero means no threshold.
+	minSimilarity := d.opts.SemanticSearch.MinSimilarity
+	if p.MinSimilarity != nil {
+		minSimilarity = *p.MinSimilarity
+		if math.IsNaN(minSimilarity) || minSimilarity < 0 || minSimilarity > 1 {
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "min_similarity must be a number from 0 to 1")
+		}
+	}
 	policy := d.policy()
 	chatID, visible, err := d.searchChatScope(ctx, policy, p.Chat)
 	if err != nil {
@@ -64,12 +74,12 @@ func (d *daemon) searchSemantic(ctx context.Context, params json.RawMessage) (an
 	if err != nil {
 		return nil, storeError(err)
 	}
-	leg, err := d.vectorLeg(ctx, p.Query, legSize, chatID, policy)
+	leg, err := d.vectorLeg(ctx, p.Query, legSize, chatID, policy, minSimilarity)
 	if err != nil {
 		return nil, err
 	}
 	fused := fuseFragments(limit, exact, stemmed, leg.hits, leg.metas)
-	result := rpc.SemanticSearchResult{Fragments: make([]rpc.SemanticFragment, 0, len(fused)), VectorSkipped: leg.skipped}
+	result := rpc.SemanticSearchResult{Fragments: make([]rpc.SemanticFragment, 0, len(fused)), VectorSkipped: leg.skipped, VectorDropped: leg.dropped}
 	chatIDs := make([]int64, 0, len(fused))
 	for _, f := range fused {
 		chatIDs = append(chatIDs, f.ref.chatID)
@@ -128,12 +138,17 @@ type vectorResult struct {
 	metas []vectors.FragmentMeta
 	// skipped is the reason the leg did not run, empty if it did.
 	skipped string
+	// dropped is the number of hits left out for a cosine below the threshold.
+	dropped int
 }
 
-// vectorLeg embeds the query and finds the nearest fragments. Anything that
-// goes wrong on the way, except the cancellation of the request, becomes a
-// reason in skipped: the search never fails because of the vector side.
-func (d *daemon) vectorLeg(ctx context.Context, query string, k int, chatID *int64, policy access.Policy) (vectorResult, error) {
+// vectorLeg embeds the query and finds the nearest fragments. Hits whose cosine
+// similarity is below minSimilarity are dropped and counted before the fusion
+// (0 keeps every hit); the word legs are not touched. Anything that goes wrong
+// on the way, except the cancellation of the request, becomes a reason in
+// skipped: the search never fails because of the vector side. A leg that ran
+// but lost every hit to the threshold is not skipped.
+func (d *daemon) vectorLeg(ctx context.Context, query string, k int, chatID *int64, policy access.Policy, minSimilarity float64) (vectorResult, error) {
 	if d.vectors == nil || d.embedder == nil {
 		if d.semanticFailure != "" {
 			return vectorResult{skipped: rpc.VectorSkippedError}, nil
@@ -194,7 +209,19 @@ func (d *daemon) vectorLeg(ctx context.Context, query string, k int, chatID *int
 	if err != nil {
 		return skip(err)
 	}
-	return vectorResult{hits: hits, metas: metas}, nil
+	kept := hits
+	if minSimilarity > 0 {
+		kept = make([]vectors.Hit, 0, len(hits))
+		// Scores are float32; compare at that precision so a hit exactly at the
+		// threshold stays.
+		floor := float32(minSimilarity)
+		for _, h := range hits {
+			if h.Score >= floor {
+				kept = append(kept, h)
+			}
+		}
+	}
+	return vectorResult{hits: kept, metas: metas, dropped: len(hits) - len(kept)}, nil
 }
 
 // semanticModelInfoTTL is how long a search trusts the model name and digest it

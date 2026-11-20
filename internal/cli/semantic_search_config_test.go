@@ -14,7 +14,7 @@ import (
 
 // defaultSemanticSearch is what the daemon gets when nothing is configured.
 var defaultSemanticSearch = daemon.SemanticSearchConfig{
-	OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute,
+	OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute, MinSimilarity: 0.5,
 }
 
 func TestDaemonSemanticSearchDefaults(t *testing.T) {
@@ -28,8 +28,8 @@ func TestDaemonSemanticSearchDefaults(t *testing.T) {
 }
 
 func TestDaemonSemanticSearchEnvironmentOverridesFile(t *testing.T) {
-	file := "[semantic_search]\nenabled = false\nollama_url = \"http://localhost:1111\"\nmodel = \"file-model\"\nbatch = 4\ninterval = \"1h\"\n"
-	fromFile := daemon.SemanticSearchConfig{OllamaURL: "http://localhost:1111", Model: "file-model", Batch: 4, Interval: time.Hour}
+	file := "[semantic_search]\nenabled = false\nollama_url = \"http://localhost:1111\"\nmodel = \"file-model\"\nbatch = 4\ninterval = \"1h\"\nmin_similarity = 0.7\n"
+	fromFile := daemon.SemanticSearchConfig{OllamaURL: "http://localhost:1111", Model: "file-model", Batch: 4, Interval: time.Hour, MinSimilarity: 0.7}
 	for _, tc := range []struct {
 		name string
 		env  map[string]string
@@ -37,14 +37,15 @@ func TestDaemonSemanticSearchEnvironmentOverridesFile(t *testing.T) {
 	}{
 		{"file only", nil, fromFile},
 		{"every variable", map[string]string{
-			"TG_CLI_SEMANTIC_SEARCH_ENABLED":    " true ",
-			"TG_CLI_SEMANTIC_SEARCH_OLLAMA_URL": "http://[::1]:2222",
-			"TG_CLI_SEMANTIC_SEARCH_MODEL":      "env-model",
-			"TG_CLI_SEMANTIC_SEARCH_BATCH":      "128",
-			"TG_CLI_SEMANTIC_SEARCH_INTERVAL":   "90s",
-		}, daemon.SemanticSearchConfig{Enabled: true, OllamaURL: "http://[::1]:2222", Model: "env-model", Batch: 128, Interval: 90 * time.Second}},
+			"TG_CLI_SEMANTIC_SEARCH_ENABLED":        " true ",
+			"TG_CLI_SEMANTIC_SEARCH_OLLAMA_URL":     "http://[::1]:2222",
+			"TG_CLI_SEMANTIC_SEARCH_MODEL":          "env-model",
+			"TG_CLI_SEMANTIC_SEARCH_BATCH":          "128",
+			"TG_CLI_SEMANTIC_SEARCH_INTERVAL":       "90s",
+			"TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY": "0",
+		}, daemon.SemanticSearchConfig{Enabled: true, OllamaURL: "http://[::1]:2222", Model: "env-model", Batch: 128, Interval: 90 * time.Second, MinSimilarity: 0}},
 		{"one variable keeps the rest of the file", map[string]string{"TG_CLI_SEMANTIC_SEARCH_BATCH": "8"},
-			daemon.SemanticSearchConfig{OllamaURL: "http://localhost:1111", Model: "file-model", Batch: 8, Interval: time.Hour}},
+			daemon.SemanticSearchConfig{OllamaURL: "http://localhost:1111", Model: "file-model", Batch: 8, Interval: time.Hour, MinSimilarity: 0.7}},
 		{"blank variable is ignored", map[string]string{"TG_CLI_SEMANTIC_SEARCH_ENABLED": "  ", "TG_CLI_SEMANTIC_SEARCH_MODEL": " "}, fromFile},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -88,6 +89,10 @@ func TestDaemonSemanticSearchInvalidEnvironment(t *testing.T) {
 		{"interval below a minute", "TG_CLI_SEMANTIC_SEARCH_INTERVAL", "30s", "TG_CLI_SEMANTIC_SEARCH_INTERVAL must be a duration from 1m to 24h"},
 		{"interval above a day", "TG_CLI_SEMANTIC_SEARCH_INTERVAL", "25h", "TG_CLI_SEMANTIC_SEARCH_INTERVAL must be a duration from 1m to 24h"},
 		{"interval word", "TG_CLI_SEMANTIC_SEARCH_INTERVAL", "later", "TG_CLI_SEMANTIC_SEARCH_INTERVAL must be a duration from 1m to 24h"},
+		{"similarity above one", "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY", "1.1", "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY must be a number from 0 to 1"},
+		{"similarity negative", "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY", "-0.1", "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY must be a number from 0 to 1"},
+		{"similarity word", "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY", "high", "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY must be a number from 0 to 1"},
+		{"similarity not a number", "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY", "NaN", "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY must be a number from 0 to 1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := backgroundSyncApp(t, "", map[string]string{tc.variable: tc.value}).daemonSemanticSearch()
@@ -111,6 +116,8 @@ func TestInvalidSemanticSearchStopsBeforeClientAndLauncher(t *testing.T) {
 		{name: "environment address", variable: "TG_CLI_SEMANTIC_SEARCH_OLLAMA_URL", value: "http://10.0.0.5:11434", want: "TG_CLI_SEMANTIC_SEARCH_OLLAMA_URL"},
 		{name: "file value", file: "[semantic_search]\ninterval = \"10s\"\n", want: "semantic_search.interval"},
 		{name: "file address", file: "[semantic_search]\nollama_url = \"http://example.com\"\n", want: "semantic_search.ollama_url"},
+		{name: "environment similarity", variable: "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY", value: "2", want: "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY"},
+		{name: "file similarity", file: "[semantic_search]\nmin_similarity = 1.5\n", want: "semantic_search.min_similarity"},
 	} {
 		for _, foreground := range []bool{false, true} {
 			name := tc.name + "/background"
@@ -163,7 +170,9 @@ func TestSemanticSearchReachesDaemonOptions(t *testing.T) {
 		{"file and environment", "[semantic_search]\nenabled = false\nmodel = \"file-model\"\nbatch = 32\n", map[string]string{
 			"TG_CLI_SEMANTIC_SEARCH_ENABLED":  "true",
 			"TG_CLI_SEMANTIC_SEARCH_INTERVAL": "2h",
-		}, daemon.SemanticSearchConfig{Enabled: true, OllamaURL: "http://127.0.0.1:11434", Model: "file-model", Batch: 32, Interval: 2 * time.Hour}},
+		}, daemon.SemanticSearchConfig{Enabled: true, OllamaURL: "http://127.0.0.1:11434", Model: "file-model", Batch: 32, Interval: 2 * time.Hour, MinSimilarity: 0.5}},
+		{"threshold from file", "[semantic_search]\nmin_similarity = 0.6\n", nil, daemon.SemanticSearchConfig{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute, MinSimilarity: 0.6}},
+		{"threshold from environment", "[semantic_search]\nmin_similarity = 0.6\n", map[string]string{"TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY": "0"}, daemon.SemanticSearchConfig{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t)
@@ -212,7 +221,7 @@ func TestConfigShowListsSemanticSearch(t *testing.T) {
 			if err := json.Unmarshal(parse(t, r).Data, &got); err != nil {
 				t.Fatal(err)
 			}
-			want := configSemanticSearchResult{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: "10m"}
+			want := configSemanticSearchResult{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: "10m", MinSimilarity: 0.5}
 			if name == "file" {
 				want.Enabled, want.Model, want.Batch = true, "gemma", 64
 			}

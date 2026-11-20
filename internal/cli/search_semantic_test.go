@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"tg-cli/internal/exitcode"
+	"tg-cli/internal/output"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/schema"
 )
@@ -162,8 +163,17 @@ func TestSearchSemanticSchema(t *testing.T) {
 	if flag == nil || flag.Type != "bool" || !strings.Contains(flag.Usage, "messages only") {
 		t.Errorf("semantic flag = %+v", flag)
 	}
+	var minFlag *flagDoc
+	for i := range search.Flags {
+		if search.Flags[i].Name == "min-similarity" {
+			minFlag = &search.Flags[i]
+		}
+	}
+	if minFlag == nil || minFlag.Type != "float64" || !strings.Contains(minFlag.Usage, "--semantic") {
+		t.Errorf("min-similarity flag = %+v", minFlag)
+	}
 	paths := []string{"hits.link", "fragments.chat_id", "fragments.topic_id", "fragments.first_id", "fragments.last_id", "fragments.starts_at", "fragments.ends_at",
-		"fragments.score", "fragments.sources", "fragments.indexed", "fragments.text", "fragments.link", "fragments.match_link", "fragments.link_unavailable", "fragments.chat_title", "fragments.chat_username", "vector_skipped"}
+		"fragments.score", "fragments.sources", "fragments.indexed", "fragments.text", "fragments.link", "fragments.match_link", "fragments.link_unavailable", "fragments.chat_title", "fragments.chat_username", "vector_skipped", "vector_dropped"}
 	if missing := schema.Missing(paths, search.Fields); len(missing) != 0 {
 		t.Errorf("schema lacks %v", missing)
 	}
@@ -175,6 +185,61 @@ func TestSearchSemanticSchema(t *testing.T) {
 			t.Errorf("%s must be marked untrusted", field.Path)
 		case strings.HasPrefix(field.Path, "fragments.") && !untrusted[field.Path] && field.Untrusted:
 			t.Errorf("%s must not be untrusted", field.Path)
+		}
+	}
+}
+
+func TestSearchSemanticMinSimilarityFlag(t *testing.T) {
+	e := searchLinkEnv(t)
+	// A valid value, the bounds included, reaches the daemon; the index is off
+	// there, so the answer says so and drops nothing.
+	for _, value := range []string{"0", "0.5", "1"} {
+		r := e.run("search", "--semantic", "доставки", "--min-similarity", value)
+		if r.code != exitcode.OK {
+			t.Fatalf("--min-similarity %s: exit %d, %q", value, r.code, r.stdout)
+		}
+		if !strings.Contains(r.stdout, `"vector_dropped":0`) || !strings.Contains(r.stdout, `"vector_skipped":"disabled"`) {
+			t.Errorf("--min-similarity %s: %q", value, r.stdout)
+		}
+	}
+	// A value outside 0 to 1, a word and the flag without --semantic are usage errors.
+	for _, args := range [][]string{
+		{"--semantic", "--min-similarity", "1.01"},
+		{"--semantic", "--min-similarity", "-0.1"},
+		{"--semantic", "--min-similarity", "NaN"},
+		{"--semantic", "--min-similarity", "high"},
+		{"--min-similarity", "0.5"},
+		{"--scope", "messages", "--min-similarity", "0.5"},
+	} {
+		r := e.run(append([]string{"search", "доставки"}, args...)...)
+		if r.code != exitcode.Usage {
+			t.Errorf("%v: exit %d, want %d: %q", args, r.code, exitcode.Usage, r.stdout)
+		}
+	}
+	// The ordinary search has no such field.
+	r := e.run("search", "доставки", "--scope", "messages")
+	if strings.Contains(r.stdout, "vector_dropped") {
+		t.Errorf("ordinary search shows vector_dropped: %q", r.stdout)
+	}
+}
+
+func TestWriteVectorDroppedIsForPeopleOnly(t *testing.T) {
+	for _, tc := range []struct {
+		format  output.Format
+		dropped int
+		want    string
+	}{
+		{output.FormatHuman, 7, "vector hits below the similarity threshold: 7\n"},
+		{output.FormatHuman, 0, ""},
+		{output.FormatJSON, 7, ""},
+		{output.FormatJSONL, 7, ""},
+	} {
+		var b strings.Builder
+		if err := writeVectorDropped(&b, outputSettings{format: tc.format}, tc.dropped); err != nil {
+			t.Fatal(err)
+		}
+		if b.String() != tc.want {
+			t.Errorf("%v, %d: wrote %q, want %q", tc.format, tc.dropped, b.String(), tc.want)
 		}
 	}
 }

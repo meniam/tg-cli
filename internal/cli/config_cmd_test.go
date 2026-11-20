@@ -121,7 +121,7 @@ func TestSchemaConfigKeys(t *testing.T) {
 		"background_sync.interval_min", "background_sync.interval_max",
 		"background_sync.page_pause_min", "background_sync.page_pause_max",
 		"semantic_search.enabled", "semantic_search.ollama_url", "semantic_search.model",
-		"semantic_search.batch", "semantic_search.interval",
+		"semantic_search.batch", "semantic_search.interval", "semantic_search.min_similarity",
 		"profiles.<profile>.client", "profiles.<profile>.device", "profiles.<profile>.transport", "profiles.<profile>.proxy",
 	}
 	if !reflect.DeepEqual(keys, wantKeys) {

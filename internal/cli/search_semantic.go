@@ -1,11 +1,15 @@
 package cli
 
 import (
+	"fmt"
+	"io"
 	"slices"
 
 	"github.com/spf13/cobra"
 
+	"tg-cli/internal/config"
 	"tg-cli/internal/exitcode"
+	"tg-cli/internal/output"
 	"tg-cli/internal/rpc"
 )
 
@@ -16,6 +20,9 @@ type localSearchResult struct {
 	Hits          []rpc.SearchHit        `json:"hits,omitempty"`
 	Fragments     []rpc.SemanticFragment `json:"fragments,omitempty"`
 	VectorSkipped string                 `json:"vector_skipped,omitempty"`
+	// VectorDropped is always present in the answer of --semantic; the ordinary
+	// search has no such field.
+	VectorDropped int `json:"vector_dropped,omitempty"`
 }
 
 // searchSemantic runs `tg search --semantic`: the hybrid search over
@@ -38,9 +45,29 @@ func (a *app) searchSemantic(cmd *cobra.Command, query string, scopes []string, 
 		return fail(exitcode.Usage, "--limit must be between 1 and 100")
 	}
 	p.Prefix, _ = cmd.Flags().GetBool("prefix")
+	if cmd.Flags().Changed("min-similarity") {
+		value, _ := cmd.Flags().GetFloat64("min-similarity")
+		if err := config.CheckSemanticMinSimilarity(value); err != nil {
+			return fail(exitcode.Usage, "--min-similarity %v", err)
+		}
+		p.MinSimilarity = &value
+	}
 	var result rpc.SemanticSearchResult
 	if err := a.callOne(cmd, rpc.MethodSearchSemantic, p, &result); err != nil {
 		return err
 	}
-	return emitListAtPath(a, cmd, settings, "fragments", result, result.Fragments, "")
+	if err := emitListAtPath(a, cmd, settings, "fragments", result, result.Fragments, ""); err != nil {
+		return err
+	}
+	return writeVectorDropped(a.deps.Stdout, settings, result.VectorDropped)
+}
+
+// writeVectorDropped tells a person what the bare vector_dropped field of the
+// listing means. Nothing is written for 0 or for a machine-readable format.
+func writeVectorDropped(w io.Writer, settings outputSettings, dropped int) error {
+	if settings.format != output.FormatHuman || dropped <= 0 {
+		return nil
+	}
+	_, err := fmt.Fprintf(w, "vector hits below the similarity threshold: %d\n", dropped)
+	return err
 }

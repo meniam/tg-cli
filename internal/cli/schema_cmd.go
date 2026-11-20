@@ -67,6 +67,7 @@ func configKeyDocs() []configKeyDoc {
 		{"semantic_search.model", "string", "bge-m3", "TG_CLI_SEMANTIC_SEARCH_MODEL", "", "Ollama embedding model, 1 to 128 characters without control characters"},
 		{"semantic_search.batch", "number", "16", "TG_CLI_SEMANTIC_SEARCH_BATCH", "", "texts per Ollama request, a whole number from 1 to 128"},
 		{"semantic_search.interval", "string", "10m", "TG_CLI_SEMANTIC_SEARCH_INTERVAL", "", "wait between two indexing runs, a duration from 1m to 24h"},
+		{"semantic_search.min_similarity", "number", "0.5", "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY", "", "lowest cosine similarity of a vector hit of search --semantic, a number from 0 to 1; 0 turns the threshold off; hits below it are counted in vector_dropped"},
 		{"profiles.<profile>.client", "string", "", "", "daemon start --client", ""},
 		{"profiles.<profile>.device", "string", "", "", "daemon start --device", ""},
 		{"profiles.<profile>.transport", "string", "tcp", "", "daemon start --transport", ""},

@@ -25,7 +25,7 @@ func TestSemanticSearchDefaults(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := SemanticSearchValues{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute}
+			want := SemanticSearchValues{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute, MinSimilarity: 0.5}
 			if values != want {
 				t.Fatalf("values = %+v, want %+v (disabled)", values, want)
 			}
@@ -40,6 +40,7 @@ ollama_url = "https://localhost:8443"
 model = "embeddinggemma:latest"
 batch = 128
 interval = "24h"
+min_similarity = 0.65
 `)
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +49,7 @@ interval = "24h"
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := SemanticSearchValues{Enabled: true, OllamaURL: "https://localhost:8443", Model: "embeddinggemma:latest", Batch: 128, Interval: 24 * time.Hour}
+	want := SemanticSearchValues{Enabled: true, OllamaURL: "https://localhost:8443", Model: "embeddinggemma:latest", Batch: 128, Interval: 24 * time.Hour, MinSimilarity: 0.65}
 	if values != want {
 		t.Fatalf("values = %+v, want %+v", values, want)
 	}
@@ -56,13 +57,16 @@ interval = "24h"
 
 func TestSemanticSearchAcceptsTheBounds(t *testing.T) {
 	for name, body := range map[string]string{
-		"batch low":      "batch = 1",
-		"batch high":     "batch = 128",
-		"interval low":   `interval = "1m"`,
-		"interval high":  `interval = "24h"`,
-		"model 128":      `model = "` + strings.Repeat("m", 128) + `"`,
-		"ipv6 loopback":  `ollama_url = "http://[::1]:11434"`,
-		"127.0.0.1 only": `ollama_url = "http://127.0.0.1"`,
+		"batch low":        "batch = 1",
+		"batch high":       "batch = 128",
+		"interval low":     `interval = "1m"`,
+		"interval high":    `interval = "24h"`,
+		"similarity zero":  "min_similarity = 0",
+		"similarity one":   "min_similarity = 1",
+		"similarity float": "min_similarity = 0.55",
+		"model 128":        `model = "` + strings.Repeat("m", 128) + `"`,
+		"ipv6 loopback":    `ollama_url = "http://[::1]:11434"`,
+		"127.0.0.1 only":   `ollama_url = "http://127.0.0.1"`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := loadSemanticSearch(t, "[semantic_search]\n"+body+"\n"); err != nil {
@@ -98,6 +102,9 @@ func TestSemanticSearchRejectsInvalidValues(t *testing.T) {
 		{"interval zero", `interval = "0"`, "semantic_search.interval must be a duration from 1m to 24h"},
 		{"interval negative", `interval = "-10m"`, "semantic_search.interval must be a duration from 1m to 24h"},
 		{"interval above a day", `interval = "24h1s"`, "semantic_search.interval must be a duration from 1m to 24h"},
+		{"similarity above one", `min_similarity = 1.01`, "semantic_search.min_similarity must be a number from 0 to 1"},
+		{"similarity negative", `min_similarity = -0.1`, "semantic_search.min_similarity must be a number from 0 to 1"},
+		{"similarity integer above one", `min_similarity = 2`, "semantic_search.min_similarity must be a number from 0 to 1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := loadSemanticSearch(t, "[semantic_search]\n"+tc.body+"\n")
@@ -111,11 +118,12 @@ func TestSemanticSearchRejectsInvalidValues(t *testing.T) {
 
 func TestSemanticSearchTypesAreChecked(t *testing.T) {
 	for name, body := range map[string]string{
-		"enabled string": `enabled = "yes"`,
-		"batch string":   `batch = "16"`,
-		"batch float":    `batch = 16.5`,
-		"interval int":   `interval = 600`,
-		"unknown key":    `window = "1h"`,
+		"enabled string":    `enabled = "yes"`,
+		"batch string":      `batch = "16"`,
+		"batch float":       `batch = 16.5`,
+		"interval int":      `interval = 600`,
+		"similarity string": `min_similarity = "0.5"`,
+		"unknown key":       `window = "1h"`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := loadSemanticSearch(t, "[semantic_search]\n"+body+"\n")

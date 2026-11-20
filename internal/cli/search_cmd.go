@@ -22,9 +22,13 @@ func (a *app) searchCommand() *cobra.Command {
 			"--scope accepts repeated values or a comma-separated list. JSONL prints one hit\n" +
 			"per line in scope order.\n" +
 			"--semantic searches messages only and returns conversation fragments (result\n" +
-			"fields fragments and vector_skipped) found by exact words, stemmed words and\n" +
-			"vector similarity; JSONL then prints one fragment per line. It works without\n" +
-			"Ollama: the fragments then come from words alone and vector_skipped says why.",
+			"fields fragments, vector_skipped and vector_dropped) found by exact words,\n" +
+			"stemmed words and vector similarity; JSONL then prints one fragment per line.\n" +
+			"It works without Ollama: the fragments then come from words alone and\n" +
+			"vector_skipped says why. Vector hits with a cosine similarity below\n" +
+			"[semantic_search] min_similarity (default 0.5) are dropped before the merge and\n" +
+			"counted in vector_dropped; --min-similarity X (0 to 1) overrides the setting\n" +
+			"for one query and 0 turns the threshold off.",
 		Args: cobra.ExactArgs(1), RunE: a.search,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[localSearchResult](), Args: []argSpec{{Name: "query", Required: true}}, Choices: append(authorChoices(), scopeChoices()...), ItemPath: "hits"})
 	cmd.SetFlagErrorFunc(func(*cobra.Command, error) error {
@@ -37,6 +41,7 @@ func (a *app) searchCommand() *cobra.Command {
 	cmd.Flags().Bool("prefix", false, "match the last query term as a prefix")
 	cmd.Flags().Bool("deleted", false, "include messages marked deleted")
 	cmd.Flags().Bool("semantic", false, "search conversation fragments by words and meaning (messages only; --limit counts fragments)")
+	cmd.Flags().Float64("min-similarity", 0, "with --semantic: lowest cosine similarity of a vector hit, 0 to 1 (0 turns the threshold off; default from [semantic_search] min_similarity)")
 	return cmd
 }
 
@@ -61,6 +66,9 @@ func (a *app) search(cmd *cobra.Command, args []string) error {
 	}
 	if semantic, _ := cmd.Flags().GetBool("semantic"); semantic {
 		return a.searchSemantic(cmd, args[0], scopes, author, settings)
+	}
+	if cmd.Flags().Changed("min-similarity") {
+		return fail(exitcode.Usage, "--min-similarity applies to --semantic only")
 	}
 	p := rpc.SearchParams{Query: args[0], Scopes: scopes, Author: author}
 	p.Chat, _ = cmd.Flags().GetString("chat")

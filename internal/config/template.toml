@@ -177,6 +177,19 @@
 # Values:  a duration from "1m" to "24h"
 # Overrides: environment TG_CLI_SEMANTIC_SEARCH_INTERVAL
 # interval = "10m"
+#
+# Lowest similarity a vector hit of `tg search --semantic` may have. It is the
+# cosine of the bge-m3 vectors of the query and of the fragment. Hits below it
+# are dropped before the merge with the word legs; their count is the
+# vector_dropped field of the answer. Word hits are never filtered by it.
+# bge-m3 gives unrelated fragments a median near 0.40 and a 99th percentile near
+# 0.5; good queries reach 0.6 to 0.7, short vague ones only about 0.55. Raise the
+# value (0.55) when the answer holds noise, lower it (0.45) when real matches
+# vanish; 0 keeps every vector hit. One query can override it: --min-similarity.
+# Default: 0.5
+# Values:  a number from 0 to 1 inclusive; 0 turns the threshold off
+# Overrides: environment TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY, flag search --min-similarity
+# min_similarity = 0.5
 
 # --- Per-profile settings ----------------------------------------------------
 # One table per profile: [profiles.<name>]. `tg daemon start` writes these

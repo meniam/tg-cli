@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 	"unicode"
@@ -24,15 +25,19 @@ type SemanticSearch struct {
 	Batch int `toml:"batch"`
 	// Interval is the wait between two indexing runs, as a Go duration.
 	Interval string `toml:"interval"`
+	// MinSimilarity is the lowest cosine similarity a vector hit of
+	// `tg search --semantic` may have; 0 turns the threshold off.
+	MinSimilarity float64 `toml:"min_similarity"`
 }
 
 // SemanticSearchValues is a checked SemanticSearch.
 type SemanticSearchValues struct {
-	Enabled   bool
-	OllamaURL string
-	Model     string
-	Batch     int
-	Interval  time.Duration
+	Enabled       bool
+	OllamaURL     string
+	Model         string
+	Batch         int
+	Interval      time.Duration
+	MinSimilarity float64
 }
 
 const (
@@ -47,8 +52,13 @@ const (
 )
 
 func defaultSemanticSearch() SemanticSearch {
-	return SemanticSearch{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: "10m"}
+	return SemanticSearch{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: "10m", MinSimilarity: DefaultSemanticMinSimilarity}
 }
+
+// DefaultSemanticMinSimilarity is the threshold when the owner sets none. The
+// cosine of bge-m3 for unrelated fragments of the owner's chats has a median of
+// 0.40 to 0.42 and a 99th percentile near 0.5, so 0.5 cuts most of the noise.
+const DefaultSemanticMinSimilarity = 0.5
 
 // CheckOllamaURL reports why an address is not usable: it must be http or https
 // with a loopback host (127.0.0.1, ::1, localhost), because the indexed text is
@@ -98,6 +108,28 @@ func ParseSemanticInterval(value string) (time.Duration, error) {
 	return d, nil
 }
 
+// CheckSemanticMinSimilarity reports why a similarity threshold is not usable:
+// it is a cosine, so it lies from 0 to 1 inclusive. The error text is the tail
+// of the message that names the key or the flag.
+func CheckSemanticMinSimilarity(value float64) error {
+	if math.IsNaN(value) || value < 0 || value > 1 {
+		return fmt.Errorf("must be a number from 0 to 1 (0 turns the threshold off)")
+	}
+	return nil
+}
+
+// ParseSemanticMinSimilarity reads a similarity threshold such as 0.5.
+func ParseSemanticMinSimilarity(value string) (float64, error) {
+	n, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, fmt.Errorf("must be a number from 0 to 1 (0 turns the threshold off)")
+	}
+	if err := CheckSemanticMinSimilarity(n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 // Resolve checks every setting and returns the converted values. An error names
 // the config key; it is a usage error.
 func (s SemanticSearch) Resolve() (SemanticSearchValues, error) {
@@ -115,5 +147,8 @@ func (s SemanticSearch) Resolve() (SemanticSearchValues, error) {
 	if err != nil {
 		return SemanticSearchValues{}, invalid("semantic_search.interval %v", err)
 	}
-	return SemanticSearchValues{Enabled: s.Enabled, OllamaURL: s.OllamaURL, Model: s.Model, Batch: batch, Interval: interval}, nil
+	if err := CheckSemanticMinSimilarity(s.MinSimilarity); err != nil {
+		return SemanticSearchValues{}, invalid("semantic_search.min_similarity %v", err)
+	}
+	return SemanticSearchValues{Enabled: s.Enabled, OllamaURL: s.OllamaURL, Model: s.Model, Batch: batch, Interval: interval, MinSimilarity: s.MinSimilarity}, nil
 }
