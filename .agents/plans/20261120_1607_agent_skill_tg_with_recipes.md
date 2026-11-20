@@ -3,16 +3,16 @@
 ID: 20261120_1607_agent_skill_tg_with_recipes
 Created: 2026-11-20
 Owner: Мязин Евгений
-Branch: — (будет `refactor/20261120_1607_agent_skill_tg_with_recipes` при переходе в `in_progress`)
+Branch: `refactor/20261120_1607_agent_skill_tg_with_recipes` (worktree `../tg-cli-skill`)
 PR: —
 
 Тексты пишет и проверяет цепочка `docwriter` и `glavred` по `docs_chain.md`. Код Go не меняется.
 
 ## Status
 
-- Current status: approved (2026-11-20: владелец принял имя `tg`, замену старого скилла и структуру из шага 3)
+- Current status: in_progress (2026-11-20: владелец принял имя `tg`, замену старого скилла и структуру; ведёт работу сам Claude)
 - Last update: 2026-11-20
-- Next safe step: Step 0 (ветка и worktree от `main`, у которого в индексе висит чужая правка скилла `scout`: сначала решить, что с ней).
+- Next safe step: вопросы Q1-Q2 и шаг 10 (установка в `~/.agents/skills`, только с подтверждением владельца), затем слияние ветки.
 
 ## Context and sources
 
@@ -32,7 +32,8 @@ PR: —
 ## Scope
 
 - В работе: переименование `docs/skill/tg-cli` в `docs/skill/tg`; новое описание; разбивка текста на `references/`; 11 рецептов и `_template.md`; исправление найденных противоречий; сверка рецептов с `tg schema` (рецепт `just`); `meta.json`; ссылки в `AGENTS.md`, `docs/README.md`; запись решения о переименовании.
-- Вне плана: изменение Go-кода и `tg schema`; новые команды; живые проверки (правило владельца); скрипты Bash и тесты скриптов из старого скилла; правка старых планов (они история).
+- В работе также: перевод тела скилла на английский (решение владельца), `scripts/tg-doctor.sh`.
+- Вне плана: изменение Go-кода и `tg schema`; новые команды; живые проверки (правило владельца); `tg-daemon-up.sh` и тесты скриптов из старого скилла; правка старых планов (они история).
 - Затрагиваются: `docs/skill/**`, `AGENTS.md` (строки 18 и 96), `docs/README.md`, `justfile` и `bin/just/`, `.agents/decisions/`, `~/.agents/skills/tg` (только шаг установки, после отдельного подтверждения).
 
 ## Main invariant
@@ -48,7 +49,7 @@ PR: —
 - `references/errors.md` в виде «симптом, код, действие» вместо перечня кодов.
 - Режимы вывода и экономия токенов: `--toon --fields` для чтения в контекст, `--jsonl` и `jq` для обработки.
 - Дисциплина `meta.json`: что проверено живьём, что нет, что сверять при обновлении.
-- Не берём: `scripts/` и `tests/`, требования Node и WSL2, `TG_SKILL_DIR`, флаг `--daemon`, всё, что относится к gramjs и версии 0.5.1.
+- Берём `tg-doctor.sh` (на python3 вместо Node). Не берём: `tg-daemon-up.sh`, `tests/`, требования Node и WSL2, `TG_SKILL_DIR`, флаг `--daemon`, всё, что относится к gramjs и версии 0.5.1.
 
 ## Risks and strategy
 
@@ -63,44 +64,49 @@ PR: —
 | ---------- | -------- | ------ | --------- |
 | 2026-11-20 | Новый скилл называется `tg`, старый gramjs-скилл заменяется | В PATH стоит наш Go-бинарник `tg`; триггеры двух скиллов совпадают | yes |
 | 2026-11-20 | Структура: `SKILL.md`, `references/` (9), `recipes/` (11 и шаблон), без `scripts/` | Выбрано владельцем из трёх вариантов | yes |
-| 2026-11-20 | Скрипты `tg-doctor.sh` и `tg-daemon-up.sh` не переносим | `tg daemon status` и идемпотентный `tg daemon start` есть в бинарнике | no |
-| 2026-11-20 | Тело скилла остаётся русским | `AGENTS.md`: `docs/skill/` на русском | no |
+| 2026-11-20 | Переносим только `tg-doctor.sh`; `tg-daemon-up.sh` не нужен | Доктор даёт версию, права сессии, следующий шаг и коды выхода; `tg daemon start` идемпотентен | yes |
+| 2026-11-20 | Description сокращено до 404 символов (было 703): убраны Go, SQLite, перечень операций записи, `запусти демон`; оставлены `телеграм`, `тг` и четыре фразы, исключение осталось | Обсуждено с Astra (GPT-6.2-Astra, Herdr, агент `astra`) по просьбе владельца: описание слишком подробное | yes |
+| 2026-11-20 | Тело скилла английское, по-русски только фразы-триггеры (`description`, поле `task` рецептов) | Решение владельца; меняет правило `AGENTS.md` про язык `docs/skill/` | yes |
 
 ## Step 0. Fix decisions before changes
 
-- [ ] Решить, что делать с индексом `main` (переименование `scout`, 17 путей): закоммитить отдельно или вести работу в worktree от `HEAD`.
-- [ ] Создать ветку и worktree, записать их в заголовок.
-- [ ] Открытые вопросы ниже решены или записаны.
+- [x] Индекс `main` (переименование `scout`) закоммичен отдельно: `cdef44f`.
+- [x] Ветка и worktree созданы, записаны в заголовок; план закоммичен на `main` (`cf6760b`).
+- [-] Открытые вопросы: Q3 решён (запись в `.skill-lint-ignore`, 2026-11-20, решение агента, `Confirmed: no`); Q1 и Q2 ждут владельца до шага 10.
 
 ## Step 1. Audit and baseline
 
-- [ ] Таблица покрытия: каждый раздел старого `SKILL.md` (по заголовкам, строки 17–459) получает адрес в новой структуре (в `var/agents/plans/20261120_1607_agent_skill_tg_with_recipes/map.md`).
-- [ ] Список 50 неупомянутых команд из `tg schema` сгруппирован по `references/`.
-- [ ] Базовые числа: `skill-lint` (4 ошибки, 1 предупреждение), число ссылок `FEATURES.md`.
+- [x] Покрытие: каждая строка старого `SKILL.md` ищется в новых файлах; не найденные (56 из 365) это переписанные описание, вступление, правила 1-13, таблица кодов, раздел «Экономия токенов» и абзац про скачивание, их смысл перенесён (проверено сравнением строк 2026-11-20).
+- [-] Список 50 неупомянутых команд по группам: отложено, их покрывает отсылка к `tg schema` (правило скилла); решено 2026-11-20 без отдельной карты.
+- [x] Базовые числа: `skill-lint` 4 ошибки и 1 предупреждение; ссылок `FEATURES.md` в старом тексте 15.
 
 ## Implementation steps
 
-- [ ] 1. `git mv docs/skill/tg-cli docs/skill/tg`; `name: tg` в frontmatter и `meta.json`; ссылки в `AGENTS.md` (строки 18, 96), `docs/README.md`. Проверка: `rg 'skill/tg-cli' --glob '!.agents/plans/**'` пуст.
-- [ ] 2. Новое описание до 1024 символов (цель 400–600).
-- [ ] 3. `references/`: `safety`, `reading`, `history`, `writing`, `media`, `stream`, `daemon-auth`, `admin`, `errors`. Абзацы переносятся из старого текста по карте шага 1; противоречия `:22` и правило 2 исправляются здесь.
-- [ ] 4. `SKILL.md` до 150 строк: правила, первый запуск (`tg daemon status`, коды 3 и 4), контракт вывода, адресация чатов, шпаргалка, индекс.
-- [ ] 5. `recipes/_template.md` и 11 рецептов: `find-chat`, `channel-digest`, `unread-triage`, `search-across-chats`, `export-history`, `monthly-archive`, `load-full-history`, `send-report`, `send-media`, `watch-chat`, `forum-topics`. Пишущие рецепты показывают только `--dry-run`.
-- [ ] 6. Сверка: рецепт `just skill-check` (frontmatter рецептов, `commands` против `tg schema`, `skill-lint`); строка в `bin/just/` по правилу проекта.
-- [ ] 7. `meta.json` без `links`, `notes` с проверенным и непроверенным; `.skill-lint-ignore`, если останутся предупреждения, с причинами.
-- [ ] 8. Документы через `docwriter` и `glavred` по `docs_chain.md`.
-- [ ] 9. Запись решения о переименовании в `.agents/decisions/` и строка в `_TOC.md`.
+- [x] 1. `git mv docs/skill/tg-cli docs/skill/tg`; `name: tg` в frontmatter и `meta.json`; ссылки в `AGENTS.md` (строки 18, 96), `docs/README.md`. Проверка: `rg 'skill/tg-cli' --glob '!.agents/plans/**'` пуст.
+- [x] 2. Новое описание до 1024 символов (цель 400–600).
+- [x] 3. `references/`: `safety`, `reading`, `history`, `writing`, `media`, `stream`, `daemon-auth`, `admin`, `errors`. Абзацы переносятся из старого текста по карте шага 1; противоречия `:22` и правило 2 исправляются здесь.
+- [x] 4. `SKILL.md` до 150 строк: правила, первый запуск (`tg daemon status`, коды 3 и 4), контракт вывода, адресация чатов, шпаргалка, индекс.
+- [x] 5. `recipes/_template.md` и 11 рецептов: `find-chat`, `channel-digest`, `unread-triage`, `search-across-chats`, `export-history`, `monthly-archive`, `load-full-history`, `send-report`, `send-media`, `watch-chat`, `forum-topics`. Пишущие рецепты показывают только `--dry-run`.
+- [x] 6. Сверка: рецепт `just skill-check` (frontmatter рецептов, `commands` и флаги против `tg schema`; `skill-lint` запускается отдельно, он лежит вне репозитория); строка в `bin/just/` по правилу проекта.
+- [x] 7. `meta.json` без `links`, `notes` с проверенным и непроверенным; `.skill-lint-ignore`, если останутся предупреждения, с причинами.
+- [x] 8a. Перевод на английский (четыре параллельных агента, затем сверка обратных кавычек со старым текстом: 9 из 540 отличаются, это переписанные правила) и `scripts/tg-doctor.sh`.
+- [0] 8b. Ревью Astra 2026-11-20, семь кругов (GPT-6.2-Astra через Herdr, агент `astra`, панель `w1W:p5J`): 25, затем 23, 22, 10, 9, 5 и 4 новых или частичных замечаний по кругам; последние высокие (чекер пропускал `tg version&&tg message send`, восстановление после `lagged`) исправлены. Круга после седьмого не было (`[0]`: правки сделаны, итог седьмого круга Astra не перепроверила).
+- [x] 8. Тексты: проверка `glavred` (маршрут проверяющего, 25 замечаний, исправлены 2026-11-20) и `agent-instructions` для `SKILL.md` (2376 до 2312 токенов, o200k_base, -2,7%). Вместо агента `docwriter` тексты писал Claude по решению владельца.
+- [x] 9. Запись решения о переименовании в `.agents/decisions/` и строка в `_TOC.md`.
 - [ ] 10. Установка: только после отдельного подтверждения владельца (меняет `~/.agents/skills`, вне репозитория).
 
 ## Verification
 
 | Check | Command | Expected result | Status |
 | ----- | ------- | --------------- | ------ |
-| Линтер скилла | `lint_skills.py docs/skill/tg` | 0 ошибок | not_run |
-| Метаданные | `check_meta.py docs/skill/tg` | 0 ошибок | not_run |
-| Рецепты и схема | `just skill-check` | все `commands` есть в `tg schema` | not_run |
-| Размер | `wc -l docs/skill/tg/SKILL.md` | не больше 150 | not_run |
-| Оговорки о живой проверке | `rg -c 'FEATURES.md' docs/skill` до и после | число не меньше исходного | not_run |
-| Висячие ссылки | `rg 'skill/tg-cli' --glob '!.agents/plans/**'` | пусто | not_run |
+| Линтер скилла | `lint_skills.py -s docs/skill/tg` | 0 ошибок, 0 предупреждений (22 `body-language` погашены в `.skill-lint-ignore`) | passed |
+| Метаданные | `check_meta.py docs/skill/tg` | 0 ошибок | passed |
+| Рецепты и схема | `just skill-check` | 0 расхождений (10 файлов, 11 рецептов, 133 команды) | passed |
+| Размер | `wc -l docs/skill/tg/SKILL.md` | не больше 150 | passed (91) |
+| Оговорки о живой проверке | `grep -o 'FEATURES.md'` до и после, пункты 4.3-10.12 по списку | число не меньше исходного | passed (15 до, 19 после, все пункты на месте) |
+| Висячие ссылки | `rg 'skill/tg-cli' --glob '!.agents/plans/**'` | пусто, кроме записи решения, где старый путь назван намеренно | passed |
+| Язык | `grep -rnP '[А-Яа-яЁё]' docs/skill/tg` | кириллица только в `description`, строках `task` и названиях чатов | passed |
+| Скрипт | `shellcheck docs/skill/tg/scripts/tg-doctor.sh` и запуск | без замечаний, 0 | passed (exit 0 на живом Daemon, только чтение) |
 | Тексты | `glavred` по `docs_chain.md` | замечаний нет | not_run |
 
 ## Deploy / rollback

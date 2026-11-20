@@ -1,0 +1,2 @@
+# <code|*> <glob relative to the skill folder> # reason
+platform-dependency scripts/tg-doctor.sh # Bash 3.2+ and python3 are declared in SKILL.md and in the script header

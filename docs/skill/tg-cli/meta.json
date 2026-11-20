@@ -1,9 +1,0 @@
-{
-  "name": "tg-cli",
-  "source": {"type": "own"},
-  "installed": {"at": "2026-11-14", "by": "claude", "method": "manual: copy the complete docs/skill/tg-cli folder into a skills directory"},
-  "version": null,
-  "modified": false,
-  "links": [],
-  "notes": "Original skill for the Go tg binary of this repository. The command list is not copied: the skill points to `tg schema`. Update it when the contract of schema, exit codes, output formats or the first-run steps change."
-}

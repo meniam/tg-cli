@@ -15,7 +15,7 @@ This file is an index: what every task needs. Details live in the documents link
 | The feature list, statuses, what is checked on a live account | [FEATURES.md](FEATURES.md) (IDs are never renumbered; a new feature takes the next free number in its section) |
 | Every command, flag, output format and exit code | [docs/cli/](docs/cli/overview.md) (index: [docs/README.md](docs/README.md)); `tg schema` prints the same from the binary |
 | Detailed behavior contracts (journal, throttle, history load, export, access lists, events, writes, media) | [docs/contracts.md](docs/contracts.md) |
-| How an agent should work with the tool | [docs/skill/tg-cli/](docs/skill/tg-cli/SKILL.md) (Russian, keep it in step with `tg schema`) |
+| How an agent should work with the tool | [docs/skill/tg/](docs/skill/tg/SKILL.md) (English body, Russian trigger phrases; keep it in step with `tg schema`, `just skill-check` verifies it) |
 | Decisions with their alternatives | [.agents/decisions/_TOC.md](.agents/decisions/_TOC.md). Do not change a settled rule silently: record a decision |
 | Plans and their status | [.agents/plans/](.agents/plans/), format in [plans.md](.agents/rules/plans.md) |
 | Open questions | the "Open questions" tables of the plans and the open questions of `INTENT.md`; do not choose yourself, ask or record a decision |
@@ -93,7 +93,7 @@ The main session runs in herdr and lays parallel work out in tabs:
 ## Documents and language
 
 - Code, comments, identifiers, error strings, log strings and commit messages are in English. So are this file, `README.md`, the `just` help, the JSON-RPC package, `docs/cli/` and `docs/contracts.md`. This project overrides the global `justfile.md` preference for Russian help text.
-- `INTENT.md`, `FEATURES.md`, plans, decisions and `docs/skill/` are in Russian, avoiding the em dash "—" where possible. Commands, flags and identifiers stay in the original.
+- `INTENT.md`, `FEATURES.md`, plans and decisions are in Russian, avoiding the em dash "—" where possible. Commands, flags and identifiers stay in the original. `docs/skill/` is English; only the trigger phrases (the Russian words in the `description` and in the `task` field of recipes) are Russian.
 - `README.md` is the public face: it documents only what is implemented and verified.
 - Text documents are written and checked by the `writer` or `docwriter` agent and `glavred` per [docs_chain.md](.agents/rules/docs_chain.md). Editing this file does not start that chain.
 

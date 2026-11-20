@@ -17,7 +17,7 @@ An index of the documentation of `tg`, a console client for a personal Telegram 
 | to send, edit, delete and forward messages, send files, react, pin and unpin, create polls, format text | [cli/messages-write.md](cli/messages-write.md) |
 | to keep notes, search the local database, print the version, read the machine description of all commands | [cli/notes-and-search.md](cli/notes-and-search.md) |
 | to decide which chats the agent sees, where it may write and which directories it may send files from | [cli/access.md](cli/access.md) |
-| an agent skill with the working rules for an AI agent (in Russian) | [skill/tg-cli/SKILL.md](skill/tg-cli/SKILL.md) |
+| an agent skill with the working rules for an AI agent (English, Russian trigger phrases) | [skill/tg/SKILL.md](skill/tg/SKILL.md) |
 
 Every command of `tg schema` has its own section in `docs/cli/` with a heading `tg <command path>`: purpose, syntax, flags, safety class, preconditions, an example, an example answer and exit codes. The authoritative machine-readable contract is `tg schema`; verification status is tracked in [FEATURES.md](../FEATURES.md).
 
@@ -35,11 +35,11 @@ Every command of `tg schema` has its own section in `docs/cli/` with a heading `
 
 ## Languages
 
-`docs/cli/` and the contracts are in English, the same as the help of the tool, the schema and `AGENTS.md`. `docs/skill/` is an agent skill in Russian. `INTENT.md`, `FEATURES.md`, the plans and the decisions are in Russian. Commands, flags and identifiers stay in the original in every document.
+`docs/cli/` and the contracts are in English, the same as the help of the tool, the schema and `AGENTS.md`. `docs/skill/` is an agent skill in English; only its trigger phrases (the `description` and the `task` field of recipes) are Russian. `INTENT.md`, `FEATURES.md`, the plans and the decisions are in Russian. Commands, flags and identifiers stay in the original in every document.
 
 ## Keeping the pages true
 
-A page of `docs/cli/` must not disagree with the built tool. When you change a command, change its section in the same commit and compare it with `tg schema` and `tg <command> --help`. Keep `docs/skill/tg-cli/` in step with `tg schema` too.
+A page of `docs/cli/` must not disagree with the built tool. When you change a command, change its section in the same commit and compare it with `tg schema` and `tg <command> --help`. Keep `docs/skill/tg/` in step with `tg schema` too (`just skill-check` compares the skill with the schema).
 
 ## Generated tables
 
