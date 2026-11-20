@@ -117,6 +117,9 @@ func TestSchemaConfigKeys(t *testing.T) {
 		"home", "default_profile",
 		"files.database", "files.session", "files.log", "files.deletions", "files.access",
 		"behavior.throttle_percent", "behavior.flood_autowait", "behavior.expect_user",
+		"background_sync.enabled", "background_sync.window_start", "background_sync.window_end",
+		"background_sync.interval_min", "background_sync.interval_max",
+		"background_sync.page_pause_min", "background_sync.page_pause_max",
 		"profiles.<profile>.client", "profiles.<profile>.device", "profiles.<profile>.transport", "profiles.<profile>.proxy",
 	}
 	if !reflect.DeepEqual(keys, wantKeys) {

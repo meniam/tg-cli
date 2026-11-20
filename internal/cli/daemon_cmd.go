@@ -188,6 +188,10 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	backgroundSync, err := a.daemonBackgroundSync()
+	if err != nil {
+		return err
+	}
 	if !foreground {
 		return a.startBackground(cmd, profile, paths, idle)
 	}
@@ -226,7 +230,7 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		}
 		logger = slog.New(slog.NewTextHandler(journal, &slog.HandlerOptions{Level: level}))
 	}
-	err = daemon.Run(cmd.Context(), daemon.Options{
+	err = runDaemon(cmd.Context(), daemon.Options{
 		FileWarningsReported: true,
 		ClientPreset:         a.config.Profiles[profile].Client,
 		Profile:              profile,
@@ -236,6 +240,7 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		TelegramConfig:       cfg,
 		Log:                  logger,
 		IdleTimeout:          idle,
+		BackgroundSync:       backgroundSync,
 	})
 	if err != nil {
 		return a.daemonStartError(err)

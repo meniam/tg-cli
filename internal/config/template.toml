@@ -95,6 +95,46 @@
 # Overrides: flag --expect-user, environment TG_CLI_EXPECT_USER
 # expect_user = "@your_username"
 
+# --- Background history load -------------------------------------------------
+# The daemon can load older history of chats that are not loaded to their first
+# message, slowly, on its own. It picks one chat per run: people first, then
+# chats from folders, then the rest. It reads only; it never writes to Telegram,
+# and it respects the access lists. While it is off, the daemon makes no new
+# Telegram request for this. A manual `tg chat sync start` always goes first.
+
+# [background_sync]
+# Turn the scheduled load on.
+# Default: false
+# Values:  true or false
+# Overrides: environment TG_CLI_BACKGROUND_SYNC_ENABLED
+# enabled = false
+#
+# Local time of the machine of the daemon when loading may begin, and when a
+# running load is stopped. Progress is kept per page; the next day picks a chat
+# again.
+# Default: "08:00" and "20:00"
+# Values:  HH:MM on a 24-hour clock; window_start must be earlier than window_end
+# Overrides: environment TG_CLI_BACKGROUND_SYNC_WINDOW_START, TG_CLI_BACKGROUND_SYNC_WINDOW_END
+# window_start = "08:00"
+# window_end = "20:00"
+#
+# Random wait between two runs, counted from the end of the previous load (or
+# from the start of the daemon). A run that falls after the window moves to the
+# start of the next one.
+# Default: "40m" and "3h"
+# Values:  positive durations such as "40m", "3h"; interval_min must not exceed interval_max
+# Overrides: environment TG_CLI_BACKGROUND_SYNC_INTERVAL_MIN, TG_CLI_BACKGROUND_SYNC_INTERVAL_MAX
+# interval_min = "40m"
+# interval_max = "3h"
+#
+# Random pause between two pages of a scheduled load. The pause of a manual
+# load stays at 2 seconds.
+# Default: "2s" and "8s"
+# Values:  durations of at least "1s"; page_pause_min must not exceed page_pause_max
+# Overrides: environment TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MIN, TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MAX
+# page_pause_min = "2s"
+# page_pause_max = "8s"
+
 # --- Per-profile settings ----------------------------------------------------
 # One table per profile: [profiles.<name>]. `tg daemon start` writes these
 # keys when you pass --client, --device, --transport or --proxy. Every key below

@@ -55,6 +55,9 @@ type Options struct {
 	IdleTimeout time.Duration
 	// OnListening, when set, is called once the socket accepts connections.
 	OnListening func()
+	// BackgroundSync holds the settings of the scheduled history load; the
+	// zero value is off.
+	BackgroundSync BackgroundSyncConfig
 }
 
 // idleCheckEvery is how often the idle stop looks at the daemon. It is finer
