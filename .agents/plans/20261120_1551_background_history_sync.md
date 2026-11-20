@@ -10,9 +10,9 @@ PR: —
 
 ## Status
 
-- Current status: in_progress (2026-11-20: шаги 1-11 выполнены и слиты в интеграционную ветку, `isocheck.sh` и `-race ./...` зелёные; осталось слияние в `main` и деплой по решению владельца)
+- Current status: done (2026-11-20: слит в `main` 8c8880f, запушен, `just install` выполнен, схема 10, демон работает; планировщик выключен до решения владельца)
 - Last update: 2026-11-20
-- Next safe step: слияние `feature/20261120_1551_background_history_sync` в `main` (один конфликт в `.agents/decisions/_TOC.md`, оставить обе строки), копия `~/.config/tg-cli/db/default`, `just install`, затем владелец включает `[background_sync] enabled = true`.
+- Next safe step: нет. Владелец включает `[background_sync] enabled = true` в `config.toml` и перезапускает демон, когда готов; копия базы до миграции: `~/.config/tg-cli/db/default.bak-20261120-1721`.
 
 ## Context and sources
 
