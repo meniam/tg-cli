@@ -96,7 +96,11 @@ result. `TG_CLI_HOME`, when set, selects the home used for migration and socket
 path validation.
 
 `home` is the base directory of the profile data: session, socket, lock, journal
-and access list. It is not where the database lives. `db_dir` is the directory of
+and access list. It defaults to `~/.config/tg-cli`; the data of the previous
+default on macOS, `~/Library/Application Support/tg-cli`, moves there at the
+first command that reaches a profile, unless `home` or `TG_CLI_HOME` is set (see
+[the previous default](overview.md#profiles-and-the-data-directory)). It is not
+where the database lives. `db_dir` is the directory of
 the profile databases, the `db` directory next to `config.toml`; the database of a
 profile is `<db_dir>/<profile>/<files.database>`. The database directory follows
 the configuration file, therefore it does not change with `home` or
@@ -123,7 +127,7 @@ tg config show
 **Answer.**
 
 ```json
-{"ok":true,"data":{"home":"/Users/alice/Library/Application Support/tg-cli","db_dir":"/Users/alice/.config/tg-cli/db","default_profile":"default","files":{"database":"store.db","session":"session.json","log":"daemon.log","deletions":"deletions.jsonl","access":"access.json"},"behavior":{"throttle_percent":60,"flood_autowait":"10s","expect_user":""},"background_sync":{"enabled":false,"window_start":"08:00","window_end":"20:00","interval_min":"40m","interval_max":"3h","page_pause_min":"2s","page_pause_max":"8s"},"semantic_search":{"enabled":false,"ollama_url":"http://127.0.0.1:11434","model":"bge-m3","batch":16,"interval":"10m"},"profiles":{"default":{"client":"desktop","device":"MacBook","transport":"tcp","proxy":"socks5://127.0.0.1:1080"}}}}
+{"ok":true,"data":{"home":"/Users/alice/.config/tg-cli","db_dir":"/Users/alice/.config/tg-cli/db","default_profile":"default","files":{"database":"store.db","session":"session.json","log":"daemon.log","deletions":"deletions.jsonl","access":"access.json"},"behavior":{"throttle_percent":60,"flood_autowait":"10s","expect_user":""},"background_sync":{"enabled":false,"window_start":"08:00","window_end":"20:00","interval_min":"40m","interval_max":"3h","page_pause_min":"2s","page_pause_max":"8s"},"semantic_search":{"enabled":false,"ollama_url":"http://127.0.0.1:11434","model":"bge-m3","batch":16,"interval":"10m"},"profiles":{"default":{"client":"desktop","device":"MacBook","transport":"tcp","proxy":"socks5://127.0.0.1:1080"}}}}
 ```
 
 **Answer fields** (`data`): `home` and `db_dir` strings, `default_profile`

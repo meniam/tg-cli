@@ -55,3 +55,4 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-20 — [Скилл для агента называется tg и состоит из маршрутизатора, справочников и рецептов](20261120_1700_agent_skill_is_tg_with_references_and_recipes.md)
 - 2026-11-20 — [Векторы живут в vectors.db, эмбеддинги bge-m3 считает Ollama, индекс фрагменты разговора, слияние RRF](20261120_1850_vectors_live_in_vectors_db_and_bge_m3_embeds_through_ollama.md)
 - 2026-11-20 — [Поиск знает формы слов через Snowball и возвращает ссылки Telegram, построенные локально](20261120_1851_search_stems_russian_and_returns_local_telegram_links.md)
+- 2026-11-20 — [Каталог данных по умолчанию это ~/.config/tg-cli, старый каталог macOS переезжает сам](20261120_2116_default_home_is_dot_config_and_the_old_macos_home_moves_automatically.md)
