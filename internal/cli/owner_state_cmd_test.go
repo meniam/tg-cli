@@ -14,16 +14,16 @@ func (f *fakeTelegram) Folders(context.Context) (rpc.FoldersResult, error) {
 	return rpc.FoldersResult{Folders: []rpc.Folder{{ID: 2, Kind: "filter", Title: "test"}}}, nil
 }
 func (f *fakeTelegram) ChatStates(context.Context, *chatref.Ref, int) (rpc.ChatStatesResult, error) {
-	return rpc.ChatStatesResult{States: []rpc.ChatState{}}, nil
+	return rpc.ChatStatesResult{States: []rpc.ChatState{{ChatID: 77, Unread: 2, TopMessage: 30}}}, nil
 }
 func (f *fakeTelegram) Sessions(context.Context) (rpc.SessionsResult, error) {
 	return rpc.SessionsResult{Sessions: []rpc.Session{{Hash: 1, DeviceModel: "Fixture", Platform: "test", AppName: "fixture"}}}, nil
 }
 func (f *fakeTelegram) Blocked(context.Context, rpc.BlockedParams) (rpc.BlockedResult, error) {
-	return rpc.BlockedResult{Peers: []rpc.BlockedPeer{}}, nil
+	return rpc.BlockedResult{Peers: []rpc.BlockedPeer{{PeerID: 8, Type: "user", Title: "Blocked", Username: "blocked", Date: 1}}}, nil
 }
 func (f *fakeTelegram) NotifyDefaults(context.Context) (rpc.NotifyDefaultsResult, error) {
-	return rpc.NotifyDefaultsResult{Defaults: []rpc.NotifyDefault{}}, nil
+	return rpc.NotifyDefaultsResult{Defaults: []rpc.NotifyDefault{{Scope: "users"}}}, nil
 }
 
 func TestOwnerStateCLI(t *testing.T) {
@@ -40,8 +40,7 @@ func TestOwnerStateCLI(t *testing.T) {
 		case rpc.MethodAccountNotify:
 			return rpc.NotifyDefaultsResult{Defaults: []rpc.NotifyDefault{{Scope: "users"}}}, nil
 		}
-		t.Fatalf("method %s", method)
-		return nil, nil
+		return audit02Reject(t, "method %s", method)
 	}
 	for _, tc := range []struct {
 		args   []string
@@ -88,40 +87,4 @@ func TestOwnerStateCLIParameters(t *testing.T) {
 	if err := json.Unmarshal(r.params, &blocked); err != nil || blocked.Limit != 12 || blocked.Cursor != "2" || blocked.Local {
 		t.Fatalf("blocked %+v %v", blocked, err)
 	}
-}
-
-func (f *fakeTelegram) TerminateSession(context.Context, int64) error { return nil }
-
-func (f *fakeTelegram) ArchiveDialogs(context.Context, []chatref.Ref, bool) error { return nil }
-func (f *fakeTelegram) PinDialog(context.Context, chatref.Ref, bool) error        { return nil }
-
-func (f *fakeTelegram) RefreshDialogStates(context.Context, []chatref.Ref) (rpc.ChatStatesResult, error) {
-	return rpc.ChatStatesResult{}, nil
-}
-
-func (f *fakeTelegram) ChangeNotify(_ context.Context, _ chatref.Ref, p rpc.NotifyParams) (rpc.NotifyResult, error) {
-	return rpc.NotifyResult{MuteUntil: p.MuteUntil, Silent: p.Silent, ShowPreviews: p.Previews, DryRun: p.DryRun}, nil
-}
-
-func (f *fakeTelegram) FolderInviteInfo(context.Context, string) (rpc.FolderInviteResult, error) {
-	return rpc.FolderInviteResult{Title: "Folder", Chats: []rpc.FolderInviteChat{{ID: 77, Type: "group", Title: "Group"}}}, nil
-}
-
-func (f *fakeTelegram) OrderFolders(context.Context, []int, bool) error { return nil }
-
-func (f *fakeTelegram) SavedTags(context.Context, *chatref.Ref) (rpc.SavedTagsResult, error) {
-	return rpc.SavedTagsResult{Tags: []rpc.SavedTag{{Emoji: "👍", Title: "tag", Count: 1}}}, nil
-}
-func (f *fakeTelegram) RenameSavedTag(context.Context, rpc.SavedTagRenameParams) error { return nil }
-
-func (f *fakeTelegram) SavedMessages(context.Context, int64, *chatref.Ref, rpc.SavedMessagesParams, bool) (rpc.MessagesResult, error) {
-	return rpc.MessagesResult{Messages: []rpc.Message{}}, nil
-}
-
-func (f *fakeTelegram) SavedList(context.Context, rpc.SavedListParams) (rpc.SavedListResult, error) {
-	return rpc.SavedListResult{Dialogs: []rpc.SavedDialog{{PeerID: 77, Title: "test", Type: "group"}}}, nil
-}
-
-func (f *fakeTelegram) WriteFolder(_ context.Context, p rpc.FolderWriteParams, action string) (rpc.FolderWriteResult, error) {
-	return rpc.FolderWriteResult{ID: 2, Deleted: action == "delete", DryRun: p.DryRun}, nil
 }

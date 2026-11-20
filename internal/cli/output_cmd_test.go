@@ -43,8 +43,9 @@ func TestFormatIsOneGlobalFlag(t *testing.T) {
 	if before.code != exitcode.OK || before.stdout != after.stdout {
 		t.Errorf("the flag must work in both positions: %q vs %q", before.stdout, after.stdout)
 	}
-	if human, short := e.run("--format", "human", "chat", "list"), e.run("chat", "list", "--human"); human.stdout != short.stdout {
-		t.Errorf("--human must be --format human: %q vs %q", human.stdout, short.stdout)
+	if human, short := e.run("--format", "human", "chat", "list"), e.run("chat", "list", "--human"); human.code != exitcode.OK || short.code != exitcode.OK ||
+		!strings.Contains(human.stdout, "Ann") || human.stdout != short.stdout {
+		t.Errorf("--human must be --format human: exit %d and %d, %q vs %q", human.code, short.code, human.stdout, short.stdout)
 	}
 
 	// A command that returns one object has no items to print one per line.

@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"tg-cli/internal/exitcode"
 )
 
 func TestSecretInput(t *testing.T) {
@@ -28,5 +30,43 @@ func TestSecretInput(t *testing.T) {
 	}
 	if _, err = secretLine(strings.NewReader(strings.Repeat("x", 65)), 64); err == nil {
 		t.Fatal("oversize code accepted")
+	}
+}
+
+// TestAudit02_SecretInputRefusals covers every refusal of secretFile and
+// secretLine and checks that each is a usage error with its own reason.
+func TestAudit02_SecretInputRefusals(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	for _, tc := range []struct {
+		name string
+		run  func() error
+		want string
+	}{
+		{"missing file", func() error { _, err := secretFile(filepath.Join(dir, "absent"), 1024); return err }, "cannot open secret file"},
+		{"directory", func() error { _, err := secretFile(dir, 1024); return err }, "regular owner-only file"},
+		{"file over the limit", func() error { _, err := secretFile(write("big", strings.Repeat("x", 65)), 64); return err }, "too large"},
+		{"empty file", func() error { _, err := secretFile(write("empty", ""), 64); return err }, "secret must not be empty"},
+		{"only a newline", func() error { _, err := secretFile(write("newline", "\r\n"), 64); return err }, "secret must not be empty"},
+		{"empty line", func() error { _, err := secretLine(strings.NewReader("\n"), 64); return err }, "empty or too long"},
+		{"no input", func() error { _, err := secretLine(strings.NewReader(""), 64); return err }, "empty or too long"},
+		{"line over the limit", func() error { _, err := secretLine(strings.NewReader(strings.Repeat("x", 65)), 64); return err }, "empty or too long"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.run()
+			var ce *cmdError
+			if !errors.As(err, &ce) || ce.exit != exitcode.Usage || !strings.Contains(ce.msg, tc.want) {
+				t.Fatalf("want a usage error with %q, got %#v", tc.want, err)
+			}
+		})
+	}
+	if got, err := secretFile(write("exact", strings.Repeat("x", 64)), 64); err != nil || len(got) != 64 {
+		t.Fatalf("a secret of exactly the limit must pass: %d %v", len(got), err)
 	}
 }
