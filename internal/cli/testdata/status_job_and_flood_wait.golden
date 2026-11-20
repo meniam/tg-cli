@@ -8,6 +8,7 @@ History      0 of 0 chats loaded to the first message
              people 0 of 0 | in folders 0 of 0 | others 0 of 0
 Background   on, window 08:00-20:00, running (chat -1001)
              last run 2026-11-19 19:40 (chat -1001, cancelled)
+Semantic     on, bge-m3, 6382 of 6500 fragments indexed, indexing
 Jobs         chat sync: chat -1001 running (background, 4 pages, 400 loaded); chat 77 waiting flood (manual, 1 page, 100 loaded) | chat full: running, 12 of 80 chats
 Throttle     flood wait 1m 31s, 3 queued
 Events       0 in the last hour, 0 stored

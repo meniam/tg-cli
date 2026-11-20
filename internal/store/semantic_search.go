@@ -106,9 +106,11 @@ func (db *DB) FragmentText(ctx context.Context, chatID, topicID, firstID, lastID
 type ChatLink struct {
 	Type     string
 	Username string
+	// Title is the title of the chat, for the answer next to the link.
+	Title string
 }
 
-// ChatLinks returns the type and the username of each stored chat among
+// ChatLinks returns the type, the username and the title of each stored chat among
 // chatIDs; a chat the database does not know is absent from the map.
 func (db *DB) ChatLinks(ctx context.Context, chatIDs []int64) (map[int64]ChatLink, error) {
 	out := make(map[int64]ChatLink, len(chatIDs))
@@ -119,7 +121,7 @@ func (db *DB) ChatLinks(ctx context.Context, chatIDs []int64) (map[int64]ChatLin
 	for i, id := range chatIDs {
 		args[i] = id
 	}
-	rows, err := db.read.QueryContext(ctx, `SELECT id,type,username FROM chats WHERE id IN (`+placeholders(len(chatIDs))+`)`, args...)
+	rows, err := db.read.QueryContext(ctx, `SELECT id,type,username,title FROM chats WHERE id IN (`+placeholders(len(chatIDs))+`)`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -127,12 +129,15 @@ func (db *DB) ChatLinks(ctx context.Context, chatIDs []int64) (map[int64]ChatLin
 	for rows.Next() {
 		var id int64
 		var link ChatLink
-		var username *string
-		if err := rows.Scan(&id, &link.Type, &username); err != nil {
+		var username, title *string
+		if err := rows.Scan(&id, &link.Type, &username, &title); err != nil {
 			return nil, err
 		}
 		if username != nil {
 			link.Username = *username
+		}
+		if title != nil {
+			link.Title = *title
 		}
 		out[id] = link
 	}

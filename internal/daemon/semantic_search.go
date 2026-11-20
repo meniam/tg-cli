@@ -108,6 +108,10 @@ func semanticFragment(f *fusedFragment, text string, chat store.ChatLink) rpc.Se
 		EndsAt:   time.Unix(f.ref.endsAt, 0).UTC().Format(time.RFC3339),
 		Score:    f.score, Sources: f.sources(), Indexed: f.ref.indexed, Text: text,
 	}
+	out.ChatTitle = chat.Title
+	if chat.Username != "" {
+		out.ChatUsername = &chat.Username
+	}
 	out.Link, out.LinkUnavailable = store.MessageLink(f.ref.chatID, f.ref.firstID, chat.Type, chat.Username, topic)
 	if f.matchID != 0 {
 		out.MatchLink, _ = store.MessageLink(f.ref.chatID, f.matchID, chat.Type, chat.Username, topic)

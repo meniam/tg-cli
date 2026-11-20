@@ -60,6 +60,11 @@ type SemanticFragment struct {
 	// only the vector leg found the fragment.
 	MatchLink       *string `json:"match_link"`
 	LinkUnavailable string  `json:"link_unavailable,omitempty"`
+	// ChatTitle is the title of the chat, empty if the database does not know
+	// the chat; ChatUsername is null when the chat has no username. Both come
+	// from the chats table and are text of Telegram.
+	ChatTitle    string  `json:"chat_title" untrusted:"true"`
+	ChatUsername *string `json:"chat_username" untrusted:"true"`
 }
 
 // SemanticSearchResult is the answer of search.semantic.

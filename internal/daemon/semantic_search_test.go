@@ -260,6 +260,26 @@ func TestSemanticSearchFusesThreeLegs(t *testing.T) {
 		t.Errorf("a chat with links has reason %q", f.LinkUnavailable)
 	}
 
+	// Every fragment names its chat, whichever leg found it: a stored fragment
+	// found by words and vector, one found by the vector alone (10), and a
+	// message in no fragment (20, 7 and 8). A chat without a username has none.
+	chatNames := map[int64]struct{ title, username string }{
+		semPublicChat: {"Public", "pubgroup"}, semDirectChat: {"Alice", ""}, semBasicChat: {"Basic", ""},
+	}
+	for _, f := range result.Fragments {
+		w := chatNames[f.ChatID]
+		if f.ChatTitle != w.title || w.username == "" && f.ChatUsername != nil || w.username != "" && (f.ChatUsername == nil || *f.ChatUsername != w.username) {
+			t.Errorf("fragment %d/%d chat = %q, %v, want %q, %q", f.ChatID, f.FirstID, f.ChatTitle, f.ChatUsername, w.title, w.username)
+		}
+	}
+	if raw, _ := json.Marshal(result.Fragments[0]); !strings.Contains(string(raw), `"chat_title":`) || !strings.Contains(string(raw), `"chat_username":`) {
+		t.Errorf("the chat fields are not written out: %s", raw)
+	}
+	// The closed chat's name is not in the answer either.
+	if raw, _ := json.Marshal(result); strings.Contains(string(raw), "Closed") || strings.Contains(string(raw), "closedgroup") {
+		t.Errorf("the closed chat's name leaked: %s", raw)
+	}
+
 	// Times: stored ones for a fragment, the message's own for a single one.
 	first := find(result, semPublicChat, 1)
 	if first.StartsAt != time.Unix(semDate(1), 0).UTC().Format(time.RFC3339) || first.EndsAt != time.Unix(semDate(3), 0).UTC().Format(time.RFC3339) {

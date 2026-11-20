@@ -24,9 +24,12 @@ type Dashboard struct {
 	Database   DashboardDatabase    `json:"database"`
 	History    DashboardHistory     `json:"history"`
 	Background BackgroundSyncStatus `json:"background"`
-	Jobs       DashboardJobs        `json:"jobs"`
-	Throttle   DashboardThrottle    `json:"throttle"`
-	Events     DashboardEvents      `json:"events"`
+	// SemanticSearch is the state of the semantic indexer, the same value as the
+	// semantic_search block of the daemon status; it is always present.
+	SemanticSearch SemanticIndexStatus `json:"semantic_search"`
+	Jobs           DashboardJobs       `json:"jobs"`
+	Throttle       DashboardThrottle   `json:"throttle"`
+	Events         DashboardEvents     `json:"events"`
 }
 
 // DashboardAccount is the account the daemon serves. User is null and

@@ -85,6 +85,7 @@ func renderDashboard(d rpc.Dashboard, now time.Time) string {
 	row("Database", dashboardDatabase(d.Database))
 	row("History", dashboardHistory(d.History)...)
 	row("Background", dashboardBackground(d.Background, now)...)
+	row("Semantic", dashboardSemantic(d.SemanticSearch, now))
 	row("Jobs", dashboardJobs(d.Jobs))
 	row("Throttle", dashboardThrottle(d.Throttle))
 	row("Events", fmt.Sprintf("%d in the last hour, %d stored", d.Events.LastHour, d.Events.Total))
@@ -220,6 +221,41 @@ func dashboardBackground(b rpc.BackgroundSyncStatus, now time.Time) []string {
 		lines = append(lines, strings.Join(runs, ", "))
 	}
 	return lines
+}
+
+// dashboardSemantic is the one line of the semantic indexer. The counters are
+// printed only while the index is usable: after a failure they describe an
+// older run and would mislead.
+func dashboardSemantic(s rpc.SemanticIndexStatus, now time.Time) string {
+	if !s.Enabled || s.State == rpc.SemanticIndexDisabled {
+		return "off (enable with [semantic_search] enabled = true)"
+	}
+	parts := []string{"on"}
+	if s.Model != "" {
+		parts = append(parts, plainText(s.Model))
+	}
+	progress := fmt.Sprintf("%d of %d fragments indexed", s.Indexed, s.Total)
+	switch s.State {
+	case rpc.SemanticIndexIndexing:
+		parts = append(parts, progress, "indexing")
+	case rpc.SemanticIndexIdle:
+		parts = append(parts, progress)
+		last := "no run yet"
+		if s.FinishedAt != nil {
+			last = "last run " + dashboardClock(*s.FinishedAt, now)
+		}
+		if s.Reason != "" {
+			last += " (" + plainText(s.Reason) + ")"
+		}
+		parts = append(parts, last)
+	default:
+		state := plainText(strings.ReplaceAll(s.State, "_", " "))
+		if s.Reason != "" {
+			state += " (" + plainText(s.Reason) + ")"
+		}
+		parts = append(parts, state)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // dashboardClock prints HH:MM for a moment of the day of now and the date with

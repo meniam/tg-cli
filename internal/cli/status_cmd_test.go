@@ -51,6 +51,9 @@ func statusBase() rpc.Dashboard {
 			Enabled: true, Window: rpc.BackgroundSyncWindow{Start: "08:00", End: "20:00"},
 			State: rpc.BackgroundSyncWaitingInterval, NextRunAt: statusAt(20, 14, 35), LastRunAt: statusAt(20, 11, 2), LastResult: rpc.BackgroundSyncDone, LastChatID: func() *int64 { id := int64(123); return &id }(),
 		},
+		SemanticSearch: rpc.SemanticIndexStatus{
+			Enabled: true, State: rpc.SemanticIndexIdle, Model: "bge-m3", Indexed: 6500, Total: 6500, FinishedAt: statusAt(20, 18, 20),
+		},
 		Jobs:   rpc.DashboardJobs{Sync: []rpc.DashboardSyncJob{}, Full: rpc.DashboardFullJob{State: rpc.ChatFullIdle}},
 		Events: rpc.DashboardEvents{LastHour: 12, Total: 71052},
 	}
@@ -63,6 +66,7 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 	off.Database = rpc.DashboardDatabase{SizeBytes: 2_560_000, SchemaVersion: 10, Chats: 1, Messages: 1}
 	off.History = rpc.DashboardHistory{Total: 1, People: rpc.DashboardGroup{Total: 1}}
 	off.Background = rpc.BackgroundSyncStatus{State: rpc.BackgroundSyncDisabled, Window: rpc.BackgroundSyncWindow{Start: "08:00", End: "20:00"}}
+	off.SemanticSearch = rpc.SemanticIndexStatus{State: rpc.SemanticIndexDisabled}
 	off.Events = rpc.DashboardEvents{Total: 1}
 
 	// A daemon that lost the login and has no client: what is still known is shown.
@@ -73,6 +77,9 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 		Background: rpc.BackgroundSyncStatus{
 			Enabled: true, Window: rpc.BackgroundSyncWindow{Start: "09:30", End: "18:00"},
 			State: rpc.BackgroundSyncWaitingWindow, NextRunAt: statusAt(21, 10, 5),
+		},
+		SemanticSearch: rpc.SemanticIndexStatus{
+			Enabled: true, State: rpc.SemanticIndexUnavailable, Reason: "ollama is unavailable", Model: "bge-m3", Indexed: 6500, Total: 6500,
 		},
 	}
 
@@ -93,6 +100,7 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 		},
 		Full: rpc.DashboardFullJob{State: rpc.ChatFullRunning, Done: 12, Total: 80},
 	}
+	busy.SemanticSearch = rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexIndexing, Model: "bge-m3", Indexed: 6382, Total: 6500, Embedded: 120}
 	busy.Throttle = rpc.DashboardThrottle{FloodWaitSeconds: 91, Queued: 3}
 	busy.Events = rpc.DashboardEvents{}
 
@@ -296,11 +304,35 @@ func TestStatusAppearsInTheSchema(t *testing.T) {
 		"profile", "pid", "started_at", "account.user.id", "account.authorized", "connection.connection", "connection.dc",
 		"access.enabled", "database.size_bytes", "database.schema_version", "database.chats", "database.messages",
 		"history.complete", "history.people.total", "history.folders.complete", "history.others.total",
-		"background.state", "background.next_run_at", "jobs.sync", "jobs.full.state", "jobs.full.done",
+		"background.state", "background.next_run_at", "semantic_search.state", "semantic_search.indexed", "semantic_search.total", "jobs.sync", "jobs.full.state", "jobs.full.done",
 		"throttle.flood_wait_seconds", "throttle.queued", "events.last_hour", "events.total",
 	} {
 		if !have[path] {
 			t.Errorf("the schema of status lacks the field %s", path)
 		}
+	}
+}
+
+// The Semantic line for the states the golden files do not show: an indexer that
+// never ran, a cancelled run, a missing model and a failure before the model is known.
+func TestRenderDashboardSemanticStates(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		st   rpc.SemanticIndexStatus
+		want string
+	}{
+		{"never ran", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexIdle, Model: "bge-m3"}, "Semantic     on, bge-m3, 0 of 0 fragments indexed, no run yet\n"},
+		{"cancelled", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexIdle, Model: "bge-m3", Indexed: 10, Total: 40, FinishedAt: statusAt(19, 9, 5), Reason: "cancelled"}, "Semantic     on, bge-m3, 10 of 40 fragments indexed, last run 2026-11-19 09:05 (cancelled)\n"},
+		{"model missing", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexModelMissing, Reason: "Ollama does not have the model bge-m3"}, "Semantic     on, model missing (Ollama does not have the model bge-m3)\n"},
+		{"error with control characters", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexError, Reason: "open: \x1b[31mfailed"}, "Semantic     on, error (open:  [31mfailed)\n"},
+		{"enabled flag off wins", rpc.SemanticIndexStatus{State: rpc.SemanticIndexIdle, Indexed: 5}, "Semantic     off (enable with [semantic_search] enabled = true)\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dash := statusBase()
+			dash.SemanticSearch = tc.st
+			if got := renderDashboard(dash, statusNow()); !strings.Contains(got, tc.want) {
+				t.Errorf("want the line %q in:\n%s", tc.want, got)
+			}
+		})
 	}
 }
