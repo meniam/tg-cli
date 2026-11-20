@@ -191,6 +191,64 @@
 # Overrides: environment TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY, flag search --min-similarity
 # min_similarity = 0.5
 
+# --- Local transcription of voice messages ------------------------------------
+# The daemon can turn voice messages, video notes and (on request) videos into
+# text with a local speech model (GigaAM, Russian only), through one persistent
+# queue with a single worker. Install the engine once: `tg voice install`; it
+# also needs ffmpeg. Telegram is asked only for the file download, inside the
+# limits below; it is never asked to transcribe (that is `tg message transcribe
+# --telegram`). It skips the chats that access.json closes. While it is off, the
+# daemon queues no job by itself and makes no new Telegram request for it; the
+# manual `tg message transcribe` works either way.
+
+# [voice_transcription]
+# Turn the sources and the worker on.
+# Default: false
+# Values:  true or false
+# Overrides: environment TG_CLI_VOICE_TRANSCRIPTION_ENABLED
+# enabled = false
+#
+# Program that converts media to WAV.
+# Default: "ffmpeg" (the first one in PATH)
+# Values:  a program name or a path, 1 to 1024 characters, no control characters
+# Overrides: environment TG_CLI_VOICE_TRANSCRIPTION_FFMPEG
+# ffmpeg = "ffmpeg"
+#
+# Largest file the worker downloads, by kind. A larger file is skipped without a
+# download (reason too_large).
+# Default: 30, 50 and 500
+# Values:  whole numbers of megabytes from 1 to 1000000
+# Overrides: environment TG_CLI_VOICE_TRANSCRIPTION_MAX_VOICE_MB, TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_NOTE_MB, TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_MB
+# max_voice_mb = 30
+# max_video_note_mb = 50
+# max_video_mb = 500
+#
+# Longest video the worker accepts (reason too_long).
+# Default: 120
+# Values:  a whole number of minutes from 1 to 1000000
+# Overrides: environment TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_MINUTES
+# max_video_minutes = 120
+#
+# Budget of one local day. When it is spent the queue pauses until the next day
+# (reason budget); a manual job ignores the budget but counts in it.
+# Default: 2000 megabytes and 200 files
+# Values:  whole numbers from 1 to 1000000
+# Overrides: environment TG_CLI_VOICE_TRANSCRIPTION_DAILY_DOWNLOAD_MB, TG_CLI_VOICE_TRANSCRIPTION_DAILY_FILES
+# daily_download_mb = 2000
+# daily_files = 200
+#
+# Wait between two downloads.
+# Default: "3s"
+# Values:  a duration from "0s" to "1h"
+# Overrides: environment TG_CLI_VOICE_TRANSCRIPTION_PAUSE
+# pause = "3s"
+#
+# Threads of the speech engine.
+# Default: 4
+# Values:  a whole number from 1 to 16
+# Overrides: environment TG_CLI_VOICE_TRANSCRIPTION_THREADS
+# threads = 4
+
 # --- Per-profile settings ----------------------------------------------------
 # One table per profile: [profiles.<name>]. `tg daemon start` writes these
 # keys when you pass --client, --device, --transport or --proxy. Every key below

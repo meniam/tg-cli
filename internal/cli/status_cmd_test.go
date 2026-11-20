@@ -54,6 +54,10 @@ func statusBase() rpc.Dashboard {
 		SemanticSearch: rpc.SemanticIndexStatus{
 			Enabled: true, State: rpc.SemanticIndexIdle, Model: "bge-m3", Indexed: 6500, Total: 6500, FinishedAt: statusAt(20, 18, 20),
 		},
+		Voice: rpc.VoiceStatus{
+			Enabled: true, Installed: true, State: rpc.VoiceStatePaused, Paused: rpc.VoicePausedBudget, PausedUntil: statusAt(21, 0, 0),
+			Queue: rpc.VoiceQueueCounts{Queued: 3, Done: 40}, DoneToday: 12, FilesToday: 12, BytesToday: 48 << 20, DailyFiles: 200, DailyBytes: 2000 << 20,
+		},
 		Jobs:   rpc.DashboardJobs{Sync: []rpc.DashboardSyncJob{}, Full: rpc.DashboardFullJob{State: rpc.ChatFullIdle}},
 		Events: rpc.DashboardEvents{LastHour: 12, Total: 71052},
 	}
@@ -68,6 +72,7 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 	off.History = rpc.DashboardHistory{Total: 1, People: rpc.DashboardGroup{Total: 1}}
 	off.Background = rpc.BackgroundSyncStatus{State: rpc.BackgroundSyncDisabled, Window: rpc.BackgroundSyncWindow{Start: "08:00", End: "20:00"}}
 	off.SemanticSearch = rpc.SemanticIndexStatus{State: rpc.SemanticIndexDisabled}
+	off.Voice = rpc.VoiceStatus{State: rpc.VoiceStateDisabled}
 	off.Events = rpc.DashboardEvents{Total: 1}
 
 	// A daemon that lost the login and has no client: what is still known is shown.
@@ -82,6 +87,7 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 		SemanticSearch: rpc.SemanticIndexStatus{
 			Enabled: true, State: rpc.SemanticIndexUnavailable, Reason: "ollama is unavailable", Model: "bge-m3", Indexed: 6500, Total: 6500,
 		},
+		Voice: rpc.VoiceStatus{Enabled: true, Missing: []string{"runtime", "model"}, State: rpc.VoiceStatePaused, Paused: rpc.VoicePausedEngineMissing},
 	}
 
 	busy := statusBase()
@@ -102,6 +108,10 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 		Full: rpc.DashboardFullJob{State: rpc.ChatFullRunning, Done: 12, Total: 80},
 	}
 	busy.SemanticSearch = rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexIndexing, Model: "bge-m3", Indexed: 6382, Total: 6500, Embedded: 120}
+	busy.Voice = rpc.VoiceStatus{
+		Enabled: true, Installed: true, State: rpc.VoiceStateWorking, Queue: rpc.VoiceQueueCounts{Queued: 41, Running: 1, Done: 3, Failed: 1},
+		DoneToday: 2, FilesToday: 3, BytesToday: 130 << 20, DailyFiles: 200, DailyBytes: 2000 << 20, LastFailure: "download",
+	}
 	busy.Throttle = rpc.DashboardThrottle{FloodWaitSeconds: 91, Queued: 3}
 	busy.Events = rpc.DashboardEvents{}
 
@@ -308,7 +318,7 @@ func TestStatusAppearsInTheSchema(t *testing.T) {
 		"profile", "pid", "started_at", "account.user.id", "account.authorized", "connection.connection", "connection.dc",
 		"access.enabled", "database.size_bytes", "database.schema_version", "database.chats", "database.messages",
 		"history.complete", "history.people.total", "history.folders.complete", "history.others.total",
-		"background.state", "background.next_run_at", "semantic_search.state", "semantic_search.indexed", "semantic_search.total", "jobs.sync", "jobs.full.state", "jobs.full.done",
+		"background.state", "background.next_run_at", "semantic_search.state", "semantic_search.indexed", "semantic_search.total", "voice.enabled", "voice.installed", "voice.state", "voice.paused", "voice.queue.queued", "voice.done_today", "voice.bytes_today", "voice.last_failure", "jobs.sync", "jobs.full.state", "jobs.full.done",
 		"throttle.flood_wait_seconds", "throttle.queued", "events.last_hour", "events.total",
 	} {
 		if !have[path] {
@@ -334,6 +344,47 @@ func TestRenderDashboardSemanticStates(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dash := statusBase()
 			dash.SemanticSearch = tc.st
+			if got := renderDashboard(dash, statusNow()); !strings.Contains(got, tc.want) {
+				t.Errorf("want the line %q in:\n%s", tc.want, got)
+			}
+		})
+	}
+}
+
+// The Voice line for the states the golden files do not show: the setting off,
+// the engine missing, a queue that works, the three pauses, a failure, and words
+// that carry control characters.
+func TestRenderDashboardVoiceStates(t *testing.T) {
+	at := statusAt(21, 0, 0)
+	ready := rpc.VoiceStatus{Enabled: true, Installed: true, State: rpc.VoiceStateIdle}
+	with := func(edit func(*rpc.VoiceStatus)) rpc.VoiceStatus {
+		v := ready
+		edit(&v)
+		return v
+	}
+	for _, tc := range []struct {
+		name string
+		st   rpc.VoiceStatus
+		want string
+	}{
+		{"off", rpc.VoiceStatus{State: rpc.VoiceStateDisabled}, "Voice        off (enable with [voice_transcription] enabled = true)\n"},
+		{"off wins over a stale queue", rpc.VoiceStatus{Installed: true, Queue: rpc.VoiceQueueCounts{Queued: 4}}, "Voice        off (enable with [voice_transcription] enabled = true)\n"},
+		{"engine missing", rpc.VoiceStatus{Enabled: true, Missing: []string{"ffmpeg", "model"}}, "Voice        on, engine not installed (missing ffmpeg, model)\n"},
+		{"engine missing without a list", rpc.VoiceStatus{Enabled: true}, "Voice        on, engine not installed\n"},
+		{"idle", ready, "Voice        on, 0 queued, 0 done today, 0 MB\n"},
+		{"working", with(func(v *rpc.VoiceStatus) {
+			v.State, v.Queue, v.DoneToday, v.BytesToday = rpc.VoiceStateWorking, rpc.VoiceQueueCounts{Queued: 3, Running: 1}, 12, 48<<20+1000
+		}), "Voice        on, 3 queued, 1 running, 12 done today, 48 MB\n"},
+		{"budget", with(func(v *rpc.VoiceStatus) {
+			v.Paused, v.PausedUntil, v.Queue.Queued = rpc.VoicePausedBudget, at, 3
+		}), "Voice        on, 3 queued, 0 done today, 0 MB, paused: budget until 2026-11-21 00:00\n"},
+		{"offline", with(func(v *rpc.VoiceStatus) { v.Paused = rpc.VoicePausedOffline }), "Voice        on, 0 queued, 0 done today, 0 MB, paused: offline\n"},
+		{"failure", with(func(v *rpc.VoiceStatus) { v.LastFailure = "too_large" }), "Voice        on, 0 queued, 0 done today, 0 MB, last failure: too_large\n"},
+		{"control characters", with(func(v *rpc.VoiceStatus) { v.Paused, v.LastFailure = "x\x1b[31m", "y\x07" }), "Voice        on, 0 queued, 0 done today, 0 MB, paused: x [31m, last failure: y \n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dash := statusBase()
+			dash.Voice = tc.st
 			if got := renderDashboard(dash, statusNow()); !strings.Contains(got, tc.want) {
 				t.Errorf("want the line %q in:\n%s", tc.want, got)
 			}

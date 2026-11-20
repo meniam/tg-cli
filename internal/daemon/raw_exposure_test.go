@@ -98,7 +98,9 @@ func TestRawStoreReadGuard(t *testing.T) {
 	if len(pkgs[0].Errors) != 0 {
 		t.Fatalf("load daemon source: %v", pkgs[0].Errors)
 	}
-	allowed := map[string]bool{"rpcStoredMessage": true, "convertStoredMessages": true}
+	// voiceMessageMedia reads only the size and the duration of the media of a
+	// stored message for the voice worker; nothing of the object leaves it.
+	allowed := map[string]bool{"rpcStoredMessage": true, "convertStoredMessages": true, "voiceMessageMedia": true}
 	guarded := map[string]bool{"Chat": true, "Person": true, "Message": true, "MessageVersion": true}
 	for _, file := range pkgs[0].Syntax {
 		for _, decl := range file.Decls {

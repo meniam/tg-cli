@@ -122,6 +122,9 @@ func TestSchemaConfigKeys(t *testing.T) {
 		"background_sync.page_pause_min", "background_sync.page_pause_max",
 		"semantic_search.enabled", "semantic_search.ollama_url", "semantic_search.model",
 		"semantic_search.batch", "semantic_search.interval", "semantic_search.min_similarity",
+		"voice_transcription.enabled", "voice_transcription.ffmpeg", "voice_transcription.max_voice_mb",
+		"voice_transcription.max_video_note_mb", "voice_transcription.max_video_mb", "voice_transcription.max_video_minutes",
+		"voice_transcription.daily_download_mb", "voice_transcription.daily_files", "voice_transcription.pause", "voice_transcription.threads",
 		"profiles.<profile>.client", "profiles.<profile>.device", "profiles.<profile>.transport", "profiles.<profile>.proxy",
 	}
 	if !reflect.DeepEqual(keys, wantKeys) {

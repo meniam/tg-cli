@@ -30,7 +30,7 @@ func TestTranscribeCachesAndWaits(t *testing.T) {
 	base.messages = []rpc.Message{{ChatID: 77, ID: 1, MediaType: "voice"}, {ChatID: 77, ID: 2, MediaType: "photo"}}
 	f := &transcriptionFake{fakeTelegram: base, answer: rpc.Transcription{ChatID: 77, ID: 1, TranscriptionID: 4, Pending: true}}
 	d.opts.Telegram = f
-	p := rpc.TranscribeParams{Chat: "77", ID: 1, WaitMS: 1000}
+	p := rpc.TranscribeParams{Telegram: true, Chat: "77", ID: 1, WaitMS: 1000}
 	f.onCall = func() {
 		// The update arrives from another goroutine, before or while the request
 		// waits. Either order must give the text, so no sleep is needed.
@@ -61,7 +61,7 @@ func TestTranscribePendingAndValidation(t *testing.T) {
 	base.messages = []rpc.Message{{ChatID: 77, ID: 1, MediaType: "video_note"}}
 	f := &transcriptionFake{fakeTelegram: base, answer: rpc.Transcription{ChatID: 77, ID: 1, TranscriptionID: 9, Pending: true}}
 	d.opts.Telegram = f
-	p := rpc.TranscribeParams{Chat: "77", ID: 1}
+	p := rpc.TranscribeParams{Telegram: true, Chat: "77", ID: 1}
 	v, err := d.messageTranscribe(context.Background(), params(t, p))
 	if err != nil || !v.(rpc.Transcription).Pending {
 		t.Fatalf("pending: %+v %v", v, err)
@@ -82,7 +82,7 @@ func TestTranscribePendingCanBeRetried(t *testing.T) {
 	base.messages = []rpc.Message{{ChatID: 77, ID: 1, MediaType: "voice"}}
 	f := &transcriptionFake{fakeTelegram: base, answer: rpc.Transcription{ChatID: 77, ID: 1, TranscriptionID: 9, Pending: true}}
 	d.opts.Telegram = f
-	p := rpc.TranscribeParams{Chat: "77", ID: 1}
+	p := rpc.TranscribeParams{Telegram: true, Chat: "77", ID: 1}
 	if _, err := d.messageTranscribe(context.Background(), params(t, p)); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestTranscribeUpdateBeforeResponse(t *testing.T) {
 	f := &transcriptionFake{fakeTelegram: base, answer: rpc.Transcription{ChatID: 77, ID: 1, TranscriptionID: 9, Pending: true}}
 	f.onCall = func() { d.handleTranscription(rpc.Transcription{ChatID: 77, ID: 1, TranscriptionID: 9, Text: "early"}) }
 	d.opts.Telegram = f
-	v, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Chat: "77", ID: 1}))
+	v, err := d.messageTranscribe(context.Background(), params(t, rpc.TranscribeParams{Telegram: true, Chat: "77", ID: 1}))
 	if err != nil || v.(rpc.Transcription).Text != "early" || v.(rpc.Transcription).Pending {
 		t.Fatalf("early update: %+v %v", v, err)
 	}

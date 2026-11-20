@@ -38,6 +38,7 @@ func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 		"chat members":               {"members.name", "members.username"},
 		"chat topics":                {"topics.title"},
 		"chat common":                {"chats.title", "chats.username"},
+		"chat voice list":            {"chats.title", "chats.username"},
 		"chat resolve":               {"title", "username"},
 		"chat info":                  {"title", "username", "about", "restriction_reason.text"},
 		"chat overview":              {"chats.title", "chats.username", "chats.first_message.text", "chats.last_message.text"},

@@ -29,6 +29,11 @@ var audit03NoChatMethods = map[string]bool{
 	rpc.MethodMessageSearchPublic: true, rpc.MethodSubscribe: true, rpc.MethodUnsubscribe: true,
 	// The semantic index commands take no chat and answer counters only.
 	rpc.MethodSearchIndexStart: true, rpc.MethodSearchIndexStatus: true, rpc.MethodSearchIndexCancel: true,
+	// The voice status takes no chat; the backfill reads the personal chats the
+	// policy leaves open (VoiceWorker tests cover a closed one).
+	rpc.MethodVoiceStatus: true, rpc.MethodVoiceBackfill: true,
+	// The list of chat marks takes no chat and leaves the closed ones out.
+	rpc.MethodChatVoiceList: true,
 }
 
 // audit03ParamsFirst validate other parameters before the chat is looked at,
