@@ -15,6 +15,7 @@ This page covers what every command shares: installation, profiles, the Daemon l
 | [users-and-contacts.md](users-and-contacts.md) | `user profile`, `block`, `unblock`; `contact list`, `add`, `delete`, `search` |
 | [folders-and-account.md](folders-and-account.md) | `folder list`; `account sessions`, `blocked`, `notify` |
 | [notes-and-search.md](notes-and-search.md) | `note add`, `list`, `delete`; `search`; `version`; `schema` |
+| [voice.md](voice.md) | `voice install`, `status`, `cancel`, `retry`, `backfill`; `chat voice on`, `off`, `list`; the local queue behind `message transcribe` |
 | [access.md](access.md) | `access.json`: chat access lists, the `write` list, the `files` roots |
 
 The tool is early. Verification status is tracked in [FEATURES.md](../../FEATURES.md). Do not point the tool at an account you cannot afford to lose: `tg` is an unofficial client, and with `--client` it presents the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited are open questions in [INTENT.md](../../INTENT.md).
@@ -113,6 +114,9 @@ A profile created before the database moved keeps `store.db` in the data directo
 | `store.db` (with `-wal` and `-shm`) | the local SQLite database, mode `0600` |
 | `data-dir` | the absolute path of the data directory that owns this database, mode `0600` |
 | `db.lock` | held while a Daemon runs on the database, mode `0600` |
+| `tmp-voice/` | the working directory of the voice worker, mode `0700`: a downloaded file lives here only while its job runs, and the Daemon empties the directory at start (see [voice.md](voice.md)) |
+
+The speech engine is not in a profile: `tg voice install` writes it to `<home>/models/gigaam/`, one set for all profiles (mode `0700` for directories, `0600` for files).
 
 `[files]` may rename `store.db`, `session.json`, `daemon.log`, `deletions.jsonl`, and `access.json`; names are limited to safe base names and cannot collide. After a name change, a remaining old database, session, or access file stops the Daemon with exit code 2; an old journal produces a warning. The socket and lock names are fixed, and the service names `daemon.sock`, `daemon.lock`, `.session-start.lock`, `moderation.jsonl`, `account.jsonl`, `data-dir` and `db.lock` are reserved: a `[files]` name equal to one of them is exit code 2, so no configured file can overwrite a file the Daemon owns.
 
@@ -290,9 +294,11 @@ Every command in `tg schema` has a safety class (`safety`) and a `dangerous` mar
 
 | Safety class | Meaning | Commands |
 | --- | --- | --- |
-| `read` | only reads | `auth status`, `daemon status`, `status`, `daemon logs`, `chat list`, `chat resolve`, `chat info`, `chat invite-info`, `chat members`, `chat topics`, `chat common`, `chat sync status`, `message history`, `message get`, `message pinned`, `message search`, `message context`, `message comments`, `message link`, `message export`, `message watch`, `note list`, `search`, `schema`, `version` |
-| `local_write` | writes to the local database or starts and stops the Daemon | `daemon start`, `daemon stop`, `chat sync start`, `chat sync cancel`, `note add`, `note delete` |
+| `read` | only reads | `auth status`, `daemon status`, `status`, `daemon logs`, `chat list`, `chat resolve`, `chat info`, `chat invite-info`, `chat members`, `chat topics`, `chat common`, `chat sync status`, `message history`, `message get`, `message pinned`, `message search`, `message context`, `message comments`, `message link`, `message export`, `message watch`, `message transcribe`, `note list`, `search`, `schema`, `version`, `voice status`, `chat voice list` |
+| `local_write` | writes to the local database or starts and stops the Daemon | `daemon start`, `daemon stop`, `chat sync start`, `chat sync cancel`, `note add`, `note delete`, `voice install`, `voice cancel`, `voice retry`, `voice backfill`, `chat voice on`, `chat voice off` |
 | `account_write` | changes the Telegram account or its login state | `auth login`, `auth resend`, `auth cancel`, `chat mark-read`, `message send`, `message edit`, `message delete`, `message forward`, `message send-media`, `message react`, `message pin`, `message unpin`, `message poll` |
+
+The `voice` and `chat voice` commands change only the local queue, the chat marks and the engine files, and call no Telegram method; Of them `voice install` is the only one that opens a network connection itself (to `github.com`), and it does so in the CLI process. `message transcribe` keeps the class `read`: it never changes the account, it only fills the local database with a text. Its default path makes no Telegram request except the download of the file, and only `--telegram` asks Telegram to transcribe.
 
 Three commands are `dangerous`: `message edit`, `message delete` and `note delete`. A deleted note or message cannot be restored, and an edit overwrites the text. They need `--yes` (for `note delete`, only to delete all notes of an author), and without `--yes` and without `--dry-run` they exit with code 2 and never call the Daemon. The other write commands are not dangerous, because the chat is already allowed by the `write` list of `access.json`.
 
@@ -353,6 +359,23 @@ Privacy: the Ollama address must be on this machine (`127.0.0.1`, `::1` or `loca
 | `semantic_search.min_similarity` | `TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY` | the lowest cosine similarity of a vector hit of `tg search --semantic`, a number from `0` to `1`; `0` turns the threshold off | `0.5` |
 
 `min_similarity` is the cosine of the `bge-m3` vectors of the query and of a fragment. Vector hits below it are dropped before the fusion and counted in `vector_dropped`; the word legs are not filtered. `tg search --semantic --min-similarity X` overrides it for one query. Unrelated fragments score a median near 0.40 and a 99th percentile near 0.5; good queries reach 0.6 to 0.7; so raise the value (`0.55`) against noise and lower it (`0.45`) when real matches vanish; see [notes-and-search.md](notes-and-search.md#semantic-search).
+
+`[voice_transcription]` holds the settings of the local transcription of voice messages, video notes and videos ([voice.md](voice.md)). With `enabled = true` the Daemon queues the voice messages and video notes of personal chats and of marked chats (`tg chat voice on`) as they arrive and as chats are synced, and one worker downloads each file, converts it with `ffmpeg` and recognises it with GigaAM v3 (Russian only) through sherpa-onnx. It needs the engine (`tg voice install`, about 190 MB in `<home>/models/gigaam/`) and `ffmpeg` (the first one in `PATH`, or the `ffmpeg` key). It is off by default: while it is off the Daemon queues nothing by itself and makes no new Telegram request for it, and the manual `tg message transcribe` works either way. Telegram is asked only for the file, inside the limits below. The same rules hold as for `[behavior]`: a variable overrides the file for one start, a bad value is exit code 2 before any connection.
+
+| Config key | Environment variable | Values | Default |
+| --- | --- | --- | --- |
+| `voice_transcription.enabled` | `TG_CLI_VOICE_TRANSCRIPTION_ENABLED` | `true` or `false` | `false` |
+| `voice_transcription.ffmpeg` | `TG_CLI_VOICE_TRANSCRIPTION_FFMPEG` | a program name or a path, 1 to 1024 characters, no control characters | `ffmpeg` |
+| `voice_transcription.max_voice_mb` | `TG_CLI_VOICE_TRANSCRIPTION_MAX_VOICE_MB` | a whole number from 1 to 1000000: the largest voice message that is downloaded | `30` |
+| `voice_transcription.max_video_note_mb` | `TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_NOTE_MB` | a whole number from 1 to 1000000: the largest video note | `50` |
+| `voice_transcription.max_video_mb` | `TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_MB` | a whole number from 1 to 1000000: the largest video | `500` |
+| `voice_transcription.max_video_minutes` | `TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_MINUTES` | a whole number of minutes from 1 to 1000000: the longest video | `120` |
+| `voice_transcription.daily_download_mb` | `TG_CLI_VOICE_TRANSCRIPTION_DAILY_DOWNLOAD_MB` | a whole number from 1 to 1000000: the megabytes downloaded per local day | `2000` |
+| `voice_transcription.daily_files` | `TG_CLI_VOICE_TRANSCRIPTION_DAILY_FILES` | a whole number from 1 to 1000000: the files downloaded per local day | `200` |
+| `voice_transcription.pause` | `TG_CLI_VOICE_TRANSCRIPTION_PAUSE` | a Go duration from `0s` to `1h`: the wait between two downloads | `3s` |
+| `voice_transcription.threads` | `TG_CLI_VOICE_TRANSCRIPTION_THREADS` | a whole number from 1 to 16: the threads of the speech engine | `4` |
+
+A file above its limit is skipped without a download (`too_large`, `too_long`). The megabytes are mebibytes. When the daily budget is spent the queue pauses until the next local day (`paused: budget` in `tg voice status`); a manual job ignores the budget but counts in it. The state is the `voice` block of `tg daemon status` and the `Voice` row of `tg status`.
 
 Per-method buckets remain an open item: `getDialogs` can hit `FLOOD_WAIT` before the general bucket, so keep pauses between reads. Media parts go through `FileDC`, which retains the same middleware and the file-transfer lane; CDN is not enabled for these downloads. The init call, ping and ack bypass the throttle; the Telegram library keeps its own retries after `FLOOD_WAIT` in the updates manager, downloader and `QR.Auth`. See [FEATURES.md](../../FEATURES.md), item 11.4.
 

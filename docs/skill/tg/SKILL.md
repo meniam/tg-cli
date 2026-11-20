@@ -2,9 +2,10 @@
 name: tg
 description: >
   Operates a personal Telegram account through the `tg` CLI. Use when the user asks to read, search,
-  summarize, export or watch chats, send messages or files, or manage tg login or the daemon, even if
-  they don't say CLI or MTProto. Common phrases include «телеграм», «тг», «что пишут в канале», «найди в
-  переписке», «выгрузи переписку» and «скинь в телегу». Not for Bot API bots or the Telegram Desktop UI.
+  summarize, export, transcribe voice messages or watch chats, send messages or files, or manage tg login
+  or the daemon, even if they don't say CLI or MTProto. Common phrases include «телеграм», «тг», «что пишут
+  в канале», «найди в переписке», «выгрузи переписку», «скинь в телегу», «расшифруй голосовое» and «что
+  сказано в кружке». Not for Bot API bots or the Telegram Desktop UI.
 ---
 
 # tg: Telegram from the terminal
@@ -25,7 +26,7 @@ Details and reasons: [references/safety.md](references/safety.md).
 5. **Only the human enters the login code and the 2FA password.** Suggest `! tg auth login`. Do not print or log keys, hashes, session strings or phone numbers.
 6. **One client per session.** Do not start a second process on the session and do not touch the profile files.
 7. **After a failed write, do not retry blindly.** Read the history first. A retry is safe only with `--idempotency-key`. After `flood_wait` (code 6), do not loop retries.
-8. **Background jobs and bulk operations only on request.** `chat sync`, `chat full` and exports grow the database and the request count, and `search index start` loads the machine with embeddings. Do not run mass mailings or bulk member collection (see the section "What not to do" in `safety.md`).
+8. **Background jobs and bulk operations only on request.** `chat sync`, `chat full` and exports grow the database and the request count, `search index start` loads the machine with embeddings, and `voice backfill` and `chat voice on --backfill` queue downloads and local recognition of saved voice messages. Do not run mass mailings or bulk member collection (see the section "What not to do" in `safety.md`).
 
 ## First run
 
@@ -69,7 +70,8 @@ A chat is given as `@username`, a numeric id (Bot API: a user is positive, a gro
 
 ## References
 
-- [references/reading.md](references/reading.md): reading, search in Telegram and in the local database (word forms, links, `search --semantic` by meaning, `search index`), context, comments, links, members, forum topics, common chats, marks, translation, transcription.
+- [references/reading.md](references/reading.md): reading, search in Telegram and in the local database (word forms, links, `search --semantic` by meaning, `search index`), context, comments, links, members, forum topics, common chats, marks, translation, `message transcribe`.
+- [references/voice.md](references/voice.md): the local transcription of voice messages, video notes and videos: engine install, queue, chat marks, limits, `voice` and `chat voice` commands.
 - [references/history.md](references/history.md): deep history load (`chat sync`), database overview, export to JSONL, monthly archive.
 - [references/writing.md](references/writing.md): sending, editing, deleting, forwarding, scheduled messages and drafts, formatting, reactions, pinning, polls, buttons.
 - [references/media.md](references/media.md): sending files and albums, downloading.
@@ -94,6 +96,7 @@ One scenario per file in [recipes/](recipes/): when to use, prepare, commands, n
 - [send-media](recipes/send-media.md): send a file, photo or album.
 - [watch-chat](recipes/watch-chat.md): watch a chat and resume from a cursor.
 - [forum-topics](recipes/forum-topics.md): forum topics and reading one topic.
+- [transcribe-voice](recipes/transcribe-voice.md): the text of a voice message, a video note or a video with the local engine, and the state of the queue.
 
 ## Boundaries
 

@@ -127,7 +127,7 @@ tg config show
 **Answer.**
 
 ```json
-{"ok":true,"data":{"home":"/Users/alice/.config/tg-cli","db_dir":"/Users/alice/.config/tg-cli/db","default_profile":"default","files":{"database":"store.db","session":"session.json","log":"daemon.log","deletions":"deletions.jsonl","access":"access.json"},"behavior":{"throttle_percent":60,"flood_autowait":"10s","expect_user":""},"background_sync":{"enabled":false,"window_start":"08:00","window_end":"20:00","interval_min":"40m","interval_max":"3h","page_pause_min":"2s","page_pause_max":"8s"},"semantic_search":{"enabled":false,"ollama_url":"http://127.0.0.1:11434","model":"bge-m3","batch":16,"interval":"10m"},"profiles":{"default":{"client":"desktop","device":"MacBook","transport":"tcp","proxy":"socks5://127.0.0.1:1080"}}}}
+{"ok":true,"data":{"home":"/Users/alice/.config/tg-cli","db_dir":"/Users/alice/.config/tg-cli/db","default_profile":"default","files":{"database":"store.db","session":"session.json","log":"daemon.log","deletions":"deletions.jsonl","access":"access.json"},"behavior":{"throttle_percent":60,"flood_autowait":"10s","expect_user":""},"background_sync":{"enabled":false,"window_start":"08:00","window_end":"20:00","interval_min":"40m","interval_max":"3h","page_pause_min":"2s","page_pause_max":"8s"},"semantic_search":{"enabled":false,"ollama_url":"http://127.0.0.1:11434","model":"bge-m3","batch":16,"interval":"10m","min_similarity":0.5},"voice_transcription":{"enabled":false,"ffmpeg":"ffmpeg","max_voice_mb":30,"max_video_note_mb":50,"max_video_mb":500,"max_video_minutes":120,"daily_download_mb":2000,"daily_files":200,"pause":"3s","threads":4},"profiles":{"default":{"client":"desktop","device":"MacBook","transport":"tcp","proxy":"socks5://127.0.0.1:1080"}}}}
 ```
 
 **Answer fields** (`data`): `home` and `db_dir` strings, `default_profile`
@@ -142,11 +142,18 @@ environment variables are not applied, see
 `interval` strings and `batch` and `min_similarity` numbers, as written in the
 file or the defaults;
 the environment variables are not applied; the keys and the rules are in
-[overview.md](overview.md#request-throttle-and-flood_wait)), and `profiles`
+[overview.md](overview.md#request-throttle-and-flood_wait)),
+`voice_transcription` object (`enabled` boolean; `ffmpeg` and `pause` strings;
+`max_voice_mb`, `max_video_note_mb`, `max_video_mb`, `max_video_minutes`,
+`daily_download_mb`, `daily_files` and `threads` numbers, as written in the file
+or the defaults; the environment variables `TG_CLI_VOICE_TRANSCRIPTION_*` are not
+applied; the keys and the rules are in
+[overview.md](overview.md#request-throttle-and-flood_wait) and the queue is in
+[voice.md](voice.md)), and `profiles`
 object keyed by profile name. Each profile contains `client`, `device`,
 `transport`, and redacted `proxy` strings.
 
-**Exit codes.** 0 success, 2 invalid configuration (including a wrong `[background_sync]` or `[semantic_search]` value) or an invalid socket path,
+**Exit codes.** 0 success, 2 invalid configuration (including a wrong `[background_sync]`, `[semantic_search]` or `[voice_transcription]` value) or an invalid socket path,
 1 a local migration error.
 
 ### tg config migrate

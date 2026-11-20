@@ -2,11 +2,37 @@
 
 The Daemon turns voice messages, video notes and (on request) videos into text with a local speech engine, GigaAM v3 through sherpa-onnx, and `ffmpeg` for the conversion. The engine recognises Russian only: other speech comes out as noise. Every job goes through one persistent queue (the table `voice_queue` of the profile database) that a single worker serves, so jobs survive a restart of the Daemon. Telegram is asked only for the file: no command on this page asks Telegram to transcribe. The single path that does is [`tg message transcribe --telegram`](messages-read.md#tg-message-transcribe).
 
-Two things are set once: the engine (`tg voice install`, about 190 MB under `<home>/models/gigaam`, one set for all profiles) and `ffmpeg` in `PATH`. The sources that queue jobs by themselves need `[voice_transcription] enabled = true` (see the configuration keys in `tg schema`); while it is off the Daemon queues nothing by itself and makes no new Telegram request for transcription. A manual command, `tg message transcribe` or `tg voice retry`, works in either case.
+Two things are set once: the engine (`tg voice install`, about 190 MB under `<home>/models/gigaam`, one set for all profiles) and `ffmpeg` in `PATH`. The sources that queue jobs by themselves need `[voice_transcription] enabled = true` (the keys, the limits and the `TG_CLI_VOICE_TRANSCRIPTION_*` variables are in [overview.md](overview.md#request-throttle-and-flood_wait)); while it is off the Daemon queues nothing by itself and makes no new Telegram request for transcription. A manual command, `tg message transcribe` or `tg voice retry`, works in either case.
 
 What a job does, in order: it checks that `access.json` does not close the chat and that the message is saved with a matching media type; it skips a file above the limit of its kind (30 MB for a voice message, 50 MB for a video note, 500 MB and 120 minutes for a video; `skipped` with the reason `too_large` or `too_long`, nothing downloaded); it checks free disk space and pauses between downloads (`pause`); it downloads the file into a private temporary directory of the Daemon (`tmp-voice` next to the database, mode 0700) and deletes it whatever happens; it converts the file to WAV and recognises it; it stores the text with `source: "local"` and `engine: "gigaam-v3"`. The text is untrusted Telegram data like any message text. A speechless recording is stored as an empty text and the job ends `done` with the reason `no_speech`. A network failure of the download is retried three times after 10, 60 and 300 seconds; every other refusal ends the job `failed` with a short reason (`download`, `convert`, `engine`, `disk`, `no_media`, `no_message`, `store`, `internal`).
 
 The daily budget (`daily_download_mb`, `daily_files`, counted by the local date) pauses the queue until the next day when it is spent (`paused: budget`); a manual job ignores the budget but counts in it. A missing engine or `ffmpeg` pauses the queue (`paused: engine_missing`) without spending attempts, and an absent Telegram connection pauses it (`paused: offline`).
+
+## Jobs, sources and reasons
+
+A job has one of five states: `queued`, `running`, `done`, `failed`, `skipped`. Its source sets the priority, and a lower number goes first: `manual` 0 (`tg message transcribe`, `tg voice retry`), `incoming` 10 (a new message of the event stream), `sync` 20 (messages saved by `tg chat sync` and the background sync, only those younger than 90 days), `backfill` 30 (`tg voice backfill` and `tg chat voice on --backfill`). A message has one job: queueing it again adds nothing and only raises the priority. A manual job goes next, but never interrupts the job in progress. A job that is `running` when the Daemon stops goes back to `queued`.
+
+The reason is a machine word (no text, no path):
+
+| Reason | State | Meaning |
+| --- | --- | --- |
+| `no_speech` | `done` | the recording has no speech; an empty text is stored |
+| `exists` | `done` | a finished text was there already (not for a manual job, which writes the text again) |
+| `too_large` | `skipped` | the file is above the limit of its kind; nothing was downloaded |
+| `too_long` | `skipped` | a video is longer than `max_video_minutes`; nothing was downloaded |
+| `closed` | `skipped` | `access.json` closes the chat |
+| `no_media` | `skipped` or `failed` | `skipped`: the message is deleted or its media type is not the kind of the job; `failed`: Telegram has no such message or file any more |
+| `cancelled` | `skipped` | `tg voice cancel` stopped or skipped the job |
+| `download` | `failed` | the download failed (after three retries for a network failure) or Telegram refused the file |
+| `convert` | `failed` | `ffmpeg` could not convert the file |
+| `engine` | `failed` | the speech engine failed or timed out |
+| `disk` | `failed` | the free disk space is below twice the file size |
+| `no_message`, `store`, `internal` | `failed` | the message is gone from the local database, a database error, an unexpected error |
+| `interrupted` | `failed` | the job was stopped for a reason other than `tg voice cancel` or the stop of the Daemon |
+
+A stop of the Daemon gives the job back to `queued` without a failure, and the next start marks the job `recovered` (the reason of a `queued` job). The text of a job that `tg message transcribe` waits for comes back in the answer; a failure comes back as `error.reason` (see [`tg message transcribe`](messages-read.md#tg-message-transcribe)).
+
+What is not covered: the engine recognises Russian only and does not check the language, so another language gives noise that goes into the search as it is. The recognition of a `video` is stored and returned by `tg message transcribe`, but the search and the semantic index take only voice messages and video notes. With `--idle-timeout` the Daemon waits only for the job in progress: without a client it stops and the queue waits for the next start.
 
 ## Commands
 
