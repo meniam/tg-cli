@@ -10,7 +10,7 @@ PR: —
 
 ## Status
 
-- Current status: in_progress (2026-11-20: шаги 2-9 приняты и слиты, дальше поток status: шаг 10, затем документы шага 11)
+- Current status: in_progress (2026-11-20: шаги 2-10 приняты и слиты, остался шаг 11: документы, плюс поле last_chat_id в блоке фона)
 - Last update: 2026-11-20
 - Next safe step: поток status (шаг 10: метод `dashboard` и `tg status`) в worktree `../tg-cli-bgsync-status`, затем шаг 11 (документы, тот же агент после приёмки кода).
 
@@ -160,7 +160,7 @@ page_pause_max = "8s"
 - [x] Шаг 7 (2026-11-20, поток config, коммит 2a144ab, `isocheck.sh` и `-race` для config и cli зелёные). Секция `[background_sync]` в `internal/config` (разбор, проверка, шаблон), передача в демон, схема, переменные `TG_CLI_BACKGROUND_SYNC_*`.
 - [x] Шаг 8 (2026-11-20, поток sched, коммит 140c79e, `isocheck.sh` и `-race` для daemon, rpc, cli зелёные). Планировщик `internal/daemon/background_sync.go`: окно, случайный интервал, часы подменяются интерфейсом, остановка вместе с демоном (канал `done` в списке ожидания `daemon.go`), отмена в конце окна, пропуск при `auth_lost`.
 - [x] Шаг 9 (2026-11-20, поток sched, коммит 140c79e). Блок `background_sync` в ответе `daemon status` (состояние, окно, `next_run_at`, `last_run_at`, `last_result`, `current_chat_id`); схема и `--human` вывод `daemon status` дополнены.
-- [ ] Шаг 10. Метод демона `dashboard` (аккаунт, соединение, доступ, база, счётчики полноты по группам, планировщик, задачи `chat sync` и `chat full`, состояние дросселя, события потока) и команда `tg status` с текстовым выводом; без демона код 3 и подсказка.
+- [x] Шаг 10 (2026-11-20, поток status, `isocheck.sh` и `-race` для daemon, store, rpc, cli, throttle, tgclient зелёные; запросы статистики 35 мс на копии боевой базы). Метод демона `dashboard` (аккаунт, соединение, доступ, база, счётчики полноты по группам, планировщик, задачи `chat sync` и `chat full`, состояние дросселя, события потока) и команда `tg status` с текстовым выводом; без демона код 3 и подсказка.
 - [ ] Шаг 11. Документы: `docs/cli/chats.md`, `docs/cli/daemon-and-auth.md` (`daemon status`, `status`), `docs/cli/config.md`, `docs/cli/overview.md`, `docs/contracts.md`, `README.md`, FEATURES 10.12; `just docs` для сгенерированных таблиц.
 
 ## Verification
