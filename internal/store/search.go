@@ -250,7 +250,7 @@ func fuseRRF(limit int, legs ...[]messageCandidate) []*fusedMessage {
 // bound argument. Filters (chat, closed chats, deleted) are identical in both
 // legs.
 func (db *DB) messageLeg(ctx context.Context, table, match string, limit int, options SearchOptions) ([]messageCandidate, error) {
-	query := `SELECT m.id,m.chat_id,m.text,m.date,m.deleted_at,m.topic_id,c.type,c.username FROM ` + table + ` JOIN messages m ON m.rowid=` + table + `.rowid LEFT JOIN chats c ON c.id=m.chat_id WHERE ` + table + ` MATCH ?`
+	query := `SELECT m.id,m.chat_id,m.text,COALESCE(t.text,''),m.date,m.deleted_at,m.topic_id,c.type,c.username FROM ` + table + ` JOIN messages m ON m.rowid=` + table + `.rowid` + transcriptJoin + ` LEFT JOIN chats c ON c.id=m.chat_id WHERE ` + table + ` MATCH ?`
 	args := []any{match}
 	if options.ChatID != nil {
 		query += ` AND m.chat_id=?`
@@ -275,9 +275,11 @@ func (db *DB) messageLeg(ctx context.Context, table, match string, limit int, op
 		var deletedAt, topicID *int64
 		var chatID int64
 		var chatType, username sql.NullString
-		if err := rows.Scan(&candidate.hit.ID, &chatID, &candidate.text, &candidate.hit.Date, &deletedAt, &topicID, &chatType, &username); err != nil {
+		var transcript string
+		if err := rows.Scan(&candidate.hit.ID, &chatID, &candidate.text, &transcript, &candidate.hit.Date, &deletedAt, &topicID, &chatType, &username); err != nil {
 			return nil, err
 		}
+		candidate.text = composeMessageText(candidate.text, transcript)
 		candidate.hit.ChatID = &chatID
 		candidate.hit.Scope = "messages"
 		candidate.hit.Deleted = deletedAt != nil

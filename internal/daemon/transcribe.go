@@ -41,7 +41,16 @@ func (d *daemon) handleTranscription(v rpc.Transcription) {
 		}
 		return
 	}
-	_, _ = d.store.UpdateTranscription(context.Background(), store.Transcription{Raw: v.Raw, ChatID: v.ChatID, MessageID: v.ID, TranscriptionID: v.TranscriptionID, Text: v.Text, Pending: v.Pending})
+	d.applyTranscriptionUpdate(context.Background(), store.Transcription{Raw: v.Raw, ChatID: v.ChatID, MessageID: v.ID, TranscriptionID: v.TranscriptionID, Text: v.Text, Pending: v.Pending})
+}
+
+// applyTranscriptionUpdate stores an update that arrived without a waiting
+// command. The text of the voice message changed, so the semantic indexer is
+// asked for a run (a no-op while it is off).
+func (d *daemon) applyTranscriptionUpdate(ctx context.Context, t store.Transcription) {
+	if updated, err := d.store.UpdateTranscription(ctx, t); err == nil && updated {
+		d.triggerSemanticIndex()
+	}
 }
 
 func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -78,7 +87,7 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 		d.transcriptionMu.Lock()
 		for _, u := range w.updates {
 			if d.policy().Allowed(u.ChatID) {
-				_, _ = d.store.UpdateTranscription(context.Background(), store.Transcription{Raw: u.Raw, ChatID: u.ChatID, MessageID: u.ID, TranscriptionID: u.TranscriptionID, Text: u.Text, Pending: u.Pending})
+				d.applyTranscriptionUpdate(context.Background(), store.Transcription{Raw: u.Raw, ChatID: u.ChatID, MessageID: u.ID, TranscriptionID: u.TranscriptionID, Text: u.Text, Pending: u.Pending})
 			}
 		}
 		delete(d.transcriptionWaiters, k)
@@ -99,6 +108,9 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 			}
 			if err = d.store.PutTranscription(ctx, store.Transcription{Raw: result.Raw, ChatID: chat.ID, MessageID: p.ID, TranscriptionID: result.TranscriptionID, Text: result.Text, Pending: result.Pending}); err != nil {
 				return nil, err
+			}
+			if !result.Pending {
+				d.triggerSemanticIndex()
 			}
 		}
 	} else if errors.Is(err, store.ErrNotFound) {
@@ -121,6 +133,9 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 		}
 		if err = d.store.PutTranscription(ctx, store.Transcription{Raw: result.Raw, ChatID: chat.ID, MessageID: p.ID, TranscriptionID: result.TranscriptionID, Text: result.Text, Pending: result.Pending}); err != nil {
 			return nil, err
+		}
+		if !result.Pending {
+			d.triggerSemanticIndex()
 		}
 	} else {
 		return nil, err
@@ -145,6 +160,7 @@ func (d *daemon) messageTranscribe(ctx context.Context, raw json.RawMessage) (an
 			}
 			if updated {
 				result.Text, result.Pending = u.Text, u.Pending
+				d.triggerSemanticIndex()
 			}
 		}
 		d.transcriptionMu.Unlock()
