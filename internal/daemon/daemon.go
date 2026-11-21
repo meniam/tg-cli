@@ -636,6 +636,8 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodHistorySyncStart, d.historySyncStart)
 	d.handle(rpc.MethodHistorySyncStatus, d.historySyncStatus)
 	d.handle(rpc.MethodHistorySyncCancel, d.historySyncCancel)
+	d.handle(rpc.MethodHistorySyncQueue, d.historySyncQueue)
+	d.handle(rpc.MethodHistorySyncCancelAll, d.historySyncCancelAll)
 	d.handle(rpc.MethodSearchIndexStart, d.searchIndexStart)
 	d.handle(rpc.MethodSearchIndexStatus, d.searchIndexStatus)
 	d.handle(rpc.MethodSearchIndexCancel, d.searchIndexCancel)
@@ -909,7 +911,7 @@ func needsTelegram(method string) bool {
 		// state in memory: they need no connection, and a client that lost
 		// Telegram must still be able to ask and to stop it. The same holds for
 		// the status and the cancel of the history load.
-		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel,
+		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel, rpc.MethodHistorySyncCancelAll,
 		rpc.MethodChatFullStatus, rpc.MethodChatFullCancel,
 		// The local chat overview reads the database only.
 		rpc.MethodChatOverview, rpc.MethodWebFolders, rpc.MethodWebHistory, rpc.MethodWebContext,

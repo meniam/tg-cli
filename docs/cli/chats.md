@@ -46,10 +46,10 @@ tg chat list --limit 2 --format jsonl
 **Answer.**
 
 ```json
-{"ok":true,"data":{"chats":[{"id":-1001234567890,"type":"supergroup","title":"Release team","username":"release_team","unread":3},{"id":987654321,"type":"user","title":"Alice","unread":0}]}}
+{"ok":true,"data":{"chats":[{"id":-1001234567890,"type":"supergroup","title":"Release team","username":"release_team","last_message_date":1795270000,"unread":3},{"id":987654321,"type":"user","title":"Alice","last_message_date":1795200000,"unread":0}]}}
 ```
 
-**Answer fields** (`data`): `chats` array, `chats.id` integer, `chats.type` string, `chats.title` string (untrusted), `chats.username` string (optional, untrusted), `chats.unread` integer, `next_cursor` string (optional).
+**Answer fields** (`data`): `chats` array, `chats.id` integer, `chats.type` string, `chats.title` string (untrusted), `chats.username` string (optional, untrusted), `chats.last_message_date` integer (optional, Unix time of the last message of the dialog, absent for a dialog without one), `chats.unread` integer, `next_cursor` string (optional).
 
 **Exit codes.** 0; 2 `--limit` outside 1 to 500, an unknown `--type`, or an invalid cursor; 3 no Daemon; 4 no login; 6 `FLOOD_WAIT` longer than the auto-wait.
 
@@ -708,11 +708,16 @@ tg chat full cancel
 Starts or resumes a background load of one chat's history. The command returns at once with the job. It reads Telegram in the background and writes only to the local database, hence the class `local_write`.
 
 ```text
-tg chat sync start <chat> [flags]
+tg chat sync start <chat> [--messages N | --days N | --months N | --since DATE] [flags]
 ```
 
 <!-- schema:flags tg chat sync start -->
-No command flags.
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--days` | int | `0` | stop once the oldest saved message is older than N days |
+| `--messages` | int | `0` | stop once the chat has this many saved messages, 1 to 100000 |
+| `--months` | int | `0` | stop once the oldest saved message is older than N calendar months |
+| `--since` | string | `none` | stop once the oldest saved message is this old or older (RFC 3339 or YYYY-MM-DD) |
 <!-- /schema:flags -->
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
@@ -722,11 +727,21 @@ No command flags.
 
 A manual start has priority over the scheduled load (see [background_sync in `daemon status`](daemon-and-auth.md#tg-daemon-status)): when the chat is not `complete`, the Daemon cancels any scheduled job, queued or running, and the manual job waits only for the manual jobs ahead of it. The pages the scheduled job saved stay, and the scheduler does not start a new run while any job is active. A manual job pauses 2 seconds between pages; a scheduled job pauses a random 2 to 8 seconds by default.
 
+**Depth.** Without a depth flag the load goes back to the first message. One of `--messages`, `--days`, `--months` and `--since` stops it earlier, at a page boundary (a page is 100 messages):
+
+- `--messages N` stops once the chat holds at least N saved messages, counting the ones saved already.
+- `--days N` and `--months N` stop once the oldest saved message is older than N days or N calendar months. The command turns them into a time at the moment of the call.
+- `--since DATE` stops once the oldest saved message is not newer than DATE, which is RFC 3339 or `YYYY-MM-DD` (local midnight).
+
+The flags exclude each other (exit code 2), and a date in the future is exit code 2. A load that stopped on its limit ends `done` with `depth_reached` true and `complete` false, and the job echoes the limit in `messages` or `since`. It never marks the chat `complete`: a later `start`, with or without a limit, goes on from the saved `oldest_id`. When the chat holds enough messages already, the job is `done` at once with no pages and no Telegram call, and it leaves a scheduled load alone.
+
 **Example.**
 
 ```sh
 tg chat sync start @release_team
 tg chat sync start -- -1001234567890
+tg chat sync start @release_team --messages 100
+tg chat sync start @release_team --months 1
 ```
 
 **Answer.**
@@ -735,7 +750,7 @@ tg chat sync start -- -1001234567890
 {"ok":true,"data":{"chat_id":-1001234567890,"state":"queued","source":"manual","pages":0,"loaded":0,"oldest_id":null,"newest_id":null,"complete":false,"first_message_date":null,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:00Z"}}
 ```
 
-**Answer fields** (`data`): `chat_id` integer, `state` string, `source` string (optional), `pages` integer, `loaded` integer, `oldest_id` integer (optional), `newest_id` integer (optional), `complete` boolean, `first_message_date` integer or null, `wait_seconds` integer (optional), `error_code` integer (optional), `error` string (optional), `started_at` string, `updated_at` string.
+**Answer fields** (`data`): `chat_id` integer, `state` string, `source` string (optional), `pages` integer, `loaded` integer, `oldest_id` integer (optional), `newest_id` integer (optional), `complete` boolean, `messages` integer (optional), `since` string (optional), `depth_reached` boolean (optional), `first_message_date` integer or null, `wait_seconds` integer (optional), `error_code` integer (optional), `error` string (optional), `started_at` string, `updated_at` string.
 
 `source` is `manual` for a job a command started and `background` for a job the scheduler started; it is absent when the chat has no job in this Daemon run. `first_message_date` is the Unix time of the first message of the chat; it is null until the load reaches the start of the chat.
 
@@ -792,11 +807,13 @@ With a chat the job fields are at the top level of `data`; without a chat they a
 Cancels a queued or running history load. Messages that are already saved remain.
 
 ```text
-tg chat sync cancel <chat> [flags]
+tg chat sync cancel [<chat>] [--all] [flags]
 ```
 
 <!-- schema:flags tg chat sync cancel -->
-No command flags.
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--all` | bool | `false` | cancel every queued and the running history load |
 <!-- /schema:flags -->
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
@@ -804,10 +821,13 @@ No command flags.
 
 **Preconditions.** A running Daemon and a login. Put `--` before a negative chat id. `cancel` removes a job from the queue or aborts the current request, a scheduled job included. A new `start` continues from the saved `oldest_id`.
 
+With `--all` the command takes no chat: it cancels every queued job and the running one, scheduled jobs included, and answers `{"cancelled":N}` with the number of jobs it cancelled (0 when nothing was running). It needs no login and no connection to Telegram. A chat together with `--all`, or neither of them, is exit code 2.
+
 **Example.**
 
 ```sh
 tg chat sync cancel @release_team
+tg chat sync cancel --all
 ```
 
 **Answer.**
@@ -816,13 +836,68 @@ tg chat sync cancel @release_team
 {"ok":true,"data":{"chat_id":-1001234567890,"state":"cancelled","source":"manual","pages":2,"loaded":200,"oldest_id":3901,"newest_id":4102,"complete":false,"first_message_date":null,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:05Z"}}
 ```
 
-**Answer fields** (`data`): `chat_id` integer, `state` string, `source` string (optional), `pages` integer, `loaded` integer, `oldest_id` integer (optional), `newest_id` integer (optional), `complete` boolean, `first_message_date` integer or null, `wait_seconds` integer (optional), `error_code` integer (optional), `error` string (optional), `started_at` string, `updated_at` string.
+**Answer fields** (`data`): `chat_id` integer, `state` string, `source` string (optional), `pages` integer, `loaded` integer, `oldest_id` integer (optional), `newest_id` integer (optional), `complete` boolean, `messages` integer (optional), `since` string (optional), `depth_reached` boolean (optional), `first_message_date` integer or null, `wait_seconds` integer (optional), `error_code` integer (optional), `error` string (optional), `started_at` string, `updated_at` string.
 
 `source` is `manual` for a job a command started and `background` for a job the scheduler started; it is absent when the chat has no job in this Daemon run. `first_message_date` is the Unix time of the first message of the chat; it is null until the load reaches the start of the chat.
 
 **Exit codes.** 0; 3, 4; 7 an unknown or closed chat.
 
 **Verification.** Cancelling does not shorten an account `FLOOD_WAIT` pause. See [FEATURES.md](../../FEATURES.md), item 10.12.
+
+### tg chat sync queue
+
+Queues the history load of a batch of chats. The Daemon reads the dialog list from the newest dialog to the oldest, keeps the chats that match the filters, and starts a load for each. It loads one chat at a time and the rest wait in its queue (`chat sync status` shows them as `queued`).
+
+```text
+tg chat sync queue [--type T] [--active-days N] [--unsynced] [--max-chats N] [--messages N | --days N | --months N | --since DATE] [--dry-run] [flags]
+```
+
+<!-- schema:flags tg chat sync queue -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--active-days` | int | `0` | only chats with a message in the last N days |
+| `--days` | int | `0` | stop once the oldest saved message is older than N days |
+| `--dry-run` | bool | `false` | list the chats and queue nothing |
+| `--max-chats` | int | `0` | most chats to queue, 1 to 500 (default 50) |
+| `--messages` | int | `0` | stop once the chat has this many saved messages, 1 to 100000 |
+| `--months` | int | `0` | stop once the oldest saved message is older than N calendar months |
+| `--since` | string | `none` | stop once the oldest saved message is this old or older (RFC 3339 or YYYY-MM-DD) |
+| `--type` | string | `none` | chat type: user, bot, group, supergroup or channel |
+| `--unsynced` | bool | `false` | only chats that were never loaded |
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
+
+**Preconditions.** A running Daemon and a login. The batch is picked in this order of rules:
+
+- Chats closed by the access lists are never picked, counted or shown, in a dry run too.
+- `--type` keeps one chat type; `--active-days N` keeps the chats whose last message is not older than N days. Dialogs come newest first, so the walk ends at the first dialog that is too old; a pinned dialog leads the list whatever its date, and an old pinned dialog is skipped, not a reason to stop.
+- A chat that is loaded completely, or has a queued or running job, is skipped and counted. `--unsynced` also skips a partly loaded chat, so the batch holds only chats that were never loaded; without it a partly loaded chat continues from its saved `oldest_id`.
+- The depth flags work as in [`chat sync start`](#tg-chat-sync-start); a chat that holds enough messages for the limit already is skipped.
+- `--max-chats` (default 50, up to 500) bounds the batch. The Daemon reads at most as many dialog pages as it needs.
+- `--dry-run` lists the chats and queues nothing.
+
+Reading the dialog list goes through the account throttle. An error, `FLOOD_WAIT` included, ends the call before anything is queued.
+
+**Example.**
+
+```sh
+tg chat sync queue --type user --active-days 60 --unsynced --messages 100 --dry-run
+tg chat sync queue --type user --active-days 60 --unsynced --messages 100
+tg chat sync queue --months 1 --max-chats 200
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"dry_run":false,"queued":2,"would_queue":0,"skipped_loaded":1,"skipped_active":0,"chats":[{"chat_id":987654321,"title":"Alice","last_message_date":1795200000,"action":"queued"},{"chat_id":123456789,"title":"Bob","last_message_date":1795100000,"action":"queued"}]}}
+```
+
+**Answer fields** (`data`): `dry_run` boolean, `queued` integer, `would_queue` integer (only a dry run), `skipped_loaded` integer, `skipped_active` integer, `chats` array, `chats.chat_id` integer, `chats.title` string (untrusted), `chats.last_message_date` integer (optional), `chats.action` string (`queued` or `would_queue`). `--format jsonl` prints one chat per line.
+
+**Exit codes.** 0; 2 an unknown `--type`, `--active-days` outside 1 to 36500, `--max-chats` outside 1 to 500, two depth flags together or a depth value out of range; 3; 4; 6 `FLOOD_WAIT` longer than the auto-wait.
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 10.12.
 
 ### tg chat state
 

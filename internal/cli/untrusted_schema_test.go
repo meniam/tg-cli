@@ -41,6 +41,7 @@ func TestCommandUntrustedPathsAreComplete(t *testing.T) {
 		"chat voice list":            {"chats.title", "chats.username"},
 		"voice list":                 {"jobs.chat_title"},
 		"status":                     {"jobs.sync.chat_title"},
+		"chat sync queue":            {"chats.title"},
 		"chat resolve":               {"title", "username"},
 		"chat info":                  {"title", "username", "about", "restriction_reason.text"},
 		"chat overview":              {"chats.title", "chats.username", "chats.first_message.text", "chats.last_message.text"},

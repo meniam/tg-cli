@@ -39,7 +39,7 @@ func TestAccountMethod(t *testing.T) {
 func TestNeedsTelegram(t *testing.T) {
 	t.Parallel()
 	for _, method := range []string{
-		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel,
+		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel, rpc.MethodHistorySyncCancelAll,
 		rpc.MethodChatFullStatus, rpc.MethodChatFullCancel,
 		rpc.MethodWebFolders, rpc.MethodWebHistory, rpc.MethodWebContext, rpc.MethodWebChat,
 		rpc.MethodChatOverview, rpc.MethodSearch, rpc.MethodSearchSemantic, rpc.MethodNoteList,
@@ -49,7 +49,7 @@ func TestNeedsTelegram(t *testing.T) {
 		}
 	}
 	for _, method := range []string{
-		rpc.MethodChatFullStart, rpc.MethodHistorySyncStart, rpc.MethodChatList, rpc.MethodChatInfo, rpc.MethodSessionExport,
+		rpc.MethodChatFullStart, rpc.MethodHistorySyncStart, rpc.MethodHistorySyncQueue, rpc.MethodChatList, rpc.MethodChatInfo, rpc.MethodSessionExport,
 	} {
 		if !needsTelegram(method) {
 			t.Errorf("needsTelegram(%q) = false, want true", method)

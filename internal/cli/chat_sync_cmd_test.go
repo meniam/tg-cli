@@ -32,7 +32,7 @@ func runSyncCLI(t *testing.T, args []string, reply func(string, json.RawMessage)
 		method string
 		params json.RawMessage
 	}, 1)
-	for _, method := range []string{rpc.MethodHistorySyncStart, rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel} {
+	for _, method := range []string{rpc.MethodHistorySyncStart, rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel, rpc.MethodHistorySyncQueue, rpc.MethodHistorySyncCancelAll} {
 		method := method
 		server.Handle(method, func(_ context.Context, raw json.RawMessage) (any, error) {
 			calls <- struct {
@@ -171,7 +171,7 @@ func TestChatSyncSchema(t *testing.T) {
 	}{
 		{"chat sync start", "local_write", "rpc.HistorySyncJob", false},
 		{"chat sync status", "read", "rpc.HistorySyncJobs", true},
-		{"chat sync cancel", "local_write", "rpc.HistorySyncJob", false},
+		{"chat sync cancel", "local_write", "rpc.HistorySyncCancelAllResult", false},
 	} {
 		cmd, ok := commands[tc.path]
 		if !ok || cmd.Safety != tc.safety || cmd.Dangerous || cmd.Result != tc.result || slices.Contains(cmd.Formats, "jsonl") != tc.jsonl {

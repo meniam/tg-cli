@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"time"
+
 	"github.com/spf13/cobra"
 
 	"tg-cli/internal/exitcode"
@@ -13,9 +15,13 @@ func (a *app) chatSyncCommand() *cobra.Command {
 	start := a.annotate(&cobra.Command{
 		Use: "start <chat>", Short: "Start or resume a background history load",
 		Long: "Start loading one chat's history in the daemon. The command returns immediately.\n" +
+			"Without a depth flag the load goes back to the first message. --messages, --days,\n" +
+			"--months and --since stop it earlier, at a page boundary; such a load never marks\n" +
+			"the chat complete, and the next load goes on from the oldest saved message.\n" +
 			"Use chat sync status to check progress. Put -- before a negative chat id.",
 		Args: cobra.ExactArgs(1), RunE: a.chatSyncStart,
 	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.HistorySyncJob](), Args: []argSpec{{Name: "chat", Required: true}}})
+	addDepthFlags(start)
 	status := a.annotate(&cobra.Command{
 		Use: "status [<chat>]", Short: "Show background history load status",
 		Long: "Without a chat, list current daemon jobs; JSONL prints one job per line.\n" +
@@ -24,18 +30,98 @@ func (a *app) chatSyncCommand() *cobra.Command {
 		Args: cobra.MaximumNArgs(1), RunE: a.chatSyncStatus,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.HistorySyncJobs](), ChatResult: typeOf[rpc.HistorySyncJob](), ItemPath: "jobs", Args: []argSpec{{Name: "chat", Required: false}}})
 	cancel := a.annotate(&cobra.Command{
-		Use: "cancel <chat>", Short: "Cancel a background history load",
+		Use: "cancel [<chat>]", Short: "Cancel a background history load",
 		Long: "Cancel a queued or running history load. Already saved messages remain.\n" +
+			"With --all, cancel every queued job and the running one instead of one chat.\n" +
 			"Put -- before a negative chat id.",
-		Args: cobra.ExactArgs(1), RunE: a.chatSyncCancel,
-	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.HistorySyncJob](), Args: []argSpec{{Name: "chat", Required: true}}})
-	cmd.AddCommand(start, status, cancel)
+		Args: cobra.MaximumNArgs(1), RunE: a.chatSyncCancel,
+	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.HistorySyncCancelAllResult](), ChatResult: typeOf[rpc.HistorySyncJob](), Args: []argSpec{{Name: "chat", Required: false}}})
+	cancel.Flags().Bool("all", false, "cancel every queued and the running history load")
+	queue := a.annotate(&cobra.Command{
+		Use: "queue", Short: "Queue the history load of a batch of chats",
+		Long: "Pick chats from the dialog list, newest first, and queue a load for each. The daemon\n" +
+			"loads one chat at a time; the rest wait in its queue. A chat that is loaded already, or\n" +
+			"has a job, is skipped. Closed chats are never picked. --active-days keeps the chats with\n" +
+			"a message newer than N days. --unsynced keeps only the chats that were never loaded, not\n" +
+			"the partly loaded ones. The depth flags work as in chat sync start. --dry-run lists the\n" +
+			"chats and starts nothing.",
+		Args: cobra.NoArgs, RunE: a.chatSyncQueue,
+	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.HistorySyncQueueResult](), ItemPath: "chats"})
+	queue.Flags().String("type", "", "chat type: user, bot, group, supergroup or channel")
+	queue.Flags().Int("active-days", 0, "only chats with a message in the last N days")
+	queue.Flags().Bool("unsynced", false, "only chats that were never loaded")
+	queue.Flags().Int("max-chats", 0, "most chats to queue, 1 to 500 (default 50)")
+	queue.Flags().Bool("dry-run", false, "list the chats and queue nothing")
+	addDepthFlags(queue)
+	cmd.AddCommand(start, status, cancel, queue)
 	return cmd
 }
 
+// addDepthFlags adds the flags that stop a history load before the first message.
+func addDepthFlags(cmd *cobra.Command) {
+	cmd.Flags().Int("messages", 0, "stop once the chat has this many saved messages, 1 to 100000")
+	cmd.Flags().Int("days", 0, "stop once the oldest saved message is older than N days")
+	cmd.Flags().Int("months", 0, "stop once the oldest saved message is older than N calendar months")
+	cmd.Flags().String("since", "", "stop once the oldest saved message is this old or older (RFC 3339 or YYYY-MM-DD)")
+}
+
+// depthFromFlags reads the depth flags into the RPC parameters. The flags
+// exclude each other; --days and --months become an absolute time from now.
+func depthFromFlags(cmd *cobra.Command, now time.Time) (messages int, since string, err error) {
+	set := 0
+	for _, name := range []string{"messages", "days", "months", "since"} {
+		if cmd.Flags().Changed(name) {
+			set++
+		}
+	}
+	if set > 1 {
+		return 0, "", fail(exitcode.Usage, "use only one of --messages, --days, --months and --since")
+	}
+	if cmd.Flags().Changed("messages") {
+		messages, _ = cmd.Flags().GetInt("messages")
+		if messages < 1 || messages > 100000 {
+			return 0, "", fail(exitcode.Usage, "--messages must be between 1 and 100000")
+		}
+	}
+	if cmd.Flags().Changed("days") {
+		days, _ := cmd.Flags().GetInt("days")
+		if days < 1 || days > 36500 {
+			return 0, "", fail(exitcode.Usage, "--days must be between 1 and 36500")
+		}
+		since = now.AddDate(0, 0, -days).UTC().Format(time.RFC3339)
+	}
+	if cmd.Flags().Changed("months") {
+		months, _ := cmd.Flags().GetInt("months")
+		if months < 1 || months > 1200 {
+			return 0, "", fail(exitcode.Usage, "--months must be between 1 and 1200")
+		}
+		since = now.AddDate(0, -months, 0).UTC().Format(time.RFC3339)
+	}
+	if cmd.Flags().Changed("since") {
+		text, _ := cmd.Flags().GetString("since")
+		t, err := time.Parse(time.RFC3339, text)
+		if err != nil {
+			day, dayErr := time.ParseInLocation("2006-01-02", text, now.Location())
+			if dayErr != nil {
+				return 0, "", fail(exitcode.Usage, "--since %q is neither RFC 3339 nor YYYY-MM-DD", text)
+			}
+			t = day
+		}
+		if t.After(now) {
+			return 0, "", fail(exitcode.Usage, "--since must not be in the future")
+		}
+		since = t.UTC().Format(time.RFC3339)
+	}
+	return messages, since, nil
+}
+
 func (a *app) chatSyncStart(cmd *cobra.Command, args []string) error {
+	messages, since, err := depthFromFlags(cmd, time.Now())
+	if err != nil {
+		return err
+	}
 	var job rpc.HistorySyncJob
-	if err := a.callOne(cmd, rpc.MethodHistorySyncStart, rpc.HistorySyncParams{Chat: args[0]}, &job); err != nil {
+	if err := a.callOne(cmd, rpc.MethodHistorySyncStart, rpc.HistorySyncParams{Chat: args[0], Messages: messages, Since: since}, &job); err != nil {
 		return err
 	}
 	if err := a.success(cmd, job); err != nil {
@@ -68,9 +154,51 @@ func (a *app) chatSyncStatus(cmd *cobra.Command, args []string) error {
 }
 
 func (a *app) chatSyncCancel(cmd *cobra.Command, args []string) error {
+	all, _ := cmd.Flags().GetBool("all")
+	switch {
+	case all && len(args) > 0:
+		return fail(exitcode.Usage, "use either a chat or --all, not both")
+	case !all && len(args) == 0:
+		return fail(exitcode.Usage, "pass a chat or --all")
+	case all:
+		var result rpc.HistorySyncCancelAllResult
+		if err := a.callOne(cmd, rpc.MethodHistorySyncCancelAll, struct{}{}, &result); err != nil {
+			return err
+		}
+		return a.success(cmd, result)
+	}
 	var job rpc.HistorySyncJob
 	if err := a.callOne(cmd, rpc.MethodHistorySyncCancel, rpc.HistorySyncParams{Chat: args[0]}, &job); err != nil {
 		return err
 	}
 	return a.success(cmd, job)
+}
+
+func (a *app) chatSyncQueue(cmd *cobra.Command, _ []string) error {
+	settings, err := a.outputSettingsFor(cmd)
+	if err != nil {
+		return err
+	}
+	messages, since, err := depthFromFlags(cmd, time.Now())
+	if err != nil {
+		return err
+	}
+	var p rpc.HistorySyncQueueParams
+	p.Type, _ = cmd.Flags().GetString("type")
+	p.ActiveDays, _ = cmd.Flags().GetInt("active-days")
+	p.Unsynced, _ = cmd.Flags().GetBool("unsynced")
+	p.MaxChats, _ = cmd.Flags().GetInt("max-chats")
+	p.DryRun, _ = cmd.Flags().GetBool("dry-run")
+	p.Messages, p.Since = messages, since
+	if cmd.Flags().Changed("active-days") && (p.ActiveDays < 1 || p.ActiveDays > 36500) {
+		return fail(exitcode.Usage, "--active-days must be between 1 and 36500")
+	}
+	if cmd.Flags().Changed("max-chats") && (p.MaxChats < 1 || p.MaxChats > 500) {
+		return fail(exitcode.Usage, "--max-chats must be between 1 and 500")
+	}
+	var result rpc.HistorySyncQueueResult
+	if err := a.callOne(cmd, rpc.MethodHistorySyncQueue, p, &result); err != nil {
+		return err
+	}
+	return emitList(a, cmd, settings, result, result.Chats, "")
 }

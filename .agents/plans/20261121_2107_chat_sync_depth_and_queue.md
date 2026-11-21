@@ -8,9 +8,9 @@ PR: —
 
 ## Status
 
-- Current status: in_progress
+- Current status: done (код написан менеджером в сессии по просьбе владельца; деплой по команде КПД)
 - Last update: 2026-11-21
-- Next safe step: Codex добавляет ограничители глубины, пачку чатов и отмену всей очереди.
+- Next safe step: деплой по команде владельца, затем `tg chat sync queue --dry-run` на живом аккаунте.
 
 ## Context and sources
 
@@ -37,5 +37,9 @@ PR: —
 
 | Check | Command | Expected result | Status |
 | --- | --- | --- | --- |
-| Тесты | `go test -count=1 ./internal/daemon ./internal/cli ./internal/rpc ./internal/tgclient ./internal/store` | зелёные | not_run |
-| Полная проверка | `just check` | зелёная | not_run |
+| Тесты | `go test -count=1 ./internal/daemon ./internal/cli ./internal/rpc ./internal/tgclient ./internal/store` | зелёные | ok |
+| Полная проверка | `just check` | зелёная | ok |
+
+## Run log
+
+- 2026-11-21: реализовано ограничение глубины (`--messages`, `--days`, `--months`, `--since`), `chat sync queue` с `--dry-run`, `chat sync cancel --all`, поле `last_message_date` у диалога; тесты менеджера, CLI и документация; навык `docs/skill/tg` доработан тремя рецептами (sync-recent-history, sync-active-chats, sync-queue-control).

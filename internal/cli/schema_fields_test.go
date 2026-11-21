@@ -354,6 +354,7 @@ var uncoveredCommands = map[string]string{
 	"chat sync start":            "background history command is covered by net.Pipe CLI tests",
 	"chat sync status":           "job status is covered by net.Pipe CLI tests",
 	"chat sync cancel":           "background cancellation is covered by net.Pipe CLI tests",
+	"chat sync queue":            "the batch of chats is covered by net.Pipe CLI tests and by daemon tests on a fake Telegram",
 }
 
 // fixtureResponseCases cover commands exercised by independent response fixtures.
