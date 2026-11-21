@@ -169,7 +169,8 @@ HISTORY          4 / 245 chats loaded to the first message
   Coverage       People 3/27 · folders 0/12 · other 1/206
   Schedule       On · 08:00–20:00 · next run 14:35 · last run 11:02 (chat 123, done)
   Settings       40m–3h between runs · 2s–8s between pages
-  Jobs           History sync idle · chat details idle
+  Jobs           History sync · 1 job · chat details idle
+                 Chat 110724171 Alice Smith · running (manual) · 62 pages · 6,200 messages loaded
 
 TELEGRAM         TCP · DC 2 · 0 reconnects
   Requests       0 active · 0 waiting · no flood wait
@@ -185,6 +186,7 @@ STORAGE          107.3 MB · schema 9
 - **Vector index.** Coverage counts indexed fragments of the current model. Run counters show fragments embedded and removed. If an indexing run fails, the section shows the reason, any coverage measured during the run and the retry time when known.
 - **Transcription.** Queue outcomes cover the saved jobs. Today's usage counts downloads, including files whose transcription failed. A running job shows its media type, processing stage and elapsed time. The last failure is available for the current daemon session. See [voice.md](voice.md).
 - **History.** A chat is complete when it has been loaded to its first message. The schedule shows the daily window and the next and last runs when known. Active history jobs show their source and progress.
+  Each job shows the chat title when it is available in the local database and permitted by the access policy.
 - **Telegram.** Shows the transport, RPC activity, throttle queue, flood wait and access policy. Proxy credentials are redacted.
 - **Storage.** Size is the main database file in decimal MB, excluding the write-ahead log. Chat and message counts follow the access policy, and deleted messages are excluded. Event counts cover the whole event table.
 

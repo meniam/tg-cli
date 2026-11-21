@@ -2,8 +2,8 @@ package rpc
 
 // MethodDashboard returns everything `tg status` prints in one answer. It only
 // reads the daemon state and the local database, it makes no Telegram request,
-// and, like MethodStatus, it works after the login is lost. No chat title or text
-// is in the answer, only chat ids, so it carries no untrusted Telegram text.
+// and, like MethodStatus, it works after the login is lost. Chat titles are
+// untrusted Telegram text.
 const MethodDashboard = "dashboard"
 
 // DashboardParams are the parameters of MethodDashboard. They carry no field
@@ -123,8 +123,9 @@ type DashboardHistory struct {
 
 // DashboardSyncJob is one active `chat sync` job.
 type DashboardSyncJob struct {
-	ChatID int64  `json:"chat_id"`
-	State  string `json:"state"`
+	ChatID    int64  `json:"chat_id"`
+	ChatTitle string `json:"chat_title,omitempty" untrusted:"true"`
+	State     string `json:"state"`
 	// Source is HistorySyncManual or HistorySyncBackground.
 	Source string `json:"source"`
 	Pages  int    `json:"pages"`

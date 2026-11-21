@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"time"
 
@@ -20,8 +21,7 @@ type throttleQueueReporter interface{ ThrottleQueued() int }
 // dashboard answers MethodDashboard. It reads the state of the daemon and the
 // local database and makes no Telegram request: the client is only asked for
 // what it already knows (the connection state, the flood pause, the queue). It
-// works without a login, like the status. The answer has chat ids and numbers,
-// never a title or a text of Telegram.
+// works without a login, like the status. Chat titles come from the local store.
 func (d *daemon) dashboard(ctx context.Context, _ json.RawMessage) (any, error) {
 	policy := d.policy()
 	stats, err := d.store.DashboardStats(ctx, chatFilter(policy), time.Now().Add(-dashboardEventsWindow))
@@ -29,6 +29,10 @@ func (d *daemon) dashboard(ctx context.Context, _ json.RawMessage) (any, error) 
 		return nil, err
 	}
 	version, err := d.store.Version()
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := d.dashboardJobs(ctx, policy.Allowed)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +49,7 @@ func (d *daemon) dashboard(ctx context.Context, _ json.RawMessage) (any, error) 
 		Background:     d.backgroundSyncStatus(),
 		SemanticSearch: d.semanticIndexStatus(),
 		Voice:          d.dashboardVoiceStatus(ctx, policy.Allowed),
-		Jobs:           d.dashboardJobs(),
+		Jobs:           jobs,
 		Events:         rpc.DashboardEvents{LastHour: stats.EventsSince, Total: stats.EventsTotal},
 		Settings:       d.dashboardSettings(),
 	}
@@ -128,17 +132,25 @@ func dashboardHistory(stats store.DashboardStats) rpc.DashboardHistory {
 }
 
 // dashboardJobs lists the active history loads and the state of the full-data job.
-func (d *daemon) dashboardJobs() rpc.DashboardJobs {
+func (d *daemon) dashboardJobs(ctx context.Context, allowed func(int64) bool) (rpc.DashboardJobs, error) {
 	jobs := rpc.DashboardJobs{Sync: []rpc.DashboardSyncJob{}}
 	for _, job := range d.sync.snapshots() {
 		switch job.State {
 		case rpc.HistorySyncQueued, rpc.HistorySyncRunning, rpc.HistorySyncWaitingFlood:
-			jobs.Sync = append(jobs.Sync, rpc.DashboardSyncJob{ChatID: job.ChatID, State: job.State, Source: job.Source, Pages: job.Pages, Loaded: job.Loaded})
+			item := rpc.DashboardSyncJob{ChatID: job.ChatID, State: job.State, Source: job.Source, Pages: job.Pages, Loaded: job.Loaded}
+			if allowed(job.ChatID) {
+				chat, err := d.store.GetChat(ctx, job.ChatID)
+				if err != nil && !errors.Is(err, store.ErrNotFound) {
+					return rpc.DashboardJobs{}, err
+				}
+				item.ChatTitle = chat.Title
+			}
+			jobs.Sync = append(jobs.Sync, item)
 		}
 	}
 	full := d.full.status()
 	jobs.Full = rpc.DashboardFullJob{State: full.State, Done: full.Done + full.Failed, Total: full.Total}
-	return jobs
+	return jobs, nil
 }
 
 // fillDashboardClient adds what the Telegram client knows without a request:
