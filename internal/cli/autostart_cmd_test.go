@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,25 @@ import (
 
 	"tg-cli/internal/exitcode"
 )
+
+// isolatedAutostartConfig points the profile at a short data directory of its own, so that a
+// test never reaches the socket of a daemon that really runs on the machine.
+func isolatedAutostartConfig(t *testing.T, home string) string {
+	t.Helper()
+	// A unix socket path is short: the temporary directory of a test is too long on macOS.
+	data, err := os.MkdirTemp("/tmp", "tgas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(data) })
+	path := filepath.Join(home, "config.toml")
+	if err := os.WriteFile(path, []byte("home = "+strconvQuote(data)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func strconvQuote(s string) string { b, _ := json.Marshal(s); return string(b) }
 
 // autostartRun is a run of `tg autostart ...` in a temporary home with a fake launchctl.
 type autostartRun struct {
@@ -38,7 +58,7 @@ func runAutostart(t *testing.T, args []string, goos string, env map[string]strin
 	state := loaded
 	run.code = Execute(context.Background(), args, Deps{
 		Stdout: &stdout, Stderr: &stderr,
-		ConfigPath: filepath.Join(home, "config.toml"),
+		ConfigPath: isolatedAutostartConfig(t, home),
 		Getenv: func(key string) string {
 			if key == "HOME" {
 				return home
@@ -243,7 +263,7 @@ func TestAutostartRefusesATemporaryBinary(t *testing.T) {
 	home := t.TempDir()
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), []string{"autostart", "on"}, Deps{
-		Stdout: &stdout, Stderr: &stderr, ConfigPath: filepath.Join(home, "config.toml"),
+		Stdout: &stdout, Stderr: &stderr, ConfigPath: isolatedAutostartConfig(t, home),
 		Getenv:       func(key string) string { return map[string]string{"HOME": home}[key] },
 		GOOS:         "darwin",
 		Executable:   func() (string, error) { return "/var/folders/x/go-build123/b001/exe/tg", nil },
@@ -279,7 +299,7 @@ func runAutostartIn(t *testing.T, home string, args []string, loaded bool) autos
 	var stdout, stderr bytes.Buffer
 	state := loaded
 	run.code = Execute(context.Background(), args, Deps{
-		Stdout: &stdout, Stderr: &stderr, ConfigPath: filepath.Join(home, "config.toml"),
+		Stdout: &stdout, Stderr: &stderr, ConfigPath: isolatedAutostartConfig(t, home),
 		Getenv:     func(key string) string { return map[string]string{"HOME": home}[key] },
 		GOOS:       "darwin",
 		Executable: func() (string, error) { return bin, nil },
@@ -300,4 +320,47 @@ func runAutostartIn(t *testing.T, home string, args []string, loaded bool) autos
 	})
 	run.stdout, run.stderr = stdout.String(), stderr.String()
 	return run
+}
+
+func TestAutostartOnLeavesAJobUnloadedWhileADaemonRuns(t *testing.T) {
+	// A unix socket path is short: the temporary directory of the test is too long on macOS.
+	root, err := os.MkdirTemp("/tmp", "tgas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(root) })
+	socketDir := filepath.Join(root, "default")
+	if err := os.MkdirAll(socketDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("unix", filepath.Join(socketDir, "daemon.sock"))
+	if err != nil {
+		t.Skipf("no unix socket in this environment: %v", err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			conn.Close()
+		}
+	}()
+	run := runAutostart(t, []string{"autostart", "on"}, "darwin", map[string]string{"TG_CLI_HOME": root}, false, nil)
+	if run.code != exitcode.OK {
+		t.Fatalf("run=%+v", run)
+	}
+	result := autostartData(t, run)
+	if !result.Enabled || result.Loaded || !strings.Contains(result.Note, "next login") || !strings.Contains(result.Note, "tg daemon stop") {
+		t.Fatalf("result=%+v", result)
+	}
+	if _, err := os.Stat(result.Path); err != nil {
+		t.Fatalf("the job file must be written for the next login: %v", err)
+	}
+	for _, verb := range run.verbs() {
+		if verb == "bootstrap" {
+			t.Fatalf("a daemon runs, so launchd must not load the job now: %v", run.calls)
+		}
+	}
 }
