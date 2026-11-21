@@ -5,7 +5,7 @@ description: >
   summarize, export, transcribe voice messages or watch chats, send messages or files, or manage tg login
   or the daemon, even if they don't say CLI or MTProto. Common phrases include «телеграм», «тг», «что пишут
   в канале», «найди в переписке», «выгрузи переписку», «скинь в телегу», «расшифруй голосовое» and «что
-  сказано в кружке», «синхронизируй последний месяц», «подгрузи последние 100 сообщений» and «поставь чаты в очередь». Not for Bot API bots or the Telegram Desktop UI.
+  сказано в кружке», «синхронизируй последний месяц», «подгрузи последние 100 сообщений» and «поставь чаты в очередь» and «автозапуск демона». Not for Bot API bots or the Telegram Desktop UI.
 ---
 
 # tg: Telegram from the terminal
@@ -101,7 +101,7 @@ A chat is given as `@username`, a numeric id (Bot API: a user is positive, a gro
 - [references/writing.md](references/writing.md): sending, editing, deleting, forwarding, scheduled messages and drafts, formatting, reactions, pinning, polls, buttons.
 - [references/media.md](references/media.md): sending files and albums, downloading.
 - [references/stream.md](references/stream.md): `message watch`, events, cursors.
-- [references/daemon-auth.md](references/daemon-auth.md): Daemon, login, transport, proxy, config, build.
+- [references/daemon-auth.md](references/daemon-auth.md): Daemon, start at login (`autostart`), login, transport, proxy, config, build.
 - [references/admin.md](references/admin.md): dialogs, folders, sessions, profile.
 - [references/safety.md](references/safety.md): command classes, access settings, foreign text, secrets, what is irreversible.
 - [references/errors.md](references/errors.md): exit codes by symptom.
@@ -118,6 +118,7 @@ One scenario per file in [recipes/](recipes/): when to use, prepare, commands, n
 - [sync-recent-history](recipes/sync-recent-history.md): load only the last N messages, days or months of one chat, or everything since a date.
 - [sync-active-chats](recipes/sync-active-chats.md): queue the history load of a batch of chats, for example the people written to in the last 60 days.
 - [sync-queue-control](recipes/sync-queue-control.md): what is loading now, how far it is, and stopping one chat or the whole queue.
+- [autostart-daemon](recipes/autostart-daemon.md): start the Daemon at login on macOS and turn it off.
 - [export-history](recipes/export-history.md): export saved history to JSONL.
 - [monthly-archive](recipes/monthly-archive.md): a monthly archive with SHA-256 verification.
 - [send-report](recipes/send-report.md): send text from a script safely and without duplicates.

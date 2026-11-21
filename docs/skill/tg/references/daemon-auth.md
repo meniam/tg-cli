@@ -33,6 +33,25 @@ tg auth status                     # whether the account is logged in and who it
 
 Exit code 3: the Daemon is not running, see "Start the Daemon" in `SKILL.md`. Exit code 4: the login is missing or lost, or the expected-account check failed. Check `auth status` and `--expect-user`; if the login is lost, ask the human to run `! tg auth login`.
 
+## Start at login (macOS)
+
+`tg autostart` makes launchd start the Daemon of a profile at every login and again after a crash. It changes the login items of the machine, so run `on` and `off` only when the user asks; `status` only looks.
+
+```bash
+tg autostart status          # enabled (job file exists), loaded (launchd knows it), executable (the binary it runs)
+tg status                    # on macOS the Autostart row of the Telegram block says the same in one line
+tg autostart on              # write ~/Library/LaunchAgents/dev.tg-cli.daemon.plist and load it
+tg autostart off             # unload the job and delete the file
+tg autostart on --profile work   # another profile: its own job dev.tg-cli.daemon.work
+```
+
+- **What the job runs.** `tg daemon start --foreground` with the full path of the running binary, with the settings saved for the profile (the official client preset included). Run `on` with the installed `tg` (for example `~/.local/bin/tg`): a temporary build or a `go run` binary is refused with exit code 2, and a moved binary shows up as a stale `executable` in `status` (run `on` again to replace the job).
+- **Secrets.** Own application credentials (`TG_API_ID`, `TG_API_HASH`) are never written to the job file; `on` refuses with exit code 2 while they are set. The job file has no secret otherwise.
+- **Stop.** The job restarts the Daemon only after a failure. `tg daemon stop` ends it with exit code 0 and launchd leaves it stopped until the next login; a stop from `off` also stops the Daemon launchd ran.
+- **A Daemon started by hand** is not under launchd. `on` then answers with a `note`; stop it and run `on` again, or wait for the next login. Starting a profile that already has a Daemon is not an error and creates no second one.
+- **After a reboot** the history sync queue is empty (it lives in the memory of the Daemon): see [sync-active-chats](../recipes/sync-active-chats.md). Only macOS: on another system all three commands give exit code 2.
+- **Not verified on a live account:** the real `launchctl bootstrap`, the start after a reboot and the restart after a crash (`FEATURES.md`, item 2.13); tests use a stub `launchctl`.
+
 ## Config
 
 Configuration that locates profiles is in `~/.config/tg-cli/config.toml`. `tg config path` shows its path. `tg config show` returns only `home`, `db_dir`, `default_profile` and `files`; it does not open the profile database. `tg settings list` and `tg settings get` show profile settings. `tg config init` writes this reduced template without overwriting an existing file (code 2). `tg config migrate` imports legacy settings once. `home` sets the directory of profile data (session, socket and logs), and `TG_CLI_HOME` overrides it for one call only. `home` defaults to `~/.config/tg-cli`. On macOS the first command moves data from the old default, `~/Library/Application Support/tg-cli`, there when `home` and `TG_CLI_HOME` are unset. Neither `home` nor `TG_CLI_HOME` moves the database. The database directory in `tg config show` is `db_dir`. See profile-setting keys, types, defaults, variables and flags in the `settings` block of `tg schema`.
