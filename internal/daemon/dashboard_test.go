@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"tg-cli/internal/chatref"
+	"tg-cli/internal/netconf"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
+	"tg-cli/internal/throttle"
 )
 
 // dashboardTelegram reports a scripted connection, flood pause and throttle
@@ -133,6 +135,20 @@ func TestDashboardAnswersEveryBlock(t *testing.T) {
 	tg.flood = 90*time.Second + time.Millisecond
 	tg.queued = 3
 	writeAccess(t, accessPath, `{"write":[10]}`)
+	proxy, err := netconf.ParseProxy("socks5://test-user:fake-password@localhost:1080")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := throttle.DefaultConfig()
+	cfg.Percent, cfg.FloodAutoWait = 45, 7*time.Second
+	limiter, err := throttle.New(cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.opts.TelegramConfig.Network.Proxy = proxy
+	d.opts.TelegramConfig.Throttle = limiter
+	d.opts.SemanticSearch.Batch = 12
+	d.opts.VoiceTranscription.Threads = 6
 
 	got := callDashboard(t, d)
 
@@ -180,6 +196,12 @@ func TestDashboardAnswersEveryBlock(t *testing.T) {
 	}
 	if got.Events != (rpc.DashboardEvents{LastHour: 3, Total: 4}) {
 		t.Errorf("events: %+v", got.Events)
+	}
+	s := got.Settings
+	if s == nil || s.Proxy != "socks5://localhost:1080" || s.Throttle == nil ||
+		s.Throttle.Percent != 45 || s.Throttle.FloodAutoWait != "7s" ||
+		s.Semantic.Batch != 12 || s.Voice.Threads != 6 {
+		t.Errorf("unexpected dashboard settings: %+v", s)
 	}
 }
 

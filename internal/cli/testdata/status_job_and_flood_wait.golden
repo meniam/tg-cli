@@ -1,15 +1,36 @@
-tg status  profile default  daemon pid 80307, up 4h 12m
+TG STATUS · default
+Telegram online · signed in as @name · PID 80307 · up 4h 12m
 
-Account      @name (id 114954417), signed in
-Connection   ready, auto (using wss), dc 4, reconnects 2
-Access       access file unreadable, every chat closed, writes off
-Database     0.0 MB, schema 10, 0 chats, 0 messages
-History      0 of 0 chats loaded to the first message
-             people 0 of 0 | in folders 0 of 0 | others 0 of 0
-Background   on, window 08:00-20:00, running (chat -1001)
-             last run 2026-11-19 19:40 (chat -1001, cancelled)
-Semantic     on, bge-m3, 6382 of 6500 fragments indexed, indexing
-Voice        on, 41 queued, 1 running, 2 done today, 130 MB, last failure: download
-Jobs         chat sync: chat -1001 running (background, 4 pages, 400 loaded); chat 77 waiting flood (manual, 1 page, 100 loaded) | chat full: running, 12 of 80 chats
-Throttle     flood wait 1m 31s, 3 queued
-Events       0 in the last hour, 0 stored
+VECTOR INDEX     Indexing · 98.2%
+  Coverage       6,382 / 6,500 fragments · 118 remaining
+  This run       120 embedded · 0 removed
+  Timing         started 11:45
+  Settings       bge-m3 via Ollama · batch 16 · every 10m
+                 Minimum similarity 0.50
+
+TRANSCRIPTION    Working · GigaAM v3 ready
+  Queue          41 waiting · 1 running
+  Outcomes       3 done · 1 failed · 0 skipped
+  Today          3 / 200 files · 130 / 2,000 MiB downloaded
+  Current        video note · transcribing · 1m 0s elapsed · chat 77 · message 5
+  Last failure   download
+  Limits         Voice 30 MiB · video note 50 MiB · video 500 MiB / 120 min
+  Settings       4 threads · 3s between downloads
+
+HISTORY          0 / 0 chats loaded to the first message
+  Coverage       People 0/0 · folders 0/0 · other 0/0
+  Schedule       On · 08:00–20:00 · running in chat -1001 · last run 2026-11-19 19:40 (chat -1001, cancelled)
+  Settings       40m–3h between runs · 2s–8s between pages
+  Jobs           History sync · 2 jobs · chat details running (12 / 80 chats)
+                 Chat -1001 · running (background) · 4 pages · 400 messages loaded
+                 Chat 77 · waiting flood (manual) · 1 page · 100 messages loaded
+
+TELEGRAM         AUTO using WSS · DC 4 · 2 reconnects
+  Requests       0 active · 3 waiting · flood wait 1m 31s
+  Settings       desktop preset · throttle 60% · flood auto-wait up to 10s
+                 Proxy off · idle timeout off
+  Access         Unavailable · all chats closed
+
+STORAGE          0.0 MB · schema 10
+  Local data     0 chats · 0 messages
+  Events         0 in the last hour · 0 stored

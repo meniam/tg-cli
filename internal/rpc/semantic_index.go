@@ -51,9 +51,11 @@ type SemanticIndexStatus struct {
 	ModelDigest string `json:"model_digest,omitempty"`
 	Indexed     int    `json:"indexed"`
 	Total       int    `json:"total"`
-	Embedded    int    `json:"embedded"`
-	Removed     int    `json:"removed"`
-	StartedAt   *int64 `json:"started_at,omitempty"`
-	FinishedAt  *int64 `json:"finished_at,omitempty"`
-	NextRunAt   *int64 `json:"next_run_at,omitempty"`
+	// CoverageMeasured reports whether this run computed both Indexed and Total.
+	CoverageMeasured bool   `json:"coverage_measured,omitempty"`
+	Embedded         int    `json:"embedded"`
+	Removed          int    `json:"removed"`
+	StartedAt        *int64 `json:"started_at,omitempty"`
+	FinishedAt       *int64 `json:"finished_at,omitempty"`
+	NextRunAt        *int64 `json:"next_run_at,omitempty"`
 }

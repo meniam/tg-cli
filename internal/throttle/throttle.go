@@ -167,6 +167,9 @@ func validRate(v float64) bool { return v > 0 && !math.IsInf(v, 0) && !math.IsNa
 // FloodAutoWait is the configured maximum automatic flood wait.
 func (l *Limiter) FloodAutoWait() time.Duration { return l.cfg.FloodAutoWait }
 
+// Percent is the configured percentage of the base request rates.
+func (l *Limiter) Percent() float64 { return l.cfg.Percent }
+
 // PausedFor returns the remaining account-wide flood pause.
 func (l *Limiter) PausedFor() time.Duration {
 	l.mu.Lock()

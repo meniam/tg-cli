@@ -127,6 +127,7 @@ func (a *app) credentials(cmd *cobra.Command, paths daemon.Paths) (daemon.Telegr
 	}
 	a.warn(cmd, "note: using the %q official client preset. Telegram puts accounts of unofficial clients under observation (opentele documentation, quoting Telegram's API terms); the risk for this tool is not assessed.", name)
 	cfg.AppID, cfg.AppHash = creds.AppID, creds.AppHash
+	cfg.ClientPreset = name
 	return cfg, nil
 }
 

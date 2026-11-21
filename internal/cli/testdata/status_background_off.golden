@@ -1,14 +1,26 @@
-tg status  profile default  daemon pid 80307, up 1m 30s
+TG STATUS · default
+Telegram online · signed in as @name · PID 80307 · up 1m 30s
 
-Account      @name (id 114954417), signed in
-Connection   ready, tcp, dc 2, reconnects 0
-Access       lists on (allow 2, block 1), writes off
-Database     2.6 MB, schema 10, 1 chat, 1 message
-History      0 of 1 chats loaded to the first message
-             people 0 of 1 | in folders 0 of 0 | others 0 of 0
-Background   off (enable with [background_sync] enabled = true)
-Semantic     off (enable with [semantic_search] enabled = true)
-Voice        off (enable with [voice_transcription] enabled = true)
-Jobs         chat sync: none | chat full: none
-Throttle     no flood wait, 0 queued
-Events       0 in the last hour, 1 stored
+VECTOR INDEX     Off
+  Settings       bge-m3 via Ollama · batch 16 · every 10m
+                 Minimum similarity 0.50
+
+TRANSCRIPTION    Off
+  Limits         Voice 30 MiB · video note 50 MiB · video 500 MiB / 120 min
+  Settings       4 threads · 3s between downloads
+
+HISTORY          0 / 1 chats loaded to the first message
+  Coverage       People 0/1 · folders 0/0 · other 0/0
+  Schedule       Off · window 08:00–20:00
+  Settings       40m–3h between runs · 2s–8s between pages
+  Jobs           History sync idle · chat details idle
+
+TELEGRAM         TCP · DC 2 · 0 reconnects
+  Requests       0 active · 0 waiting · no flood wait
+  Settings       desktop preset · throttle 60% · flood auto-wait up to 10s
+                 Proxy off · idle timeout off
+  Access         Read filter on (2 allowed, 1 blocked) · writes off
+
+STORAGE          2.6 MB · schema 10
+  Local data     1 chat · 1 message
+  Events         0 in the last hour · 1 stored

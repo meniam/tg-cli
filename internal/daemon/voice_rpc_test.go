@@ -80,7 +80,11 @@ func TestVoiceWorkerTranscribeAnswersPendingWhenTheWaitEnds(t *testing.T) {
 		t.Fatalf("pending = %+v %v", got, err)
 	}
 	<-started
+	current := f.status().Current
 	close(release)
+	if current == nil || current.Stage != "transcribing" {
+		t.Fatalf("voice job stage during recognition: %+v", current)
+	}
 	f.awaitState(77, 1, store.VoiceStateDone)
 	done, err := f.transcribeLocal("77", 1, 0)
 	if err != nil || done.Pending || !done.Cached || done.Text != "привет как дела" {

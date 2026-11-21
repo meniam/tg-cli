@@ -44,9 +44,13 @@ func (d *daemon) dashboard(ctx context.Context, _ json.RawMessage) (any, error) 
 		History:        dashboardHistory(stats),
 		Background:     d.backgroundSyncStatus(),
 		SemanticSearch: d.semanticIndexStatus(),
-		Voice:          d.voiceStatusBlock(ctx),
+		Voice:          d.dashboardVoiceStatus(ctx, policy.Allowed),
 		Jobs:           d.dashboardJobs(),
 		Events:         rpc.DashboardEvents{LastHour: stats.EventsSince, Total: stats.EventsTotal},
+		Settings:       d.dashboardSettings(),
+	}
+	if d.srv != nil {
+		out.Throttle.ActiveRequests = max(d.srv.Active()-1, 0)
 	}
 	if !d.startedAt.IsZero() {
 		out.StartedAt = d.startedAt.Unix()
@@ -55,17 +59,58 @@ func (d *daemon) dashboard(ctx context.Context, _ json.RawMessage) (any, error) 
 	if info, err := os.Stat(d.store.Path()); err == nil {
 		out.Database.SizeBytes = info.Size()
 	}
+	out.Account.AuthLost = d.getAuthLost()
 	d.account.mu.RLock()
 	if d.account.user != nil {
 		user := *d.account.user
 		out.Account.User = &user
-		out.Account.Authorized = d.getAuthLost() == ""
+		out.Account.Authorized = out.Account.AuthLost == ""
 	}
 	d.account.mu.RUnlock()
 	d.fillDashboardClient(ctx, &out)
 	return out, nil
 }
 
+func (d *daemon) dashboardSettings() *rpc.DashboardSettings {
+	b, s := d.opts.BackgroundSync, d.opts.SemanticSearch
+	v := d.opts.VoiceTranscription.withDefaults()
+	out := &rpc.DashboardSettings{
+		ClientPreset: d.opts.TelegramConfig.ClientPreset,
+		Device:       d.opts.TelegramConfig.DeviceModel,
+		Proxy:        d.opts.TelegramConfig.Network.Proxy.Redacted(),
+		IdleTimeout:  d.opts.IdleTimeout.String(),
+		Background: rpc.DashboardBackgroundSettings{
+			IntervalMin: b.IntervalMin.String(), IntervalMax: b.IntervalMax.String(),
+			PagePauseMin: b.PagePauseMin.String(), PagePauseMax: b.PagePauseMax.String(),
+		},
+		Semantic: rpc.DashboardSemanticSettings{
+			Model: s.Model, Batch: s.Batch, Interval: s.Interval.String(), MinSimilarity: s.MinSimilarity,
+		},
+		Voice: rpc.DashboardVoiceSettings{
+			Engine: voiceEngineName, MaxVoiceMiB: v.MaxVoiceMB, MaxVideoNoteMiB: v.MaxVideoNoteMB,
+			MaxVideoMiB: v.MaxVideoMB, MaxVideoMinutes: v.MaxVideoMinutes, Threads: v.Threads, Pause: v.Pause.String(),
+		},
+	}
+	if limiter := d.opts.TelegramConfig.Throttle; limiter != nil {
+		out.Throttle = &rpc.DashboardThrottleSettings{Percent: limiter.Percent(), FloodAutoWait: limiter.FloodAutoWait().String()}
+	}
+	return out
+}
+
+func (d *daemon) dashboardVoiceStatus(ctx context.Context, allowed func(int64) bool) rpc.VoiceStatus {
+	if d.voice == nil {
+		return rpc.VoiceStatus{State: rpc.VoiceStateDisabled}
+	}
+	st, err := d.voice.status(ctx)
+	if err != nil {
+		d.log.Warn("voice status could not be read")
+		return rpc.VoiceStatus{Enabled: d.voice.cfg.Enabled, State: rpc.VoiceStateUnavailable}
+	}
+	if st.Current != nil && !allowed(st.Current.ChatID) {
+		st.Current = nil
+	}
+	return st
+}
 func dashboardHistory(stats store.DashboardStats) rpc.DashboardHistory {
 	group := func(g int) rpc.DashboardGroup {
 		return rpc.DashboardGroup{Complete: stats.History[g].Complete, Total: stats.History[g].Total}

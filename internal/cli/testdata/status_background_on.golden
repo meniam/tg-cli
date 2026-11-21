@@ -1,15 +1,32 @@
-tg status  profile default  daemon pid 80307, up 3d 4h
+TG STATUS · default
+Telegram online · signed in as @name · PID 80307 · up 3d 4h
 
-Account      @name (id 114954417), signed in
-Connection   ready, tcp, dc 2, reconnects 0
-Access       lists off, writes allowed in 1 chat
-Database     107.3 MB, schema 9, 245 chats, 67583 messages
-History      4 of 245 chats loaded to the first message
-             people 3 of 27 | in folders 0 of 12 | others 1 of 206
-Background   on, window 08:00-20:00, waiting for the next run
-             next run 14:35, last run 11:02 (chat 123, done)
-Semantic     on, bge-m3, 6500 of 6500 fragments indexed, last run 18:20
-Voice        on, 3 queued, 12 done today, 48 MB, paused: budget until 2026-11-21 00:00
-Jobs         chat sync: none | chat full: none
-Throttle     no flood wait, 0 queued
-Events       12 in the last hour, 71052 stored
+VECTOR INDEX     Idle · 100.0%
+  Coverage       6,500 / 6,500 fragments · 0 remaining
+  Last run       0 embedded · 0 removed
+  Timing         last run 11:20 · next run 12:05
+  Settings       bge-m3 via Ollama · batch 16 · every 10m
+                 Minimum similarity 0.50
+
+TRANSCRIPTION    Paused · budget until 2026-11-21 00:00
+  Queue          3 waiting · 0 running
+  Outcomes       40 done · 0 failed · 0 skipped
+  Today          12 / 200 files · 48 / 2,000 MiB downloaded
+  Limits         Voice 30 MiB · video note 50 MiB · video 500 MiB / 120 min
+  Settings       4 threads · 3s between downloads
+
+HISTORY          4 / 245 chats loaded to the first message
+  Coverage       People 3/27 · folders 0/12 · other 1/206
+  Schedule       On · 08:00–20:00 · next run 14:35 · last run 11:02 (chat 123, done)
+  Settings       40m–3h between runs · 2s–8s between pages
+  Jobs           History sync idle · chat details idle
+
+TELEGRAM         TCP · DC 2 · 0 reconnects
+  Requests       0 active · 0 waiting · no flood wait
+  Settings       desktop preset · throttle 60% · flood auto-wait up to 10s
+                 Proxy off · idle timeout off
+  Access         Read filter off · writes allowed in 1 chat
+
+STORAGE          107.3 MB · schema 9
+  Local data     245 chats · 67,583 messages
+  Events         12 in the last hour · 71,052 stored

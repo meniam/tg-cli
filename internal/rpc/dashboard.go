@@ -29,17 +29,60 @@ type Dashboard struct {
 	SemanticSearch SemanticIndexStatus `json:"semantic_search"`
 	// Voice is the state of the local transcription queue, the same value as the
 	// voice block of the daemon status; it is always present.
-	Voice    VoiceStatus       `json:"voice"`
-	Jobs     DashboardJobs     `json:"jobs"`
-	Throttle DashboardThrottle `json:"throttle"`
-	Events   DashboardEvents   `json:"events"`
+	Voice    VoiceStatus        `json:"voice"`
+	Jobs     DashboardJobs      `json:"jobs"`
+	Throttle DashboardThrottle  `json:"throttle"`
+	Events   DashboardEvents    `json:"events"`
+	Settings *DashboardSettings `json:"settings,omitempty"`
+}
+
+// DashboardSettings contains the effective, non-secret settings of the daemon.
+type DashboardSettings struct {
+	ClientPreset string                      `json:"client_preset,omitempty"`
+	Device       string                      `json:"device,omitempty"`
+	Proxy        string                      `json:"proxy,omitempty"`
+	IdleTimeout  string                      `json:"idle_timeout"`
+	Throttle     *DashboardThrottleSettings  `json:"throttle,omitempty"`
+	Background   DashboardBackgroundSettings `json:"background"`
+	Semantic     DashboardSemanticSettings   `json:"semantic"`
+	Voice        DashboardVoiceSettings      `json:"voice"`
+}
+
+type DashboardThrottleSettings struct {
+	Percent       float64 `json:"percent"`
+	FloodAutoWait string  `json:"flood_auto_wait"`
+}
+
+type DashboardBackgroundSettings struct {
+	IntervalMin  string `json:"interval_min"`
+	IntervalMax  string `json:"interval_max"`
+	PagePauseMin string `json:"page_pause_min"`
+	PagePauseMax string `json:"page_pause_max"`
+}
+
+type DashboardSemanticSettings struct {
+	Model         string  `json:"model"`
+	Batch         int     `json:"batch"`
+	Interval      string  `json:"interval"`
+	MinSimilarity float64 `json:"min_similarity"`
+}
+
+type DashboardVoiceSettings struct {
+	Engine          string `json:"engine"`
+	MaxVoiceMiB     int    `json:"max_voice_mib"`
+	MaxVideoNoteMiB int    `json:"max_video_note_mib"`
+	MaxVideoMiB     int    `json:"max_video_mib"`
+	MaxVideoMinutes int    `json:"max_video_minutes"`
+	Threads         int    `json:"threads"`
+	Pause           string `json:"pause"`
 }
 
 // DashboardAccount is the account the daemon serves. User is null and
 // Authorized false when nobody is logged in or the login was lost.
 type DashboardAccount struct {
-	User       *User `json:"user"`
-	Authorized bool  `json:"authorized"`
+	User       *User  `json:"user"`
+	Authorized bool   `json:"authorized"`
+	AuthLost   string `json:"auth_lost,omitempty"`
 }
 
 // DashboardConnection is the primary Telegram connection; every field is empty
@@ -105,6 +148,8 @@ type DashboardJobs struct {
 
 // DashboardThrottle is the state of the account throttle.
 type DashboardThrottle struct {
+	// ActiveRequests excludes the dashboard request itself.
+	ActiveRequests int `json:"active_requests"`
 	// FloodWaitSeconds is the rest of the account-wide FLOOD_WAIT pause, rounded
 	// up; zero when there is no pause.
 	FloodWaitSeconds int `json:"flood_wait_seconds"`

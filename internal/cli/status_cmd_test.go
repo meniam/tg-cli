@@ -52,7 +52,7 @@ func statusBase() rpc.Dashboard {
 			State: rpc.BackgroundSyncWaitingInterval, NextRunAt: statusAt(20, 14, 35), LastRunAt: statusAt(20, 11, 2), LastResult: rpc.BackgroundSyncDone, LastChatID: func() *int64 { id := int64(123); return &id }(),
 		},
 		SemanticSearch: rpc.SemanticIndexStatus{
-			Enabled: true, State: rpc.SemanticIndexIdle, Model: "bge-m3", Indexed: 6500, Total: 6500, FinishedAt: statusAt(20, 18, 20),
+			Enabled: true, State: rpc.SemanticIndexIdle, Model: "bge-m3", Indexed: 6500, Total: 6500, CoverageMeasured: true, FinishedAt: statusAt(20, 11, 20), NextRunAt: statusAt(20, 12, 5),
 		},
 		Voice: rpc.VoiceStatus{
 			Enabled: true, Installed: true, State: rpc.VoiceStatePaused, Paused: rpc.VoicePausedBudget, PausedUntil: statusAt(21, 0, 0),
@@ -60,6 +60,13 @@ func statusBase() rpc.Dashboard {
 		},
 		Jobs:   rpc.DashboardJobs{Sync: []rpc.DashboardSyncJob{}, Full: rpc.DashboardFullJob{State: rpc.ChatFullIdle}},
 		Events: rpc.DashboardEvents{LastHour: 12, Total: 71052},
+		Settings: &rpc.DashboardSettings{
+			ClientPreset: "desktop", IdleTimeout: "0s",
+			Throttle:   &rpc.DashboardThrottleSettings{Percent: 60, FloodAutoWait: "10s"},
+			Background: rpc.DashboardBackgroundSettings{IntervalMin: "40m0s", IntervalMax: "3h0m0s", PagePauseMin: "2s", PagePauseMax: "8s"},
+			Semantic:   rpc.DashboardSemanticSettings{Model: "bge-m3", Batch: 16, Interval: "10m0s", MinSimilarity: 0.5},
+			Voice:      rpc.DashboardVoiceSettings{Engine: "gigaam-v3", MaxVoiceMiB: 30, MaxVideoNoteMiB: 50, MaxVideoMiB: 500, MaxVideoMinutes: 120, Threads: 4, Pause: "3s"},
+		},
 	}
 }
 
@@ -78,7 +85,7 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 	// A daemon that lost the login and has no client: what is still known is shown.
 	lost := rpc.Dashboard{
 		Profile: "work", PID: 12,
-		Account:  rpc.DashboardAccount{User: &rpc.User{ID: 5, Username: "gone"}},
+		Account:  rpc.DashboardAccount{User: &rpc.User{ID: 5, Username: "gone"}, AuthLost: "revoked"},
 		Database: rpc.DashboardDatabase{SchemaVersion: 10},
 		Background: rpc.BackgroundSyncStatus{
 			Enabled: true, Window: rpc.BackgroundSyncWindow{Start: "09:30", End: "18:00"},
@@ -107,9 +114,10 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 		},
 		Full: rpc.DashboardFullJob{State: rpc.ChatFullRunning, Done: 12, Total: 80},
 	}
-	busy.SemanticSearch = rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexIndexing, Model: "bge-m3", Indexed: 6382, Total: 6500, Embedded: 120}
+	busy.SemanticSearch = rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexIndexing, Model: "bge-m3", Indexed: 6382, Total: 6500, CoverageMeasured: true, Embedded: 120, StartedAt: statusAt(20, 11, 45)}
 	busy.Voice = rpc.VoiceStatus{
 		Enabled: true, Installed: true, State: rpc.VoiceStateWorking, Queue: rpc.VoiceQueueCounts{Queued: 41, Running: 1, Done: 3, Failed: 1},
+		Current:   &rpc.VoiceCurrentJob{ChatID: 77, MessageID: 5, Kind: "video_note", Stage: "transcribing", StartedAt: *statusAt(20, 11, 59)},
 		DoneToday: 2, FilesToday: 3, BytesToday: 130 << 20, DailyFiles: 200, DailyBytes: 2000 << 20, LastFailure: "download",
 	}
 	busy.Throttle = rpc.DashboardThrottle{FloodWaitSeconds: 91, Queued: 3}
@@ -143,12 +151,12 @@ func TestRenderDashboardUsesTheGivenTimeAndZone(t *testing.T) {
 	utc := statusNow().UTC() // 09:00 on the same day
 	got := renderDashboard(dash, utc)
 	// 14:35 in the zone +3 is 11:35 UTC; 11:02 is 08:02 UTC; the day is still the 20th.
-	if !strings.Contains(got, "next run 11:35, last run 08:02 (chat 123, done)") {
+	if !strings.Contains(got, "next run 11:35 · last run 08:02 (chat 123, done)") {
 		t.Errorf("times are not shown in the zone of the given time:\n%s", got)
 	}
 	// A moment past midnight of the given zone is another day: the date is shown.
 	dash.Background.NextRunAt = statusAt(21, 0, 30)
-	if got := renderDashboard(dash, statusNow()); !strings.Contains(got, "next run 2026-11-21 00:30,") {
+	if got := renderDashboard(dash, statusNow()); !strings.Contains(got, "next run 2026-11-21 00:30 ·") {
 		t.Errorf("another day lacks its date:\n%s", got)
 	}
 }
@@ -176,7 +184,7 @@ func TestRenderDashboardStripsControlCharacters(t *testing.T) {
 	dash := statusBase()
 	dash.Account.User = &rpc.User{ID: 9, FirstName: "Ann\x1b[2J", LastName: "Lee"}
 	got := renderDashboard(dash, statusNow())
-	if strings.ContainsRune(got, '\x1b') || !strings.Contains(got, "Ann [2J Lee (id 9), signed in") {
+	if strings.ContainsRune(got, '\x1b') || !strings.Contains(got, "signed in as Ann [2J Lee") {
 		t.Errorf("account row: %q", got)
 	}
 }
@@ -242,7 +250,7 @@ func TestStatusPrintsTheDashboardAsText(t *testing.T) {
 		if run.code != exitcode.OK || !run.called {
 			t.Fatalf("%v: exit %d, called %v, stderr %q", args, run.code, run.called, run.stderr)
 		}
-		for _, want := range []string{"tg status  profile default  daemon pid 80307, up ", "Account      @name (id 114954417), signed in", "Events       12 in the last hour, 71052 stored"} {
+		for _, want := range []string{"TG STATUS · default", "Telegram online · signed in as @name · PID 80307", "Events         12 in the last hour · 71,052 stored"} {
 			if !strings.Contains(run.stdout, want) {
 				t.Errorf("%v: stdout lacks %q:\n%s", args, want, run.stdout)
 			}
@@ -259,7 +267,7 @@ func TestStatusWithoutLoginExitsZero(t *testing.T) {
 	dash := statusBase()
 	dash.Account = rpc.DashboardAccount{}
 	run := runStatusCLI(t, []string{"status"}, func() (any, error) { return dash, nil })
-	if run.code != exitcode.OK || !strings.Contains(run.stdout, "Account      not signed in\n") {
+	if run.code != exitcode.OK || !strings.Contains(run.stdout, "Telegram online · not signed in · PID") {
 		t.Fatalf("exit %d: %q", run.code, run.stdout)
 	}
 }
@@ -276,7 +284,7 @@ func TestStatusRefusesAJSONFormat(t *testing.T) {
 	}
 	// The refusal of json names the way out; the text is not printed.
 	run := runStatusCLI(t, []string{"status", "--format", "json"}, func() (any, error) { return statusBase(), nil })
-	if !strings.Contains(run.stdout, "tg status prints text") || strings.Contains(run.stdout, "Account") {
+	if !strings.Contains(run.stdout, "tg status prints text") || strings.Contains(run.stdout, "TG STATUS") {
 		t.Errorf("json refusal: %q", run.stdout)
 	}
 	// The default format is json too, but it was not asked for: the text is printed.
@@ -320,6 +328,7 @@ func TestStatusAppearsInTheSchema(t *testing.T) {
 		"history.complete", "history.people.total", "history.folders.complete", "history.others.total",
 		"background.state", "background.next_run_at", "semantic_search.state", "semantic_search.indexed", "semantic_search.total", "voice.enabled", "voice.installed", "voice.state", "voice.paused", "voice.queue.queued", "voice.done_today", "voice.bytes_today", "voice.last_failure", "jobs.sync", "jobs.full.state", "jobs.full.done",
 		"throttle.flood_wait_seconds", "throttle.queued", "events.last_hour", "events.total",
+		"settings.semantic.batch", "settings.throttle.percent", "settings.voice.threads", "voice.current.stage",
 	} {
 		if !have[path] {
 			t.Errorf("the schema of status lacks the field %s", path)
@@ -335,11 +344,12 @@ func TestRenderDashboardSemanticStates(t *testing.T) {
 		st   rpc.SemanticIndexStatus
 		want string
 	}{
-		{"never ran", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexIdle, Model: "bge-m3"}, "Semantic     on, bge-m3, 0 of 0 fragments indexed, no run yet\n"},
-		{"cancelled", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexIdle, Model: "bge-m3", Indexed: 10, Total: 40, FinishedAt: statusAt(19, 9, 5), Reason: "cancelled"}, "Semantic     on, bge-m3, 10 of 40 fragments indexed, last run 2026-11-19 09:05 (cancelled)\n"},
-		{"model missing", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexModelMissing, Reason: "Ollama does not have the model bge-m3"}, "Semantic     on, model missing (Ollama does not have the model bge-m3)\n"},
-		{"error with control characters", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexError, Reason: "open: \x1b[31mfailed"}, "Semantic     on, error (open:  [31mfailed)\n"},
-		{"enabled flag off wins", rpc.SemanticIndexStatus{State: rpc.SemanticIndexIdle, Indexed: 5}, "Semantic     off (enable with [semantic_search] enabled = true)\n"},
+		{"never ran", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexIdle, Model: "bge-m3"}, "VECTOR INDEX     Waiting for first run\n"},
+		{"cancelled", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexIdle, Model: "bge-m3", Indexed: 10, Total: 40, CoverageMeasured: true, FinishedAt: statusAt(19, 9, 5), Reason: "cancelled"}, "VECTOR INDEX     Idle · 25.0% · cancelled\n"},
+		{"model missing", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexModelMissing, Reason: "Ollama does not have the model bge-m3"}, "VECTOR INDEX     Model missing · Ollama does not have the model bge-m3\n"},
+		{"error with control characters", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexError, Reason: "open: \x1b[31mfailed"}, "VECTOR INDEX     Error · open:  [31mfailed\n"},
+		{"failed after coverage measured", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexError, Indexed: 10, Total: 40, CoverageMeasured: true}, "Last measured  10 / 40 fragments · 30 remaining\n"},
+		{"enabled flag off wins", rpc.SemanticIndexStatus{State: rpc.SemanticIndexIdle, Indexed: 5}, "VECTOR INDEX     Off\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dash := statusBase()
@@ -367,20 +377,20 @@ func TestRenderDashboardVoiceStates(t *testing.T) {
 		st   rpc.VoiceStatus
 		want string
 	}{
-		{"off", rpc.VoiceStatus{State: rpc.VoiceStateDisabled}, "Voice        off (enable with [voice_transcription] enabled = true)\n"},
-		{"off wins over a stale queue", rpc.VoiceStatus{Installed: true, Queue: rpc.VoiceQueueCounts{Queued: 4}}, "Voice        off (enable with [voice_transcription] enabled = true)\n"},
-		{"engine missing", rpc.VoiceStatus{Enabled: true, Missing: []string{"ffmpeg", "model"}}, "Voice        on, engine not installed (missing ffmpeg, model)\n"},
-		{"engine missing without a list", rpc.VoiceStatus{Enabled: true}, "Voice        on, engine not installed\n"},
-		{"idle", ready, "Voice        on, 0 queued, 0 done today, 0 MB\n"},
+		{"off", rpc.VoiceStatus{State: rpc.VoiceStateDisabled}, "TRANSCRIPTION    Off\n"},
+		{"off wins over a stale queue", rpc.VoiceStatus{Installed: true, Queue: rpc.VoiceQueueCounts{Queued: 4}}, "TRANSCRIPTION    Off\n"},
+		{"engine missing", rpc.VoiceStatus{Enabled: true, Missing: []string{"ffmpeg", "model"}}, "TRANSCRIPTION    Engine unavailable · missing ffmpeg, model\n"},
+		{"engine missing without a list", rpc.VoiceStatus{Enabled: true}, "TRANSCRIPTION    Engine unavailable\n"},
+		{"idle", ready, "TRANSCRIPTION    Idle · GigaAM v3 ready\n"},
 		{"working", with(func(v *rpc.VoiceStatus) {
 			v.State, v.Queue, v.DoneToday, v.BytesToday = rpc.VoiceStateWorking, rpc.VoiceQueueCounts{Queued: 3, Running: 1}, 12, 48<<20+1000
-		}), "Voice        on, 3 queued, 1 running, 12 done today, 48 MB\n"},
+		}), "TRANSCRIPTION    Working · GigaAM v3 ready\n"},
 		{"budget", with(func(v *rpc.VoiceStatus) {
 			v.Paused, v.PausedUntil, v.Queue.Queued = rpc.VoicePausedBudget, at, 3
-		}), "Voice        on, 3 queued, 0 done today, 0 MB, paused: budget until 2026-11-21 00:00\n"},
-		{"offline", with(func(v *rpc.VoiceStatus) { v.Paused = rpc.VoicePausedOffline }), "Voice        on, 0 queued, 0 done today, 0 MB, paused: offline\n"},
-		{"failure", with(func(v *rpc.VoiceStatus) { v.LastFailure = "too_large" }), "Voice        on, 0 queued, 0 done today, 0 MB, last failure: too_large\n"},
-		{"control characters", with(func(v *rpc.VoiceStatus) { v.Paused, v.LastFailure = "x\x1b[31m", "y\x07" }), "Voice        on, 0 queued, 0 done today, 0 MB, paused: x [31m, last failure: y \n"},
+		}), "TRANSCRIPTION    Paused · budget until 2026-11-21 00:00\n"},
+		{"offline", with(func(v *rpc.VoiceStatus) { v.Paused = rpc.VoicePausedOffline }), "TRANSCRIPTION    Paused · offline\n"},
+		{"failure", with(func(v *rpc.VoiceStatus) { v.LastFailure = "too_large" }), "Last failure   too large\n"},
+		{"control characters", with(func(v *rpc.VoiceStatus) { v.Paused, v.LastFailure = "x\x1b[31m", "y\x07" }), "Last failure   y \n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dash := statusBase()

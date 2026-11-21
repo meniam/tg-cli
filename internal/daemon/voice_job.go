@@ -102,7 +102,7 @@ func (w *voiceWorker) maxVideoSeconds() float64 { return float64(w.cfg.MaxVideoM
 // process works one claimed job from start to end and records how it ended.
 func (w *voiceWorker) process(ctx context.Context, job store.VoiceJob) voiceOutcome {
 	runCtx, cancel := context.WithCancel(ctx)
-	run := &voiceRun{job: job, cancel: cancel}
+	run := &voiceRun{job: job, cancel: cancel, stage: "checking"}
 	w.mu.Lock()
 	w.current = run
 	w.mu.Unlock()
@@ -123,6 +123,12 @@ func (w *voiceWorker) process(ctx context.Context, job store.VoiceJob) voiceOutc
 	w.mu.Unlock()
 	w.conclude(ctx, job, out)
 	return out
+}
+
+func (w *voiceWorker) setStage(run *voiceRun, stage string) {
+	w.mu.Lock()
+	run.stage = stage
+	w.mu.Unlock()
 }
 
 // conclude writes the end of a job to the queue. The context of the daemon may
@@ -228,9 +234,11 @@ func (w *voiceWorker) execute(ctx context.Context, run *voiceRun) voiceOutcome {
 	if err := w.engine.CheckDisk(w.dir, need); err != nil {
 		return voiceFailed("disk")
 	}
+	w.setStage(run, "waiting_to_download")
 	if !w.waitDownloadPause(ctx) {
 		return w.abort(run)
 	}
+	w.setStage(run, "downloading")
 	file, err := w.download(ctx, job, VoiceDownload{Dir: w.dir, MaxBytes: limit, ExpectedSize: info.Size})
 	w.markDownloadEnd()
 	if err != nil {
@@ -246,6 +254,7 @@ func (w *voiceWorker) execute(ctx context.Context, run *voiceRun) voiceOutcome {
 		return w.abort(run)
 	}
 
+	w.setStage(run, "converting")
 	wav := filepath.Join(w.dir, fmt.Sprintf("%d_%d.wav", job.ChatID, job.MessageID))
 	defer os.Remove(wav)
 	guess := info.Seconds
@@ -275,6 +284,7 @@ func (w *voiceWorker) execute(ctx context.Context, run *voiceRun) voiceOutcome {
 	if job.Kind == store.VoiceKindVideo && seconds > w.maxVideoSeconds() {
 		return voiceSkipped("too_long")
 	}
+	w.setStage(run, "transcribing")
 	segments, err := w.engine.Transcribe(ctx, wav, w.cfg.Threads, w.engine.Timeout(seconds))
 	if err != nil {
 		if ctx.Err() != nil {
@@ -289,6 +299,7 @@ func (w *voiceWorker) execute(ctx context.Context, run *voiceRun) voiceOutcome {
 	if !d.policy().Allowed(job.ChatID) {
 		return voiceSkipped("closed")
 	}
+	w.setStage(run, "saving")
 	text := voiceText(segments)
 	raw, err := json.Marshal(map[string]any{"voice_local": map[string]any{"engine": voiceEngineName, "segments": nonNilSegments(segments)}})
 	if err != nil {
