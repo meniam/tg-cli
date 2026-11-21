@@ -44,11 +44,12 @@ type Options struct {
 	Paths        Paths
 	Telegram     Telegram
 	// NewTelegram constructs a replacement for the single-use client.
-	NewTelegram    func(context.Context, TelegramConfig) (Telegram, error)
-	TelegramConfig TelegramConfig
-	Store          *store.DB
-	Access         *access.Loader
-	Log            *slog.Logger
+	NewTelegram       func(context.Context, TelegramConfig) (Telegram, error)
+	TelegramConfig    TelegramConfig
+	Store             *store.DB
+	SettingsOverrides map[string]SettingOverride
+	Access            *access.Loader
+	Log               *slog.Logger
 	// FileWarningsReported suppresses warnings already shown by the caller.
 	FileWarningsReported bool
 	// IdleTimeout stops the daemon after this long without a request and with
@@ -86,6 +87,9 @@ type daemon struct {
 	transcriptionLocks   keyLocks
 	accessMu             sync.RWMutex
 	accessRefreshMu      sync.Mutex
+	settingsMu           sync.Mutex
+	settingsInitial      map[string]json.RawMessage
+	settingsPending      map[string]bool
 	accessSnapshot       *access.Policy
 	ownerSecrets         *OwnerSecrets
 	phoneLimit           phoneLimiter
@@ -130,6 +134,11 @@ type daemon struct {
 // Run starts the daemon and blocks until ctx ends, a shutdown request
 // arrives or the Telegram client stops. It returns nil on a clean stop.
 func Run(ctx context.Context, opts Options) error {
+	overrides, err := validateSettingOverrides(opts.SettingsOverrides)
+	if err != nil {
+		return err
+	}
+	opts.SettingsOverrides = overrides
 	log := opts.Log
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
@@ -217,6 +226,7 @@ func Run(ctx context.Context, opts Options) error {
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore, startedAt: time.Now()}
 	d.ownerSecrets = NewOwnerSecrets(ownedStore)
 	d.refreshAccess(runCtx)
+	d.initSettings(runCtx)
 	d.admission.unblock(opts.Telegram)
 	defer d.openSemantic()()
 	// The indexer starts before anything that can send it a trigger exists.
@@ -513,6 +523,7 @@ func (d *daemon) handle(method string, h rpc.Handler) {
 }
 
 func (d *daemon) register() {
+	d.registerSettings()
 	d.handle(rpc.MethodSessionExport, d.sessionExport)
 	d.handle(rpc.MethodPing, d.ping)
 	d.handle(rpc.MethodStatus, d.status)
@@ -859,6 +870,9 @@ func (d *daemon) getAuthLost() string {
 // needsTelegram excludes operations that are fully served by local storage.
 func needsTelegram(method string) bool {
 	switch method {
+	case rpc.MethodSettingsList, rpc.MethodSettingsGet, rpc.MethodSettingsSet, rpc.MethodSettingsUnset,
+		rpc.MethodSettingsAdd, rpc.MethodSettingsRemove, rpc.MethodSettingsTokenInit, rpc.MethodSettingsTokenChange:
+		return false
 	case rpc.MethodSearch, rpc.MethodSearchSemantic, rpc.MethodNoteList, rpc.MethodNoteDelete, rpc.MethodNoteDeleteByAuthor,
 		rpc.MethodMessageExportLocal, rpc.MethodMessageExportVerify,
 		// The status and the cancel of a background job read and change the job

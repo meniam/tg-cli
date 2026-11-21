@@ -243,8 +243,13 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		}
 		logger = slog.New(slog.NewTextHandler(journal, &slog.HandlerOptions{Level: level}))
 	}
+	overrides, err := a.settingsOverrides(cmd)
+	if err != nil {
+		return err
+	}
 	err = runDaemon(cmd.Context(), daemon.Options{
 		FileWarningsReported: true,
+		SettingsOverrides:    overrides,
 		ClientPreset:         a.config.Profiles[profile].Client,
 		Profile:              profile,
 		Paths:                paths,
