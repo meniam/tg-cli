@@ -16,7 +16,7 @@ The user wants the words of a voice message, a video note or a video in a chat, 
 
 ## Prepare
 
-The Daemon is running and logged in, and the chat is found (`find-chat`). The message id is known (`message history`, `message search`). The engine and `ffmpeg` are installed: `tg voice install --check` says `installed: true`. If something is missing, tell the user and ask before `tg voice install` (it downloads about 190 MB). The owner does not need to turn on `[voice_transcription]` for a single message.
+The Daemon is running and logged in, and the chat is found (`find-chat`). The message id is known (`message history`, `message search`). The engine and `ffmpeg` are installed: `tg voice install --check` says `installed: true`. If something is missing, tell the user and ask before `tg voice install` (it downloads about 190 MB). The owner does not need to turn on `voice_transcription.enabled` for a single message.
 
 ## Commands
 

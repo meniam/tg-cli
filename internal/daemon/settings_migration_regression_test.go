@@ -58,7 +58,7 @@ func migrationSettings(t *testing.T, configPath, profile string) (map[string]jso
 
 func TestSettingsMigrationProfilesBackupAndRetry(t *testing.T) {
 	home, path := migrationTestHome(t)
-	content := "# Keep this comment\ndefault_profile = \"default\"\n[behavior]\nthrottle_percent = 37\n[profiles.default]\nclient = \"desktop\"\n[profiles.work]\nclient = \"ios\"\n"
+	content := "# Keep this comment\ndefault_profile = \"default\"\n[behavior]\nthrottle_percent = 37\n[voice_transcription]\nthreads = 7\ndaily_files = 44\n[profiles.default]\nclient = \"desktop\"\n[profiles.work]\nclient = \"ios\"\n"
 	writeMigrationSource(t, path, content)
 	sources := map[string]string{"default": `{"allow":[11,22],"block":[22],"write":[11]}`, "work": `{"block":[33],"admin":[44]}`}
 	for name, data := range sources {
@@ -94,7 +94,7 @@ func TestSettingsMigrationProfilesBackupAndRetry(t *testing.T) {
 			t.Fatalf("legacy file remains: %v", err)
 		}
 		values, marked := migrationSettings(t, path, name)
-		if !marked || string(values["behavior.throttle_percent"]) != "37" {
+		if !marked || string(values["behavior.throttle_percent"]) != "37" || string(values["voice_transcription.threads"]) != "7" || string(values["voice_transcription.daily_files"]) != "44" {
 			t.Fatalf("profile %s values=%v marked=%v", name, values, marked)
 		}
 		want := `"desktop"`
@@ -115,7 +115,7 @@ func TestSettingsMigrationProfilesBackupAndRetry(t *testing.T) {
 		}
 	}
 	cleaned, err := os.ReadFile(path)
-	if err != nil || !strings.Contains(string(cleaned), "# Keep this comment") || strings.Contains(string(cleaned), "[behavior]") || strings.Contains(string(cleaned), "[profiles.") {
+	if err != nil || !strings.Contains(string(cleaned), "# Keep this comment") || strings.Contains(string(cleaned), "[behavior]") || strings.Contains(string(cleaned), "[voice_transcription]") || strings.Contains(string(cleaned), "[profiles.") {
 		t.Fatalf("config cleanup: %s %v", cleaned, err)
 	}
 	before := map[string][]byte{}
@@ -146,6 +146,7 @@ func TestSettingsMigrationInvalidSourceIsAtomic(t *testing.T) {
 	for _, tc := range []struct{ name, config, access, source string }{
 		{"access", "# keep\n[behavior]\nthrottle_percent = 55\n", `{"allow":[0],"unknown":"private-content"}`, "access"},
 		{"config", "# private-content\n[behavior]\nthrottle_percent = 999\n", `{"write":[42]}`, "config"},
+		{"voice", "# private-content\n[voice_transcription]\nthreads = 17\n", `{"write":[42]}`, "config"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home, path := migrationTestHome(t)
@@ -214,7 +215,7 @@ func TestOfflineSettingsRefusesProtectedWriteAndBusyProfile(t *testing.T) {
 }
 
 func TestMigratedSettingsRejectLateSources(t *testing.T) {
-	for _, kind := range []string{"access", "config"} {
+	for _, kind := range []string{"access", "config", "voice"} {
 		t.Run(kind, func(t *testing.T) {
 			home, path := migrationTestHome(t)
 			ctx := context.Background()
@@ -229,6 +230,9 @@ func TestMigratedSettingsRejectLateSources(t *testing.T) {
 			target := paths.Access
 			if kind == "access" {
 				writeMigrationSource(t, target, `{"block":[42]}`)
+			} else if kind == "voice" {
+				target = "voice_transcription"
+				writeMigrationSource(t, path, "# unchanged\n[voice_transcription]\nthreads = 7\n")
 			} else {
 				target = "behavior"
 				writeMigrationSource(t, path, "# unchanged\n[behavior]\nthrottle_percent = 55\n")
@@ -259,7 +263,7 @@ func TestMigratedSettingsRejectLateSources(t *testing.T) {
 				t.Fatalf("running daemon accepted %s: %v", kind, guardErr)
 			}
 			wantSource := paths.Access
-			if kind == "config" {
+			if kind != "access" {
 				wantSource = path
 			}
 			if !strings.Contains(rpcErr.Message, wantSource) {

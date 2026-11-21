@@ -150,7 +150,7 @@ type voiceRun struct {
 
 // voiceWorker is the single worker of the voice queue. One goroutine takes the
 // queued jobs one at a time. It exists for every daemon, but its goroutine runs
-// only when [voice_transcription] enabled is on, or after the first manual job.
+// only when voice_transcription.enabled is on, or after the first manual job.
 type voiceWorker struct {
 	d      *daemon
 	cfg    VoiceTranscriptionConfig

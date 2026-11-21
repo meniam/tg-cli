@@ -19,7 +19,7 @@ import (
 
 // schemaVersion is the version of the document `tg schema` prints. It grows
 // when a field changes meaning, so an agent tells an old schema from a new one.
-const schemaVersion = 3
+const schemaVersion = 4
 
 // schemaDoc is the machine description of the command line.
 type schemaDoc struct {

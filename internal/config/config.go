@@ -48,10 +48,11 @@ type Config struct {
 
 // Legacy records the old sections and their explicitly set values.
 type Legacy struct {
-	Behavior       map[string]any
-	BackgroundSync map[string]any
-	SemanticSearch map[string]any
-	Profiles       map[string]map[string]any
+	Behavior           map[string]any
+	BackgroundSync     map[string]any
+	SemanticSearch     map[string]any
+	VoiceTranscription map[string]any
+	Profiles           map[string]map[string]any
 }
 
 // Files holds the file names within a profile directory.
@@ -179,17 +180,18 @@ func Load(path string) (Config, error) {
 	}
 	// Decode explicitly set legacy values separately for migration.
 	var probe struct {
-		Home           *string                   `toml:"home"`
-		Behavior       map[string]any            `toml:"behavior"`
-		BackgroundSync map[string]any            `toml:"background_sync"`
-		SemanticSearch map[string]any            `toml:"semantic_search"`
-		Profiles       map[string]map[string]any `toml:"profiles"`
+		Home               *string                   `toml:"home"`
+		Behavior           map[string]any            `toml:"behavior"`
+		BackgroundSync     map[string]any            `toml:"background_sync"`
+		SemanticSearch     map[string]any            `toml:"semantic_search"`
+		VoiceTranscription map[string]any            `toml:"voice_transcription"`
+		Profiles           map[string]map[string]any `toml:"profiles"`
 	}
 	if err := toml.Unmarshal(content, &probe); err != nil {
 		return Config{}, invalid("invalid legacy configuration")
 	}
 	c.HomeSet = probe.Home != nil
-	c.Legacy = Legacy{Behavior: probe.Behavior, BackgroundSync: probe.BackgroundSync, SemanticSearch: probe.SemanticSearch, Profiles: probe.Profiles}
+	c.Legacy = Legacy{Behavior: probe.Behavior, BackgroundSync: probe.BackgroundSync, SemanticSearch: probe.SemanticSearch, VoiceTranscription: probe.VoiceTranscription, Profiles: probe.Profiles}
 	c.Home, err = validateHome(c.Home)
 	if err != nil {
 		return Config{}, err
@@ -212,6 +214,7 @@ func Load(path string) (Config, error) {
 	if _, err := c.VoiceTranscription.Resolve(); err != nil {
 		return Config{}, err
 	}
+	c.VoiceTranscription = defaultVoiceTranscription()
 	for name, p := range c.Profiles {
 		proxy, err := validateProfile(name, p)
 		if err != nil {

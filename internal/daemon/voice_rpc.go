@@ -41,7 +41,7 @@ func (w *voiceWorker) voiceInstallError() error {
 	hint := "run `tg voice install`"
 	for _, m := range missing {
 		if m == "ffmpeg" {
-			hint = "install ffmpeg or set [voice_transcription] ffmpeg, then run `tg voice install`"
+			hint = "install ffmpeg or set voice_transcription.ffmpeg, then run `tg voice install`"
 			break
 		}
 	}
@@ -203,7 +203,7 @@ func (d *daemon) voiceBackfill(ctx context.Context, params json.RawMessage) (any
 	res := rpc.VoiceBackfillResult{Enabled: w.cfg.Enabled, DryRun: p.DryRun}
 	if !p.DryRun {
 		if !w.cfg.Enabled {
-			return nil, rpc.NewError(rpc.CodeInvalidParams, "voice transcription is off: set [voice_transcription] enabled = true")
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "voice transcription is off: set voice_transcription.enabled = true")
 		}
 		if err := w.voiceInstallError(); err != nil {
 			return nil, err

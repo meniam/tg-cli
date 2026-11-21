@@ -14,8 +14,25 @@ secret status.
 
 The default `profile.client` is `desktop`. `background_sync.enabled` and
 `semantic_search.enabled` also default to `true`; set either one to `false`
-and restart the Daemon to disable it. Use `tg schema` for the authoritative
+and restart the Daemon to disable it. `voice_transcription.enabled` defaults to
+`true`; its ten voice settings, including the 5000 MB and 500-file daily
+budget, are also restart settings. Use `tg schema` for the authoritative
 defaults of every setting.
+
+All voice settings take effect after a Daemon restart.
+
+| Setting key | Environment variable | Values | Default |
+| --- | --- | --- | --- |
+| `voice_transcription.enabled` | `TG_CLI_VOICE_TRANSCRIPTION_ENABLED` | `true` or `false` | `true` |
+| `voice_transcription.ffmpeg` | `TG_CLI_VOICE_TRANSCRIPTION_FFMPEG` | a program name or a path, 1 to 1024 characters, no control characters | `ffmpeg` |
+| `voice_transcription.max_voice_mb` | `TG_CLI_VOICE_TRANSCRIPTION_MAX_VOICE_MB` | a whole number from 1 to 1000000: the largest voice message that is downloaded | `30` |
+| `voice_transcription.max_video_note_mb` | `TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_NOTE_MB` | a whole number from 1 to 1000000: the largest video note | `50` |
+| `voice_transcription.max_video_mb` | `TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_MB` | a whole number from 1 to 1000000: the largest video | `500` |
+| `voice_transcription.max_video_minutes` | `TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_MINUTES` | a whole number of minutes from 1 to 1000000: the longest video | `120` |
+| `voice_transcription.daily_download_mb` | `TG_CLI_VOICE_TRANSCRIPTION_DAILY_DOWNLOAD_MB` | a whole number from 1 to 1000000: the megabytes downloaded per local day | `5000` |
+| `voice_transcription.daily_files` | `TG_CLI_VOICE_TRANSCRIPTION_DAILY_FILES` | a whole number from 1 to 1000000: the files downloaded per local day | `500` |
+| `voice_transcription.pause` | `TG_CLI_VOICE_TRANSCRIPTION_PAUSE` | a Go duration from `0s` to `1h`: the wait between two downloads | `3s` |
+| `voice_transcription.threads` | `TG_CLI_VOICE_TRANSCRIPTION_THREADS` | a whole number from 1 to 16: the threads of the speech engine | `4` |
 
 Settings below `access.` control the chats and directories available to an
 agent. They require the owner's passphrase for every write. The phrase is read

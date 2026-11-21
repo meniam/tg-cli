@@ -367,8 +367,8 @@ func TestRenderDashboardVoiceStates(t *testing.T) {
 		st   rpc.VoiceStatus
 		want string
 	}{
-		{"off", rpc.VoiceStatus{State: rpc.VoiceStateDisabled}, "Voice        off (enable with [voice_transcription] enabled = true)\n"},
-		{"off wins over a stale queue", rpc.VoiceStatus{Installed: true, Queue: rpc.VoiceQueueCounts{Queued: 4}}, "Voice        off (enable with [voice_transcription] enabled = true)\n"},
+		{"off", rpc.VoiceStatus{State: rpc.VoiceStateDisabled}, "Voice        off (enable with tg settings set voice_transcription.enabled true; restart required)\n"},
+		{"off wins over a stale queue", rpc.VoiceStatus{Installed: true, Queue: rpc.VoiceQueueCounts{Queued: 4}}, "Voice        off (enable with tg settings set voice_transcription.enabled true; restart required)\n"},
 		{"engine missing", rpc.VoiceStatus{Enabled: true, Missing: []string{"ffmpeg", "model"}}, "Voice        on, engine not installed (missing ffmpeg, model)\n"},
 		{"engine missing without a list", rpc.VoiceStatus{Enabled: true}, "Voice        on, engine not installed\n"},
 		{"idle", ready, "Voice        on, 0 queued, 0 done today, 0 MB\n"},

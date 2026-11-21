@@ -155,16 +155,17 @@ func StripLegacy(data []byte) ([]byte, error) {
 	}
 	output = append(output, data[last:]...)
 	var probe struct {
-		Behavior       map[string]any            `toml:"behavior"`
-		BackgroundSync map[string]any            `toml:"background_sync"`
-		SemanticSearch map[string]any            `toml:"semantic_search"`
-		Profiles       map[string]map[string]any `toml:"profiles"`
+		Behavior           map[string]any            `toml:"behavior"`
+		BackgroundSync     map[string]any            `toml:"background_sync"`
+		SemanticSearch     map[string]any            `toml:"semantic_search"`
+		VoiceTranscription map[string]any            `toml:"voice_transcription"`
+		Profiles           map[string]map[string]any `toml:"profiles"`
 	}
-	if err := toml.Unmarshal(output, &probe); err != nil || probe.Behavior != nil || probe.BackgroundSync != nil || probe.SemanticSearch != nil || probe.Profiles != nil {
+	if err := toml.Unmarshal(output, &probe); err != nil || probe.Behavior != nil || probe.BackgroundSync != nil || probe.SemanticSearch != nil || probe.VoiceTranscription != nil || probe.Profiles != nil {
 		return nil, invalid("cannot remove legacy sections")
 	}
 	return output, nil
 }
 func legacySection(name string) bool {
-	return name == "behavior" || name == "background_sync" || name == "semantic_search" || name == "profiles"
+	return name == "behavior" || name == "background_sync" || name == "semantic_search" || name == "voice_transcription" || name == "profiles"
 }

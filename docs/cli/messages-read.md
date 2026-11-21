@@ -635,7 +635,7 @@ tg message transcribe <message-link>
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon. For the local engine: the engine and `ffmpeg` installed (`tg voice install --check`); `[voice_transcription] enabled` may be off. The message must be in the local database or readable from Telegram. For `--telegram`: a connected, logged-in account (Premium, or a free trial).
+**Preconditions.** A running Daemon. For the local engine: the engine and `ffmpeg` installed (`tg voice install --check`); `voice_transcription.enabled` may be false. The message must be in the local database or readable from Telegram. For `--telegram`: a connected, logged-in account (Premium, or a free trial).
 
 **Example.**
 

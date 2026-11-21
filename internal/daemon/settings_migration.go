@@ -73,7 +73,7 @@ func migrationSource(p *migrationProfile, key, configPath string) string {
 }
 
 func defaultMigrationSource(p *migrationProfile, legacy config.Legacy, configPath string) string {
-	if legacy.Behavior != nil || legacy.BackgroundSync != nil || legacy.SemanticSearch != nil {
+	if legacy.Behavior != nil || legacy.BackgroundSync != nil || legacy.SemanticSearch != nil || legacy.VoiceTranscription != nil {
 		return configPath
 	}
 	if _, ok := legacy.Profiles[p.name]; ok {
@@ -148,7 +148,7 @@ func migrateSettings(ctx context.Context, configPath, home, selected string, ren
 		}
 		// A completed migration with no legacy sources is a read-only no-op,
 		// even while another profile's daemon is running.
-		if len(standaloneNames) == 0 && cfg.Legacy.Behavior == nil && cfg.Legacy.BackgroundSync == nil && cfg.Legacy.SemanticSearch == nil && cfg.Legacy.Profiles == nil {
+		if len(standaloneNames) == 0 && cfg.Legacy.Behavior == nil && cfg.Legacy.BackgroundSync == nil && cfg.Legacy.SemanticSearch == nil && cfg.Legacy.VoiceTranscription == nil && cfg.Legacy.Profiles == nil {
 			allMigrated := true
 			for i := range profiles {
 				if err := CheckNoLegacySettingsSources(profiles[i].paths.Access, config.Legacy{}); err != nil {
@@ -256,7 +256,7 @@ func migrateSettings(ctx context.Context, configPath, home, selected string, ren
 					return &MigrationInputError{Source: configPath}
 				}
 			}
-			globalLegacy := cfg.Legacy.Behavior != nil || cfg.Legacy.BackgroundSync != nil || cfg.Legacy.SemanticSearch != nil || cfg.Legacy.Profiles != nil
+			globalLegacy := cfg.Legacy.Behavior != nil || cfg.Legacy.BackgroundSync != nil || cfg.Legacy.SemanticSearch != nil || cfg.Legacy.VoiceTranscription != nil || cfg.Legacy.Profiles != nil
 			anySource := globalLegacy
 			for i := range profiles {
 				anySource = anySource || profiles[i].prepared.AccessExists || len(profiles[i].standalone) > 0

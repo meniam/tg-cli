@@ -15,7 +15,7 @@ func (a *app) chatVoiceCommand() *cobra.Command {
 		Short: "Mark chats whose voice messages the Daemon transcribes",
 		Long: "Personal chats need no mark. A marked chat gets its new and synced voice messages and\n" +
 			"video notes transcribed, and its videos too when the mark has --video. The marks\n" +
-			"take effect only with [voice_transcription] enabled = true.",
+			"take effect only with voice_transcription.enabled = true.",
 	}
 	on := a.annotate(&cobra.Command{
 		Use:   "on <chat>",
@@ -55,7 +55,7 @@ func (a *app) chatVoiceOn(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if !res.Enabled {
-		a.warn(cmd, "voice transcription is off: set [voice_transcription] enabled = true and restart the Daemon for the mark to take effect")
+		a.warn(cmd, "voice transcription is off: set voice_transcription.enabled = true and restart the Daemon for the mark to take effect")
 	}
 	return a.success(cmd, res)
 }

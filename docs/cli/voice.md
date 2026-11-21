@@ -2,7 +2,7 @@
 
 The Daemon turns voice messages, video notes and (on request) videos into text with a local speech engine, GigaAM v3 through sherpa-onnx, and `ffmpeg` for the conversion. The engine recognises Russian only: other speech comes out as noise. Every job goes through one persistent queue (the table `voice_queue` of the profile database) that a single worker serves, so jobs survive a restart of the Daemon. Telegram is asked only for the file: no command on this page asks Telegram to transcribe. The single path that does is [`tg message transcribe --telegram`](messages-read.md#tg-message-transcribe).
 
-Two things are set once: the engine (`tg voice install`, about 190 MB under `<home>/models/gigaam`, one set for all profiles) and `ffmpeg` in `PATH`. Automatic sources are enabled by default (the keys, the limits and the `TG_CLI_VOICE_TRANSCRIPTION_*` variables are in [overview.md](overview.md#request-throttle-and-flood_wait)). Set `[voice_transcription] enabled = false` and restart the Daemon to disable them. A manual command, `tg message transcribe` or `tg voice retry`, works either way.
+Two things are set once: the engine (`tg voice install`, about 190 MB under `<home>/models/gigaam`, one set for all profiles) and `ffmpeg` in `PATH`. Automatic sources are enabled by default. The `voice_transcription.*` keys live in the profile database, have `TG_CLI_VOICE_TRANSCRIPTION_*` overrides, and take effect after a Daemon restart; see [overview.md](overview.md#request-throttle-and-flood_wait). Set `voice_transcription.enabled` to `false` and restart the Daemon to disable them. A manual command, `tg message transcribe` or `tg voice retry`, works either way.
 
 What a job does, in order: it checks that access settings do not close the chat and that the message is saved with a matching media type; it skips a file above the limit of its kind (30 MB for a voice message, 50 MB for a video note, 500 MB and 120 minutes for a video; `skipped` with the reason `too_large` or `too_long`, nothing downloaded); it checks free disk space and pauses between downloads (`pause`); it downloads the file into a private temporary directory of the Daemon (`tmp-voice` next to the database, mode 0700) and deletes it whatever happens; it converts the file to WAV and recognises it; it stores the text with `source: "local"` and `engine: "gigaam-v3"`. The text is untrusted Telegram data like any message text. A speechless recording is stored as an empty text and the job ends `done` with the reason `no_speech`. A network failure of the download is retried three times after 10, 60 and 300 seconds; every other refusal ends the job `failed` with a short reason (`download`, `convert`, `engine`, `disk`, `no_media`, `no_message`, `store`, `internal`).
 
@@ -52,7 +52,7 @@ tg voice install [--check]
 
 **Safety class:** `local_write` (`--check` only reads). Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** Network access to `github.com` for the download, about 190 MB of free disk space. `ffmpeg` is not downloaded: `--check` and a finished install report it as missing when `PATH` (or `[voice_transcription] ffmpeg`) does not have it. A failed download changes nothing that was installed.
+**Preconditions.** Network access to `github.com` for the download, about 190 MB of free disk space. `ffmpeg` is not downloaded: `--check` and a finished install report it as missing when `PATH` (or `voice_transcription.ffmpeg`) does not have it. A failed download changes nothing that was installed.
 
 **Example.**
 
@@ -68,7 +68,7 @@ tg voice install --check
 
 **Answer fields** (`data`): `installed` boolean (nothing is missing); `checked` boolean (true for `--check`, which downloads nothing); `missing` array of `ffmpeg`, `runtime`, `model`, `vad` (empty when `installed`). No path and no file name is reported.
 
-**Exit codes.** 0 (also when `--check` finds parts missing: read `installed`); 1 the download failed, the sum did not match, the archive was refused or the command was interrupted (the message names the class, not a path); 2 an invalid `[voice_transcription]` setting.
+**Exit codes.** 0 (also when `--check` finds parts missing: read `installed`); 1 the download failed, the sum did not match, the archive was refused or the command was interrupted (the message names the class, not a path); 2 an invalid `voice_transcription.*` setting.
 
 ### tg voice status
 
@@ -185,7 +185,7 @@ tg voice backfill [--dry-run]
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon. When `[voice_transcription] enabled = false`, the command fails with exit code 2 because transcription is off; `--dry-run` still counts and says so on stderr. A real run needs the engine installed.
+**Preconditions.** A running Daemon. When `voice_transcription.enabled` is false, the command fails with exit code 2 because transcription is off; `--dry-run` still counts and says so on stderr. A real run needs the engine installed.
 
 **Example.**
 
@@ -213,7 +213,7 @@ Who gets queued, and when, is one rule. A message is queued only if access setti
 - the messages a `tg chat sync` or the background sync has just saved, only those whose date is less than 90 days old: priority 20 (`sync`); older ones wait for a backfill;
 - `--backfill` of a mark and `tg voice backfill`: priority 30 (`backfill`).
 
-A source never queues a message twice (the queue keeps one row per message) and makes no Telegram request. With `[voice_transcription] enabled = false`, no automatic source queues anything.
+A source never queues a message twice (the queue keeps one row per message) and makes no Telegram request. With `voice_transcription.enabled` false, no automatic source queues anything.
 
 ### tg chat voice on
 
@@ -232,7 +232,7 @@ tg chat voice on <chat> [--video] [--backfill]
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon. The chat is known to the local database. The mark takes effect while `[voice_transcription] enabled` is true, which is the default; while it is false the command warns on stderr.
+**Preconditions.** A running Daemon. The chat is known to the local database. The mark takes effect while `voice_transcription.enabled` is true, which is the default; while it is false the command warns on stderr.
 
 **Example.**
 

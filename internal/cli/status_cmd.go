@@ -264,7 +264,7 @@ func dashboardSemantic(s rpc.SemanticIndexStatus, now time.Time) string {
 // or the last failure. Every word is a machine word or a number.
 func dashboardVoice(v rpc.VoiceStatus, now time.Time) string {
 	if !v.Enabled {
-		return "off (enable with [voice_transcription] enabled = true)"
+		return "off (enable with tg settings set voice_transcription.enabled true; restart required)"
 	}
 	if !v.Installed {
 		line := "on, engine not installed"

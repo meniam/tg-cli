@@ -16,6 +16,7 @@ func TestSettingDefaults(t *testing.T) {
 		"behavior.throttle_percent": c.Behavior.ThrottlePercent, "behavior.flood_autowait": c.Behavior.FloodAutoWait, "behavior.expect_user": c.Behavior.ExpectUser,
 		"background_sync.enabled": c.BackgroundSync.Enabled, "background_sync.window_start": c.BackgroundSync.WindowStart, "background_sync.window_end": c.BackgroundSync.WindowEnd, "background_sync.interval_min": c.BackgroundSync.IntervalMin, "background_sync.interval_max": c.BackgroundSync.IntervalMax, "background_sync.page_pause_min": c.BackgroundSync.PagePauseMin, "background_sync.page_pause_max": c.BackgroundSync.PagePauseMax,
 		"semantic_search.enabled": c.SemanticSearch.Enabled, "semantic_search.ollama_url": c.SemanticSearch.OllamaURL, "semantic_search.model": c.SemanticSearch.Model, "semantic_search.batch": c.SemanticSearch.Batch, "semantic_search.interval": c.SemanticSearch.Interval, "semantic_search.min_similarity": c.SemanticSearch.MinSimilarity,
+		"voice_transcription.enabled": c.VoiceTranscription.Enabled, "voice_transcription.ffmpeg": c.VoiceTranscription.FFmpeg, "voice_transcription.max_voice_mb": c.VoiceTranscription.MaxVoiceMB, "voice_transcription.max_video_note_mb": c.VoiceTranscription.MaxVideoNoteMB, "voice_transcription.max_video_mb": c.VoiceTranscription.MaxVideoMB, "voice_transcription.max_video_minutes": c.VoiceTranscription.MaxVideoMinutes, "voice_transcription.daily_download_mb": c.VoiceTranscription.DailyDownloadMB, "voice_transcription.daily_files": c.VoiceTranscription.DailyFiles, "voice_transcription.pause": c.VoiceTranscription.Pause, "voice_transcription.threads": c.VoiceTranscription.Threads,
 		"profile.client": "desktop", "profile.device": "", "profile.transport": "tcp", "profile.proxy": "none",
 		"access.allow": []int64{}, "access.block": []int64{}, "access.write": []int64{}, "access.admin": []int64{}, "access.files": []string{}, "access.downloads": []string{}, "access.dialogs": false, "access.sessions": false, "access.create": false, "access.profile": false,
 	}
@@ -83,6 +84,16 @@ func TestSettingValues(t *testing.T) {
 		{"semantic_search.batch", "128", "128", []string{"0", "129", "1.2"}},
 		{"semantic_search.interval", "1m", `"1m"`, []string{"59s", "25h", "bad"}},
 		{"semantic_search.min_similarity", "0", "0", []string{"-0.1", "1.1", "NaN"}},
+		{"voice_transcription.enabled", "false", "false", []string{"yes"}},
+		{"voice_transcription.ffmpeg", "avconv", `"avconv"`, []string{"", "  "}},
+		{"voice_transcription.max_voice_mb", "1", "1", []string{"0", "1000001"}},
+		{"voice_transcription.max_video_note_mb", "2", "2", []string{"0", "1000001"}},
+		{"voice_transcription.max_video_mb", "3", "3", []string{"0", "1000001"}},
+		{"voice_transcription.max_video_minutes", "4", "4", []string{"0", "1000001"}},
+		{"voice_transcription.daily_download_mb", "5", "5", []string{"0", "1000001"}},
+		{"voice_transcription.daily_files", "6", "6", []string{"0", "1000001"}},
+		{"voice_transcription.pause", "0s", `"0s"`, []string{"-1s", "1h1s"}},
+		{"voice_transcription.threads", "16", "16", []string{"0", "17"}},
 		{"profile.client", "desktop", `"desktop"`, []string{"UPPER", "bad_name"}},
 		{"profile.device", "device", `"device"`, []string{"  ", "x\ny", strings.Repeat("x", 65)}},
 		{"profile.transport", "wss", `"wss"`, []string{"udp", ""}},
@@ -157,6 +168,7 @@ func TestTemplateDocumentedSettingDefaults(t *testing.T) {
 		"behavior.throttle_percent": `60`, "behavior.flood_autowait": `"10s"`, "behavior.expect_user": `""`,
 		"background_sync.enabled": `true`, "background_sync.window_start": `"08:00"`, "background_sync.window_end": `"20:00"`, "background_sync.interval_min": `"40m"`, "background_sync.interval_max": `"3h"`, "background_sync.page_pause_min": `"2s"`, "background_sync.page_pause_max": `"8s"`,
 		"semantic_search.enabled": `true`, "semantic_search.ollama_url": `"http://127.0.0.1:11434"`, "semantic_search.model": `"bge-m3"`, "semantic_search.batch": `16`, "semantic_search.interval": `"10m"`, "semantic_search.min_similarity": `0.5`,
+		"voice_transcription.enabled": `true`, "voice_transcription.ffmpeg": `"ffmpeg"`, "voice_transcription.max_voice_mb": `30`, "voice_transcription.max_video_note_mb": `50`, "voice_transcription.max_video_mb": `500`, "voice_transcription.max_video_minutes": `120`, "voice_transcription.daily_download_mb": `5000`, "voice_transcription.daily_files": `500`, "voice_transcription.pause": `"3s"`, "voice_transcription.threads": `4`,
 		"profile.client": `"desktop"`, "profile.device": `""`, "profile.transport": `"tcp"`, "profile.proxy": `"none"`,
 	}
 	for _, key := range SettingKeys() {
@@ -176,7 +188,7 @@ func TestTemplateDocumentedSettingDefaults(t *testing.T) {
 			t.Errorf("invalid default for %s", name)
 		}
 	}
-	for _, section := range []string{"[behavior]", "[background_sync]", "[semantic_search]", "[profiles.default]"} {
+	for _, section := range []string{"[behavior]", "[background_sync]", "[semantic_search]", "[voice_transcription]", "[profiles.default]"} {
 		if strings.Contains(Template(), section) {
 			t.Errorf("template contains legacy section %s", section)
 		}

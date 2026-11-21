@@ -16,7 +16,7 @@ func (l Legacy) SettingsForProfile(profile string) (map[string]json.RawMessage, 
 		name   string
 		values map[string]any
 	}{
-		{"behavior", l.Behavior}, {"background_sync", l.BackgroundSync}, {"semantic_search", l.SemanticSearch}, {"profile", l.Profiles[profile]},
+		{"behavior", l.Behavior}, {"background_sync", l.BackgroundSync}, {"semantic_search", l.SemanticSearch}, {"voice_transcription", l.VoiceTranscription}, {"profile", l.Profiles[profile]},
 	}
 	for _, section := range sections {
 		for key, value := range section.values {

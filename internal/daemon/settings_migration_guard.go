@@ -47,6 +47,8 @@ func CheckNoLegacySettingsSources(accessPath string, legacy config.Legacy) error
 		return &LegacySettingsError{Source: "[background_sync]"}
 	case legacy.SemanticSearch != nil:
 		return &LegacySettingsError{Source: "[semantic_search]"}
+	case legacy.VoiceTranscription != nil:
+		return &LegacySettingsError{Source: "[voice_transcription]"}
 	case legacy.Profiles != nil:
 		return &LegacySettingsError{Source: "[profiles]"}
 	}

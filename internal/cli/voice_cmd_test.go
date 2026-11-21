@@ -138,7 +138,7 @@ func TestVoiceBackfillCommand(t *testing.T) {
 		t.Fatalf("backfill: %+v %+v %v", r, p, err)
 	}
 	r = runVoiceCLI(t, []string{"voice", "backfill"}, nil, func(string, json.RawMessage) (any, error) {
-		return nil, rpc.NewError(rpc.CodeInvalidParams, "voice transcription is off: set [voice_transcription] enabled = true")
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "voice transcription is off: set voice_transcription.enabled = true")
 	})
 	if r.code != exitcode.Usage || !strings.Contains(r.stdout, "enabled = true") {
 		t.Fatalf("backfill while off: %+v", r)
@@ -289,6 +289,13 @@ func TestDaemonVoiceTranscriptionEnvironmentOverridesFile(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := backgroundSyncApp(t, file, tc.env)
+			stored, err := a.config.Legacy.SettingsForProfile("default")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := a.applyDatabaseSettings(daemon.Paths{Dir: "/data/tg/default"}, stored); err != nil {
+				t.Fatal(err)
+			}
 			a.config.Home = "/data/tg"
 			got, err := a.daemonVoiceTranscription()
 			if err != nil {
@@ -325,5 +332,36 @@ func TestDaemonVoiceTranscriptionRejectsBadEnvironment(t *testing.T) {
 				t.Fatalf("got %v, want a usage error naming %s", err, tc.variable)
 			}
 		})
+	}
+}
+
+func TestDaemonVoiceTranscriptionDatabaseAndEnvironment(t *testing.T) {
+	e := newEnv(t)
+	e.setProfileSettings("default", map[string]json.RawMessage{
+		"voice_transcription.enabled": []byte(`false`),
+		"voice_transcription.ffmpeg":  []byte(`"/database/ffmpeg"`),
+		"voice_transcription.threads": []byte(`6`),
+		"voice_transcription.pause":   []byte(`"5s"`),
+	})
+	e.env["TG_CLI_VOICE_TRANSCRIPTION_THREADS"] = "9"
+	previous := runDaemon
+	t.Cleanup(func() { runDaemon = previous })
+	var got daemon.Options
+	runDaemon = func(ctx context.Context, opts daemon.Options) error {
+		err := daemon.WithProfileDatabase(opts.Paths, func(db daemon.ProfileDatabase) error { return opts.Prepare(ctx, db, &opts) })
+		got = opts
+		return err
+	}
+	var stdout, stderr safeBuffer
+	deps := e.deps(&stdout, &stderr)
+	deps.NewTelegram = func(daemon.TelegramConfig) (daemon.Telegram, error) { return e.tg, nil }
+	if code := Execute(context.Background(), []string{"daemon", "start", "--foreground"}, deps); code != exitcode.OK {
+		t.Fatalf("exit %d: %s %s", code, stdout.String(), stderr.String())
+	}
+	if got.VoiceTranscription.Enabled || got.VoiceTranscription.FFmpeg != "/database/ffmpeg" || got.VoiceTranscription.Threads != 9 || got.VoiceTranscription.Pause != 5*time.Second {
+		t.Fatalf("voice options: %+v", got.VoiceTranscription)
+	}
+	if override, ok := got.SettingsOverrides["voice_transcription.threads"]; !ok || override.Source != "env" || string(override.Value) != "9" {
+		t.Fatalf("environment source: %+v", got.SettingsOverrides)
 	}
 }

@@ -15,8 +15,7 @@ import (
 	"tg-cli/internal/exitcode"
 )
 
-// applyDatabaseSettings overlays stored values on the legacy configuration.
-// The legacy fields remain a fallback until the migration in the next stage.
+// applyDatabaseSettings overlays stored values on the startup defaults.
 func (a *app) applyDatabaseSettings(paths daemon.Paths, values map[string]json.RawMessage) error {
 	name := filepath.Base(paths.Dir)
 	_, a.storedClient = values["profile.client"]
@@ -30,6 +29,16 @@ func (a *app) applyDatabaseSettings(paths daemon.Paths, values map[string]json.R
 		"background_sync.enabled": &a.config.BackgroundSync.Enabled, "background_sync.window_start": &a.config.BackgroundSync.WindowStart, "background_sync.window_end": &a.config.BackgroundSync.WindowEnd,
 		"background_sync.interval_min": &a.config.BackgroundSync.IntervalMin, "background_sync.interval_max": &a.config.BackgroundSync.IntervalMax, "background_sync.page_pause_min": &a.config.BackgroundSync.PagePauseMin, "background_sync.page_pause_max": &a.config.BackgroundSync.PagePauseMax,
 		"semantic_search.enabled": &a.config.SemanticSearch.Enabled, "semantic_search.ollama_url": &a.config.SemanticSearch.OllamaURL, "semantic_search.model": &a.config.SemanticSearch.Model, "semantic_search.batch": &a.config.SemanticSearch.Batch, "semantic_search.interval": &a.config.SemanticSearch.Interval, "semantic_search.min_similarity": &a.config.SemanticSearch.MinSimilarity,
+		"voice_transcription.enabled":           &a.config.VoiceTranscription.Enabled,
+		"voice_transcription.ffmpeg":            &a.config.VoiceTranscription.FFmpeg,
+		"voice_transcription.max_voice_mb":      &a.config.VoiceTranscription.MaxVoiceMB,
+		"voice_transcription.max_video_note_mb": &a.config.VoiceTranscription.MaxVideoNoteMB,
+		"voice_transcription.max_video_mb":      &a.config.VoiceTranscription.MaxVideoMB,
+		"voice_transcription.max_video_minutes": &a.config.VoiceTranscription.MaxVideoMinutes,
+		"voice_transcription.daily_download_mb": &a.config.VoiceTranscription.DailyDownloadMB,
+		"voice_transcription.daily_files":       &a.config.VoiceTranscription.DailyFiles,
+		"voice_transcription.pause":             &a.config.VoiceTranscription.Pause,
+		"voice_transcription.threads":           &a.config.VoiceTranscription.Threads,
 	}
 	for key, dst := range fields {
 		if value, ok := values[key]; ok {

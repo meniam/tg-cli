@@ -46,6 +46,16 @@ var settingSpecs = []settingSpec{
 	{"semantic_search.batch", "int", `16`, "TG_CLI_SEMANTIC_SEARCH_BATCH", "", "restart", false, false},
 	{"semantic_search.interval", "duration", `"10m"`, "TG_CLI_SEMANTIC_SEARCH_INTERVAL", "", "restart", false, false},
 	{"semantic_search.min_similarity", "number", `0.5`, "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY", "search --min-similarity", "live", false, false},
+	{"voice_transcription.enabled", "bool", `true`, "TG_CLI_VOICE_TRANSCRIPTION_ENABLED", "", "restart", false, false},
+	{"voice_transcription.ffmpeg", "string", `"ffmpeg"`, "TG_CLI_VOICE_TRANSCRIPTION_FFMPEG", "", "restart", false, false},
+	{"voice_transcription.max_voice_mb", "int", `30`, "TG_CLI_VOICE_TRANSCRIPTION_MAX_VOICE_MB", "", "restart", false, false},
+	{"voice_transcription.max_video_note_mb", "int", `50`, "TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_NOTE_MB", "", "restart", false, false},
+	{"voice_transcription.max_video_mb", "int", `500`, "TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_MB", "", "restart", false, false},
+	{"voice_transcription.max_video_minutes", "int", `120`, "TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_MINUTES", "", "restart", false, false},
+	{"voice_transcription.daily_download_mb", "int", `5000`, "TG_CLI_VOICE_TRANSCRIPTION_DAILY_DOWNLOAD_MB", "", "restart", false, false},
+	{"voice_transcription.daily_files", "int", `500`, "TG_CLI_VOICE_TRANSCRIPTION_DAILY_FILES", "", "restart", false, false},
+	{"voice_transcription.pause", "duration", `"3s"`, "TG_CLI_VOICE_TRANSCRIPTION_PAUSE", "", "restart", false, false},
+	{"voice_transcription.threads", "int", `4`, "TG_CLI_VOICE_TRANSCRIPTION_THREADS", "", "restart", false, false},
 	{"profile.client", "string", `"desktop"`, "", "daemon start --client", "restart", false, false},
 	{"profile.device", "string", `""`, "", "daemon start --device", "restart", false, false},
 	{"profile.transport", "string", `"tcp"`, "", "daemon start --transport", "restart", false, false},
@@ -220,6 +230,17 @@ func validateSettingValue(name string, value any, raw []byte) error {
 		return err
 	case "semantic_search.min_similarity":
 		return CheckSemanticMinSimilarity(value.(float64))
+	case "voice_transcription.ffmpeg":
+		return CheckVoiceFFmpeg(value.(string))
+	case "voice_transcription.max_voice_mb", "voice_transcription.max_video_note_mb", "voice_transcription.max_video_mb", "voice_transcription.max_video_minutes", "voice_transcription.daily_download_mb", "voice_transcription.daily_files":
+		_, err := ParseVoiceLimit(strconv.Itoa(value.(int)))
+		return err
+	case "voice_transcription.pause":
+		_, err := ParseVoicePause(value.(string))
+		return err
+	case "voice_transcription.threads":
+		_, err := ParseVoiceThreads(strconv.Itoa(value.(int)))
+		return err
 	case "profile.client":
 		_, err := validateProfile("default", Profile{Client: value.(string)})
 		return err

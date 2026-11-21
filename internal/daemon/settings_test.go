@@ -197,6 +197,10 @@ func TestSettingsRPCRestartValuesRemainAtStartup(t *testing.T) {
 	cases := []struct{ name, value, initial string }{
 		{"semantic_search.enabled", `false`, `true`}, {"semantic_search.ollama_url", `"http://localhost:1234"`, `"http://127.0.0.1:11434"`},
 		{"semantic_search.model", `"another-model"`, `"bge-m3"`}, {"semantic_search.batch", `32`, `16`}, {"semantic_search.interval", `"20m"`, `"10m"`},
+		{"voice_transcription.enabled", `false`, `true`}, {"voice_transcription.ffmpeg", `"avconv"`, `"ffmpeg"`},
+		{"voice_transcription.max_voice_mb", `31`, `30`}, {"voice_transcription.max_video_note_mb", `51`, `50`}, {"voice_transcription.max_video_mb", `501`, `500`},
+		{"voice_transcription.max_video_minutes", `121`, `120`}, {"voice_transcription.daily_download_mb", `5001`, `5000`}, {"voice_transcription.daily_files", `501`, `500`},
+		{"voice_transcription.pause", `"4s"`, `"3s"`}, {"voice_transcription.threads", `5`, `4`},
 		{"profile.client", `"ios"`, `"desktop"`}, {"profile.device", `"test-device"`, `""`}, {"profile.transport", `"wss"`, `"tcp"`},
 		{"profile.proxy", `"socks5://localhost:1080"`, `"[REDACTED]"`},
 	}

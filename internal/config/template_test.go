@@ -26,10 +26,8 @@ func TestTemplateLoadsWithDefaults(t *testing.T) {
 	if !got.VoiceTranscription.Enabled || got.VoiceTranscription.DailyDownloadMB != 5000 || got.VoiceTranscription.DailyFiles != 500 {
 		t.Fatalf("voice template defaults: %+v", got.VoiceTranscription)
 	}
-	for _, line := range []string{"# enabled = true", "# daily_download_mb = 5000", "# daily_files = 500"} {
-		if !strings.Contains(Template(), line) {
-			t.Errorf("template missing %q", line)
-		}
+	if strings.Contains(Template(), "voice_transcription") {
+		t.Error("template contains voice settings")
 	}
 	if len(got.Profiles) != 0 || got.Legacy.Profiles != nil {
 		t.Errorf("template must not contain profile settings: %+v", got.Profiles)

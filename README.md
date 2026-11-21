@@ -71,7 +71,7 @@ On failure the envelope is `{"ok":false,"error":{"code":"...","message":"..."}}`
 - **To build and run:** Go (the version in [`go.mod`](go.mod)), [`just`](https://github.com/casey/just) (`brew install just`) and a Unix-like system: the daemon uses Unix sockets and file locks, and the supported platforms are not defined yet. `go build` fetches the Go libraries from `go.mod`. They are all pure Go, with no cgo and no native library: SQLite is [`modernc.org/sqlite`](https://pkg.go.dev/modernc.org/sqlite), stemming is [`kljensen/snowball`](https://github.com/kljensen/snowball) and Telegram is [`gotd/td`](https://github.com/gotd/td).
 - **Telegram:** an account. With no credential option, `tg` uses the official `desktop` preset, downloaded from `raw.githubusercontent.com` when it is needed. Your own `TG_API_ID` and `TG_API_HASH` take priority over that default; `--client` selects another preset. `--client` together with either own-credential variable is rejected.
 - **For default semantic indexing:** [Ollama](https://ollama.com) on the same machine with the `bge-m3` model (`ollama pull bge-m3`, about 1.2 GB). The client accepts only a loopback address (`127.0.0.1`, `::1` or `localhost`) and refuses any other, and there is no cloud API. Without Ollama, word search still works and the indexer reports its unavailable state.
-- **For default automatic transcription:** `ffmpeg` (`brew install ffmpeg`; the first one in `PATH`, or the path in `[voice_transcription] ffmpeg`) and the speech engine, which `tg voice install` downloads (GigaAM v3 and `sherpa-onnx`, about 190 MB in `<home>/models/gigaam/`). The engine recognises Russian only.
+- **For default automatic transcription:** `ffmpeg` (`brew install ffmpeg`; the first one in `PATH`, or the path in `voice_transcription.ffmpeg`) and the speech engine, which `tg voice install` downloads (GigaAM v3 and `sherpa-onnx`, about 190 MB in `<home>/models/gigaam/`). The engine recognises Russian only.
 - **Optional, for development:** `uv` (`brew install uv`) for `just changelog` and `just atlas`, and `python3` for `just skill-check`. The `sqlite3` utility is not needed.
 
 ```sh
@@ -92,7 +92,7 @@ TG_API_ID=... TG_API_HASH=... tg daemon start
 ```
 
 `~/.config/tg-cli/config.toml` keeps the profile home, default profile, file
-names, and `voice_transcription.*`. Profile settings, including the client,
+names. Profile settings, including voice transcription, the client,
 network path, behaviour, access policy, background sync, and semantic search
 live in the profile database and are read or changed with `tg settings`,
 including while the daemon is stopped.
@@ -155,7 +155,7 @@ tg message transcribe @alice 4711      # queues one message and waits up to 60 s
 tg voice status                        # the engine, the queue, today's downloads against the budget
 ```
 
-Set `[voice_transcription] enabled = false` and restart the daemon to disable automatic transcription. Chats that the access policy closes are never queued or downloaded, the daemon never queues your own messages, and a downloaded file lives in a private temporary directory of the daemon only while its job runs. `tg voice backfill --dry-run` counts the already saved voice messages of personal chats before you queue them.
+Set `voice_transcription.enabled` to `false` and restart the daemon to disable automatic transcription. Chats that the access policy closes are never queued or downloaded, the daemon never queues your own messages, and a downloaded file lives in a private temporary directory of the daemon only while its job runs. `tg voice backfill --dry-run` counts the already saved voice messages of personal chats before you queue them.
 
 A chat is addressed as `@username`, a Bot API id (users positive, groups negative, channels from `-1000000000000`), the phone number of a contact, or a `t.me` link. More: [install and run](docs/cli/overview.md#install-and-run), [profiles](docs/cli/overview.md#profiles-and-the-data-directory), [global flags](docs/cli/overview.md#global-flags).
 
@@ -172,8 +172,8 @@ tg voice install                # about 190 MB; needs neither the daemon nor Tel
 ```
 
 - **PATH.** `just install` writes `~/.local/bin/tg`: that directory has to be in your `PATH`.
-- **Voice transcription engine.** `ffmpeg` comes from `PATH` or from `[voice_transcription] ffmpeg`. `tg voice install` downloads the `sherpa-onnx` runtime, the GigaAM v3 model and the Silero VAD model (about 190 MB) into `<home>/models/gigaam/` (default `~/.config/tg-cli/models/gigaam/`), one set for all profiles; it uses only links and SHA-256 sums fixed in the program and checks each archive before it unpacks it. `tg voice install --check` reports what is missing.
-- **Default services.** Semantic indexing, scheduled history load and automatic transcription are enabled by default. `semantic_search.enabled` and `background_sync.enabled` are database settings and take effect after a daemon restart. `voice_transcription.*` remains in `config.toml`; set `[voice_transcription] enabled = false` to disable automatic transcription, then restart the daemon.
+- **Voice transcription engine.** `ffmpeg` comes from `PATH` or from `voice_transcription.ffmpeg`. `tg voice install` downloads the `sherpa-onnx` runtime, the GigaAM v3 model and the Silero VAD model (about 190 MB) into `<home>/models/gigaam/` (default `~/.config/tg-cli/models/gigaam/`), one set for all profiles; it uses only links and SHA-256 sums fixed in the program and checks each archive before it unpacks it. `tg voice install --check` reports what is missing.
+- **Default services.** Semantic indexing, scheduled history load and automatic transcription are enabled by default. `semantic_search.enabled`, `background_sync.enabled`, and `voice_transcription.enabled` are database settings and take effect after a daemon restart. Set `voice_transcription.enabled` to `false` to disable automatic transcription.
 - **Nothing else to install.** `tg` starts no other program except `ffmpeg` and `sherpa-onnx`, and only for voice transcription (the daemon, when a job runs): without a voice job it launches no process but itself, when `tg daemon start` runs the daemon in the background. It does not call `sqlite3`, and media metadata is read in Go. The two programs start without a shell, with fixed arguments.
 - **What depends on the account, not on the installation.** `message transcribe --telegram` (Telegram gives a free-trial allowance, then asks for Premium; the default path needs no Premium), `message translate` and custom emoji in sent text need Telegram Premium; a refusal is exit code 5 with `error.reason: "premium_required"`. Writing works only in chats in `access.write`; elsewhere it is exit code 9 `write_disabled`.
 
