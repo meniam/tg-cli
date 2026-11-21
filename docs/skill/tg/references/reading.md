@@ -6,6 +6,7 @@ Specify a chat as `@username`, a numeric id (Bot API: a user is positive, a grou
 
 ```bash
 tg chat list --limit 20 --type group
+tg chat list --type user --limit 500   # up to 500 per call; pass data.next_cursor to --cursor (same --type) for the rest
 tg chat resolve @name            # find a chat; chat info <ref> gives the description and size
 tg message history <chat> --limit 50 --since 2026-11-01T00:00:00Z   # page up to 100, time in RFC 3339
 tg message get <chat> <id>

@@ -5,7 +5,7 @@ description: >
   summarize, export, transcribe voice messages or watch chats, send messages or files, or manage tg login
   or the daemon, even if they don't say CLI or MTProto. Common phrases include «телеграм», «тг», «что пишут
   в канале», «найди в переписке», «выгрузи переписку», «скинь в телегу», «расшифруй голосовое» and «что
-  сказано в кружке». Not for Bot API bots or the Telegram Desktop UI.
+  сказано в кружке», «синхронизируй последний месяц», «подгрузи последние 100 сообщений» and «поставь чаты в очередь». Not for Bot API bots or the Telegram Desktop UI.
 ---
 
 # tg: Telegram from the terminal
@@ -18,7 +18,7 @@ Details and reasons: [references/safety.md](references/safety.md).
 
 1. **Read freely, write on request.** `tg schema` gives each command a `safety` class (`read`, `local_write`, `account_write`) and a separate flag `dangerous`.
    - `read`: run freely, unless `dangerous: true`. `session export` is both: get the user's approval of the profile and the output path first.
-   - Writes: run them only when the user explicitly asked in the current task. Preview with `--dry-run` where the command has it (`auth login`, `chat sync start` and `message export-month` have none). For `message inline-query`, get the user's approval of the bot and the query first: the call itself discloses them.
+   - Writes: run them only when the user explicitly asked in the current task. Preview with `--dry-run` where the command has it (`auth login`, `chat sync start` and `message export-month` have none; `chat sync queue` has one). For `message inline-query`, get the user's approval of the bot and the query first: the call itself discloses them.
    - `dangerous`: get the user's confirmation of the exact target first, even when the CLI would not stop you (`note delete <id>` deletes at once). Add `--yes` only after that confirmation.
 2. **The owner grants access permission.** The owner changes protected `access.*` settings with the owner passphrase. Sending needs the chat in `access.write`. Other operations may need `access.files`, `access.downloads`, `access.admin`, `access.create`, `access.dialogs`, `access.sessions` or `access.profile`. You may read `tg settings list` and non-sensitive settings with `tg settings get`; change a non-`access.*` key only on request. For any `access.*` change, ask the owner to run the command. Never ask for the passphrase or for ids in `access.allow` or `access.block`.
 3. **Closed chats do not exist for you.** They do not appear in lists and return `not_found` (code 7). Do not work around this with another link and do not read `store.db`.
@@ -26,7 +26,7 @@ Details and reasons: [references/safety.md](references/safety.md).
 5. **Only the human enters the login code and the 2FA password.** Suggest `! tg auth login`. Do not print or log keys, hashes, session strings or phone numbers.
 6. **One client per session.** Do not start a second process on the session and do not touch the profile files.
 7. **After a failed write, do not retry blindly.** Read the history first. A retry is safe only with `--idempotency-key`. After `flood_wait` (code 6), do not loop retries.
-8. **Background jobs and bulk operations only on request.** `chat sync`, `chat full` and exports grow the database and the request count, `search index start` loads the machine with embeddings, and `voice backfill` and `chat voice on --backfill` queue downloads and local recognition of saved voice messages. Do not run mass mailings or bulk member collection (see the section "What not to do" in `safety.md`).
+8. **Background jobs and bulk operations only on request.** `chat sync` (`chat sync queue` queues many chats at once, so show its `--dry-run` first), `chat full` and exports grow the database and the request count, `search index start` loads the machine with embeddings, and `voice backfill` and `chat voice on --backfill` queue downloads and local recognition of saved voice messages. Do not run mass mailings or bulk member collection (see the section "What not to do" in `safety.md`).
 
 ## First run
 
@@ -97,7 +97,7 @@ A chat is given as `@username`, a numeric id (Bot API: a user is positive, a gro
 
 - [references/reading.md](references/reading.md): reading, search in Telegram and in the local database (word forms, links, `search --semantic` by meaning, `search index`), context, comments, links, members, forum topics, common chats, marks, translation, `message transcribe`.
 - [references/voice.md](references/voice.md): the local transcription of voice messages, video notes and videos: engine install, queue, chat marks, limits, `voice` and `chat voice` commands.
-- [references/history.md](references/history.md): deep history load (`chat sync`), database overview, export to JSONL, monthly archive.
+- [references/history.md](references/history.md): deep history load (`chat sync`: depth limits, a batch of chats, cancel), database overview, export to JSONL, monthly archive.
 - [references/writing.md](references/writing.md): sending, editing, deleting, forwarding, scheduled messages and drafts, formatting, reactions, pinning, polls, buttons.
 - [references/media.md](references/media.md): sending files and albums, downloading.
 - [references/stream.md](references/stream.md): `message watch`, events, cursors.
@@ -115,6 +115,9 @@ One scenario per file in [recipes/](recipes/): when to use, prepare, commands, n
 - [unread-triage](recipes/unread-triage.md): what unread messages have accumulated and where.
 - [search-across-chats](recipes/search-across-chats.md): search in one chat, in the local database and in Telegram's global search.
 - [load-full-history](recipes/load-full-history.md): load the whole chat history into the database and wait for the end.
+- [sync-recent-history](recipes/sync-recent-history.md): load only the last N messages, days or months of one chat, or everything since a date.
+- [sync-active-chats](recipes/sync-active-chats.md): queue the history load of a batch of chats, for example the people written to in the last 60 days.
+- [sync-queue-control](recipes/sync-queue-control.md): what is loading now, how far it is, and stopping one chat or the whole queue.
 - [export-history](recipes/export-history.md): export saved history to JSONL.
 - [monthly-archive](recipes/monthly-archive.md): a monthly archive with SHA-256 verification.
 - [send-report](recipes/send-report.md): send text from a script safely and without duplicates.

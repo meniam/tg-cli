@@ -12,7 +12,7 @@ tags: [history, loading, background]
 
 ## When to use
 
-The task needs the whole chat history or a long period: searching old messages, an export, a digest over months. For recent messages, `message history` with a cursor is enough: deep loading is slow.
+The task needs the whole chat history or a long period: searching old messages, an export, a digest over months. For recent messages, `message history` with a cursor is enough: deep loading is slow. To save only a recent slice into the database use [sync-recent-history](sync-recent-history.md) (`--messages`, `--days`, `--months`, `--since`), and for many chats [sync-active-chats](sync-active-chats.md).
 
 ## Prepare
 
