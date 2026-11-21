@@ -177,3 +177,22 @@ func TestNotifyHidesClosedAndUnknownNumericIDs(t *testing.T) {
 	unknown := call("999")
 	sameRPCError(t, closed, unknown)
 }
+
+func TestDialogWritesHideClosedAndUnknownNumericIDs(t *testing.T) {
+	d, base, _, path := accessTestDaemon(t)
+	writeAccess(t, path, `{"block":[42]}`)
+	for _, action := range []string{"archive", "unarchive", "pin", "unpin"} {
+		t.Run(action, func(t *testing.T) {
+			call := func(id string) error {
+				_, err := d.changeDialog(context.Background(), params(t, rpc.DialogParams{Chats: []string{id}}), action)
+				return err
+			}
+			base.missing = false
+			closed := call("42")
+			base.missing = true
+			unknown := call("999")
+			base.missing = false
+			sameRPCError(t, closed, unknown)
+		})
+	}
+}

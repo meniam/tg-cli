@@ -90,7 +90,10 @@ func TestSettingsRPCOwnerAuthorizationAndPolicy(t *testing.T) {
 	if d.policy().Allowed(42) || result.Applied != "live" {
 		t.Fatalf("policy/result = %+v", result)
 	}
-	settingsCode(t, rpcCall(t, c, rpc.MethodSettingsGet, rpc.SettingsGetParams{Key: "access.block"}, nil), rpc.CodeWriteDisabled)
+	var hidden rpc.SettingValue
+	if err := rpcCall(t, c, rpc.MethodSettingsGet, rpc.SettingsGetParams{Key: "access.block"}, &hidden); err != nil || string(hidden.Value) != "1" {
+		t.Fatalf("hidden block count: %+v %v", hidden, err)
+	}
 	var list rpc.SettingsListResult
 	if err := rpcCall(t, c, rpc.MethodSettingsList, rpc.SettingsListParams{Prefix: "access.block"}, &list); err != nil {
 		t.Fatal(err)

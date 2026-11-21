@@ -13,10 +13,9 @@ environment variable, command-line flag, application timing, protection and
 secret status.
 
 Settings below `access.` control the chats and directories available to an
-agent. They require the owner's passphrase for every write. Reading
-`access.allow` or `access.block` also requires it, because those values contain
-chat ids. The phrase is read without echo from the terminal; it is never a
-command argument, printed answer, or journal field.
+agent. They require the owner's passphrase for every write. The phrase is read
+without echo from the terminal; it is never a command argument, printed answer,
+or journal field.
 
 ## Commands
 
@@ -25,21 +24,25 @@ command argument, printed answer, or journal field.
 Lists every known setting, or the settings whose key starts with a prefix.
 
 ```text
-tg settings list [--prefix <prefix>]
+tg settings list [--prefix <prefix>] [--show-ids]
 ```
 
 <!-- schema:flags tg settings list -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--prefix` | string | `none` | filter settings by key prefix |
+| `--show-ids` | bool | `false` | show all access list IDs after owner passphrase |
 <!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`,
 `human`.
 
 **Preconditions.** The selected profile must have a usable local database. The
-command needs neither a Telegram connection nor an owner passphrase. It does
-not reveal ids in protected access lists.
+command needs neither a Telegram connection nor an owner passphrase unless
+`--show-ids` is present. Without that flag, `access.allow` and `access.block`
+show counts, while `access.write` and `access.admin` show only ids still
+visible under the effective policy. `--show-ids` asks for the owner's
+passphrase and returns all ids in those four lists.
 
 **Answer fields** (`data`): `settings`, an array of setting values. Each item
 has `key`, `value`, `source`, `stored` when set, `overridden_by` when an
@@ -52,17 +55,21 @@ override wins, and `restart_required`.
 Shows one effective setting.
 
 ```text
-tg settings get <key>
+tg settings get <key> [--show-ids]
 ```
 
 <!-- schema:flags tg settings get -->
-No command flags.
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--show-ids` | bool | `false` | show all access list IDs after owner passphrase |
 <!-- /schema:flags -->
 
 **Safety class:** `read`. Not dangerous. **Preconditions.** `<key>` is a key
-from `tg schema`. `access.allow` and `access.block` prompt for the owner's
-passphrase before contacting the Daemon or database. Other access values do not
-expose chat ids and can be read without it.
+from `tg schema`. Without `--show-ids`, `access.allow` and `access.block`
+return counts, and `access.write` and `access.admin` return only visible ids.
+With `--show-ids`, any of those four keys prompts for the owner's passphrase
+before contacting the Daemon or database and returns all ids. Other access
+values can be read without it.
 
 **Answer fields** (`data`): `key`, `value`, `source`, `stored`, optional
 `overridden_by`, and `restart_required`.

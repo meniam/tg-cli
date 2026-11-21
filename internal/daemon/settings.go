@@ -373,7 +373,7 @@ func (d *daemon) settingsList(ctx context.Context, raw json.RawMessage) (any, er
 	out := rpc.SettingsListResult{Settings: []rpc.SettingValue{}}
 	for _, key := range config.SettingKeys() {
 		if strings.HasPrefix(key.Name, p.Prefix) {
-			value := d.settingValue(key, stored, true)
+			value := d.settingValue(key, stored, !authorized)
 			if !authorized {
 				value = d.filterSettingVisibility(value, stored)
 			}
@@ -394,7 +394,7 @@ func (d *daemon) settingsGet(ctx context.Context, raw json.RawMessage) (any, err
 	d.settingsMu.Lock()
 	defer d.settingsMu.Unlock()
 	authorized := false
-	if key.Name == "access.allow" || key.Name == "access.block" || ((key.Name == "access.write" || key.Name == "access.admin") && p.Passphrase != "") {
+	if (key.Name == "access.allow" || key.Name == "access.block" || key.Name == "access.write" || key.Name == "access.admin") && p.Passphrase != "" {
 		if err := d.requireOwner(ctx, p.Passphrase); err != nil {
 			return nil, err
 		}
@@ -404,7 +404,7 @@ func (d *daemon) settingsGet(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, err
 	}
-	value := d.settingValue(key, stored, false)
+	value := d.settingValue(key, stored, !authorized)
 	if !authorized {
 		value = d.filterSettingVisibility(value, stored)
 	}

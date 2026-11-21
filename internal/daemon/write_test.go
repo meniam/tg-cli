@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -423,6 +424,21 @@ func TestWritesHideClosedAndUnknownNumericIDs(t *testing.T) {
 		{"send_inline", func(id string) (any, error) {
 			return d.messageSendInline(ctx, params(t, rpc.SendInlineParams{Chat: id, QueryID: "1", Result: "x"}))
 		}},
+		{"inline_query", func(id string) (any, error) {
+			return d.messageInlineQuery(ctx, params(t, rpc.InlineQueryParams{Chat: id, Bot: "@examplebot", Query: "x"}))
+		}},
+		{"sticker", func(id string) (any, error) {
+			index := 0
+			return d.messageSendSticker(ctx, params(t, rpc.SendStickerParams{Chat: id, Set: "fixture", Index: &index}))
+		}},
+		{"press", func(id string) (any, error) {
+			index := 0
+			return d.messagePress(ctx, params(t, rpc.PressParams{Chat: id, ID: 1, Button: &index}))
+		}},
+		{"auto_delete", func(id string) (any, error) {
+			return d.chatAutoDelete(ctx, params(t, rpc.AutoDeleteParams{Chat: id, Period: "1d"}))
+		}},
+		{"mark_read", func(id string) (any, error) { return d.chatMarkRead(ctx, params(t, rpc.MarkReadParams{Chat: id})) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tg.missing = false
@@ -431,6 +447,110 @@ func TestWritesHideClosedAndUnknownNumericIDs(t *testing.T) {
 			_, unknown := tc.call("999")
 			sameRPCError(t, closed, unknown)
 			tg.missing = false
+		})
+	}
+}
+
+func TestSendRefusesRevocationWhileWaitingForIdempotency(t *testing.T) {
+	d, tg, db, _ := writeDaemon(t)
+	d.opts.Access = nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`)}); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshAccess(ctx)
+	release, err := d.idempotencyLocks.lock(ctx, 42, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := d.messageSend(ctx, params(t, rpc.SendParams{Chat: "42", Text: "hello", IdempotencyKey: "fixture"}))
+		done <- err
+	}()
+	for {
+		d.idempotencyLocks.mu.Lock()
+		entry := d.idempotencyLocks.entries[idempotencyKey{chatID: 42, key: "fixture"}]
+		waiting := entry != nil && entry.refs == 2
+		d.idempotencyLocks.mu.Unlock()
+		if waiting {
+			break
+		}
+		if ctx.Err() != nil {
+			release()
+			t.Fatal("request did not reach idempotency lock")
+		}
+		runtime.Gosched()
+	}
+	if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[]`)}); err != nil {
+		release()
+		t.Fatal(err)
+	}
+	d.refreshAccess(ctx)
+	release()
+	err = <-done
+	if writeCode(t, err) != rpc.CodeWriteDisabled || len(tg.calls) != 0 {
+		t.Fatalf("send after revocation: %v calls=%v", err, tg.calls)
+	}
+}
+
+func TestIdempotentWritesRefuseRevocationWhileWaiting(t *testing.T) {
+	for _, kind := range []string{"forward", "poll", "sticker", "inline"} {
+		t.Run(kind, func(t *testing.T) {
+			d, _, db, _ := writeDaemon(t)
+			d.opts.Access = nil
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`)}); err != nil {
+				t.Fatal(err)
+			}
+			d.refreshAccess(ctx)
+			release, err := d.idempotencyLocks.lock(ctx, 42, "fixture")
+			if err != nil {
+				t.Fatal(err)
+			}
+			d.inlineQueries = map[string]inlineQueryEntry{"query": {chatID: 42, results: map[string]bool{"item": true}, expires: time.Now().Add(time.Minute)}}
+			done := make(chan error, 1)
+			go func() {
+				var err error
+				switch kind {
+				case "forward":
+					_, err = d.messageForward(ctx, params(t, rpc.ForwardParams{From: "7", To: "42", IDs: []int{1}, IdempotencyKey: "fixture"}))
+				case "poll":
+					_, err = d.messagePoll(ctx, params(t, rpc.PollParams{Chat: "42", Question: "Question?", Options: []string{"yes", "no"}, IdempotencyKey: "fixture"}))
+				case "sticker":
+					index := 0
+					_, err = d.messageSendSticker(ctx, params(t, rpc.SendStickerParams{Chat: "42", Set: "fixture", Index: &index, IdempotencyKey: "fixture"}))
+				case "inline":
+					_, err = d.messageSendInline(ctx, params(t, rpc.SendInlineParams{Chat: "42", QueryID: "query", Result: "item", IdempotencyKey: "fixture"}))
+				}
+				done <- err
+			}()
+			for {
+				d.idempotencyLocks.mu.Lock()
+				entry := d.idempotencyLocks.entries[idempotencyKey{chatID: 42, key: "fixture"}]
+				waiting := entry != nil && entry.refs == 2
+				d.idempotencyLocks.mu.Unlock()
+				if waiting {
+					break
+				}
+				if ctx.Err() != nil {
+					release()
+					t.Fatal("request did not reach idempotency lock")
+				}
+				runtime.Gosched()
+			}
+			if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[]`)}); err != nil {
+				release()
+				t.Fatal(err)
+			}
+			d.refreshAccess(ctx)
+			release()
+			err = <-done
+			if writeCode(t, err) != rpc.CodeWriteDisabled {
+				t.Fatalf("%s after revocation: %v", kind, err)
+			}
 		})
 	}
 }

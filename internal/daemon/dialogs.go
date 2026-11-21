@@ -30,12 +30,16 @@ func (d *daemon) changeDialog(ctx context.Context, raw json.RawMessage, action s
 	refs := make([]chatref.Ref, 0, len(p.Chats))
 	ids := make([]int64, 0, len(p.Chats))
 	for _, name := range p.Chats {
-		_, id, err := d.writeReference(ctx, name, false)
+		original, id, err := d.writeReference(ctx, name, false)
 		if err != nil {
 			return nil, err
 		}
 		chat, err := d.telegram(ctx).Resolve(ctx, chatref.Ref{Kind: chatref.ID, ID: id})
 		if err != nil {
+			var re *rpc.Error
+			if original.Kind == chatref.ID && errors.As(err, &re) && re.Code == rpc.CodeNotFound {
+				return nil, rpc.ErrUnknownChatID()
+			}
 			return nil, err
 		}
 		if chat.ID != id || !d.policy().Allowed(id) {

@@ -24,12 +24,14 @@ not change the current policy: an empty policy still leaves reads unrestricted.
 
 ## Access keys
 
-Use `tg settings list --prefix access.` to inspect the keys. It returns counts,
-not ids, for `access.allow` and `access.block`. `tg settings get access.allow`
-and `tg settings get access.block` ask for the phrase before returning ids. The
-other access values may be read normally. Change scalar values with `set` and
-`unset`; change lists with `add` and `remove`. Every `access.*` write prompts
-for the owner phrase.
+Use `tg settings list --prefix access.` to inspect the keys. Without
+`--show-ids`, it returns counts for `access.allow` and `access.block`, and only
+ids still visible under the effective policy for `access.write` and
+`access.admin`. To return all ids from any of those four lists, add
+`--show-ids` and enter the owner passphrase in the terminal. Other access
+values may be read normally. Change scalar values with `set` and `unset`; change
+lists with `add` and `remove`. Every `access.*` write prompts for the owner
+phrase.
 
 | Key | Value | Effect |
 | --- | --- | --- |

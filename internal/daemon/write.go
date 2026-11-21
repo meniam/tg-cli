@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"tg-cli/internal/access"
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
 )
@@ -116,6 +117,33 @@ func (d *daemon) writeReference(ctx context.Context, value string, writing bool)
 	return ref, id, nil
 }
 
+// lockChatWrite keeps revocations ordered with the Telegram write.
+func (d *daemon) lockChatWrite(id int64, readIDs ...int64) (func(), error) {
+	policy := d.policy()
+	d.accessMu.RLock()
+	if d.accessSnapshot != nil {
+		policy = *d.accessSnapshot
+	}
+	if d.legacyAccessPresent() || d.legacyConfigPresent() {
+		policy = access.Denied()
+	}
+	if !policy.Allowed(id) {
+		d.accessMu.RUnlock()
+		return nil, rpc.ErrChatNotFound()
+	}
+	for _, readID := range readIDs {
+		if !policy.Allowed(readID) {
+			d.accessMu.RUnlock()
+			return nil, rpc.ErrChatNotFound()
+		}
+	}
+	if !policy.WriteAllowed(id) {
+		d.accessMu.RUnlock()
+		return nil, rpc.ErrWriteDisabled()
+	}
+	return d.accessMu.RUnlock, nil
+}
+
 func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, error) {
 	var p rpc.SendParams
 	if err := decodeParams(raw, &p); err != nil {
@@ -204,7 +232,12 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 		}
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(id)
+	if err != nil {
+		return nil, err
+	}
 	res, err := d.telegram(ctx).Send(ctx, ref, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +348,7 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 	if err := validWriteIDs(p.IDs); err != nil {
 		return nil, err
 	}
-	from, _, err := d.writeReference(ctx, p.From, false)
+	from, fromID, err := d.writeReference(ctx, p.From, false)
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +378,12 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 		}
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(id, fromID)
+	if err != nil {
+		return nil, err
+	}
 	res, err := d.telegram(ctx).Forward(ctx, from, to, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +507,12 @@ func (d *daemon) messagePoll(ctx context.Context, raw json.RawMessage) (any, err
 		}
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(id)
+	if err != nil {
+		return nil, err
+	}
 	res, err := d.telegram(ctx).SendPoll(ctx, ref, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}

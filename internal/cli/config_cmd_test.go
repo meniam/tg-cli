@@ -126,7 +126,7 @@ func TestSchemaConfigKeys(t *testing.T) {
 	if err := json.Unmarshal(parse(t, r).Data, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc.SchemaVersion != 2 {
+	if doc.SchemaVersion != 3 {
 		t.Fatalf("schema version %d", doc.SchemaVersion)
 	}
 	var keys []string

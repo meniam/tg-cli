@@ -22,17 +22,31 @@ func (a *app) settingsCommand() *cobra.Command {
 	root := &cobra.Command{Use: "settings", Short: "Inspect and change profile settings"}
 	list := a.annotate(&cobra.Command{Use: "list", Short: "List profile settings", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		prefix, _ := cmd.Flags().GetString("prefix")
+		showIDs, _ := cmd.Flags().GetBool("show-ids")
+		phrase := ""
+		if showIDs {
+			var err error
+			phrase, err = a.settingsSecret("Owner passphrase: ")
+			if err != nil {
+				return err
+			}
+		}
 		var result rpc.SettingsListResult
-		if err := a.settingsCall(cmd, rpc.MethodSettingsList, rpc.SettingsListParams{Prefix: prefix}, &result); err != nil {
+		if err := a.settingsCall(cmd, rpc.MethodSettingsList, rpc.SettingsListParams{Prefix: prefix, Passphrase: phrase}, &result); err != nil {
 			return err
 		}
 		return a.success(cmd, result)
 	}}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.SettingsListResult]()})
 	list.Flags().String("prefix", "", "filter settings by key prefix")
+	list.Flags().Bool("show-ids", false, "show all access list IDs after owner passphrase")
 	root.AddCommand(list)
-	root.AddCommand(a.annotate(&cobra.Command{Use: "get <key>", Short: "Read a profile setting", Long: "Read a profile setting. Reading access.allow or access.block requires the owner's passphrase.", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	get := a.annotate(&cobra.Command{Use: "get <key>", Short: "Read a profile setting", Long: "Read a profile setting. Use --show-ids and the owner passphrase for all access list IDs.", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		phrase := ""
-		if args[0] == "access.allow" || args[0] == "access.block" {
+		showIDs, _ := cmd.Flags().GetBool("show-ids")
+		if showIDs && args[0] != "access.allow" && args[0] != "access.block" && args[0] != "access.write" && args[0] != "access.admin" {
+			return fail(exitcode.Usage, "--show-ids requires an access ID list")
+		}
+		if showIDs {
 			var err error
 			phrase, err = a.settingsSecret("Owner passphrase: ")
 			if err != nil {
@@ -44,7 +58,9 @@ func (a *app) settingsCommand() *cobra.Command {
 			return err
 		}
 		return a.success(cmd, result)
-	}}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.SettingValue](), Args: []argSpec{{Name: "key", Required: true}}}))
+	}}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.SettingValue](), Args: []argSpec{{Name: "key", Required: true}}})
+	get.Flags().Bool("show-ids", false, "show all access list IDs after owner passphrase")
+	root.AddCommand(get)
 	for _, action := range []string{"set", "unset", "add", "remove"} {
 		action := action
 		use := action + " <key> <value>"

@@ -60,7 +60,7 @@ func TestSettingsOfflineRoundTripAndSecretPrompts(t *testing.T) {
 		{[]string{"settings", "unset", "behavior.throttle_percent"}, nil, `"value":60`},
 		{[]string{"settings", "token", "init"}, []string{phrase, phrase}, `"updated":true`},
 		{[]string{"settings", "add", "access.block", "42", "43"}, []string{phrase}, `[42,43]`},
-		{[]string{"settings", "get", "access.block"}, []string{phrase}, `[42,43]`},
+		{[]string{"settings", "get", "access.block", "--show-ids"}, []string{phrase}, `[42,43]`},
 		{[]string{"settings", "remove", "access.block", "42"}, []string{phrase}, `[43]`},
 		{[]string{"settings", "token", "change"}, []string{phrase, next, next}, `"updated":true`},
 		{[]string{"settings", "add", "access.block", "42"}, []string{next}, `[42,43]`},
@@ -93,7 +93,7 @@ func TestSettingsRequireSecretBeforeConnecting(t *testing.T) {
 	e := newEnv(t)
 	calls := 0
 	dial := func(context.Context, string, string) (*rpc.Client, error) { calls++; return nil, os.ErrNotExist }
-	for _, args := range [][]string{{"settings", "get", "access.allow"}, {"settings", "add", "access.write", "42"}, {"settings", "token", "init"}, {"settings", "token", "change"}, {"settings", "token", "reset"}} {
+	for _, args := range [][]string{{"settings", "get", "access.allow", "--show-ids"}, {"settings", "add", "access.write", "42"}, {"settings", "token", "init"}, {"settings", "token", "change"}, {"settings", "token", "reset"}} {
 		r := runSettingsFixture(t, e, args, nil, dial)
 		if r.code != exitcode.Usage || calls != 0 {
 			t.Fatalf("%v: code %d calls %d: %s", args, r.code, calls, r.stdout)
@@ -254,7 +254,7 @@ func TestSettingsSchemaContract(t *testing.T) {
 	if err := json.Unmarshal(parse(t, r).Data, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc.SchemaVersion != 2 || len(doc.Settings) != 30 {
+	if doc.SchemaVersion != 3 || len(doc.Settings) != 30 {
 		t.Fatalf("schema version %d settings %d", doc.SchemaVersion, len(doc.Settings))
 	}
 	for _, key := range doc.Settings {
@@ -537,5 +537,45 @@ func TestSettingsResetRejectsLateLegacySources(t *testing.T) {
 				t.Fatalf("owner hash removed: %v", err)
 			}
 		})
+	}
+}
+
+func TestSettingsShowIDsRequiresExplicitFlagAndPhrase(t *testing.T) {
+	e := newEnv(t)
+	phrase := "owner passphrase fixture"
+	offline := func(context.Context, string, string) (*rpc.Client, error) { return nil, os.ErrNotExist }
+	run := func(args []string, secrets ...string) result { return runSettingsFixture(t, e, args, secrets, offline) }
+	if r := run([]string{"settings", "token", "init"}, phrase, phrase); r.code != exitcode.OK {
+		t.Fatal(r.stdout)
+	}
+	for _, args := range [][]string{{"settings", "add", "access.allow", "1", "2"}, {"settings", "add", "access.block", "2"}, {"settings", "add", "access.write", "1", "2"}, {"settings", "add", "access.admin", "1", "2"}} {
+		if r := run(args, phrase); r.code != exitcode.OK {
+			t.Fatal(r.stdout)
+		}
+	}
+	for _, tc := range []struct{ key, plain, full string }{{"access.allow", "2", "[1,2]"}, {"access.block", "1", "[2]"}, {"access.write", "[1]", "[1,2]"}, {"access.admin", "[1]", "[1,2]"}} {
+		r := run([]string{"settings", "get", tc.key})
+		if r.code != exitcode.OK || !strings.Contains(r.stdout, `"value":`+tc.plain) {
+			t.Fatalf("plain %s: %d %s", tc.key, r.code, r.stdout)
+		}
+		r = run([]string{"settings", "get", tc.key, "--show-ids"}, phrase)
+		if r.code != exitcode.OK || !strings.Contains(r.stdout, `"value":`+tc.full) || strings.Contains(r.stdout+r.stderr, phrase) {
+			t.Fatalf("full %s: %d %s", tc.key, r.code, r.stdout)
+		}
+		r = run([]string{"settings", "list", "--prefix", tc.key, "--show-ids"}, phrase)
+		if r.code != exitcode.OK || !strings.Contains(r.stdout, `"value":`+tc.full) || strings.Contains(r.stdout+r.stderr, phrase) {
+			t.Fatalf("list %s: %d %s", tc.key, r.code, r.stdout)
+		}
+	}
+	wrong := "wrong phrase fixture"
+	rWrong := run([]string{"settings", "list", "--show-ids"}, wrong)
+	if rWrong.code != exitcode.WriteDisabled || strings.Contains(rWrong.stdout+rWrong.stderr, wrong) {
+		t.Fatalf("wrong phrase: %d", rWrong.code)
+	}
+	calls := 0
+	dial := func(context.Context, string, string) (*rpc.Client, error) { calls++; return nil, os.ErrNotExist }
+	r := runSettingsFixture(t, e, []string{"settings", "list", "--show-ids"}, nil, dial)
+	if r.code != exitcode.Usage || calls != 0 {
+		t.Fatalf("missing terminal: %d calls %d", r.code, calls)
 	}
 }

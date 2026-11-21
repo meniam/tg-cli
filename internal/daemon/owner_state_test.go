@@ -186,3 +186,18 @@ func TestOwnerStateAccessAndLocal(t *testing.T) {
 		t.Fatalf("empty %+v %v", v, err)
 	}
 }
+
+func TestFolderWriteHidesClosedAndUnknownNumericIDs(t *testing.T) {
+	d, base, _, path := accessTestDaemon(t)
+	writeAccess(t, path, `{"block":[42]}`)
+	title := "folder"
+	call := func(id string) error {
+		_, err := d.folderWrite(context.Background(), params(t, rpc.FolderWriteParams{Title: &title, Include: []string{id}}), "create")
+		return err
+	}
+	base.missing = false
+	closed := call("42")
+	base.missing = true
+	unknown := call("999")
+	sameRPCError(t, closed, unknown)
+}

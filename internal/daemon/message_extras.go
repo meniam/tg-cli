@@ -114,7 +114,12 @@ func (d *daemon) messageSendSticker(ctx context.Context, raw json.RawMessage) (a
 		result.Replayed = true
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(id)
+	if err != nil {
+		return nil, err
+	}
 	result, err := d.telegram(ctx).SendSticker(ctx, ref, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +252,12 @@ func (d *daemon) messageSendInline(ctx context.Context, raw json.RawMessage) (an
 		}
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(chatID)
+	if err != nil {
+		return nil, err
+	}
 	result, message, err := d.telegram(ctx).SendInline(ctx, ref, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}
