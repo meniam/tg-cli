@@ -213,13 +213,18 @@ func (a *app) autostartOn(cmd *cobra.Command, _ []string) error {
 	if err := writeFileAtomic(t.file, []byte(content), 0o644); err != nil {
 		return fail(exitcode.Failure, "cannot write %s: %v", t.file, err)
 	}
+	result := autostartResult{Profile: t.profile, Label: t.label, Path: t.file, Enabled: true, Executable: executable}
+	if already {
+		// A foreground start on a profile that has a daemon exits with code 1, and launchd
+		// would retry it every 30 seconds for as long as the daemon runs, and would start a
+		// new one at once when the owner stops it. launchd loads the file at the next login.
+		result.Note = "A daemon is already running outside launchd, so the job is not loaded now: launchd loads it at the next login. To put the daemon under launchd now, run `tg daemon stop` and then `tg autostart on` again."
+		return a.success(cmd, result)
+	}
 	if out, err := a.launchctl("bootstrap", t.domain, t.file); err != nil {
 		return fail(exitcode.Failure, "launchctl bootstrap failed: %s (the job file stays at %s)", launchctlText(out, err), t.file)
 	}
-	result := autostartResult{Profile: t.profile, Label: t.label, Path: t.file, Enabled: true, Loaded: a.autostartLoaded(t), Executable: executable}
-	if already {
-		result.Note = "A daemon is already running outside launchd. launchd supervises the daemon from the next login, or after `tg daemon stop` and `tg autostart on` again."
-	}
+	result.Loaded = a.autostartLoaded(t)
 	return a.success(cmd, result)
 }
 
