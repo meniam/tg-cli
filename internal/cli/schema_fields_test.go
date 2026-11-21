@@ -274,6 +274,7 @@ func TestSchemaFieldsMatchRealResponses(t *testing.T) {
 // other command of the schema is compared with a real response above, so a new
 // command has to be either exercised or listed here with a reason.
 var uncoveredCommands = map[string]string{
+	"web":                        "a foreground HTTP server, verified through its startup envelope and browser tests",
 	"chat unread":                "access and persistence are covered by daemon tests",
 	"chat full start":            "the background job is covered by daemon tests on a fake Telegram",
 	"chat full status":           "the background job is covered by daemon tests on a fake Telegram",

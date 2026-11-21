@@ -38,6 +38,9 @@ const (
 
 // Options configure Run.
 type Options struct {
+	WebCacheRoot  string
+	WebCacheBytes int64
+	WebCacheTTL   time.Duration
 	// ClientPreset is the profile preset included in session exports.
 	ClientPreset string
 	Profile      string
@@ -76,6 +79,8 @@ type Options struct {
 const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
+	thumbMu              sync.Mutex
+	thumbSlots           chan struct{}
 	admission            telegramAdmission
 	supervisor           *clientSupervisor
 	auto                 *autoTransport
@@ -212,6 +217,7 @@ func Run(ctx context.Context, opts Options) error {
 		opts.Access = access.Open(opts.Paths.Access)
 	}
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore, startedAt: time.Now()}
+	d.thumbSlots = make(chan struct{}, 3)
 	d.admission.unblock(opts.Telegram)
 	defer d.openSemantic()()
 	// The indexer starts before anything that can send it a trigger exists.
@@ -237,6 +243,9 @@ func Run(ctx context.Context, opts Options) error {
 
 	d.register()
 	d.srv.SetEventSource(d.hub, d.replayEvents)
+	d.srv.SetEventGuard(func(event rpc.Event) bool {
+		return event.ChatID == nil || d.policy().Allowed(*event.ChatID)
+	})
 	opts.Telegram.SetEventSink(d.handleEvent)
 	if client, ok := opts.Telegram.(transcriptionTelegram); ok {
 		client.SetTranscriptionSink(d.handleTranscription)
@@ -508,6 +517,7 @@ func (d *daemon) handle(method string, h rpc.Handler) {
 }
 
 func (d *daemon) register() {
+	d.registerWeb()
 	d.handle(rpc.MethodSessionExport, d.sessionExport)
 	d.handle(rpc.MethodPing, d.ping)
 	d.handle(rpc.MethodStatus, d.status)
@@ -863,7 +873,8 @@ func needsTelegram(method string) bool {
 		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel,
 		rpc.MethodChatFullStatus, rpc.MethodChatFullCancel,
 		// The local chat overview reads the database only.
-		rpc.MethodChatOverview:
+		rpc.MethodChatOverview, rpc.MethodWebFolders, rpc.MethodWebHistory, rpc.MethodWebContext,
+		rpc.MethodMediaThumb, rpc.MethodWebThumbEnabled, rpc.MethodWebChat, rpc.MethodWebAccess, rpc.MethodWebChatSettings, rpc.MethodWebSetChatSettings:
 		return false
 	}
 	return accountMethod(method) || method == rpc.MethodSessionExport

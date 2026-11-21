@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tg web</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body data-screen="list">
+  <aside class="sidebar" aria-label="Chats">
+    <!-- Web K keeps one header row: the menu control and the search field sit
+         side by side, at the same 56px height as the chat header. The viewer's
+         name lives in the document title and in the Details/Access panels, not
+         in this row. -->
+    <header class="sidebar-head">
+      <button id="access" type="button" class="icon" aria-label="Open the access policy" title="Access policy">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <form id="global-search" class="search" role="search">
+        <svg class="search-glyph" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <circle cx="8.5" cy="8.5" r="5.25" fill="none" stroke="currentColor" stroke-width="2"/>
+          <path d="M12.6 12.6 16.5 16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <input id="global-query" name="query" type="search" autocomplete="off"
+               aria-label="Search saved messages in all chats" placeholder="Search">
+        <button id="global-clear" type="button" class="icon" hidden aria-label="Clear the search">
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <path d="M6 6l8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </form>
+    </header>
+    <nav id="folders" class="folders" role="tablist" aria-label="Folders"></nav>
+    <div class="list-head" id="list-head" hidden>
+      <span id="list-head-title">Results</span>
+      <button id="search-back" type="button" class="link">Back to chats</button>
+    </div>
+    <div id="chats" class="chats"></div>
+  </aside>
+
+  <main class="conversation">
+    <!-- One reading rail: the header, the pinned plate and the feed share its
+         width, so the conversation reads as one column as in Web K. -->
+    <div class="rail">
+      <header class="feed-head">
+        <button id="back" type="button" class="icon" aria-label="Back to chats">←</button>
+        <button id="open-details" type="button" class="identity" disabled>
+          <span id="chat-avatar" class="avatar" aria-hidden="true">?</span>
+          <span class="identity-text">
+            <strong id="chat-title">Messages</strong>
+            <small id="chat-subtitle">Local history</small>
+          </span>
+        </button>
+        <!-- Compact affordance for an incomplete local history: the remedy is in
+             the tooltip and in Details, so no bar takes a row of its own. -->
+        <button id="history-badge" type="button" class="badge" hidden
+                title="Older messages are not saved locally. Run tg chat sync to load more history.">Partial history</button>
+        <button id="search-chat" type="button" class="icon" aria-label="Search this chat" disabled>
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M12.8 12.8 17 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </header>
+
+      <!-- One pinned preview plate: segment indicators, "Pinned Message", a
+           single ellipsized preview, and the way to the other pins. -->
+      <section id="pin-plate" class="pin-plate" hidden aria-label="Pinned message">
+        <button id="pin-open" type="button" class="pin-open">
+          <span id="pin-bars" class="pin-bars" aria-hidden="true"></span>
+          <span class="pin-text">
+            <span class="pin-title">Pinned Message <span id="pin-counter" class="pin-counter"></span></span>
+            <span id="pin-preview" class="pin-preview"></span>
+          </span>
+        </button>
+        <button id="pin-all" type="button" class="pin-action" hidden>See all</button>
+        <button id="pin-hide" type="button" class="icon pin-hide" aria-label="Hide the pinned preview">
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <path d="M6 6l8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </section>
+
+      <form id="chat-search" class="search inline" role="search" hidden>
+        <span id="chat-search-scope" class="scope-label"></span>
+        <input id="chat-query" name="query" type="search" autocomplete="off" aria-label="Search this chat">
+        <button id="chat-search-clear" type="button" class="ghost">Close</button>
+      </form>
+      <div id="chat-results" class="chat-results" hidden aria-label="Search results in this chat"></div>
+
+      <div id="unavailable" class="note warn" hidden></div>
+      <div id="options" class="note" hidden>
+        <label for="topics">Topic</label>
+        <select id="topics"></select>
+      </div>
+
+      <div id="timeline" class="timeline" tabindex="0" aria-label="Messages">
+        <div class="timeline-column">
+          <div id="older-row" hidden><button id="older" type="button">Load older messages</button></div>
+          <div id="messages" role="log" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+    <button id="jump-new" type="button" class="jump" hidden></button>
+  </main>
+
+  <aside id="panel" class="panel" hidden aria-label="Details">
+    <header class="panel-head">
+      <nav id="panel-tabs" class="tabs" aria-label="Details sections">
+        <button type="button" data-tab="info" aria-selected="true">Info</button>
+        <button type="button" data-tab="attachments">Attachments</button>
+        <button type="button" data-tab="access">Access</button>
+      </nav>
+      <button id="close-panel" type="button" class="icon" aria-label="Close details">×</button>
+    </header>
+    <div id="panel-content" class="panel-body"></div>
+  </aside>
+
+  <output id="status" role="status" hidden></output>
+</body>
+</html>

@@ -25,6 +25,7 @@ type ChatMessagePreview struct {
 // the database never learned them: a chat without a saved dialog state, a chat
 // without stored messages, a chat whose history is not loaded completely.
 type ChatOverview struct {
+	Contact         bool                `json:"contact,omitempty"`
 	ChatID          int64               `json:"chat_id"`
 	Type            string              `json:"type"`
 	Title           string              `json:"title" untrusted:"true"`

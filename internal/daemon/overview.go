@@ -31,7 +31,7 @@ func (d *daemon) chatOverview(ctx context.Context, raw json.RawMessage) (any, er
 		// The store row and the wire type carry the same fields; the copy keeps
 		// the local shape out of the RPC contract.
 		item := rpc.ChatOverview{
-			ChatID: row.ChatID, Type: row.Type, Title: row.Title, Username: row.Username,
+			Contact: row.Contact, ChatID: row.ChatID, Type: row.Type, Title: row.Title, Username: row.Username,
 			CreatedAt: row.CreatedAt, Muted: row.Muted, MuteUntil: row.MuteUntil,
 			Archived: row.Archived, Pinned: row.Pinned, Unread: row.Unread,
 			UnreadMentions: row.UnreadMentions, UnreadMark: row.UnreadMark,

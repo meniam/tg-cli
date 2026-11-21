@@ -221,7 +221,11 @@ func (d *daemon) storageGap() {
 }
 
 func (d *daemon) replayEvents(ctx context.Context, params rpc.SubscribeParams) (rpc.ReplayPlan, error) {
-	if err := d.requireAccount(ctx); err != nil {
+	if params.Local {
+		if d.getAuthLost() != "" || !d.account.authorized() {
+			return rpc.ReplayPlan{}, rpc.NewError(rpc.CodeNotAuthorized, "not logged in")
+		}
+	} else if err := d.requireAccount(ctx); err != nil {
 		return rpc.ReplayPlan{}, err
 	}
 	filter := rpc.EventFilter{Types: params.Types, Topic: params.Topic}

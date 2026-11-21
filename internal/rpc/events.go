@@ -75,6 +75,7 @@ type GapData struct {
 
 // SubscribeParams selects chats, topic, types and the last seen event cursor.
 type SubscribeParams struct {
+	Local bool     `json:"local,omitempty"`
 	Chats []string `json:"chats,omitempty"`
 	Topic int      `json:"topic,omitempty"`
 	Types []string `json:"types,omitempty"`

@@ -249,6 +249,13 @@
 # Overrides: environment TG_CLI_VOICE_TRANSCRIPTION_THREADS
 # threads = 4
 
+# --- Web interface -----------------------------------------------------------
+[web]
+# listen = "127.0.0.1:1313"  # omit to find a free port starting at 1313
+open = false
+cache_bytes = 33554432
+cache_ttl = "168h"
+
 # --- Per-profile settings ----------------------------------------------------
 # One table per profile: [profiles.<name>]. `tg daemon start` writes these
 # keys when you pass --client, --device, --transport or --proxy. Every key below

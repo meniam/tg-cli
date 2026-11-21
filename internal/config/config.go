@@ -21,6 +21,7 @@ import (
 
 // Config contains the loaded settings and any non-fatal diagnostics.
 type Config struct {
+	Web Web `toml:"web"`
 	// Home is the base directory for profile data.
 	Home string `toml:"home"`
 	// HomeSet reports that the file sets home itself. Home then holds that value;
@@ -180,6 +181,9 @@ func Load(path string) (Config, error) {
 	if err != nil || duration < 0 {
 		return Config{}, invalid("behavior.flood_autowait must be a non-negative duration")
 	}
+	if _, err := c.Web.TTL(); err != nil {
+		return Config{}, err
+	}
 	if _, err := c.BackgroundSync.Resolve(); err != nil {
 		return Config{}, err
 	}
@@ -202,7 +206,7 @@ func Load(path string) (Config, error) {
 }
 
 func defaults(home string) Config {
-	return Config{Home: home, DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}, BackgroundSync: defaultBackgroundSync(), SemanticSearch: defaultSemanticSearch(), VoiceTranscription: defaultVoiceTranscription()}
+	return Config{Web: defaultWeb(), Home: home, DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}, BackgroundSync: defaultBackgroundSync(), SemanticSearch: defaultSemanticSearch(), VoiceTranscription: defaultVoiceTranscription()}
 }
 
 func validateHome(path string) (string, error) {

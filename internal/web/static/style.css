@@ -1,0 +1,1271 @@
+/* tg web: Web K visual parity.
+   Colours, metrics and timings are taken from the Web K sources at
+   morethanwords/tweb @ 2e4bbb52b6aec5e95ee32e5c2882c1f05de32200:
+   src/scss/variables.scss, base.scss (:root and .night), _chatlist.scss,
+   _sidebar.scss, _leftSidebar.scss, _row.scss, _avatar.scss, _badge.scss,
+   _chatBubble.scss, _chatVariables.scss, _slider.scss, _transition.scss,
+   and the theme map in src/helpers/themeController.ts.
+   The stylesheet and layout are written here; no Web K code or assets are used.
+   Dark (Web K "night") is the primary target; light follows the same rules. */
+
+:root {
+  color-scheme: dark light;
+
+  /* Web K timings (base.scss :root, _transition.scss) */
+  --transition-standard-easing: cubic-bezier(.4, .0, .2, 1);
+  --transition-standard-in-time: .3s;
+  --transition-standard-out-time: .25s;
+  --transition-standard-in: var(--transition-standard-in-time) var(--transition-standard-easing);
+  --transition-standard-out: var(--transition-standard-out-time) var(--transition-standard-easing);
+  --layer-transition: .2s cubic-bezier(.4, .0, .2, 1);
+  --tabs-transition: .2s ease-in-out;
+  --input-transition: .2s ease-out;
+  --chatlist-badge-transition-in: .25s cubic-bezier(.35,.35,.47,1.34);
+  --chatlist-badge-transition-out: .25s cubic-bezier(.35,.35,.7,1);
+
+  /* Web K metrics (variables.scss, _chatVariables.scss, _chatlist.scss) */
+  --header-height: 3.5rem;          /* $header-height */
+  --column-width: 360px;            /* $default-column-width */
+  --max-column-width: 480px;        /* $max-sidebar-width */
+  --floating-left-sidebar: 925px;   /* $floating-left-sidebar */
+  --border-radius: 12px;            /* $border-radius */
+  --border-radius-medium: 16px;
+  --border-radius-big: 24px;
+  --bubble-radius-medium: 5px;      /* $bubble-border-radius-medium */
+  --bubble-radius-big: 15px;        /* $bubble-border-radius-big */
+  --row-min-height: 4.5rem;         /* _row.scss min-height with avatar */
+  --messages-text-size: 16px;
+  --messages-line-height: 1.3125;
+  --messages-secondary-text-size: 14px;
+  --messages-time-text-size: 12px;
+  --avatar-size: 54px;              /* _avatar.scss .avatar-like */
+  /* Web K desktop floats the left column as a card over the page backdrop. */
+  --sidebar-inset: 16px;            /* outside gutter on every side */
+  --sidebar-radius: 24px;           /* the card's corners */
+  --row-radius: 8px;                /* the row surface inside the card */
+  --row-gutter: 8px;                /* row inset from the card edge */
+  --row-height: 72px;               /* the row surface height */
+  --badge-size: 1.375rem;           /* _badge.scss */
+  --hover-alpha: .08;
+
+  /* Web K "night" palette (themeController.ts colorMap.night) */
+  --surface-color: #212121;
+  --background-color: #181818;
+  --body-background-color: #181818;
+  --border-color: #0f0f0f;
+  --secondary-color: #707579;
+  --primary-color: #8774e1;
+  --message-background-color: #212121;
+  --message-out-background-color: #8774e1;
+  --primary-text-color: #ffffff;
+  --secondary-text-color: #aaaaaa;
+  --danger-color: #ff595a;
+  /* Derived in themeController.applyAppColor: light-* is the colour mixed
+     8% over the surface, light-filled-* the same mix as an opaque hex. */
+  --light-secondary-text-color: rgba(170, 170, 170, .08);
+  --light-filled-secondary-text-color: #2b2b2b;
+  --light-filled-primary-color: #292730;
+  --message-out-primary-color: #ffffff;
+  --message-status-color: var(--secondary-color);
+  --message-out-status-color: rgba(255, 255, 255, .6);
+  --badge-text-color: #fff;
+  --badge-muted-background: #707579;
+  /* Web K's search pill is a near-black fill inside the card. */
+  --search-fill: #141414;
+  --tray-fill: #141414;
+  /* Web K base.scss .night: the overlay scrollbar thumb, translucent white. */
+  --scrollbar-color: rgba(255, 255, 255, .2);
+
+  /* Default night wallpaper (state.ts DEFAULT_THEME, baseThemeNight pattern) */
+  /* state.ts DEFAULT_THEME baseThemeNight: colours #fec496 #dd6cb9 #962fbf
+     #4f5bd5 at intensity -50. Web K renders a dark wallpaper by multiplying the
+     pattern over the surface, so the visible result is near-black with a faint
+     colour cast, not a bright gradient. */
+  --wallpaper-1: #fec496;
+  --wallpaper-2: #dd6cb9;
+  --wallpaper-3: #962fbf;
+  --wallpaper-4: #4f5bd5;
+  --wallpaper-base: #181818;
+  --wallpaper-intensity: .16;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+/* Web K light ("day", baseThemeClassic) */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --surface-color: #ffffff;
+    --background-color: #f4f4f5;
+    --body-background-color: #ffffff;
+    --border-color: #dfe1e5;
+    --secondary-color: #c4c9cc;
+    --primary-color: #3390ec;
+    --message-background-color: #ffffff;
+    /* Not the accent itself: Web K mixes the outgoing accent (#5ca853) 12%
+       over the surface, then adds 63 HSL saturation points
+       (themeController.applyAppColor, messageLightenAlpha = 0.12 in day). */
+    --message-out-background-color: #e3fee0;
+    --primary-text-color: #000000;
+    --secondary-text-color: #707579;
+    --danger-color: #df3f40;
+    --light-secondary-text-color: rgba(112, 117, 121, .08);
+    --light-filled-secondary-text-color: #f3f3f4;
+    --light-filled-primary-color: #eef6fd;
+    --message-out-primary-color: #5ca853;
+    --message-status-color: #707579;
+    --message-out-status-color: #5ca853;
+    --badge-muted-background: #c4c9cc;
+    /* Light counterparts of the near-black fills inside the card. */
+    --search-fill: #f1f1f1;
+    --tray-fill: #f1f1f1;
+    /* Web K base.scss :root (day): translucent black. */
+    --scrollbar-color: rgba(0, 0, 0, .2);
+
+    /* Default day wallpaper (state.ts DEFAULT_THEME, baseThemeClassic pattern) */
+    --wallpaper-1: #dbddbb;
+    --wallpaper-2: #6ba587;
+    --wallpaper-3: #d5d88d;
+    --wallpaper-4: #88b884;
+    --wallpaper-base: #dbddbb;
+    --wallpaper-intensity: .5;
+  }
+}
+
+/* A lighter animation level fades instead of moving (base.scss
+   body.animation-level-1): the timings shorten, and nothing travels. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-standard-in-time: .2s;
+    --transition-standard-out-time: .15s;
+    --transition-standard-in: var(--transition-standard-in-time) var(--transition-standard-easing);
+    --transition-standard-out: var(--transition-standard-out-time) var(--transition-standard-easing);
+  }
+  * {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  display: grid;
+  /* The gutter lives in the column so the card keeps its real 360px content
+     width; the page backdrop shows through the gap around it. */
+  grid-template-columns: calc(var(--column-width) + var(--sidebar-inset) * 2) minmax(0, 1fr) auto;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--background-color);
+  color: var(--primary-text-color);
+  font: 16px/var(--messages-line-height) var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.sidebar, .conversation, .panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+/* On a desktop the list is a rounded charcoal card inset from the page edges,
+   as in Web K; the conversation keeps its own backdrop beside it. */
+.sidebar {
+  grid-column: 1;
+  margin: var(--sidebar-inset);
+  border-radius: var(--sidebar-radius);
+  background: var(--surface-color);
+  overflow: hidden;
+  box-shadow: 0 1px 8px 1px rgba(0, 0, 0, .25);
+}
+.conversation { background: var(--background-color); position: relative; }
+
+/* ---------- left column (Web K _leftSidebar / _sidebar) ---------- */
+
+/* One row, as in Web K: menu control, search field, and the viewer's own name. */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  min-height: var(--header-height);
+  padding: 0 .5rem 0 .375rem;
+  background: var(--surface-color);
+}
+.sidebar-head #access { flex: 0 0 auto; }
+/* Web K's menu glyph is a full-size 20px line stack. */
+.sidebar-head #access svg { width: 1.25rem; height: 1.25rem; }
+.sidebar-head .search {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+}
+/* The search field is a filled pill with a leading magnifier inside it. */
+.sidebar-head .search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 2.5rem;
+  border-radius: 1.25rem;
+  background: var(--search-fill);
+}
+.sidebar-head .search-glyph {
+  position: absolute;
+  inset-inline-start: .75rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--secondary-text-color);
+  pointer-events: none;
+}
+.sidebar-head .search input[type=search] {
+  flex: 1;
+  min-width: 0;
+  height: 2.5rem;
+  padding-inline: 2.5rem .75rem;
+  background: transparent;
+  border-radius: inherit;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .25rem .8125rem .5rem;
+  background: var(--surface-color);
+}
+/* Web K search field: a filled pill, no border (_inputSearch.scss) */
+.search input[type=search] {
+  flex: 1;
+  min-width: 0;
+  height: 2.5rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 1.375rem;
+  background: var(--light-secondary-text-color);
+  color: var(--primary-text-color);
+  font-size: 1rem;
+}
+.search input[type=search]::placeholder { color: var(--secondary-text-color); }
+.search input[type=search]:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary-color);
+}
+.search.inline {
+  padding: .5rem .75rem;
+  border-bottom: 0;
+  background: var(--surface-color);
+}
+.sidebar-head .search button.icon { width: 2rem; height: 2rem; }
+.scope-label {
+  font-size: .875rem;
+  color: var(--secondary-text-color);
+  white-space: nowrap;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+button, input, select {
+  font: inherit;
+  color: inherit;
+}
+button {
+  border: 0;
+  border-radius: var(--border-radius);
+  background: transparent;
+  padding: .4rem .6rem;
+  cursor: pointer;
+  transition: background-color var(--transition-standard-out);
+}
+button:hover:not(:disabled) { background: var(--light-secondary-text-color); }
+button:disabled { cursor: default; opacity: .6; }
+button.ghost { color: var(--primary-color); }
+button.link {
+  border: 0;
+  padding: 0;
+  color: var(--primary-color);
+  background: none;
+  text-decoration: none;
+  font-size: .875rem;
+}
+button.icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  color: var(--secondary-text-color);
+}
+button.icon svg { width: 1.25rem; height: 1.25rem; display: block; }
+
+/* Web K focuses with a ring inside the control (_accessibility.scss) */
+:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+}
+a { color: var(--primary-color); text-decoration: none; }
+
+/* Folder tabs: the active one is an accent plate with a rounded pill
+   (_slider.scss .menu-horizontal-div-item). */
+/* One rounded tray holds the folder tabs; the selected tab is an inset pill
+   with the accent, exactly as Web K's horizontal folder strip behaves. */
+.folders {
+  display: flex;
+  align-items: center;
+  gap: .125rem;
+  margin: 0 var(--row-gutter) .5rem;
+  padding: .25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-radius: 1.25rem;
+  background: var(--tray-fill);
+}
+.folders::-webkit-scrollbar { display: none; }
+.tab {
+  display: flex;
+  align-items: center;
+  gap: .375rem;
+  flex: 0 0 auto;
+  height: 2rem;
+  padding: 0 .625rem;
+  border-radius: 1rem;
+  font-size: .875rem;
+  font-weight: 500;
+  color: var(--secondary-text-color);
+  white-space: nowrap;
+  transition: background-color var(--tabs-transition), color var(--tabs-transition);
+}
+.tab:hover:not(:disabled) { background: var(--light-secondary-text-color); }
+.tab[aria-selected=true] {
+  color: var(--primary-color);
+  background: var(--light-filled-primary-color);
+  font-weight: 600;
+}
+/* A small circular badge, not a text suffix: the number of unread chats. */
+.tab-count {
+  display: grid;
+  place-items: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 .25rem;
+  border-radius: .5625rem;
+  background: var(--primary-color);
+  color: var(--badge-text-color);
+  font-size: .75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .25rem 1rem .5rem;
+  font-size: .875rem;
+  color: var(--secondary-text-color);
+  background: var(--surface-color);
+}
+
+/* ---------- chat rows (Web K _chatlist / _row) ---------- */
+
+/* Web K's scrollbar (_scrollable.scss): `--scrollbar-color` over a transparent
+   track, invisible at rest and revealed on hover or keyboard focus.
+   The standard properties are the real path: `scrollbar-width` alone decides
+   the space, so revealing the thumb changes no geometry, and it stays "thin".
+   A non-auto `scrollbar-width`/`scrollbar-color` also disables the
+   ::-webkit-scrollbar pseudos, so those live in an exclusive fallback for
+   engines without the standard properties. Native wheel, keys, trackpad and
+   thumb dragging are all untouched either way. */
+.chats {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--row-gutter) var(--row-gutter);
+  background: transparent;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.chats:hover,
+.chats:focus-visible,
+.chats:focus-within {
+  scrollbar-color: var(--scrollbar-color) transparent;
+}
+
+@supports not (scrollbar-color: auto) {
+  .chats::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .chats::-webkit-scrollbar-track,
+  .chats::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  .chats::-webkit-scrollbar-button {
+    display: none;
+  }
+  .chats::-webkit-scrollbar-thumb {
+    border-radius: var(--border-radius-medium);
+    background-color: transparent;
+  }
+  .chats:hover::-webkit-scrollbar-thumb,
+  .chats:focus-visible::-webkit-scrollbar-thumb,
+  .chats:focus-within::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-color);
+  }
+}
+/* Each row is its own rounded surface with a small gutter, so hover and
+   selection stay inside it: no full-width band, no divider per row. */
+.chat {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--avatar-size) minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: .75rem;
+  width: 100%;
+  min-height: var(--row-height);
+  padding: .5rem .5rem;
+  text-align: start;
+  border-radius: var(--row-radius);
+  background: transparent;
+  color: inherit;
+  transition: background-color var(--transition-standard-out);
+}
+.chat + .chat { margin-block-start: .125rem; }
+.chat:hover { background: var(--light-secondary-text-color); }
+/* A selected row wears the accent, as in Web K on a wide screen. */
+.chat[aria-current=true] { background: var(--primary-color); }
+.chat[aria-current=true] .chat-title,
+.chat[aria-current=true] .chat-preview,
+.chat[aria-current=true] .chat-time,
+.chat[aria-current=true] .chat-meta,
+.chat[aria-current=true] .pin-glyph,
+.chat[aria-current=true] .mute-glyph { color: #fff; }
+/* The description of a selected row stays readable but subordinate. */
+.chat[aria-current=true] .chat-preview,
+.chat[aria-current=true] .chat-time { color: rgba(255, 255, 255, .82); }
+
+.avatar {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  user-select: none;
+}
+.chat-title, .chat-preview, .chat-time, .chat-meta {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Row anatomy follows Web K: title and preview in the middle column, the
+   minute/date on the right with the pin beside it, the unread pill below. */
+.chat-body {
+  display: grid;
+  gap: .125rem;
+  min-width: 0;
+  align-content: center;
+}
+.chat-title {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  min-width: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3125;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chat-preview {
+  min-width: 0;
+  font-size: .9375rem;
+  line-height: 1.375;
+  color: var(--secondary-text-color);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chat-side {
+  display: grid;
+  gap: .25rem;
+  justify-items: end;
+  align-content: center;
+  min-width: 0;
+}
+.chat-dates {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  color: var(--secondary-text-color);
+}
+/* A muted chat's own marker is a monochrome glyph, not a colour emoji. */
+.mute-glyph,
+.pin-glyph {
+  flex: 0 0 auto;
+  width: .875rem;
+  height: .875rem;
+  color: var(--secondary-text-color);
+}
+.chat.unread .chat-title { font-weight: 700; }
+.chat.unread .chat-preview { color: var(--primary-text-color); }
+.chat-time {
+  font-size: .75rem;
+  color: var(--secondary-text-color);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* The unread count is a small circular pill below the date, not text. */
+.chat-meta {
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 .375rem;
+  border-radius: .625rem;
+  background: var(--primary-color);
+  color: var(--badge-text-color);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition: background-color var(--chatlist-badge-transition-out);
+}
+.chat.muted .chat-meta { background: var(--badge-muted-background); }
+
+/* Web K peer avatar gradients, by the same colour names _avatar.scss uses. */
+.avatar[data-tint="red"] { background: linear-gradient(#ff885e, #ff516a); }
+.avatar[data-tint="orange"] { background: linear-gradient(#ffcd6a, #ffa85c); }
+.avatar[data-tint="violet"] { background: linear-gradient(#82b1ff, #665fff); }
+.avatar[data-tint="green"] { background: linear-gradient(#a0de7e, #54cb68); }
+.avatar[data-tint="cyan"] { background: linear-gradient(#53edd6, #28c9b7); }
+.avatar[data-tint="blue"] { background: linear-gradient(#72d5fd, #2a9ef1); }
+.avatar[data-tint="pink"] { background: linear-gradient(#e0a2f3, #d669ed); }
+/* A peer with no colour yet still reads as an avatar, not as an empty box. */
+.avatar { background: linear-gradient(#72d5fd, #2a9ef1); }
+
+/* ---------- conversation: the Web K wallpaper ---------- */
+
+/* Web K paints the chat background as a four-colour gradient with a pattern
+   overlay; the pattern artwork itself is an asset and is not reproduced, so
+   this is the closest approximation from the palette values alone. */
+.conversation::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-color: var(--wallpaper-base);
+  background-image:
+    radial-gradient(circle at 15% 20%, var(--wallpaper-1), transparent 45%),
+    radial-gradient(circle at 85% 15%, var(--wallpaper-3), transparent 50%),
+    radial-gradient(circle at 70% 85%, var(--wallpaper-4), transparent 55%),
+    radial-gradient(circle at 25% 90%, var(--wallpaper-2), transparent 50%);
+  opacity: var(--wallpaper-intensity);
+  z-index: 0;
+}
+.conversation > * { position: relative; z-index: 1; }
+
+/* One reading rail: header, pinned plate and feed share this width and these
+   side insets, so the conversation reads as a single column (Web K's chat
+   column). Below the rail the wallpaper stays visible around the cards. */
+/* updateColumnWidths.ts: CHAT_WIDTH_MAX 696, chat padding 16 desktop / 8
+   handheld, plate gap 8. The rail is the content column the chat is clamped to. */
+.rail {
+  --rail-width: min(100%, 696px);
+  --rail-inset: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  /* PAGE_CHATS_PADDING_CHAT_DESKTOP: the chat padding lives here, so the rail's
+     content box is the chat width the header, plate and feed each span. */
+  padding-inline: var(--rail-inset);
+}
+
+/* The chat header floats over the wallpaper as a rounded plate, aligned to the
+   same rail as the feed rather than a full-bleed bar. */
+.feed-head {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  min-height: var(--header-height);
+  margin: var(--rail-inset) auto .5rem;
+  width: var(--rail-width);
+  padding: 0 .375rem;
+  border-radius: var(--border-radius-big);
+  background: var(--surface-color);
+  box-shadow: 0 1px 5px -1px rgba(0, 0, 0, .21); /* --topbar-box-shadow */
+  flex: 0 0 auto;
+}
+
+/* ---------- the pinned preview plate (Web K _chatPinned.scss) ---------- */
+
+.pin-plate {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  width: var(--rail-width);
+  min-height: 48px;
+  margin: 0 auto 8px;
+  padding: .25rem .25rem .25rem .5rem;
+  border-radius: var(--border-radius-medium);
+  background: var(--surface-color);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+  flex: 0 0 auto;
+}
+.pin-open {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex: 1;
+  min-width: 0;
+  padding: .25rem .375rem;
+  border-radius: var(--border-radius);
+  text-align: start;
+}
+/* Segment bars: one per stored pin, the active one in the accent. */
+.pin-bars {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  width: 3px;
+  height: 2.5rem;
+}
+.pin-bar {
+  width: 3px;
+  border-radius: 3px;
+  background: var(--primary-color);
+  opacity: .4;
+  flex: 1;
+}
+.pin-bar.is-active { opacity: 1; }
+.pin-text { display: grid; min-width: 0; gap: .0625rem; }
+.pin-title {
+  display: flex;
+  gap: .375rem;
+  font-size: .875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--primary-color);
+}
+.pin-counter { color: var(--secondary-text-color); font-weight: 400; }
+.pin-preview {
+  font-size: .875rem;
+  line-height: 1.25;
+  color: var(--primary-text-color);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pin-action {
+  flex: 0 0 auto;
+  padding: .25rem .625rem;
+  border-radius: 1rem;
+  background: var(--light-secondary-text-color);
+  color: var(--primary-color);
+  font-size: .8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.pin-hide { flex: 0 0 auto; width: 2rem; height: 2rem; }
+.identity {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex: 1;
+  min-width: 0;
+  padding: .25rem .375rem;
+  border-radius: var(--border-radius);
+  text-align: start;
+}
+.identity:hover:not(:disabled) { background: var(--light-secondary-text-color); }
+.identity-text { display: grid; min-width: 0; }
+.identity-text strong {
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.3125;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.identity-text small {
+  font-size: .875rem;
+  line-height: 1.25;
+  color: var(--secondary-text-color);
+}
+.identity .avatar {
+  width: 2.625rem;
+  height: 2.625rem;
+  font-size: .9375rem;
+  grid-row: auto;
+}
+
+.badge {
+  flex: 0 0 auto;
+  height: 1.5rem;
+  padding: 0 .5rem;
+  border-radius: .75rem;
+  background: var(--light-filled-secondary-text-color);
+  color: var(--primary-text-color);
+  font-size: .75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.note {
+  display: block;
+  padding: .5rem 1rem;
+  background: var(--surface-color);
+  color: var(--secondary-text-color);
+  font-size: .875rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .12);
+}
+.note.warn { color: var(--danger-color); }
+.note code { font-family: var(--mono); font-size: .8125rem; }
+#options { display: flex; align-items: center; gap: .5rem; }
+#options label { white-space: nowrap; }
+#options select {
+  padding: .25rem .5rem;
+  border: 0;
+  border-radius: .75rem;
+  background: var(--light-secondary-text-color);
+}
+
+.pinned {
+  display: flex;
+  gap: .5rem;
+  padding: .375rem .75rem;
+  overflow-x: auto;
+  background: var(--surface-color);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .12);
+}
+.pin {
+  max-width: 16rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: .25rem .75rem;
+  border-radius: 1rem;
+  background: var(--light-secondary-text-color);
+  font-size: .8125rem;
+  color: var(--primary-text-color);
+}
+
+/* ---------- the feed ---------- */
+
+.timeline {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Same overlay treatment as the list: the bar costs no layout width, so the
+     header, the plate and the feed share one centring box. */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.timeline:hover,
+.timeline:focus-visible,
+.timeline:focus-within {
+  scrollbar-color: var(--scrollbar-color) transparent;
+}
+/* The feed sits on the same rail as the header and the pin plate. */
+.timeline-column {
+  width: var(--rail-width, min(100%, 696px));
+  margin-inline: auto;
+  padding: .25rem 0 1.25rem;
+}
+#older-row { text-align: center; margin-block: .25rem 1rem; }
+
+/* Date pill (Web K .bubble.service .service-msg) */
+.day {
+  width: max-content;
+  margin: .625rem auto .75rem;
+  padding: .25rem .625rem;
+  border-radius: var(--bubble-radius-big);
+  background: rgba(0, 0, 0, .2);
+  color: #fff;
+  font-size: .875rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+@media (prefers-color-scheme: light) {
+  .day { background: rgba(0, 0, 0, .2); }
+}
+
+/* Web K bubble geometry: 5px on the "own" corner, 15px elsewhere, per side
+   (_chatBubble.scss .bubble.is-in / .is-out and $bubble-border-radius-*). */
+.message {
+  position: relative;
+  width: fit-content;
+  max-width: min(85%, 30rem);
+  /* A run keeps 4px between its bubbles and a different group gets 8px, so two
+     long cards never weld into one block. The gap is set on the top edge only:
+     adjacent block margins collapse, so a bottom margin would take over. */
+  margin: .5rem auto 0 0;
+  padding: .25rem .5rem .1875rem;
+  border-radius: var(--bubble-radius-big);
+  background: var(--message-background-color);
+  color: var(--primary-text-color);
+  border-start-start-radius: var(--bubble-radius-big);
+  border-start-end-radius: var(--bubble-radius-big);
+  border-end-end-radius: var(--bubble-radius-big);
+  border-end-start-radius: var(--bubble-radius-big);
+  overflow-wrap: anywhere;
+  scroll-margin-block: 5rem;
+  transition: box-shadow var(--transition-standard-out);
+}
+/* Incoming: the avatar side is the "own" corner. */
+.message:not(.out) {
+  margin-inline: 0 auto;
+  border-start-start-radius: var(--bubble-radius-medium);
+  border-end-start-radius: var(--bubble-radius-medium);
+}
+/* Outgoing: the opposite corner, and its own fill. */
+.message.out {
+  margin-inline: auto 0;
+  background: var(--message-out-background-color);
+  color: var(--message-out-primary-color);
+  border-start-start-radius: var(--bubble-radius-big);
+  border-start-end-radius: var(--bubble-radius-medium);
+  border-end-end-radius: var(--bubble-radius-medium);
+  border-end-start-radius: var(--bubble-radius-big);
+}
+/* On the pale day fill the bubble keeps dark text and an accent accent, as
+   Web K does; on the night fill the text is white
+   (--message-out-primary-color per base theme). */
+@media (prefers-color-scheme: light) {
+  .message.out { color: var(--primary-text-color); }
+    .message.out .sender { color: var(--primary-color); }
+}
+/* A grouped message continues the run above it: 4px from its predecessor. What
+   comes after it is a new row's business, so no bottom margin is set here. */
+.message.grouped { margin-block-start: 4px; }
+.message:not(.out).grouped { border-start-start-radius: var(--bubble-radius-big); }
+.message.out.grouped { border-start-end-radius: var(--bubble-radius-big); }
+.message:target, .message.highlight {
+  box-shadow: 0 0 0 2px var(--primary-color);
+}
+/* A terminal tail on the last bubble of a run, clipped from the bubble's own
+   colour (Web K's .bubble-tail). Hidden on grouped middles. */
+.message.tail::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 11px;
+  height: 20px;
+  z-index: -1;
+  background: inherit;
+  clip-path: path("M3 19h6V2c-.193 2.84-.876 5.767-2.05 8.782-.904 2.325-2.446 4.485-4.625 6.48A1 1 0 0 0 3 19z");
+}
+.message.tail:not(.out)::after { inset-inline-start: -8px; }
+.message.tail.out::after { inset-inline-end: -8px; transform: scaleX(-1); }
+/* The own corner of a tailed bubble squares off, as in Web K. */
+.message.tail:not(.out) { border-end-start-radius: 0; }
+.message.tail.out { border-end-end-radius: 0; }
+.message-meta { display: flex; gap: .375rem; padding: 0; }
+/* Web K sender name: the peer colour, 15px, bold. */
+.sender {
+  color: var(--primary-color);
+  font-size: .9375rem;
+  font-weight: 600;
+  line-height: 1.3125;
+}
+.message.out .sender { color: var(--message-out-primary-color); }
+/* Web K message text: $message-padding-top/horizontal + the 16px body. */
+.message-text {
+  margin: 0;
+  font-size: var(--messages-text-size);
+  line-height: var(--messages-line-height);
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+}
+.message-text pre {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: .25rem 0;
+  font-family: var(--mono);
+  font-size: .875rem;
+}
+.message-text code { font-family: var(--mono); font-size: .875rem; }
+.message-text blockquote {
+  margin: .25rem 0;
+  padding-inline-start: .625rem;
+  border-inline-start: 3px solid var(--primary-color);
+}
+/* The time sits in the bubble's lower-right, next to any link action. */
+.message time {
+  display: inline-block;
+  margin: 0 0 0 auto;
+  padding-inline-start: .5rem;
+  font-size: var(--messages-time-text-size);
+  line-height: 1;
+  vertical-align: bottom;
+  color: var(--message-status-color);
+  font-variant-numeric: tabular-nums;
+}
+.message.out time { color: var(--message-out-status-color); }
+/* Time and the Telegram-link icon share one row, right-aligned. */
+.message-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .25rem;
+  margin-block-start: .0625rem;
+}
+/* The Telegram link is a secondary action: barely there until the bubble is
+   hovered or the link itself is focused, and never an extra visible line. */
+.message-link {
+  display: inline-grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--message-status-color);
+  opacity: .55;
+  transition: opacity var(--transition-standard-out);
+}
+.message:hover .message-link,
+.message-link:hover,
+.message-link:focus-visible { opacity: 1; }
+.message.out .message-link { color: var(--message-out-status-color); }
+.message-link-icon {
+  width: 1rem;
+  height: 1rem;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+}
+/* A service event is a small neutral plate in the middle of the rail: never an
+   outgoing bubble, never filled with the accent. */
+.message.service {
+  width: auto;
+  max-width: min(100%, 30rem);
+  margin: .75rem auto 0;
+  padding: 0;
+  background: none;
+  color: var(--secondary-text-color);
+  border-radius: 0;
+  text-align: center;
+  box-shadow: none;
+}
+.message.service .service-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  margin: 0;
+  padding: .28125rem .625rem;
+  border-radius: var(--bubble-radius-big);
+  background: rgba(0, 0, 0, .2);
+  color: #fff;
+  font-size: var(--messages-secondary-text-size);
+  line-height: 1.35;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (prefers-color-scheme: light) {
+  .message.service .service-chip { background: rgba(0, 0, 0, .18); }
+}
+/* A service event that answers something stays actionable. */
+/* The actionable chip is itself `.service-action`, so hover applies to it. */
+.message.service .service-action { cursor: pointer; border: 0; }
+.message.service .service-action:hover { filter: brightness(1.08); }
+.message.service .service-action:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+.message.service time {
+  display: block;
+  margin: .125rem 0 0;
+  padding: 0;
+  font-size: 11px;
+  color: var(--secondary-text-color);
+  text-align: center;
+}
+.message .quote, .message .forwarded, .message .reactions {
+  margin: .125rem 0;
+  font-size: var(--messages-secondary-text-size);
+  color: var(--message-status-color);
+}
+.message.out .quote,
+.message.out .forwarded,
+.message.out .service,
+.message.out .reactions { color: var(--message-out-status-color); }
+.message .quote {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: .125rem .5rem;
+  border: 0;
+  border-inline-start: 3px solid var(--primary-color);
+  border-radius: 0;
+  background: transparent;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.message.out .quote { border-inline-start-color: var(--message-out-primary-color); }
+.message .forwarded { font-style: italic; }
+
+.media { display: grid; gap: .25rem; margin: .125rem 0; }
+/* The frame reserves its space before the bytes arrive. */
+.media-frame {
+  display: block;
+  width: min(100%, 20rem);
+  min-height: 7rem;
+  border-radius: var(--bubble-radius-medium);
+  background: rgba(0, 0, 0, .12);
+  overflow: hidden;
+}
+.media-frame.loaded, .media-frame.failed { min-height: 0; }
+.media-frame.failed { display: none; }
+.media img {
+  display: block;
+  width: 100%;
+  max-height: 16rem;
+  object-fit: cover;
+  border-radius: var(--bubble-radius-medium);
+}
+.media-label { font-size: var(--messages-secondary-text-size); color: var(--message-status-color); }
+.message.out .media-label { color: var(--message-out-status-color); }
+
+
+/* The jump-to-new pill sits over the feed, as Web K's floating button. */
+.jump {
+  position: absolute;
+  inset-block-end: 1rem;
+  inset-inline-end: 1.25rem;
+  padding: .5rem 1rem;
+  border-radius: 1.25rem;
+  background: var(--surface-color);
+  color: var(--primary-color);
+  box-shadow: 0 1px 8px 1px rgba(0, 0, 0, .25);
+  font-size: .875rem;
+  font-weight: 500;
+  z-index: 2;
+  transition: background-color var(--transition-standard-in), transform var(--transition-standard-in);
+}
+
+/* ---------- right panel (Web K _rightSidebar) ---------- */
+
+.panel {
+  width: var(--column-width);
+  min-width: 0;
+  max-width: var(--max-column-width);
+  background: var(--surface-color);
+  box-shadow: -1px 0 0 var(--border-color);
+  /* The enter/exit itself is a WAAPI animation (details.js) so it can run for
+     exactly 300ms in / 250ms out; these are the resting states. */
+  opacity: 1;
+  transform: translateX(0);
+  will-change: transform, opacity;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  min-height: var(--header-height);
+  padding: 0 .5rem 0 1rem;
+}
+.tabs { display: flex; gap: .25rem; }
+.tabs button {
+  height: 2rem;
+  padding: 0 .75rem;
+  border-radius: 1rem;
+  font-size: .875rem;
+  font-weight: 500;
+  color: var(--secondary-text-color);
+  transition: background-color var(--tabs-transition), color var(--tabs-transition);
+}
+.tabs button[aria-selected=true] {
+  color: var(--primary-color);
+  background: var(--light-filled-secondary-text-color);
+}
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: .5rem 1rem 1.25rem;
+}
+.panel-body h2 { margin: .5rem 0 .75rem; font-size: 1.25rem; font-weight: 500; }
+.panel-body h3 { margin: 1rem 0 .375rem; font-size: .875rem; font-weight: 500; color: var(--secondary-text-color); }
+.panel-body section { margin-block-end: 1rem; }
+.panel-body dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .375rem .75rem;
+  margin: 0;
+  font-size: .9375rem;
+}
+.panel-body dt { color: var(--secondary-text-color); }
+.panel-body dd { margin: 0; text-align: end; overflow-wrap: anywhere; }
+.panel-body .about { margin-block: .75rem 0; white-space: pre-wrap; font-size: .9375rem; }
+.panel-body .scope-note { font-size: .8125rem; color: var(--secondary-text-color); margin: 0 0 .75rem; }
+.panel-body ul.plain { margin: 0; padding-inline-start: 1.1rem; font-size: .9375rem; }
+.panel-body li.current { color: var(--primary-color); font-weight: 600; }
+/* Web K row-shaped buttons inside a sidebar section (_row.scss). */
+.pinned-row, .attachment {
+  display: flex;
+  justify-content: space-between;
+  gap: .75rem;
+  width: 100%;
+  min-height: 2.75rem;
+  margin: 0 -.5rem .125rem;
+  padding: .5rem;
+  border-radius: var(--border-radius);
+  text-align: start;
+  font-size: .9375rem;
+}
+.pinned-row:hover, .attachment:hover { background: var(--light-secondary-text-color); }
+.attachment-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.attachment-meta { color: var(--secondary-text-color); font-size: .8125rem; white-space: nowrap; }
+
+/* Search results inside the feed, in the shape of Web K rows. */
+.chat-results {
+  max-height: 45vh;
+  overflow-y: auto;
+  background: var(--surface-color);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .12);
+}
+.hit {
+  display: flex;
+  justify-content: space-between;
+  gap: .75rem;
+  width: 100%;
+  min-height: 3rem;
+  padding: .5rem 1rem;
+  border-radius: 0;
+  text-align: start;
+}
+.hit:hover { background: var(--light-secondary-text-color); }
+.hit-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: .9375rem; }
+.hit-meta { color: var(--secondary-text-color); font-size: .75rem; white-space: nowrap; }
+
+/* ---------- shared ---------- */
+
+.empty, .muted { color: var(--secondary-text-color); }
+.empty { margin: 1.25rem; text-align: center; font-size: .9375rem; }
+.empty.warn, .warn { color: var(--danger-color); }
+.boundary { margin: 1rem; text-align: center; font-size: .8125rem; color: var(--secondary-text-color); }
+#status {
+  position: fixed;
+  z-index: 20;
+  inset-block-end: 1rem;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  max-width: min(90%, 36rem);
+  padding: .5rem 1rem;
+  border-radius: var(--border-radius);
+  background: var(--surface-color);
+  color: var(--primary-text-color);
+  box-shadow: 0 1px 8px 1px rgba(0, 0, 0, .3);
+  font-size: .875rem;
+}
+
+/* The back control belongs to the drawer and handheld screens only. */
+#back { display: none; }
+
+/* Web K moves side panels with a short slide plus a fade, on the standard
+   timing (--transition-standard-in), never a jump. Under reduced motion the
+   media query above collapses these durations to a fade in place. */
+.sidebar {
+  transition: transform var(--transition-standard-in), opacity var(--transition-standard-in);
+}
+
+/* ---------- responsive: Web K's floating left sidebar ---------- */
+
+/* Above $floating-left-sidebar the chat sits beside the list; the right panel
+   then overlaps the feed instead of taking a column of its own. */
+@media (max-width: 1279px) {
+  .panel {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-end: 0;
+    z-index: 10;
+    width: min(26rem, 92vw);
+    box-shadow: -1px 0 0 var(--border-color), 0 0 24px rgba(0, 0, 0, .3);
+  }
+}
+
+@keyframes slide-fade-in {
+  from { transform: translateX(-1.5rem); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slide-fade-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-1.5rem); opacity: 0; }
+}
+
+/* Below $floating-left-sidebar the list floats over the chat as a drawer.
+   The drawer keeps its card corners and inset, but takes the viewport height
+   itself instead of the desktop gutter. */
+@media (max-width: 925px) {
+  body { grid-template-columns: minmax(0, 1fr); }
+  .sidebar {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 12;
+    width: min(calc(var(--column-width) + var(--sidebar-inset)), 92vw);
+    margin: 0;
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
+    box-shadow: 0 0 24px rgba(0, 0, 0, .35);
+    animation: slide-fade-in var(--transition-standard-in);
+  }
+  body[data-screen=chat] .sidebar,
+  body[data-screen=panel] .sidebar { display: none; }
+  #back { display: grid; }
+}
+
+/* Handhelds ($small-screen 600px): one screen at a time, no side columns.
+   The list is a full-width screen here, not the 92vw drawer of the tablet range. */
+@media (max-width: 600px) {
+  body { grid-template-columns: minmax(0, 1fr); }
+  .sidebar {
+    position: static;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border-radius: 0;
+    animation: none;
+    box-shadow: none;
+  }
+  /* One screen at a time: the list, the conversation or the details panel. */
+  .sidebar, .conversation, .panel { display: none; }
+  body[data-screen=list] .sidebar,
+  body[data-screen=chat] .conversation,
+  body[data-screen=panel] .conversation { display: flex; }
+  body[data-screen=chat] .sidebar,
+  body[data-screen=panel] .sidebar { display: none; }
+  .panel {
+    position: static;
+    width: 100%;
+    max-width: none;
+    box-shadow: none;
+  }
+  .message { max-width: 85%; }
+  /* PAGE_CHATS_PADDING_CHAT_HANDHELD = 8. */
+  .rail { padding-inline: 8px; }
+  .timeline-column { padding-inline: 0; }
+  #status { inset-inline: 1rem; transform: none; max-width: none; }
+}

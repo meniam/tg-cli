@@ -16,6 +16,7 @@ This page covers what every command shares: installation, profiles, the Daemon l
 | [folders-and-account.md](folders-and-account.md) | `folder list`; `account sessions`, `blocked`, `notify` |
 | [notes-and-search.md](notes-and-search.md) | `note add`, `list`, `delete`; `search`; `version`; `schema` |
 | [voice.md](voice.md) | `voice install`, `status`, `list`, `cancel`, `retry`, `backfill`; `chat voice on`, `off`, `list`; the local queue behind `message transcribe` |
+| [web.md](web.md) | `web`: local browsing of folders, chats and messages |
 | [access.md](access.md) | `access.json`: chat access lists, the `write` list, the `files` roots |
 
 The tool is early. Verification status is tracked in [FEATURES.md](../../FEATURES.md). Do not point the tool at an account you cannot afford to lose: `tg` is an unofficial client, and with `--client` it presents the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited are open questions in [INTENT.md](../../INTENT.md).

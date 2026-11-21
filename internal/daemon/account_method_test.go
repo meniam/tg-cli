@@ -41,6 +41,7 @@ func TestNeedsTelegram(t *testing.T) {
 	for _, method := range []string{
 		rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel,
 		rpc.MethodChatFullStatus, rpc.MethodChatFullCancel,
+		rpc.MethodWebFolders, rpc.MethodWebHistory, rpc.MethodWebContext, rpc.MethodWebChat,
 		rpc.MethodChatOverview, rpc.MethodSearch, rpc.MethodSearchSemantic, rpc.MethodNoteList,
 	} {
 		if needsTelegram(method) {

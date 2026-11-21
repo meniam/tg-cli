@@ -18,6 +18,7 @@ type ChatMessagePreview struct {
 // source never supplied them: a chat without a saved dialog state, a chat without
 // messages, a chat whose history is not loaded completely.
 type ChatsOverviewRow struct {
+	Contact         bool
 	ChatID          int64               `json:"chat_id"`
 	Type            string              `json:"type"`
 	Title           string              `json:"title" untrusted:"true"`
@@ -69,7 +70,8 @@ func (db *DB) ChatsOverview(ctx context.Context, filter ChatFilter, limit int, c
 	       messages, my_messages,
 	       first_message_id, first_message_date, first_message_text,
 	       last_message_id, last_message_date, last_message_text,
-	       history_complete, history_first_message_date
+	       history_complete, history_first_message_date,
+ COALESCE((SELECT is_contact FROM people WHERE id=chats_state.chat_id),0)
 	FROM chats_state
 	WHERE (? = '' OR type = ?)` + cond + `
 	ORDER BY last_message_date DESC, chat_id
@@ -91,7 +93,7 @@ func (db *DB) ChatsOverview(ctx context.Context, filter ChatFilter, limit int, c
 		err := rows.Scan(&row.ChatID, &row.Type, &row.Title, &row.Username, &row.CreatedAt, &row.Muted,
 			&row.MuteUntil, &row.Archived, &row.Pinned, &row.Unread, &row.UnreadMentions, &row.UnreadMark,
 			&row.StateSyncedAt, &row.Messages, &row.MyMessages,
-			&firstID, &firstDate, &firstText, &lastID, &lastDate, &lastText, &row.HistoryComplete, &row.HistoryFirstMessageDate)
+			&firstID, &firstDate, &firstText, &lastID, &lastDate, &lastText, &row.HistoryComplete, &row.HistoryFirstMessageDate, &row.Contact)
 		if err != nil {
 			return nil, fmt.Errorf("read chat overview: %w", err)
 		}

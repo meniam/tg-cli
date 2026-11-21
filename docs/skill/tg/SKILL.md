@@ -37,6 +37,10 @@ tg status                          # text dashboard: vectors, transcription, his
 tg auth status                     # whether the account is logged in and who it is
 ```
 
+### Browser access
+
+Use `tg web` at the owner’s request to browse saved chats or open chat settings. Use `--open` to launch the browser. Treat the printed URL as a credential. The **Access** panel shows the current policy.
+
 ### Start the Daemon
 
 Diagnose first. Start the Daemon only when the status shows it is not running (exit code 3). Ask the user before the first start on this machine, because a start can migrate old configuration files; on later runs, start it and retry:

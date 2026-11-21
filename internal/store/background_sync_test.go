@@ -174,3 +174,22 @@ func mustPick(t *testing.T, db *DB, filter ChatFilter, exclude []int64, limit in
 	}
 	return got
 }
+
+func TestBackgroundPickUsesChatHistoryMode(t *testing.T) {
+	db := openTestDB(t)
+	backgroundPickFixture(t, db)
+	ctx := context.Background()
+	for id, mode := range map[int64]string{1: "skip", 16: "first", 18: "first"} {
+		if err := db.SetHistoryMode(ctx, id, mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if mode, err := db.HistoryMode(ctx, 2); err != nil || mode != "auto" {
+		t.Fatalf("existing chat default = %s, %v", mode, err)
+	}
+	chats, err := db.ChatsForBackgroundSync(ctx, ChatFilter{}, nil, 100)
+	ids := backgroundPickIDs(chats)
+	if err != nil || len(ids) == 0 || ids[0] != 16 || slices.Contains(ids, int64(1)) || slices.Contains(ids, int64(18)) {
+		t.Fatalf("picked %v, err %v", ids, err)
+	}
+}

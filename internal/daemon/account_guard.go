@@ -35,6 +35,12 @@ func (c *accountCache) setIfEmpty(user *rpc.User) {
 		c.user = &copyUser
 	}
 }
+func (c *accountCache) authorized() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.user != nil
+}
+
 func (c *accountCache) check(req rpc.Request) error {
 	if req.ExpectUser == "" || !accountMethod(req.Method) {
 		return nil
@@ -63,11 +69,11 @@ func (c *accountCache) check(req rpc.Request) error {
 // A method whose name has no dot after its group ("chat_full.") needs its own
 // prefix, or those checks would silently skip it.
 func accountMethod(method string) bool {
-	return method == rpc.MethodSearch || method == rpc.MethodSearchSemantic || method == rpc.MethodSubscribe || method == rpc.MethodUnsubscribe ||
+	return method == rpc.MethodMediaThumb || method == rpc.MethodSearch || method == rpc.MethodSearchSemantic || method == rpc.MethodSubscribe || method == rpc.MethodUnsubscribe ||
 		strings.HasPrefix(method, "chat.") || strings.HasPrefix(method, "chat_full.") ||
 		strings.HasPrefix(method, "message.") || strings.HasPrefix(method, "sticker.") ||
 		strings.HasPrefix(method, "note.") || strings.HasPrefix(method, "history_sync.") ||
 		strings.HasPrefix(method, "user.") || strings.HasPrefix(method, "contact.") ||
 		strings.HasPrefix(method, "folder.") || strings.HasPrefix(method, "account.") ||
-		strings.HasPrefix(method, "saved.")
+		strings.HasPrefix(method, "saved.") || strings.HasPrefix(method, "web.")
 }
