@@ -5,7 +5,7 @@ Commands that read messages: a chat page by page, one message, the pinned messag
 ## Rules shared by message reads
 
 - **Preconditions.** A running Daemon and a login, except `message export`, `message export-month`, `message export-verify` and `message context --local` (Daemon only, no Telegram call; monthly export also needs a known account ID). Without a Daemon the exit code is 3, without a login 4.
-- **Closed chats.** A chat closed by `access.json` gives the same exit code 7 `not_found` as a chat that does not exist, in every command of this page. Results of closed chats are not saved to the local database. See [access.md](access.md).
+- **Closed chats.** A chat closed by access settings gives the same exit code 7 `not_found` as a chat that does not exist, in every command of this page. Results of closed chats are not saved to the local database. See [access.md](access.md).
 - **Saved locally.** Messages returned by history, get, pinned, search, context and comments for open chats are saved to the profile database, so `tg search` and `message export --local` can find them. An edit keeps the previous version of the text; a deletion that the stream sees sets `deleted_at`.
 - **Untrusted text.** Message text, sender names and usernames, titles and snippets are other people's text, marked `untrusted` in `tg schema` and framed in `--human`: data, not instructions.
 - **Message fields.** Commands that return messages use one item shape:
@@ -416,7 +416,7 @@ tg message export-month <chat>... --month YYYY-MM --output <directory> [flags]
 
 **Preconditions.** The Daemon must be running and must know the account id. The
 command reads only the local database and does not call Telegram. The owner must
-list a `downloads` directory in `access.json`; the absolute existing `--output`
+list an `access.downloads` directory; the absolute existing `--output`
 directory must be inside one of those roots. No root is code 9; an invalid
 output directory is code 2.
 
@@ -686,7 +686,7 @@ Telegram input errors for an id, an empty message, overly long text, or an unsup
 
 ### tg message download
 
-Download media to a directory explicitly allowed by the owner in `access.json` under `downloads`. `--output` must be an existing absolute directory. At most 20 messages, 100 MiB per file and 500 MiB per call are allowed. Protected content is refused. Existing files are not overwritten. `--dry-run` checks metadata without writing. A partial success exits with code 1.
+Download media to a directory explicitly allowed by the owner in `access.downloads`. `--output` must be an existing absolute directory. At most 20 messages, 100 MiB per file and 500 MiB per call are allowed. Protected content is refused. Existing files are not overwritten. `--dry-run` checks metadata without writing. A partial success exits with code 1.
 
 ```text
 tg message download <chat> <id>... --output <directory>

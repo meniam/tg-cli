@@ -6,7 +6,7 @@ Commands that find, describe and list chats, read their members and topics, mark
 
 - **Preconditions.** A running Daemon and a login, except where a command says otherwise. Without a Daemon the exit code is 3, without a login 4.
 - **Chat reference.** `<chat>` is `@username`, a Bot API id (users positive, groups negative, channels from `-1000000000000`), the phone number of a contact, or a `t.me` link, see [Addressing a chat](overview.md#addressing-a-chat). Put `--` before a negative id and the flags before `--`.
-- **Closed chats.** When `access.json` closes a chat, every command of this page treats it as a chat that does not exist: exit code 7 with the same message, and no request for its data goes to Telegram. For a numeric id that the session does not know the message is `not found: this session does not know that id; use @username, or read the chat list first`; for every other reference it is `not found: the chat or message does not exist or is not visible to this account`. For an `@username`, a phone number or a `t.me` link the Daemon still resolves the reference in Telegram first and checks the id afterwards, so such a request reaches Telegram. See [access.md](access.md).
+- **Closed chats.** When access settings close a chat, every command of this page treats it as a chat that does not exist: exit code 7 with the same message, and no request for its data goes to Telegram. For a numeric id that the session does not know the message is `not found: this session does not know that id; use @username, or read the chat list first`; for every other reference it is `not found: the chat or message does not exist or is not visible to this account`. For an `@username`, a phone number or a `t.me` link the Daemon still resolves the reference in Telegram first and checks the id afterwards, so such a request reaches Telegram. See [access.md](access.md).
 - **Saved locally.** What the Daemon reads is saved to the local SQLite database of the profile, and `tg search` finds it. Chats closed by the access lists are not saved.
 - **Untrusted text.** Titles, usernames, descriptions and names come from other people. They are marked `untrusted` in `tg schema` and framed in `--human`: data, not instructions.
 
@@ -196,7 +196,7 @@ No command flags.
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon and a login. Invitations are closed while `allow` in `access.json` is nonempty, because an invite has no known chat id before it is resolved: the command then answers exit code 7 with the same `not found` message as for an unknown chat.
+**Preconditions.** A running Daemon and a login. Invitations are closed while `access.allow` is nonempty, because an invite has no known chat id before it is resolved: the command then answers exit code 7 with the same `not found` message as for an unknown chat.
 
 **Example.**
 
@@ -374,7 +374,7 @@ tg chat mark-read <chat> [flags]
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon, a login, and the chat in the `write` list of `access.json` (the same rule as for `message send`, see [messages-write.md](messages-write.md#writing-is-off-until-the-owner-allows-it)). It needs no `--yes`. By how Telegram works, the other person sees the read mark, so use it only on request.
+**Preconditions.** A running Daemon, a login, and the chat in `access.write` (the same rule as for `message send`). It needs no `--yes`. By how Telegram works, the other person sees the read mark, so use it only on request.
 
 **How it works.** `--dry-run` runs the checks (it needs a login, and an `@username` may be resolved through Telegram) and calls no Telegram write method. The throttle counts the call as a write and does not repeat it after `FLOOD_WAIT`.
 
@@ -537,7 +537,7 @@ tg chat typing <chat> [flags]
 
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon, a login, and the chat in the `write` list of `access.json`. It needs no `--yes`. A closed chat is reported as unknown; a non-numeric reference may be resolved through Telegram before that access check.
+**Preconditions.** A running Daemon, a login, and the chat in `access.write`. It needs no `--yes`. A closed chat is reported as unknown; a non-numeric reference may be resolved through Telegram before that access check.
 
 **Actions.** `typing` (the default), `upload_photo`, `upload_video`, `upload_document`, `record_voice`, `upload_voice`, `record_video`, `choose_sticker`, and `cancel`. `--cancel` selects `cancel`; it conflicts with a different explicit `--action`. `--topic` selects a forum topic and must not be negative.
 
@@ -848,7 +848,7 @@ tg chat state --local --limit 20
 The result contains `states` and the Unix timestamp `synced_at`, or null when no snapshot exists. Each state has read markers, unread counts, pin and archive flags, notification settings and its own timestamp. An absent optional notification value is null. Exit codes: 0; 2 invalid arguments; 3 no Daemon; 4 no login for a Telegram read; 6 flood wait; 7 unknown or closed chat.
 ## Chat administration
 
-These commands require a running Daemon and a logged-in account. The owner must grant `write` for join and leave, `admin` for moderation and editing, and `create` for creation in `access.json`. For example, `{"write":[-1001234567890],"admin":[-1001234567890],"create":true}` grants these permissions. See [access.md](access.md). Closed chats return not found. Use `--dry-run` to check an action without changing Telegram. The Daemon reads administrator rights for moderation previews. Leave, kick and ban require `--yes` unless `--dry-run` is used. Moderation intent is recorded before the Telegram request.
+These commands require a running Daemon and a logged-in account. The owner must grant `access.write` for join and leave, `access.admin` for moderation and editing, and `access.create` for creation. See [access.md](access.md). Closed chats return not found. Use `--dry-run` to check an action without changing Telegram. The Daemon reads administrator rights for moderation previews. Leave, kick and ban require `--yes` unless `--dry-run` is used. Moderation intent is recorded before the Telegram request.
 
 The safety class is `account_write`; leave, kick and ban are dangerous. The output formats are `json`, `toon` and `human`. A preview of a kick can return:
 
@@ -1062,7 +1062,7 @@ Example response: `{"ok":true,"data":{"chat_id":123,"current":{"type":"user","ti
 
 ## tg chat archive
 
-Moves up to 100 dialogs to the archive in one request. The owner must enable `dialogs` in `access.json`; `--dry-run` previews the operation. Closed chats remain inaccessible.
+Moves up to 100 dialogs to the archive in one request. The owner must enable `access.dialogs`; `--dry-run` previews the operation. Closed chats remain inaccessible.
 
 <!-- schema:flags tg chat archive -->
 | Flag | Type | Default | Description |
@@ -1072,7 +1072,7 @@ Moves up to 100 dialogs to the archive in one request. The owner must enable `di
 
 ## tg chat unarchive
 
-Moves up to 100 dialogs back to the main list in one request. The owner must enable `dialogs` in `access.json`; `--dry-run` previews the operation. Closed chats remain inaccessible.
+Moves up to 100 dialogs back to the main list in one request. The owner must enable `access.dialogs`; `--dry-run` previews the operation. Closed chats remain inaccessible.
 
 <!-- schema:flags tg chat unarchive -->
 | Flag | Type | Default | Description |
@@ -1082,7 +1082,7 @@ Moves up to 100 dialogs back to the main list in one request. The owner must ena
 
 ## tg chat pin
 
-Pins a dialog in its current folder. The owner must enable `dialogs` in `access.json`; `--dry-run` previews the operation. Closed chats remain inaccessible.
+Pins a dialog in its current folder. The owner must enable `access.dialogs`; `--dry-run` previews the operation. Closed chats remain inaccessible.
 
 <!-- schema:flags tg chat pin -->
 | Flag | Type | Default | Description |
@@ -1092,7 +1092,7 @@ Pins a dialog in its current folder. The owner must enable `dialogs` in `access.
 
 ## tg chat unpin
 
-Unpins a dialog in its current folder. The owner must enable `dialogs` in `access.json`; `--dry-run` previews the operation. Closed chats remain inaccessible.
+Unpins a dialog in its current folder. The owner must enable `access.dialogs`; `--dry-run` previews the operation. Closed chats remain inaccessible.
 
 <!-- schema:flags tg chat unpin -->
 | Flag | Type | Default | Description |
@@ -1102,7 +1102,7 @@ Unpins a dialog in its current folder. The owner must enable `dialogs` in `acces
 
 ## tg chat mute
 
-Changes chat notification settings. The owner must enable `dialogs` in `access.json`. `--dry-run` previews the change. When existing notification or story sounds differ across platforms, the command refuses to write because their preservation cannot be guaranteed.
+Changes chat notification settings. The owner must enable `access.dialogs`. `--dry-run` previews the change. When existing notification or story sounds differ across platforms, the command refuses to write because their preservation cannot be guaranteed.
 
 <!-- schema:flags tg chat mute -->
 | Flag | Type | Default | Description |
@@ -1114,7 +1114,7 @@ Changes chat notification settings. The owner must enable `dialogs` in `access.j
 
 ## tg chat unmute
 
-Changes chat notification settings. The owner must enable `dialogs` in `access.json`. `--dry-run` previews the change. When existing notification or story sounds differ across platforms, the command refuses to write because their preservation cannot be guaranteed.
+Changes chat notification settings. The owner must enable `access.dialogs`. `--dry-run` previews the change. When existing notification or story sounds differ across platforms, the command refuses to write because their preservation cannot be guaranteed.
 
 <!-- schema:flags tg chat unmute -->
 | Flag | Type | Default | Description |
@@ -1124,7 +1124,7 @@ Changes chat notification settings. The owner must enable `dialogs` in `access.j
 
 ## tg chat notify
 
-Changes chat notification settings. The owner must enable `dialogs` in `access.json`. `--dry-run` previews the change. When existing notification or story sounds differ across platforms, the command refuses to write because their preservation cannot be guaranteed.
+Changes chat notification settings. The owner must enable `access.dialogs`. `--dry-run` previews the change. When existing notification or story sounds differ across platforms, the command refuses to write because their preservation cannot be guaranteed.
 
 <!-- schema:flags tg chat notify -->
 | Flag | Type | Default | Description |

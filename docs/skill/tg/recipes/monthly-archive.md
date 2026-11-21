@@ -16,7 +16,7 @@ You need a repeatable archive of a finished month (UTC) for one or several chats
 
 ## Prepare
 
-- The owner added the archive directory to `downloads` in `access.json` (you do not edit the file yourself).
+- The owner added the archive directory to `access.downloads`.
 - The history of each chat is loaded and shows `complete: true` ([load-full-history](load-full-history.md)).
 - The month is over in UTC. The Daemon is running and knows the account.
 

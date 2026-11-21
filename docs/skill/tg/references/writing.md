@@ -2,7 +2,7 @@
 
 ## Writing
 
-Safety class `account_write`, so run these only on an explicit user request. Writing is off by default: a chat accepts it only if a human added it to the `write` list of `access.json`, it is visible under the read rules and it is not in `block`. No `access.json` or no `write` list: writing is off everywhere. No permission: code 9 `write_disabled`, and a chat closed for reading returns the usual `not_found` (code 7).
+Safety class `account_write`, so run these only on an explicit user request. Writing is off by default: a chat accepts it only if the owner added it to `access.write`, it is visible under the read rules and it is not in `access.block`. No permitted `access.write` entry means writing is off everywhere. No permission: code 9 `write_disabled`, and a chat closed for reading returns the usual `not_found` (code 7).
 
 Every example below that writes carries `--dry-run`, except `chat draft clear`, which has no preview and runs only on explicit request. `scheduled list` and `chat draft get|list` only read. To send, edit or delete for real, get the user's confirmation of the exact recipient, ids and text, remove `--dry-run` (for `edit` and `delete` add `--yes`), and keep the `--idempotency-key` from the preview where the command has one (add a new one if the preview had none). `message scheduled delete|send-now` act at once: run them only on request.
 
@@ -38,7 +38,7 @@ tg chat typing <chat> [--action typing|upload_document] [--topic ID] [--cancel] 
 - **Expected account.** `--expect-user` or `TG_CLI_EXPECT_USER` requires the current account to match a positive id or username before the handlers of `chat`, `message`, `note`, `user`, `contact`, `folder`, `account`, `saved`, `sticker`, `search`, history sync and subscription. The flag takes priority over the variable.
 - **Response.** `send` and `edit` return `{chat_id, id, date}`, `delete` returns the identifiers, `forward` returns `{chat_id, messages: [{source_id, id, date}]}`, where `source_id` is the original message id. The Daemon saves what was sent and edited to the local database as the original `p.Text`, including markup; it marks what was deleted. A scheduled message is not saved until delivery.
 - **No retries.** Without `--idempotency-key` the tool does not retry a write, neither on `FLOOD_WAIT` (code 6) nor on a network error. Do not loop retries: after a network error check the history first, because the message may have gone out.
-- **Verified on a live account** (the test chat, 2026-11-14, by exit codes): sending, a reply with text from stdin, an edit with `--yes` and the refusal without it, a silent send, forwarding to the same chat, both kinds of deletion, `--dry-run`, refusals without `access.json`, for a chat outside `write` and for a closed chat; the `deletions.jsonl` journal without text, permissions 0600.
+- **Verified on a live account** (the test chat, 2026-11-14, by exit codes): sending, a reply with text from stdin, an edit with `--yes` and the refusal without it, a silent send, forwarding to the same chat, both kinds of deletion, `--dry-run`, refusals without write permission, for a chat outside `write` and for a closed chat; the `deletions.jsonl` journal without text, permissions 0600.
 - **Not verified on a live account:** see `FEATURES.md`, items 5.1, 5.2, 5.4. Do not use writing for experiments, only on an explicit user request in a chat from `write`.
 
 ## Text formatting

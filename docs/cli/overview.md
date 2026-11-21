@@ -16,7 +16,8 @@ This page covers what every command shares: installation, profiles, the Daemon l
 | [folders-and-account.md](folders-and-account.md) | `folder list`; `account sessions`, `blocked`, `notify` |
 | [notes-and-search.md](notes-and-search.md) | `note add`, `list`, `delete`; `search`; `version`; `schema` |
 | [voice.md](voice.md) | `voice install`, `status`, `cancel`, `retry`, `backfill`; `chat voice on`, `off`, `list`; the local queue behind `message transcribe` |
-| [access.md](access.md) | `access.json`: chat access lists, the `write` list, the `files` roots |
+| [access.md](access.md) | access settings: chat visibility, writes and file roots |
+| [settings.md](settings.md) | `settings list`, `get`, `set`, `unset`, `add`, `remove`, and owner-passphrase commands |
 
 The tool is early. Verification status is tracked in [FEATURES.md](../../FEATURES.md). Do not point the tool at an account you cannot afford to lose: `tg` is an unofficial client, and with `--client` it presents the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited are open questions in [INTENT.md](../../INTENT.md).
 
@@ -73,7 +74,7 @@ The data of a profile is split in two directories:
       data-dir                     mode 0600, the data directory recorded for this database
       db.lock                      mode 0600, held while the Daemon runs
 <home>/<profile>/                  mode 0700, the data directory
-  session.json, daemon.sock, daemon.lock, daemon.log, access.json, deletions.jsonl, ...
+  session.json, daemon.sock, daemon.lock, daemon.log, deletions.jsonl, ...
 ```
 
 The database root is the `db` directory next to `config.toml`: it follows the configuration file and does not depend on `home`, `TG_CLI_HOME` or `--profile`; `--profile` selects one directory inside that root. The path of the socket (`<home>/<profile>/daemon.sock`) must not exceed 103 bytes, because Unix socket paths are short.
@@ -85,7 +86,7 @@ Do not put `~/.config/tg-cli/db` into a dotfiles repository, a file sync or a cl
 **The previous default on macOS.** Earlier builds put the data directory in `~/Library/Application Support/tg-cli`. The first command that reaches a profile (`daemon start`, `stop`, `status`, `logs` and every command that opens the socket) moves the profile directories from there to `~/.config/tg-cli`, but only when the directory is not chosen: `home` is absent from `config.toml` and `TG_CLI_HOME` is not set. A `home` or `TG_CLI_HOME` you set is never moved, whatever lies in the old place. The move is one line on stderr, `note: moved the data directory from <old> to <new>`, and `--quiet` silences it. It runs in this order:
 
 1. The command refuses, with exit code 1 and nothing changed, when a daemon still runs in the old directory (its socket answers or its `daemon.lock` is held): stop it with the previous binary, `tg daemon stop`. It also refuses when a profile directory of the same name exists in both places; the message names both paths, and you keep one and move or remove the other by hand.
-2. It copies `session.json`, `access.json` and `deletions.jsonl` of every profile to `<home>/.home-move-backup-<time>/<profile>/` (directory mode `0700`, files `0600`). These copies are secrets: delete the directory when the tool works.
+2. It copies `session.json`, `deletions.jsonl` and a legacy `access.json`, if one is still there, of every profile to `<home>/.home-move-backup-<time>/<profile>/` (directory mode `0700`, files `0600`). These copies are secrets: delete the directory when the tool works.
 3. It renames each profile directory into the new home (across volumes it copies the files, checks every SHA-256 and only then deletes the source), keeps modes `0700` and `0600`, deletes the stale `daemon.sock` and `daemon.lock`, points `data-dir` of the profile database to the new directory, and moves the service directories `.config-migration-*`, `.db-backup-*` and `.db-move-backup-*` under the same names. It deletes the old home when it is empty.
 
 A failure in the middle undoes every step already made: the profiles go back, `data-dir` is restored and the backup is deleted. A second run finds nothing to do. Anything else in the old directory, such as a file you added, stays there.
@@ -94,9 +95,9 @@ A profile created before the database moved keeps `store.db` in the data directo
 
 ## Configuration
 
-`~/.config/tg-cli/config.toml` holds the profile data directory and the default profile. `home` defaults to `~/.config/tg-cli`, the same directory as the configuration file, on macOS and on Linux; on Linux with `XDG_CONFIG_HOME` set the default is `tg-cli` inside it, as before. `default_profile` defaults to `default`. `TG_CLI_HOME` overrides `home` for one invocation, and `--profile` overrides `default_profile`. Set `home` in `config.toml` or `TG_CLI_HOME` to a shorter directory when the socket path is too long. Neither `home` nor `TG_CLI_HOME` moves the database: it stays in the `db` directory next to the configuration file.
+`~/.config/tg-cli/config.toml` holds the profile data directory, default profile, and file names. `voice_transcription.*` remains in this file. Other profile settings live in the profile database and are managed by [`tg settings`](settings.md). `home` defaults to `~/.config/tg-cli`, the same directory as the configuration file, on macOS and on Linux; on Linux with `XDG_CONFIG_HOME` set the default is `tg-cli` inside it, as before. `default_profile` defaults to `default`. `TG_CLI_HOME` overrides `home` for one invocation, and `--profile` overrides `default_profile`. Set `home` in `config.toml` or `TG_CLI_HOME` to a shorter directory when the socket path is too long. Neither `home` nor `TG_CLI_HOME` moves the database: it stays in the `db` directory next to the configuration file.
 
-`tg config path` prints the file, `tg config show` prints its values with defaults and proxy credentials redacted, `tg config init` writes the template with every key commented out, and `tg config migrate` transfers settings from the former profile files. `tg config show` names the database root in `db_dir`: the answer also carries `home`, which no longer says where the history lives. A created config file has mode `0600`; a file writable by group or others is rejected. A group- or world-readable config with proxy credentials produces a warning on stderr.
+`tg config path` prints the file, `tg config show` returns `home`, `db_dir`, `default_profile`, and `files`, `tg config init` writes the template, and `tg config migrate` transfers legacy settings. `tg config show` names the database root in `db_dir`: `home` does not say where the history lives. A created config file has mode `0600`; a file writable by group or others is rejected.
 
 | File in the data directory `<home>/<profile>/` | What it holds |
 | --- | --- |
@@ -104,7 +105,6 @@ A profile created before the database moved keeps `store.db` in the data directo
 | `daemon.lock` | held while a Daemon runs on the profile |
 | `session.json` | the Telegram session, mode `0600`, a secret |
 | `daemon.log`, `daemon.log.1` to `.3` | the journal of a background Daemon, mode `0600`, see [daemon logs](daemon-and-auth.md#tg-daemon-logs) |
-| `access.json` | the chat access lists, written only by a human, see [access.md](access.md) |
 | `deletions.jsonl` | the deletion journal, mode `0600`, see [message delete](messages-write.md#tg-message-delete) |
 | `moderation.jsonl` | the journal of chat-administration actions |
 | `account.jsonl` | the journal of account-profile and privacy actions |
@@ -118,15 +118,15 @@ A profile created before the database moved keeps `store.db` in the data directo
 
 The speech engine is not in a profile: `tg voice install` writes it to `<home>/models/gigaam/`, one set for all profiles (mode `0700` for directories, `0600` for files).
 
-`[files]` may rename `store.db`, `session.json`, `daemon.log`, `deletions.jsonl`, and `access.json`; names are limited to safe base names and cannot collide. After a name change, a remaining old database, session, or access file stops the Daemon with exit code 2; an old journal produces a warning. The socket and lock names are fixed, and the service names `daemon.sock`, `daemon.lock`, `.session-start.lock`, `moderation.jsonl`, `account.jsonl`, `data-dir` and `db.lock` are reserved: a `[files]` name equal to one of them is exit code 2, so no configured file can overwrite a file the Daemon owns.
+`[files]` may rename `store.db`, `session.json`, `daemon.log`, and `deletions.jsonl`, and still names the legacy `access.json`, which is read only once to move the access lists into the database; names are limited to safe base names and cannot collide. After a name change, a remaining old database or session file stops the Daemon with exit code 2; an old journal produces a warning. The socket and lock names are fixed, and the service names `daemon.sock`, `daemon.lock`, `.session-start.lock`, `moderation.jsonl`, `account.jsonl`, `data-dir` and `db.lock` are reserved: a `[files]` name equal to one of them is exit code 2, so no configured file can overwrite a file the Daemon owns.
 
-`[profiles.<name>]` stores `client`, `device`, `transport`, and `proxy`. `daemon start --client`, `--device`, `--transport`, and `--proxy` update the selected profile only when a value changes. The former `client`, `device`, `transport`, and `proxy` files are migrated automatically before `daemon start`, `session export`, `session import`, and `config show`; `tg config migrate` runs the same migration explicitly. Migration copies those files and the previous configuration to `<home>/.config-migration-<time>/`, then removes only transferred files. It never opens or copies the session, database, access list, or journals.
+`profile.client`, `profile.device`, `profile.transport`, and `profile.proxy` are database settings. `daemon start --client`, `--device`, `--transport`, and `--proxy` store them before starting the Daemon. The legacy TOML sections and legacy access file are migrated automatically before `daemon start` and offline settings; `tg config migrate` runs the same migration explicitly. Migration copies its sources to `<home>/.config-migration-<time>/`, then removes them only after a database readback succeeds. A legacy source that returns after migration stops startup or offline settings.
 
 Secrets and risks:
 
 - Treat `session.json` and `api_hash` as passwords: keep them out of git, logs, screenshots and chat. The tool does not print keys or hashes itself; error texts from the Telegram library were not audited for leaks.
 - The database is plain text. It holds other people's messages without separate encryption, protected only by file mode `0600` and the disk encryption of your machine.
-- Telegram may log an account out when two processes share one session. Always go through the Daemon and never start a second client on its session. The profile lock prevents a second Daemon on a profile, `db.lock` prevents two data directories from opening one database, and the CLI never talks to Telegram and never opens the database itself.
+- Telegram may log an account out when two processes share one session. Always go through the Daemon and never start a second client on its session. The profile lock prevents a second Daemon on a profile, and `db.lock` prevents two data directories from opening one database. For stopped-Daemon settings, the CLI calls an offline operation in the `daemon` package; that operation, not the CLI package, opens the database and takes both locks.
 
 ## The Daemon lifecycle
 
@@ -134,7 +134,7 @@ One Daemon runs per profile and holds the Telegram connection, the session, the 
 
 1. `tg daemon start` launches the Daemon as a detached background process and returns when its socket answers (up to 15 seconds). Credentials come from `TG_API_ID` and `TG_API_HASH` (your own application from https://my.telegram.org) or from `--client <preset>`, an official client preset, never both. The Daemon runs until `tg daemon stop` or a failure. With `--idle-timeout 30m` it stops itself after that long without a request; a running history load or an active `message watch` keeps it alive.
 2. `tg auth login` logs the profile in through the Daemon. The login is stored in the session and survives Daemon restarts.
-3. Most other commands send a request to the running Daemon. `config` commands and session import run locally; session export also works with a stopped Daemon. Without one the command exits with code 3 and the message ``the daemon is not running for profile "<name>": start it with `tg daemon start` ``. The exception is [`tg status`](daemon-and-auth.md#tg-status), a text command: it prints `daemon is not running` and the hint on stderr and leaves stdout empty, with the same exit code 3.
+3. Most commands send a request to the running Daemon. `settings` also works with a stopped Daemon through the locked offline operation. `config` commands and session import run locally; session export also works with a stopped Daemon. Without one the remaining commands exit with code 3 and the message ``the daemon is not running for profile "<name>": start it with `tg daemon start` ``. The exception is [`tg status`](daemon-and-auth.md#tg-status), a text command: it prints `daemon is not running` and the hint on stderr and leaves stdout empty, with the same exit code 3.
 4. `tg daemon stop` asks the Daemon to stop and waits until the process is gone (it fails if the process is alive after 10 seconds).
 
 Starting again on a profile whose Daemon is running is not an error: the command reports the PID of the Daemon that is there and starts no second one. Details, flags and the journal are in [daemon-and-auth.md](daemon-and-auth.md).
@@ -143,7 +143,7 @@ What each group of commands needs:
 
 | Commands | Running Daemon | Login |
 | --- | --- | --- |
-| `schema`, `version`, `daemon logs`, `config *`, `session import` | no | no |
+| `schema`, `version`, `daemon logs`, `config *`, `settings *`, `session import` | no | no |
 | `session export` | no | an authorized saved session |
 | `daemon start` | no (it starts one) | no |
 | `daemon status`, `status`, `daemon stop`, `auth *` | yes | no |
@@ -300,11 +300,11 @@ Every command in `tg schema` has a safety class (`safety`) and a `dangerous` mar
 
 The `voice` and `chat voice` commands change only the local queue, the chat marks and the engine files, and call no Telegram method; Of them `voice install` is the only one that opens a network connection itself (to `github.com`), and it does so in the CLI process. `message transcribe` keeps the class `read`: it never changes the account, it only fills the local database with a text. Its default path makes no Telegram request except the download of the file, and only `--telegram` asks Telegram to transcribe.
 
-Three commands are `dangerous`: `message edit`, `message delete` and `note delete`. A deleted note or message cannot be restored, and an edit overwrites the text. They need `--yes` (for `note delete`, only to delete all notes of an author), and without `--yes` and without `--dry-run` they exit with code 2 and never call the Daemon. The other write commands are not dangerous, because the chat is already allowed by the `write` list of `access.json`.
+Three commands are `dangerous`: `message edit`, `message delete` and `note delete`. A deleted note or message cannot be restored, and an edit overwrites the text. They need `--yes` (for `note delete`, only to delete all notes of an author), and without `--yes` and without `--dry-run` they exit with code 2 and never call the Daemon. The other write commands are not dangerous, because the chat is already allowed by the `write` list of the legacy access file.
 
 An agent should run `account_write` and `dangerous` commands only on an explicit request of the user, and run `--dry-run` first where the command has it. Every message write command, `chat mark-read` and `message react|pin|unpin|poll` have `--dry-run`: it runs every check of the Daemon, including the write permission, and changes nothing.
 
-Writing is off until the owner adds the chat to the `write` list of `access.json`; sending files is off until the owner adds the directory to `files`. See [access.md](access.md).
+Writing is off until the owner adds the chat to `access.write`; sending files is off until the owner adds the directory to `access.files`. See [access.md](access.md).
 
 ## Untrusted text
 
@@ -326,14 +326,14 @@ Media parts (`upload.getFile`, `upload.getFileHashes`, `upload.saveFilePart` and
 
 A `FLOOD_WAIT_X` from Telegram pauses the whole account for X seconds. A request that is not a write (send, send media, forward, edit, delete, mark read, reaction, pin, poll) waits and repeats once when X is at most 10 seconds. Media parts also wait and retry at or below that threshold; a longer wait returns `flood_wait`. A partial download instead exits with code 1 and reports the item error. Telegram message writes are never repeated. `SLOWMODE_WAIT` does not pause the account. While a history load waits out a `FLOOD_WAIT` longer than the auto-wait threshold, a normal command gets exit code 6 at once with the seconds left instead of waiting. Cancelling the load does not shorten the pause.
 
-`[behavior]` tunes the throttle. Environment variables override the corresponding config values for one invocation; a bad value is exit code 2 before any connection:
+`behavior.*` settings tune the throttle. The priority is flag, environment, database, then default; a bad value is exit code 2 before any connection:
 
 | Config key | Environment variable | Values | Default |
 | --- | --- | --- | --- |
 | `behavior.throttle_percent` | `TG_CLI_THROTTLE_PERCENT` | a decimal number from 1 to 100: the share of the reference limits | 60 |
 | `behavior.flood_autowait` | `TG_CLI_FLOOD_AUTOWAIT` | a Go duration such as `10s`; `0` turns the auto-wait off, and commands then queue during a pause | `10s` |
 
-`[background_sync]` tunes the scheduled history load: the Daemon loads older history of chats that are not loaded to their first message, one chat per run, inside a daily window. It is off by default; while it is off the Daemon makes no new Telegram request for it, and `chat sync` is unchanged. The pauses and the window below apply to scheduled loads only. The same rules hold for the environment as for `[behavior]`: a variable overrides the file for one start, a bad value is exit code 2 before the Daemon starts, and a value that breaks a rule between two keys (the pair order, the minimum pause) is exit code 2 as well:
+`background_sync.*` settings tune the scheduled history load: the Daemon loads older history of chats that are not loaded to their first message, one chat per run, inside a daily window. It is off by default; while it is off the Daemon makes no new Telegram request for it, and `chat sync` is unchanged. The pauses and the window below apply to scheduled loads only. The priority is environment, database, then default because this group has no flag. A bad value is exit code 2 before the Daemon starts, and a value that breaks a rule between two keys (the pair order, the minimum pause) is exit code 2 as well. `background_sync.enabled` requires a restart; the other keys take effect in the running Daemon.
 
 | Config key | Environment variable | Values | Default |
 | --- | --- | --- | --- |
@@ -345,9 +345,9 @@ A `FLOOD_WAIT_X` from Telegram pauses the whole account for X seconds. A request
 | `background_sync.page_pause_min` | `TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MIN` | a Go duration of at least `1s`; the shortest random pause between pages | `2s` |
 | `background_sync.page_pause_max` | `TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MAX` | a Go duration, not below `page_pause_min` | `8s` |
 
-`[semantic_search]` holds the settings of the local semantic index. With `enabled = true` the Daemon cuts the local messages into conversation fragments, asks a local [Ollama](https://ollama.com) service for a vector of each with the `bge-m3` model (install it with `ollama pull bge-m3`, about 1.2 GB) and keeps the vectors in `vectors.db`, next to `store.db` in `db/<profile>/`. The vectors serve `tg search --semantic` ([notes-and-search.md](notes-and-search.md#semantic-search)). It is off by default; while it is off the Daemon makes no request to Ollama and creates no `vectors.db`, and `tg search` works by words as before. The index is built in the background: one run a `interval` after the Daemon starts, then after each run, after a history load, and on `tg search index start`; it never calls Telegram and skips the chats that the access lists close. The state is the `semantic_search` block of `tg daemon status` and the `Semantic` row of `tg status`. Change the setting, then restart the Daemon.
+`semantic_search.*` holds the settings of the local semantic index. With `enabled = true` the Daemon cuts the local messages into conversation fragments, asks a local [Ollama](https://ollama.com) service for a vector of each with the `bge-m3` model (install it with `ollama pull bge-m3`, about 1.2 GB) and keeps the vectors in `vectors.db`, next to `store.db` in `db/<profile>/`. The vectors serve `tg search --semantic` ([notes-and-search.md](notes-and-search.md#semantic-search)). It is off by default; while it is off the Daemon makes no request to Ollama and creates no `vectors.db`, and `tg search` works by words as before. The index is built in the background: one run a `interval` after the Daemon starts, then after each run, after a history load, and on `tg search index start`; it never calls Telegram and skips the chats that the access lists close. The state is the `semantic_search` block of `tg daemon status` and the `Semantic` row of `tg status`. Change the setting, then restart the Daemon.
 
-Privacy: the Ollama address must be on this machine (`127.0.0.1`, `::1` or `localhost`; any other host is exit code 2), so the text of your conversations never leaves it, and there is no external embedding service. Ollama receives the text of the fragments and of a search query, nothing else. `vectors.db` holds vectors and fragment bounds (chat, message ids, times), no message text, and it is mode `0600`. It is derived data: you can delete it with the Daemon stopped, and the next run builds it again. Switching the model rebuilds the index, because vectors of two models are never compared. The rules for the environment are those of `[background_sync]`: a variable overrides the file for one start, and a bad value is exit code 2 before the Daemon starts:
+Privacy: the Ollama address must be on this machine (`127.0.0.1`, `::1` or `localhost`; any other host is exit code 2), so the text of your conversations never leaves it, and there is no external embedding service. Ollama receives the text of the fragments and of a search query, nothing else. `vectors.db` holds vectors and fragment bounds (chat, message ids, times), no message text, and it is mode `0600`. It is derived data: you can delete it with the Daemon stopped, and the next run builds it again. Switching the model rebuilds the index, because vectors of two models are never compared. The priority is flag, environment, database, then default. `semantic_search.min_similarity` takes effect for the next search; every other semantic-search key requires a Daemon restart. A bad value is exit code 2 before the Daemon starts:
 
 | Config key | Environment variable | Values | Default |
 | --- | --- | --- | --- |
@@ -360,7 +360,7 @@ Privacy: the Ollama address must be on this machine (`127.0.0.1`, `::1` or `loca
 
 `min_similarity` is the cosine of the `bge-m3` vectors of the query and of a fragment. Vector hits below it are dropped before the fusion and counted in `vector_dropped`; the word legs are not filtered. `tg search --semantic --min-similarity X` overrides it for one query. Unrelated fragments score a median near 0.40 and a 99th percentile near 0.5; good queries reach 0.6 to 0.7; so raise the value (`0.55`) against noise and lower it (`0.45`) when real matches vanish; see [notes-and-search.md](notes-and-search.md#semantic-search).
 
-`[voice_transcription]` holds the settings of the local transcription of voice messages, video notes and videos ([voice.md](voice.md)). With `enabled = true` the Daemon queues the voice messages and video notes of personal chats and of marked chats (`tg chat voice on`) as they arrive and as chats are synced, and one worker downloads each file, converts it with `ffmpeg` and recognises it with GigaAM v3 (Russian only) through sherpa-onnx. It needs the engine (`tg voice install`, about 190 MB in `<home>/models/gigaam/`) and `ffmpeg` (the first one in `PATH`, or the `ffmpeg` key). It is off by default: while it is off the Daemon queues nothing by itself and makes no new Telegram request for it, and the manual `tg message transcribe` works either way. Telegram is asked only for the file, inside the limits below. The same rules hold as for `[behavior]`: a variable overrides the file for one start, a bad value is exit code 2 before any connection.
+`[voice_transcription]` remains in `config.toml` and holds the settings of the local transcription of voice messages, video notes and videos ([voice.md](voice.md)). With `enabled = true` the Daemon queues the voice messages and video notes of personal chats and of marked chats (`tg chat voice on`) as they arrive and as chats are synced, and one worker downloads each file, converts it with `ffmpeg` and recognises it with GigaAM v3 (Russian only) through sherpa-onnx. It needs the engine (`tg voice install`, about 190 MB in `<home>/models/gigaam/`) and `ffmpeg` (the first one in `PATH`, or the `ffmpeg` key). It is off by default: while it is off the Daemon queues nothing by itself and makes no new Telegram request for it, and the manual `tg message transcribe` works either way. Telegram is asked only for the file, inside the limits below. The same rules hold as for `[behavior]`: a variable overrides the file for one start, a bad value is exit code 2 before any connection.
 
 | Config key | Environment variable | Values | Default |
 | --- | --- | --- | --- |

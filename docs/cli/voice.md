@@ -4,7 +4,7 @@ The Daemon turns voice messages, video notes and (on request) videos into text w
 
 Two things are set once: the engine (`tg voice install`, about 190 MB under `<home>/models/gigaam`, one set for all profiles) and `ffmpeg` in `PATH`. The sources that queue jobs by themselves need `[voice_transcription] enabled = true` (the keys, the limits and the `TG_CLI_VOICE_TRANSCRIPTION_*` variables are in [overview.md](overview.md#request-throttle-and-flood_wait)); while it is off the Daemon queues nothing by itself and makes no new Telegram request for transcription. A manual command, `tg message transcribe` or `tg voice retry`, works in either case.
 
-What a job does, in order: it checks that `access.json` does not close the chat and that the message is saved with a matching media type; it skips a file above the limit of its kind (30 MB for a voice message, 50 MB for a video note, 500 MB and 120 minutes for a video; `skipped` with the reason `too_large` or `too_long`, nothing downloaded); it checks free disk space and pauses between downloads (`pause`); it downloads the file into a private temporary directory of the Daemon (`tmp-voice` next to the database, mode 0700) and deletes it whatever happens; it converts the file to WAV and recognises it; it stores the text with `source: "local"` and `engine: "gigaam-v3"`. The text is untrusted Telegram data like any message text. A speechless recording is stored as an empty text and the job ends `done` with the reason `no_speech`. A network failure of the download is retried three times after 10, 60 and 300 seconds; every other refusal ends the job `failed` with a short reason (`download`, `convert`, `engine`, `disk`, `no_media`, `no_message`, `store`, `internal`).
+What a job does, in order: it checks that access settings do not close the chat and that the message is saved with a matching media type; it skips a file above the limit of its kind (30 MB for a voice message, 50 MB for a video note, 500 MB and 120 minutes for a video; `skipped` with the reason `too_large` or `too_long`, nothing downloaded); it checks free disk space and pauses between downloads (`pause`); it downloads the file into a private temporary directory of the Daemon (`tmp-voice` next to the database, mode 0700) and deletes it whatever happens; it converts the file to WAV and recognises it; it stores the text with `source: "local"` and `engine: "gigaam-v3"`. The text is untrusted Telegram data like any message text. A speechless recording is stored as an empty text and the job ends `done` with the reason `no_speech`. A network failure of the download is retried three times after 10, 60 and 300 seconds; every other refusal ends the job `failed` with a short reason (`download`, `convert`, `engine`, `disk`, `no_media`, `no_message`, `store`, `internal`).
 
 The daily budget (`daily_download_mb`, `daily_files`, counted by the local date) pauses the queue until the next day when it is spent (`paused: budget`); a manual job ignores the budget but counts in it. A missing engine or `ffmpeg` pauses the queue (`paused: engine_missing`) without spending attempts, and an absent Telegram connection pauses it (`paused: offline`).
 
@@ -20,7 +20,7 @@ The reason is a machine word (no text, no path):
 | `exists` | `done` | a finished text was there already (not for a manual job, which writes the text again) |
 | `too_large` | `skipped` | the file is above the limit of its kind; nothing was downloaded |
 | `too_long` | `skipped` | a video is longer than `max_video_minutes`; nothing was downloaded |
-| `closed` | `skipped` | `access.json` closes the chat |
+| `closed` | `skipped` | access settings close the chat |
 | `no_media` | `skipped` or `failed` | `skipped`: the message is deleted or its media type is not the kind of the job; `failed`: Telegram has no such message or file any more |
 | `cancelled` | `skipped` | `tg voice cancel` stopped or skipped the job |
 | `download` | `failed` | the download failed (after three retries for a network failure) or Telegram refused the file |
@@ -171,7 +171,7 @@ tg voice retry @alice 4711
 
 ### tg voice backfill
 
-Queues the saved voice messages and video notes of the personal chats that have no finished text and no job yet, at the lowest priority, so that manual and incoming jobs go first. Chats that `access.json` closes, your own messages and deleted messages are left out. Videos are never queued here. One database query selects the candidates page by page, so every personal chat counts: there is no ceiling on the number of chats.
+Queues the saved voice messages and video notes of the personal chats that have no finished text and no job yet, at the lowest priority, so that manual and incoming jobs go first. Chats that access settings close, your own messages and deleted messages are left out. Videos are never queued here. One database query selects the candidates page by page, so every personal chat counts: there is no ceiling on the number of chats.
 
 ```text
 tg voice backfill [--dry-run]
@@ -199,7 +199,7 @@ tg voice backfill --dry-run
 {"ok":true,"data":{"enabled":true,"dry_run":true,"chats":14,"candidates":238,"queued":0}}
 ```
 
-**Answer fields** (`data`): `enabled` boolean (the setting); `dry_run` boolean; `chats` integer (personal chats with saved messages that `access.json` leaves open); `candidates` integer (messages that qualify); `queued` integer (jobs this call queued, always 0 for a dry run).
+**Answer fields** (`data`): `enabled` boolean (the setting); `dry_run` boolean; `chats` integer (personal chats with saved messages that access settings leave open); `candidates` integer (messages that qualify); `queued` integer (jobs this call queued, always 0 for a dry run).
 
 **Exit codes.** 0; 2 voice transcription is off (not for `--dry-run`) or the engine is not installed; 3 no Daemon.
 
@@ -207,7 +207,7 @@ tg voice backfill --dry-run
 
 Personal chats (chats of type `user`; bots, groups and channels are not personal) need no mark. For any other chat a mark in the local database says "transcribe the voice messages and video notes here", and with the video flag the videos too. The marks work through three commands. They read and write only the local database: no Telegram call, and the chat is found there (a numeric id or a `@username` the database knows; put `--` before a negative id).
 
-Who gets queued, and when, is one rule. A message is queued only if `access.json` leaves its chat open, it is not your own, and it is not deleted. A voice message or video note needs a personal chat or a mark; a video needs a mark with `--video`. The sources are:
+Who gets queued, and when, is one rule. A message is queued only if access settings leave its chat open, it is not your own, and it is not deleted. A voice message or video note needs a personal chat or a mark; a video needs a mark with `--video`. The sources are:
 
 - a new message of the event stream, after it is saved: priority 10 (`incoming`);
 - the messages a `tg chat sync` or the background sync has just saved, only those whose date is less than 90 days old: priority 20 (`sync`); older ones wait for a backfill;
@@ -284,7 +284,7 @@ tg chat voice off @team
 
 ### tg chat voice list
 
-Lists the marked chats that `access.json` leaves open, ordered by chat id.
+Lists the marked chats that access settings leave open, ordered by chat id.
 
 ```text
 tg chat voice list

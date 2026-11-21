@@ -1,9 +1,10 @@
 # Configuration
 
-`tg` reads its configuration from `~/.config/tg-cli/config.toml`. The file
-holds the profile data directory, file names, behaviour settings, and named
-profile settings. `tg config init` writes a template with every key; `tg schema`
-lists every key, its default, and its command-line or environment override.
+`tg` reads its configuration from `~/.config/tg-cli/config.toml`. The file holds `home`, `default_profile`, and `[files]`. Profile settings live
+in the selected profile database and are managed with `tg settings`.
+`voice_transcription.*` is the current exception: it remains in `config.toml`.
+`tg config init` writes the compact template; `tg schema` lists configuration
+and profile-setting keys separately.
 
 The configuration directory holds the database of every profile as well, in
 `db/<profile>/`: `~/.config/tg-cli/db/default/store.db` for the default profile.
@@ -128,18 +129,17 @@ tg config show
 
 **Answer fields** (`data`): `home` and `db_dir` strings, `default_profile`
 string, and a `files` object with `database`, `session`, `log`, `deletions`,
-and `access` strings.
+and `access` strings. `access` is the legacy file name retained only for migration; access policy itself is in the profile database.
 
 **Exit codes.** 0 success; 2 invalid configuration or an invalid profile path.
 
 ### tg config migrate
 
-Explicitly migrates legacy `client`, `device`, `transport`, and `proxy` files
-from every profile under the current home directory. The `db` directory under
-that home is not a profile and is skipped. Before changing the configuration, it
-copies the migrated files and the prior configuration into a
-`.config-migration-<time>` directory under that home. It never migrates a
-session, database, access list, or journal file.
+Explicitly migrates legacy configuration sections and the legacy access policy
+into each affected profile database. Before changing sources, it copies the
+configuration file and any legacy access file into a
+`.config-migration-<time>` directory under the selected home. It does not
+migrate a session, database, or journal file.
 
 ```text
 tg config migrate [flags]

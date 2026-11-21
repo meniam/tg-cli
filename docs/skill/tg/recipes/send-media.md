@@ -16,8 +16,8 @@ The user directly asks to send a file to a chat. For text without a file: [send-
 
 ## Prepare
 
-- The human added the chat to `write` and the file's directory to `files` in `access.json` (absolute directories).
-- The file lies inside such a directory. If not, tell the user which directory to add, and wait. Do not edit `access.json`.
+- The owner added the chat to `access.write` and the file's directory to `access.files` (absolute directories).
+- The file lies inside such a directory. If not, tell the user which directory the owner must add, and wait. Do not ask for the passphrase.
 - The user confirmed the chat and the file.
 
 ## Commands

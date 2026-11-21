@@ -6,13 +6,13 @@ An agent runs these commands only when the user asks for exactly this write in t
 
 ## Writing is off until the owner allows it
 
-Writing is off by default. The owner adds chat ids (Bot API form, nonzero integers without duplicates, like `allow` and `block`) to the list `write` in `<profile>/access.json`:
+Writing is off by default. The owner adds chat ids (Bot API form, nonzero integers without duplicates) to `access.write` with `tg settings add`:
 
-```json
-{"write": [-1001234567890]}
+```text
+tg settings add access.write -1001234567890
 ```
 
-- **Rule.** A chat accepts writes only when it is in `write`, is visible by the read rules and is not in `block`. No file or no `write` list means writing is off everywhere. `write` alone does not turn the read filter on. Only a human edits the file, and the agent never does. See [access.md](access.md).
+- **Rule.** A chat accepts writes only when it is in `access.write`, is visible by the read rules and is not in `access.block`. An empty list keeps writing off everywhere. `access.write` alone does not turn the read filter on. Only the owner may change it with the owner passphrase. See [access.md](access.md).
 - **No permission.** The command exits with code 9 `write_disabled` (JSON-RPC `-32008`) and a hint to add the chat to `write`. A chat closed for reading gives the same exit code 7 `not_found` as an unknown chat.
 - **Confirmation.** `message edit` and `message delete` need `--yes`; without `--yes` and without `--dry-run` they exit with code 2 and never call the Daemon. All other write commands need no `--yes`.
 - **Dry run.** `--dry-run` runs every applicable Daemon check, the write permission included, and returns `dry_run: true` with the fields of that command's result. It calls no Telegram write method, writes nothing to the database and creates no journal. Run it first, then run the real call.
@@ -20,7 +20,7 @@ Writing is off by default. The owner adds chat ids (Bot API form, nonzero intege
 - **Negative chat ids.** The id goes after `--` and the flags before it: `tg message send --text hi -- -1001234567890`.
 - **No retries.** Without an idempotency key, a write is never repeated automatically, neither after `FLOOD_WAIT` (exit code 6) nor after a network error. The agent decides: after a network error read the history first, the message may have gone out. Reads keep their usual retry. An idempotency-keyed write has its documented one transient retry. The write rate is limited by the request throttle only (the send buckets), see [overview.md](overview.md#request-throttle-and-flood_wait).
 - **Saved locally.** Ordinary sent and edited messages are saved to the local database (`out: true`, an edit keeps the previous version), deleted ones get `deleted_at`, a forward is not saved. A scheduled send is not saved until it is delivered.
-- **Who can bypass it.** An agent running as the same user can edit `write` in `access.json`: the list protects against accidental writes and against writes induced through a chat, not against an agent that deliberately bypasses it.
+- **Who can bypass it.** An agent running as the same user can open the database directly. The setting protects against accidental writes and writes induced through a chat, not against deliberate local bypass.
 
 Verification and remaining work for account writes are tracked in [FEATURES.md](../../FEATURES.md), items 5.1, 5.2 and 9.1.
 
@@ -465,10 +465,11 @@ tg message send-media <chat> [flags]
 **Safety class:** `account_write`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon, a login, and two conditions that only the owner can set in `access.json`: the chat is in `write`, and the directory of every file is in `files`.
+**Preconditions.** A running Daemon, a login, and two owner-controlled settings: the chat is in `access.write`, and the directory of every file is in `access.files`.
 
-```json
-{"write": [-1001234567890], "files": ["/Users/me/tg-outbox"]}
+```text
+tg settings add access.write -1001234567890
+tg settings add access.files /Users/me/tg-outbox
 ```
 
 **The two conditions.** The chat rules are those of [Writing is off until the owner allows it](#writing-is-off-until-the-owner-allows-it): a closed or unknown chat is exit code 7, a chat outside `write` is exit code 9. `files` is an array of absolute directory paths without duplicates; a relative or empty path, a duplicate or another type makes the file invalid and closes everything, like the other keys. No `files` key or an empty list means sending files is off: exit code 9 `write_disabled` and a hint to ask the owner to add the directory. The Daemon rereads the file like the other lists. No command writes `files`: an agent cannot widen the roots and has to ask the owner. An agent running as the same user can edit `files`: the roots protect against accidental reading of a file and against reading induced through a chat, not against an agent that deliberately bypasses them.

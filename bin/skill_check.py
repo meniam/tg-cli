@@ -20,7 +20,7 @@ from pathlib import Path
 
 SAFETY = {}
 ACCESS = {"none", "write", "files", "downloads", "admin", "create", "dialogs", "sessions", "profile"}
-# Permissions of access.json that a command needs besides `write`: a small map, extend it with the schema.
+# Access settings that a command needs besides `write`: a small map, extend it with the schema.
 NEEDS = {
     "message send-media": {"write", "files"},
     "message edit-media": {"write", "files"},
