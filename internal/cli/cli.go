@@ -65,6 +65,13 @@ type Deps struct {
 	// string when there is none. A nil function turns the move of the data
 	// directory off, so that a test never touches the real profile.
 	LegacyHome func() string
+	// RunLaunchctl runs launchctl for `autostart` and returns its output; nil runs
+	// the real one. A test replaces it so that nothing reaches launchd.
+	RunLaunchctl func(args ...string) (string, error)
+	// GOOS names the operating system for `autostart`; empty means runtime.GOOS.
+	GOOS string
+	// Executable returns the path of the running binary for `autostart`; nil means os.Executable.
+	Executable func() (string, error)
 }
 
 // cmdError carries the exit code of a failed command.
@@ -207,6 +214,7 @@ func (a *app) rootCommand() *cobra.Command {
 		a.configCommand(),
 		a.settingsCommand(),
 		a.daemonCommand(),
+		a.autostartCommand(),
 		a.authCommand(),
 		a.sessionCommand(),
 		a.chatCommand(),

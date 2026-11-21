@@ -48,7 +48,7 @@ func (a *app) status(cmd *cobra.Command, _ []string) error {
 		}
 		return err
 	}
-	_, err := fmt.Fprint(a.deps.Stdout, renderDashboard(dash, time.Now()))
+	_, err := fmt.Fprint(a.deps.Stdout, renderDashboardWith(dash, time.Now(), a.autostartLine(cmd)))
 	return err
 }
 
@@ -67,6 +67,12 @@ var dashboardNumbers = message.NewPrinter(language.English)
 
 // renderDashboard formats one daemon snapshot in the local time zone of now.
 func renderDashboard(d rpc.Dashboard, now time.Time) string {
+	return renderDashboardWith(d, now, "")
+}
+
+// renderDashboardWith is renderDashboard plus the autostart state, a fact of the
+// machine the daemon cannot report. An empty autostart leaves the row out.
+func renderDashboardWith(d rpc.Dashboard, now time.Time, autostart string) string {
 	var out strings.Builder
 	section := func(label, summary string) {
 		fmt.Fprintf(&out, "\n%-17s%s\n", label, summary)
@@ -186,6 +192,9 @@ func renderDashboard(d rpc.Dashboard, now time.Time) string {
 		row("Settings", dashboardTelegramSettings(*d.Settings)...)
 	}
 	row("Access", dashboardAccess(d.Access))
+	if autostart != "" {
+		row("Autostart", autostart)
+	}
 
 	section("STORAGE", dashboardNumbers.Sprintf("%.1f MB · schema %d", float64(d.Database.SizeBytes)/1e6, d.Database.SchemaVersion))
 	row("Local data", dashboardCount(d.Database.Chats, "chat")+" · "+dashboardCount(d.Database.Messages, "message"))
