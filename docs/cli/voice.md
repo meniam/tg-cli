@@ -2,11 +2,11 @@
 
 The Daemon turns voice messages, video notes and (on request) videos into text with a local speech engine, GigaAM v3 through sherpa-onnx, and `ffmpeg` for the conversion. The engine recognises Russian only: other speech comes out as noise. Every job goes through one persistent queue (the table `voice_queue` of the profile database) that a single worker serves, so jobs survive a restart of the Daemon. Telegram is asked only for the file: no command on this page asks Telegram to transcribe. The single path that does is [`tg message transcribe --telegram`](messages-read.md#tg-message-transcribe).
 
-Two things are set once: the engine (`tg voice install`, about 190 MB under `<home>/models/gigaam`, one set for all profiles) and `ffmpeg` in `PATH`. The sources that queue jobs by themselves need `[voice_transcription] enabled = true` (the keys, the limits and the `TG_CLI_VOICE_TRANSCRIPTION_*` variables are in [overview.md](overview.md#request-throttle-and-flood_wait)); while it is off the Daemon queues nothing by itself and makes no new Telegram request for transcription. A manual command, `tg message transcribe` or `tg voice retry`, works in either case.
+Two things are set once: the engine (`tg voice install`, about 190 MB under `<home>/models/gigaam`, one set for all profiles) and `ffmpeg` in `PATH`. Automatic sources are enabled by default (the keys, the limits and the `TG_CLI_VOICE_TRANSCRIPTION_*` variables are in [overview.md](overview.md#request-throttle-and-flood_wait)). Set `[voice_transcription] enabled = false` and restart the Daemon to disable them. A manual command, `tg message transcribe` or `tg voice retry`, works either way.
 
 What a job does, in order: it checks that access settings do not close the chat and that the message is saved with a matching media type; it skips a file above the limit of its kind (30 MB for a voice message, 50 MB for a video note, 500 MB and 120 minutes for a video; `skipped` with the reason `too_large` or `too_long`, nothing downloaded); it checks free disk space and pauses between downloads (`pause`); it downloads the file into a private temporary directory of the Daemon (`tmp-voice` next to the database, mode 0700) and deletes it whatever happens; it converts the file to WAV and recognises it; it stores the text with `source: "local"` and `engine: "gigaam-v3"`. The text is untrusted Telegram data like any message text. A speechless recording is stored as an empty text and the job ends `done` with the reason `no_speech`. A network failure of the download is retried three times after 10, 60 and 300 seconds; every other refusal ends the job `failed` with a short reason (`download`, `convert`, `engine`, `disk`, `no_media`, `no_message`, `store`, `internal`).
 
-The daily budget (`daily_download_mb`, `daily_files`, counted by the local date) pauses the queue until the next day when it is spent (`paused: budget`); a manual job ignores the budget but counts in it. A missing engine or `ffmpeg` pauses the queue (`paused: engine_missing`) without spending attempts, and an absent Telegram connection pauses it (`paused: offline`).
+The daily budget (`daily_download_mb`, `daily_files`, counted by the local date) defaults to 5000 MB and 500 files. It pauses the queue until the next day when spent (`paused: budget`); a manual job ignores the budget but counts in it. A missing engine or `ffmpeg` pauses the queue (`paused: engine_missing`) without spending attempts, and an absent Telegram connection pauses it (`paused: offline`).
 
 ## Jobs, sources and reasons
 
@@ -95,7 +95,7 @@ tg voice status
 **Answer.**
 
 ```json
-{"ok":true,"data":{"enabled":true,"installed":true,"state":"idle","queue":{"queued":0,"running":0,"done":42,"failed":1,"skipped":3},"done_today":7,"files_today":7,"bytes_today":3145728,"daily_files":200,"daily_bytes":2097152000,"last_failure":"download"}}
+{"ok":true,"data":{"enabled":true,"installed":true,"state":"idle","queue":{"queued":0,"running":0,"done":42,"failed":1,"skipped":3},"done_today":7,"files_today":7,"bytes_today":3145728,"daily_files":500,"daily_bytes":5242880000,"last_failure":"download"}}
 ```
 
 **Answer fields** (`data`): `enabled` boolean (the setting); `installed` boolean; `missing` array of `ffmpeg`, `runtime`, `model`, `vad` (optional); `state` string, `disabled` (the worker does not run: the setting is off and no manual job has started it), `idle`, `working` or `paused`; `paused` string (optional), `engine_missing`, `budget` or `offline`; `paused_until` integer (optional, Unix seconds, for `budget`); `queue` object with `queued`, `running`, `done`, `failed`, `skipped` integers; `current` object (optional) with `chat_id`, `message_id`, `kind`, `source` and `started_at`; `done_today` integer (jobs done since the Daemon started, on the local day); `files_today` and `bytes_today` (downloads of the local day); `daily_files` and `daily_bytes` (the budget); `last_failure` string (optional, the reason of the latest failed or skipped job since the Daemon started). Every string is a machine word: no message text and no path.
@@ -185,7 +185,7 @@ tg voice backfill [--dry-run]
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon. Without `[voice_transcription] enabled = true` the command fails with exit code 2 and the message `voice transcription is off: set [voice_transcription] enabled = true`; `--dry-run` still counts and says so on stderr. A real run needs the engine installed.
+**Preconditions.** A running Daemon. When `[voice_transcription] enabled = false`, the command fails with exit code 2 because transcription is off; `--dry-run` still counts and says so on stderr. A real run needs the engine installed.
 
 **Example.**
 
@@ -213,7 +213,7 @@ Who gets queued, and when, is one rule. A message is queued only if access setti
 - the messages a `tg chat sync` or the background sync has just saved, only those whose date is less than 90 days old: priority 20 (`sync`); older ones wait for a backfill;
 - `--backfill` of a mark and `tg voice backfill`: priority 30 (`backfill`).
 
-A source never queues a message twice (the queue keeps one row per message) and makes no Telegram request. Without `[voice_transcription] enabled = true` no source queues anything.
+A source never queues a message twice (the queue keeps one row per message) and makes no Telegram request. With `[voice_transcription] enabled = false`, no automatic source queues anything.
 
 ### tg chat voice on
 
@@ -232,7 +232,7 @@ tg chat voice on <chat> [--video] [--backfill]
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon. The chat is known to the local database. The mark takes effect only with `[voice_transcription] enabled = true`; while it is off the command warns on stderr.
+**Preconditions.** A running Daemon. The chat is known to the local database. The mark takes effect while `[voice_transcription] enabled` is true, which is the default; while it is false the command warns on stderr.
 
 **Example.**
 

@@ -82,9 +82,10 @@ func fail(exit int, format string, args ...any) *cmdError {
 }
 
 type app struct {
-	deps        Deps
-	config      config.Config
-	throttledMS int64
+	deps         Deps
+	config       config.Config
+	throttledMS  int64
+	storedClient bool
 	// homeChecked is set once the move of the previous data directory has been
 	// looked at in this process.
 	homeChecked bool

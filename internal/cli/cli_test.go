@@ -443,7 +443,7 @@ func newEnv(t *testing.T) *testEnv {
 	return &testEnv{
 		t:    t,
 		home: home,
-		env:  map[string]string{"TG_CLI_HOME": home, "TG_API_ID": "12345", "TG_API_HASH": "APIHASHVALUE"},
+		env:  map[string]string{"TG_CLI_HOME": home, "TG_API_ID": "12345", "TG_API_HASH": "APIHASHVALUE", "TG_CLI_BACKGROUND_SYNC_ENABLED": "false", "TG_CLI_SEMANTIC_SEARCH_ENABLED": "false", "TG_CLI_VOICE_TRANSCRIPTION_ENABLED": "false"},
 		tg: &fakeTelegram{
 			ready:    make(chan struct{}),
 			wantCode: "CODE777",
@@ -939,11 +939,17 @@ func TestPresetDownloadFailure(t *testing.T) {
 func TestNoCredentialsExplainsBothWays(t *testing.T) {
 	e := newEnv(t)
 	e.usePreset()
+	e.setProfileSettings("default", map[string]json.RawMessage{"profile.client": []byte(`""`)})
+	previous := runDaemon
+	defer func() { runDaemon = previous }()
+	runDaemon = func(ctx context.Context, opts daemon.Options) error {
+		return daemon.WithProfileDatabase(opts.Paths, func(db daemon.ProfileDatabase) error { return opts.Prepare(ctx, db, &opts) })
+	}
 	r := e.run("daemon", "start", "--foreground")
 	wantFailure(t, r, exitcode.Usage)
 	for _, want := range []string{"TG_API_ID", "--client"} {
 		if !strings.Contains(r.stdout, want) {
-			t.Errorf("the message must mention %s: %q", want, r.stdout)
+			t.Errorf("missing %s: %q", want, r.stdout)
 		}
 	}
 }

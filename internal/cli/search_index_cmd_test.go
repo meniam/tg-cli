@@ -107,7 +107,7 @@ func TestSearchIndexStatusHumanPrintsTheState(t *testing.T) {
 }
 
 func TestSearchIndexStartWhileOffExitsWithUsage(t *testing.T) {
-	off := rpc.NewError(rpc.CodeInvalidParams, "semantic search is off: set [semantic_search] enabled = true")
+	off := rpc.NewError(rpc.CodeInvalidParams, "semantic search is off: set semantic_search.enabled to true and restart the daemon")
 	run := runIndexCLI(t, []string{"search", "index", "start"}, []string{rpc.MethodSearchIndexStart}, func(string, json.RawMessage) (any, error) { return nil, off })
 	if run.code != exitcode.Usage || !strings.Contains(run.stdout+run.stderr, "semantic search is off") {
 		t.Errorf("code %d stdout %q stderr %q, want exit %d with the explanation", run.code, run.stdout, run.stderr, exitcode.Usage)

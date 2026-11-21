@@ -16,7 +16,7 @@ func TestSettingDefaults(t *testing.T) {
 		"behavior.throttle_percent": c.Behavior.ThrottlePercent, "behavior.flood_autowait": c.Behavior.FloodAutoWait, "behavior.expect_user": c.Behavior.ExpectUser,
 		"background_sync.enabled": c.BackgroundSync.Enabled, "background_sync.window_start": c.BackgroundSync.WindowStart, "background_sync.window_end": c.BackgroundSync.WindowEnd, "background_sync.interval_min": c.BackgroundSync.IntervalMin, "background_sync.interval_max": c.BackgroundSync.IntervalMax, "background_sync.page_pause_min": c.BackgroundSync.PagePauseMin, "background_sync.page_pause_max": c.BackgroundSync.PagePauseMax,
 		"semantic_search.enabled": c.SemanticSearch.Enabled, "semantic_search.ollama_url": c.SemanticSearch.OllamaURL, "semantic_search.model": c.SemanticSearch.Model, "semantic_search.batch": c.SemanticSearch.Batch, "semantic_search.interval": c.SemanticSearch.Interval, "semantic_search.min_similarity": c.SemanticSearch.MinSimilarity,
-		"profile.client": "", "profile.device": "", "profile.transport": "tcp", "profile.proxy": "none",
+		"profile.client": "desktop", "profile.device": "", "profile.transport": "tcp", "profile.proxy": "none",
 		"access.allow": []int64{}, "access.block": []int64{}, "access.write": []int64{}, "access.admin": []int64{}, "access.files": []string{}, "access.downloads": []string{}, "access.dialogs": false, "access.sessions": false, "access.create": false, "access.profile": false,
 	}
 	keys := SettingKeys()
@@ -155,9 +155,9 @@ func TestValidateSettingPairs(t *testing.T) {
 func TestTemplateDocumentedSettingDefaults(t *testing.T) {
 	expected := map[string]string{
 		"behavior.throttle_percent": `60`, "behavior.flood_autowait": `"10s"`, "behavior.expect_user": `""`,
-		"background_sync.enabled": `false`, "background_sync.window_start": `"08:00"`, "background_sync.window_end": `"20:00"`, "background_sync.interval_min": `"40m"`, "background_sync.interval_max": `"3h"`, "background_sync.page_pause_min": `"2s"`, "background_sync.page_pause_max": `"8s"`,
-		"semantic_search.enabled": `false`, "semantic_search.ollama_url": `"http://127.0.0.1:11434"`, "semantic_search.model": `"bge-m3"`, "semantic_search.batch": `16`, "semantic_search.interval": `"10m"`, "semantic_search.min_similarity": `0.5`,
-		"profile.client": `""`, "profile.device": `""`, "profile.transport": `"tcp"`, "profile.proxy": `"none"`,
+		"background_sync.enabled": `true`, "background_sync.window_start": `"08:00"`, "background_sync.window_end": `"20:00"`, "background_sync.interval_min": `"40m"`, "background_sync.interval_max": `"3h"`, "background_sync.page_pause_min": `"2s"`, "background_sync.page_pause_max": `"8s"`,
+		"semantic_search.enabled": `true`, "semantic_search.ollama_url": `"http://127.0.0.1:11434"`, "semantic_search.model": `"bge-m3"`, "semantic_search.batch": `16`, "semantic_search.interval": `"10m"`, "semantic_search.min_similarity": `0.5`,
+		"profile.client": `"desktop"`, "profile.device": `""`, "profile.transport": `"tcp"`, "profile.proxy": `"none"`,
 	}
 	for _, key := range SettingKeys() {
 		if strings.HasPrefix(key.Name, "access.") {

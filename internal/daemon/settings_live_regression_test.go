@@ -186,3 +186,24 @@ func TestLiveThrottleSettingsAffectQueuedRequests(t *testing.T) {
 		}
 	})
 }
+
+func TestNewDefaultsKeepStoredOptOuts(t *testing.T) {
+	d, c, db := settingsFixture(t)
+	ctx := context.Background()
+	settings := map[string]json.RawMessage{"background_sync.enabled": []byte(`false`), "semantic_search.enabled": []byte(`false`), "profile.client": []byte(`"ios"`)}
+	if err := db.SetSettings(ctx, settings); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.initSettings(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range settings {
+		var got rpc.SettingValue
+		if err := rpcCall(t, c, rpc.MethodSettingsGet, rpc.SettingsGetParams{Key: key}, &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Source != "database" || string(got.Value) != string(want) || string(got.Stored) != string(want) {
+			t.Fatalf("stored %s changed: %+v", key, got)
+		}
+	}
+}

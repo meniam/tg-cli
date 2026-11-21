@@ -17,14 +17,14 @@ func (a *app) searchWithIndexCommand() *cobra.Command {
 // searchIndexCommand drives the semantic indexer of the Daemon: the background
 // job that cuts the local messages into fragments and embeds them through the
 // local Ollama service. None of the three commands calls Telegram. `start` sends
-// the text of fragments to Ollama, so it needs [semantic_search] enabled = true;
+// the text of fragments to Ollama, so it needs semantic_search.enabled = true;
 // `status` answers "disabled" without it.
 func (a *app) searchIndexCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "index",
 		Short: "Build and inspect the semantic search index",
 		Long: "The Daemon cuts the local messages into fragments and embeds them through a local\n" +
-			"Ollama service. The group needs [semantic_search] enabled = true, except status.\n" +
+			"Ollama service. The group needs semantic_search.enabled = true, except status.\n" +
 			"To search for the word \"index\" itself, put -- before it: tg search -- index.",
 	}
 	start := a.annotate(&cobra.Command{

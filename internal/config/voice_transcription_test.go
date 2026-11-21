@@ -19,11 +19,12 @@ func TestVoiceTranscriptionDefaults(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := VoiceTranscriptionValues{
-				FFmpeg: "ffmpeg", MaxVoiceMB: 30, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120,
-				DailyDownloadMB: 2000, DailyFiles: 200, Pause: 3 * time.Second, Threads: 4,
+				Enabled: true,
+				FFmpeg:  "ffmpeg", MaxVoiceMB: 30, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120,
+				DailyDownloadMB: 5000, DailyFiles: 500, Pause: 3 * time.Second, Threads: 4,
 			}
 			if values != want {
-				t.Fatalf("values = %+v, want %+v (disabled)", values, want)
+				t.Fatalf("values = %+v, want %+v (enabled)", values, want)
 			}
 		})
 	}

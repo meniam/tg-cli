@@ -195,9 +195,9 @@ func TestSettingsRPCSourcesAndSecret(t *testing.T) {
 func TestSettingsRPCRestartValuesRemainAtStartup(t *testing.T) {
 	_, c, _ := settingsFixture(t)
 	cases := []struct{ name, value, initial string }{
-		{"semantic_search.enabled", `true`, `false`}, {"semantic_search.ollama_url", `"http://localhost:1234"`, `"http://127.0.0.1:11434"`},
+		{"semantic_search.enabled", `false`, `true`}, {"semantic_search.ollama_url", `"http://localhost:1234"`, `"http://127.0.0.1:11434"`},
 		{"semantic_search.model", `"another-model"`, `"bge-m3"`}, {"semantic_search.batch", `32`, `16`}, {"semantic_search.interval", `"20m"`, `"10m"`},
-		{"profile.client", `"desktop"`, `""`}, {"profile.device", `"test-device"`, `""`}, {"profile.transport", `"wss"`, `"tcp"`},
+		{"profile.client", `"ios"`, `"desktop"`}, {"profile.device", `"test-device"`, `""`}, {"profile.transport", `"wss"`, `"tcp"`},
 		{"profile.proxy", `"socks5://localhost:1080"`, `"[REDACTED]"`},
 	}
 	for _, tc := range cases {

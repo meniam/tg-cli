@@ -87,9 +87,15 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 			if !migrated {
 				client = a.config.Profiles[profile].Client
 			}
-			if value, ok := stored["profile.client"]; ok {
-				if json.Unmarshal(value, &client) != nil {
+			storedValue, storedClient := stored["profile.client"]
+			if storedClient {
+				if json.Unmarshal(storedValue, &client) != nil {
 					return fail(exitcode.Failure, "cannot read profile settings")
+				}
+			} else if client == "" && a.deps.Getenv("TG_API_ID") == "" && a.deps.Getenv("TG_API_HASH") == "" {
+				key, _ := config.LookupSetting("profile.client")
+				if json.Unmarshal(key.Default, &client) != nil {
+					return fail(exitcode.Failure, "invalid default client preset")
 				}
 			}
 			raw, e := os.ReadFile(p.Session)

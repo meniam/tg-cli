@@ -12,6 +12,11 @@ The result for a setting has `key`, effective `value`, `source` (`default`,
 environment variable, command-line flag, application timing, protection and
 secret status.
 
+The default `profile.client` is `desktop`. `background_sync.enabled` and
+`semantic_search.enabled` also default to `true`; set either one to `false`
+and restart the Daemon to disable it. Use `tg schema` for the authoritative
+defaults of every setting.
+
 Settings below `access.` control the chats and directories available to an
 agent. They require the owner's passphrase for every write. The phrase is read
 without echo from the terminal; it is never a command argument, printed answer,

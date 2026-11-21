@@ -497,7 +497,7 @@ func (d *daemon) semanticIndexStatus() rpc.SemanticIndexStatus {
 
 // errSemanticOff is the answer of a command that needs the feature while it is off.
 func errSemanticOff() *rpc.Error {
-	return rpc.NewError(rpc.CodeInvalidParams, "semantic search is off: set [semantic_search] enabled = true")
+	return rpc.NewError(rpc.CodeInvalidParams, "semantic search is off: set semantic_search.enabled to true and restart the daemon")
 }
 
 // requireSemanticIndexer returns the worker or the error that explains why

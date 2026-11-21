@@ -3,6 +3,8 @@
 `tg` reads its configuration from `~/.config/tg-cli/config.toml`. The file holds `home`, `default_profile`, and `[files]`. Profile settings live
 in the selected profile database and are managed with `tg settings`.
 `voice_transcription.*` is the current exception: it remains in `config.toml`.
+Its automatic sources are enabled by default, with a daily budget of 5000 MB
+and 500 files; set `enabled = false` to disable them after a Daemon restart.
 `tg config init` writes the compact template; `tg schema` lists configuration
 and profile-setting keys separately.
 

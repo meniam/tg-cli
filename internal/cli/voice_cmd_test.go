@@ -248,11 +248,11 @@ func TestDaemonVoiceTranscriptionDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := daemon.VoiceTranscriptionConfig{
-		Home: "/data/tg", FFmpeg: "ffmpeg", MaxVoiceMB: 30, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120,
-		DailyDownloadMB: 2000, DailyFiles: 200, Pause: 3 * time.Second, Threads: 4,
+		Enabled: true, Home: "/data/tg", FFmpeg: "ffmpeg", MaxVoiceMB: 30, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120,
+		DailyDownloadMB: 5000, DailyFiles: 500, Pause: 3 * time.Second, Threads: 4,
 	}
 	if got != want {
-		t.Fatalf("got %+v, want %+v (disabled)", got, want)
+		t.Fatalf("got %+v, want %+v (enabled)", got, want)
 	}
 }
 
@@ -260,7 +260,7 @@ func TestDaemonVoiceTranscriptionEnvironmentOverridesFile(t *testing.T) {
 	file := "[voice_transcription]\nenabled = false\nffmpeg = \"/opt/ffmpeg\"\nmax_voice_mb = 10\nthreads = 2\npause = \"1s\"\n"
 	fromFile := daemon.VoiceTranscriptionConfig{
 		Home: "/data/tg", FFmpeg: "/opt/ffmpeg", MaxVoiceMB: 10, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120,
-		DailyDownloadMB: 2000, DailyFiles: 200, Pause: time.Second, Threads: 2,
+		DailyDownloadMB: 5000, DailyFiles: 500, Pause: time.Second, Threads: 2,
 	}
 	for _, tc := range []struct {
 		name string
@@ -284,7 +284,7 @@ func TestDaemonVoiceTranscriptionEnvironmentOverridesFile(t *testing.T) {
 			DailyDownloadMB: 55, DailyFiles: 66, Pause: 0, Threads: 16,
 		}},
 		{"one variable keeps the rest of the file", map[string]string{"TG_CLI_VOICE_TRANSCRIPTION_THREADS": "8"},
-			daemon.VoiceTranscriptionConfig{Home: "/data/tg", FFmpeg: "/opt/ffmpeg", MaxVoiceMB: 10, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120, DailyDownloadMB: 2000, DailyFiles: 200, Pause: time.Second, Threads: 8}},
+			daemon.VoiceTranscriptionConfig{Home: "/data/tg", FFmpeg: "/opt/ffmpeg", MaxVoiceMB: 10, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120, DailyDownloadMB: 5000, DailyFiles: 500, Pause: time.Second, Threads: 8}},
 		{"blank variable is ignored", map[string]string{"TG_CLI_VOICE_TRANSCRIPTION_ENABLED": "  ", "TG_CLI_VOICE_TRANSCRIPTION_PAUSE": " "}, fromFile},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

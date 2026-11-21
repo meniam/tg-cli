@@ -14,7 +14,7 @@ import (
 
 // defaultSemanticSearch is what the daemon gets when nothing is configured.
 var defaultSemanticSearch = daemon.SemanticSearchConfig{
-	OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute, MinSimilarity: 0.5,
+	Enabled: true, OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute, MinSimilarity: 0.5,
 }
 
 func TestDaemonSemanticSearchDefaults(t *testing.T) {
@@ -23,7 +23,7 @@ func TestDaemonSemanticSearchDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got != defaultSemanticSearch {
-		t.Fatalf("got %+v, want %+v (disabled)", got, defaultSemanticSearch)
+		t.Fatalf("got %+v, want %+v (enabled)", got, defaultSemanticSearch)
 	}
 }
 
@@ -166,7 +166,7 @@ func TestSemanticSearchReachesDaemonOptions(t *testing.T) {
 		env    map[string]string
 		want   daemon.SemanticSearchConfig
 	}{
-		{"off by default", nil, nil, defaultSemanticSearch},
+		{"disabled by environment", nil, nil, daemon.SemanticSearchConfig{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute, MinSimilarity: 0.5}},
 		{"database and environment", map[string]json.RawMessage{"semantic_search.enabled": []byte("false"), "semantic_search.model": []byte(`"file-model"`), "semantic_search.batch": []byte("32")}, map[string]string{
 			"TG_CLI_SEMANTIC_SEARCH_ENABLED":  "true",
 			"TG_CLI_SEMANTIC_SEARCH_INTERVAL": "2h",
@@ -212,7 +212,7 @@ func TestConfigShowListsSemanticSearch(t *testing.T) {
 		values                map[string]json.RawMessage
 		enabled, model, batch string
 	}{
-		{"defaults", nil, "false", `"bge-m3"`, "16"},
+		{"defaults", nil, "true", `"bge-m3"`, "16"},
 		{"database", map[string]json.RawMessage{"semantic_search.enabled": []byte("true"), "semantic_search.model": []byte(`"gemma"`), "semantic_search.batch": []byte("64")}, "true", `"gemma"`, "64"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

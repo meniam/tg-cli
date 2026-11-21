@@ -184,7 +184,7 @@ func dashboardHistory(h rpc.DashboardHistory) []string {
 
 func dashboardBackground(b rpc.BackgroundSyncStatus, now time.Time) []string {
 	if !b.Enabled || b.State == rpc.BackgroundSyncDisabled {
-		return []string{"off (enable with [background_sync] enabled = true)"}
+		return []string{"off (enable with tg settings set background_sync.enabled true; restart required)"}
 	}
 	var state string
 	switch b.State {
@@ -229,7 +229,7 @@ func dashboardBackground(b rpc.BackgroundSyncStatus, now time.Time) []string {
 // older run and would mislead.
 func dashboardSemantic(s rpc.SemanticIndexStatus, now time.Time) string {
 	if !s.Enabled || s.State == rpc.SemanticIndexDisabled {
-		return "off (enable with [semantic_search] enabled = true)"
+		return "off (enable with tg settings set semantic_search.enabled true; restart required)"
 	}
 	parts := []string{"on"}
 	if s.Model != "" {

@@ -13,9 +13,7 @@ import (
 // messages, video notes and videos. The values are kept as the owner wrote
 // them; Resolve checks and converts them.
 type VoiceTranscription struct {
-	// Enabled turns the sources and the queue worker on. Off by default: the
-	// daemon then queues no job by itself and makes no new Telegram request
-	// for transcription. The manual command works either way.
+	// Enabled turns the sources and the queue worker on by default.
 	Enabled bool `toml:"enabled"`
 	// FFmpeg is the program that converts media to WAV: a name looked up in
 	// PATH or a path.
@@ -51,6 +49,9 @@ type VoiceTranscriptionValues struct {
 }
 
 const (
+	// DefaultVoiceDailyDownloadMB and DefaultVoiceDailyFiles bound daily downloads.
+	DefaultVoiceDailyDownloadMB = 5000
+	DefaultVoiceDailyFiles      = 500
 	// MaxVoiceFFmpegRunes is the longest accepted program name or path.
 	MaxVoiceFFmpegRunes = 1024
 	// MaxVoiceLimit is the largest accepted size, count or minutes: far above
@@ -66,9 +67,10 @@ const (
 
 func defaultVoiceTranscription() VoiceTranscription {
 	return VoiceTranscription{
+		Enabled:    true,
 		FFmpeg:     "ffmpeg",
 		MaxVoiceMB: 30, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120,
-		DailyDownloadMB: 2000, DailyFiles: 200,
+		DailyDownloadMB: DefaultVoiceDailyDownloadMB, DailyFiles: DefaultVoiceDailyFiles,
 		Pause: "3s", Threads: 4,
 	}
 }

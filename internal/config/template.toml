@@ -64,3 +64,10 @@
 # Legacy access file name used during migration.
 # Default: "access.json"
 # access = "access.json"
+
+# --- Local voice transcription -----------------------------------------------
+# Voice transcription is enabled by default. Set enabled to false to disable it.
+# [voice_transcription]
+# enabled = true
+# daily_download_mb = 5000
+# daily_files = 500

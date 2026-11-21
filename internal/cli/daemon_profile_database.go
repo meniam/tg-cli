@@ -19,6 +19,7 @@ import (
 // The legacy fields remain a fallback until the migration in the next stage.
 func (a *app) applyDatabaseSettings(paths daemon.Paths, values map[string]json.RawMessage) error {
 	name := filepath.Base(paths.Dir)
+	_, a.storedClient = values["profile.client"]
 	if a.config.Profiles == nil {
 		a.config.Profiles = make(map[string]config.Profile)
 	}
@@ -187,6 +188,12 @@ func (a *app) prepareDaemonSettings(ctx context.Context, cmd *cobra.Command, pat
 		}
 	}
 	opts.ClientPreset = a.config.Profiles[filepath.Base(paths.Dir)].Client
+	if opts.ClientPreset == "" && !a.storedClient && a.deps.Getenv("TG_API_ID") == "" && a.deps.Getenv("TG_API_HASH") == "" {
+		key, _ := config.LookupSetting("profile.client")
+		if err := json.Unmarshal(key.Default, &opts.ClientPreset); err != nil {
+			return fail(exitcode.Failure, "invalid default client preset")
+		}
+	}
 	opts.TelegramConfig = cfg
 	opts.SettingsOverrides = overrides
 	opts.BackgroundSync = background

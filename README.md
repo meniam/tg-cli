@@ -69,9 +69,9 @@ On failure the envelope is `{"ok":false,"error":{"code":"...","message":"..."}}`
 **Requirements.** There are no releases yet, so you build from source.
 
 - **To build and run:** Go (the version in [`go.mod`](go.mod)), [`just`](https://github.com/casey/just) (`brew install just`) and a Unix-like system: the daemon uses Unix sockets and file locks, and the supported platforms are not defined yet. `go build` fetches the Go libraries from `go.mod`. They are all pure Go, with no cgo and no native library: SQLite is [`modernc.org/sqlite`](https://pkg.go.dev/modernc.org/sqlite), stemming is [`kljensen/snowball`](https://github.com/kljensen/snowball) and Telegram is [`gotd/td`](https://github.com/gotd/td).
-- **Telegram:** an account, and either an official client preset (`--client`, downloaded from `raw.githubusercontent.com` on every start that uses it, so the daemon needs network access to GitHub then) or your own `TG_API_ID` and `TG_API_HASH` (no download).
-- **Optional, for `tg search --semantic`:** [Ollama](https://ollama.com) on the same machine with the `bge-m3` model (`ollama pull bge-m3`, about 1.2 GB). The client accepts only a loopback address (`127.0.0.1`, `::1` or `localhost`) and refuses any other, and there is no cloud API. Without Ollama the search by words works as before; see "Optional: search by meaning" below. The maximum set of installs is in [Everything installed](#everything-installed-full-functionality).
-- **Optional, for the transcription of voice messages:** `ffmpeg` (`brew install ffmpeg`; the first one in `PATH`, or the path in `[voice_transcription] ffmpeg`) and the speech engine, which `tg voice install` downloads (GigaAM v3 and `sherpa-onnx`, about 190 MB in `<home>/models/gigaam/`). The engine recognises Russian only. See "Optional: transcribe voice messages" below.
+- **Telegram:** an account. With no credential option, `tg` uses the official `desktop` preset, downloaded from `raw.githubusercontent.com` when it is needed. Your own `TG_API_ID` and `TG_API_HASH` take priority over that default; `--client` selects another preset. `--client` together with either own-credential variable is rejected.
+- **For default semantic indexing:** [Ollama](https://ollama.com) on the same machine with the `bge-m3` model (`ollama pull bge-m3`, about 1.2 GB). The client accepts only a loopback address (`127.0.0.1`, `::1` or `localhost`) and refuses any other, and there is no cloud API. Without Ollama, word search still works and the indexer reports its unavailable state.
+- **For default automatic transcription:** `ffmpeg` (`brew install ffmpeg`; the first one in `PATH`, or the path in `[voice_transcription] ffmpeg`) and the speech engine, which `tg voice install` downloads (GigaAM v3 and `sherpa-onnx`, about 190 MB in `<home>/models/gigaam/`). The engine recognises Russian only.
 - **Optional, for development:** `uv` (`brew install uv`) for `just changelog` and `just atlas`, and `python3` for `just skill-check`. The `sqlite3` utility is not needed.
 
 ```sh
@@ -84,8 +84,8 @@ just install                    # optional: installs `tg` into ~/.local/bin and 
 **1. Start the daemon.** It starts in the background and the command returns once the socket answers.
 
 ```sh
-# Without your own api_id: borrow the credentials of an official client
-tg daemon start --client desktop
+# Uses the default desktop preset when own credentials are absent
+tg daemon start
 
 # Or with your own application from https://my.telegram.org
 TG_API_ID=... TG_API_HASH=... tg daemon start
@@ -142,23 +142,11 @@ echo "Follow up on Monday" | tg note add --chat @username --author ai --tag foll
 tg status
 ```
 
-**Optional: load old history on a schedule.** It is off by default, and while it is off the daemon makes no extra request to Telegram. With the setting below the daemon takes one chat per run, a random 40 to 180 minutes apart and only between 08:00 and 20:00 of the local time of the machine, and loads its history to the first message with random 2 to 8 second pauses. It goes through the same throttle as every request, takes people first, then chats from folders, then the rest, skips chats the access lists close, and gives way to a manual `tg chat sync start`. The state is the `background_sync` block of `tg daemon status` and the `Background` row of `tg status`. With `--idle-timeout` set the daemon may stop before a run. The schedule is checked by tests on a fake client and clock and has not run on a live account. Keys and limits: [overview.md](docs/cli/overview.md#request-throttle-and-flood_wait).
+**Scheduled history load.** It is on by default: the daemon takes one chat per run, a random 40 to 180 minutes apart and only between 08:00 and 20:00 of the local time of the machine, and loads its history to the first message with random 2 to 8 second pauses. It goes through the same throttle as every request, takes people first, then chats from folders, then the rest, skips chats the access lists close, and gives way to a manual `tg chat sync start`. Set `background_sync.enabled` to `false` and restart the daemon to disable it. The state is the `background_sync` block of `tg daemon status` and the `Background` row of `tg status`.
 
-```sh
-tg settings set background_sync.enabled true
-tg daemon stop
-tg daemon start
-```
+**Search by meaning.** `tg search` already knows word forms: `доставка`, `доставки` and `доставку` find each other in `messages`, and every message hit has a `t.me` link built from the local database. Semantic indexing is on by default. The daemon cuts local messages into fragments, asks local Ollama for vectors (`bge-m3`) and keeps them in `vectors.db` next to `store.db`. It never calls Telegram, skips chats the access lists close, and runs every 10 minutes or on `tg search index start`. If Ollama is down the answer comes from the word legs and says why in `vector_skipped`. Set `semantic_search.enabled` to `false` and restart the daemon to disable it. Vector hits below `[semantic_search] min_similarity` (default 0.5, 0 turns it off) are dropped and counted in `vector_dropped`; `--min-similarity X` overrides it for one query.
 
-**Optional: search by meaning.** `tg search` already knows word forms: `доставка`, `доставки` and `доставку` find each other in `messages`, and every message hit has a `t.me` link built from the local database. With `tg search --semantic` the search returns fragments of a conversation (a stretch of one chat cut by pauses) found by three legs fused by RRF: exact words, stemmed words and vector similarity. The vector leg is off by default; while it is off the daemon makes no request to Ollama and creates no `vectors.db`. With the setting below the daemon cuts the local messages into fragments, asks the local Ollama for a vector of each (`bge-m3`) and keeps them in `vectors.db` next to `store.db`, without any message text. It never calls Telegram, skips chats the access lists close, and runs every 10 minutes or on `tg search index start`. If Ollama is down the answer comes from the word legs and says why in `vector_skipped`. Vector hits with a cosine similarity below `[semantic_search] min_similarity` (default 0.5, 0 turns it off) are dropped and counted in `vector_dropped`; `--min-similarity X` overrides it for one query. You can delete `vectors.db`: the index is built again. The state is the `semantic_search` block of `tg daemon status` and the `Semantic` row of `tg status`. The feature is checked by tests on fakes and has not run on a live account or a live Ollama, and there are no measurements of its quality yet, see [`FEATURES.md`](FEATURES.md) item 13.1. Keys and limits: [overview.md](docs/cli/overview.md#request-throttle-and-flood_wait); the command: [notes-and-search.md](docs/cli/notes-and-search.md#semantic-search).
-
-```sh
-tg settings set semantic_search.enabled true
-tg daemon stop
-tg daemon start
-```
-
-**Optional: transcribe voice messages.** `tg message transcribe` and the daemon turn voice messages, video notes and (on request) videos into text on this machine with GigaAM v3 (Sber, MIT) through `sherpa-onnx`, and `ffmpeg` converts the media to WAV. The engine recognises Russian only; other speech comes out as noise and goes into the search as it is. Telegram is asked for the file only, within limits (a voice message up to 30 MB, a video note up to 50 MB, a video up to 500 MB and 120 minutes, a budget of 2000 MB and 200 files per local day); `messages.transcribeAudio` is called only by `tg message transcribe --telegram` (Premium). Every job goes through one persistent queue with one worker, so the work survives a daemon restart. Install the engine once, then ask for a text:
+**Transcribe voice messages.** `tg message transcribe` and the daemon turn voice messages, video notes and (on request) videos into text on this machine with GigaAM v3 (Sber, MIT) through `sherpa-onnx`, and `ffmpeg` converts the media to WAV. Automatic sources are on by default. The engine recognises Russian only; other speech comes out as noise and goes into the search as it is. Telegram is asked for the file only, within limits (a voice message up to 30 MB, a video note up to 50 MB, a video up to 500 MB and 120 minutes, a budget of 5000 MB and 500 files per local day); `messages.transcribeAudio` is called only by `tg message transcribe --telegram` (Premium). Every job goes through one persistent queue with one worker, so the work survives a daemon restart. Install the engine once, then ask for a text:
 
 ```sh
 brew install ffmpeg
@@ -167,14 +155,7 @@ tg message transcribe @alice 4711      # queues one message and waits up to 60 s
 tg voice status                        # the engine, the queue, today's downloads against the budget
 ```
 
-`tg message transcribe` works with the setting off. To have the daemon transcribe by itself the voice messages of personal chats as they arrive and as chats are synced (and of the chats you mark with `tg chat voice on <chat>`), turn the setting on and restart the daemon:
-
-```toml
-[voice_transcription]
-enabled = true
-```
-
-While it is off the daemon queues nothing by itself and makes no new Telegram request for transcription. Chats that the access policy closes are never queued or downloaded, the daemon never queues your own messages, and a downloaded file lives in a private temporary directory of the daemon only while its job runs. `tg voice backfill --dry-run` counts the already saved voice messages of personal chats before you queue them. The queue is the `voice` block of `tg daemon status` and the `Voice` row of `tg status`. The feature is checked by tests on fakes; the engine was run in this release only on the sample audio of its model archive, and nothing was run on Telegram voice messages, video notes or videos, so the speed, the quality and the limits on real files are open, see [`FEATURES.md`](FEATURES.md) items 18.5 to 18.9. Keys and limits: [overview.md](docs/cli/overview.md#request-throttle-and-flood_wait), commands: [voice.md](docs/cli/voice.md).
+Set `[voice_transcription] enabled = false` and restart the daemon to disable automatic transcription. Chats that the access policy closes are never queued or downloaded, the daemon never queues your own messages, and a downloaded file lives in a private temporary directory of the daemon only while its job runs. `tg voice backfill --dry-run` counts the already saved voice messages of personal chats before you queue them.
 
 A chat is addressed as `@username`, a Bot API id (users positive, groups negative, channels from `-1000000000000`), the phone number of a contact, or a `t.me` link. More: [install and run](docs/cli/overview.md#install-and-run), [profiles](docs/cli/overview.md#profiles-and-the-data-directory), [global flags](docs/cli/overview.md#global-flags).
 
@@ -192,7 +173,7 @@ tg voice install                # about 190 MB; needs neither the daemon nor Tel
 
 - **PATH.** `just install` writes `~/.local/bin/tg`: that directory has to be in your `PATH`.
 - **Voice transcription engine.** `ffmpeg` comes from `PATH` or from `[voice_transcription] ffmpeg`. `tg voice install` downloads the `sherpa-onnx` runtime, the GigaAM v3 model and the Silero VAD model (about 190 MB) into `<home>/models/gigaam/` (default `~/.config/tg-cli/models/gigaam/`), one set for all profiles; it uses only links and SHA-256 sums fixed in the program and checks each archive before it unpacks it. `tg voice install --check` reports what is missing.
-- **Three settings.** Use `tg settings set semantic_search.enabled true` for the vector index and `tg search --semantic`, and `tg settings set background_sync.enabled true` for scheduled history load; both take effect after a daemon restart. `voice_transcription.*` remains in `config.toml` and is not managed by `tg settings`: set `[voice_transcription] enabled = true` for automatic transcription, then mark other chats with `tg chat voice on <chat>`.
+- **Default services.** Semantic indexing, scheduled history load and automatic transcription are enabled by default. `semantic_search.enabled` and `background_sync.enabled` are database settings and take effect after a daemon restart. `voice_transcription.*` remains in `config.toml`; set `[voice_transcription] enabled = false` to disable automatic transcription, then restart the daemon.
 - **Nothing else to install.** `tg` starts no other program except `ffmpeg` and `sherpa-onnx`, and only for voice transcription (the daemon, when a job runs): without a voice job it launches no process but itself, when `tg daemon start` runs the daemon in the background. It does not call `sqlite3`, and media metadata is read in Go. The two programs start without a shell, with fixed arguments.
 - **What depends on the account, not on the installation.** `message transcribe --telegram` (Telegram gives a free-trial allowance, then asks for Premium; the default path needs no Premium), `message translate` and custom emoji in sent text need Telegram Premium; a refusal is exit code 5 with `error.reason: "premium_required"`. Writing works only in chats in `access.write`; elsewhere it is exit code 9 `write_disabled`.
 

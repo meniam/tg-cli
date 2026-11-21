@@ -47,12 +47,13 @@ func TestDaemonBackgroundSyncDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := daemon.BackgroundSyncConfig{
+		Enabled:     true,
 		WindowStart: 8 * time.Hour, WindowEnd: 20 * time.Hour,
 		IntervalMin: 40 * time.Minute, IntervalMax: 3 * time.Hour,
 		PagePauseMin: 2 * time.Second, PagePauseMax: 8 * time.Second,
 	}
 	if got != want {
-		t.Fatalf("got %+v, want %+v (disabled)", got, want)
+		t.Fatalf("got %+v, want %+v (enabled)", got, want)
 	}
 }
 
@@ -260,7 +261,7 @@ func TestConfigShowListsBackgroundSync(t *testing.T) {
 		values         map[string]json.RawMessage
 		enabled, start string
 	}{
-		{"defaults", nil, "false", `"08:00"`},
+		{"defaults", nil, "true", `"08:00"`},
 		{"database", map[string]json.RawMessage{"background_sync.enabled": []byte("true"), "background_sync.window_start": []byte(`"09:00"`)}, "true", `"09:00"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

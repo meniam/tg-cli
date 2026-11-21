@@ -339,7 +339,7 @@ func TestRenderDashboardSemanticStates(t *testing.T) {
 		{"cancelled", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexIdle, Model: "bge-m3", Indexed: 10, Total: 40, FinishedAt: statusAt(19, 9, 5), Reason: "cancelled"}, "Semantic     on, bge-m3, 10 of 40 fragments indexed, last run 2026-11-19 09:05 (cancelled)\n"},
 		{"model missing", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexModelMissing, Reason: "Ollama does not have the model bge-m3"}, "Semantic     on, model missing (Ollama does not have the model bge-m3)\n"},
 		{"error with control characters", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexError, Reason: "open: \x1b[31mfailed"}, "Semantic     on, error (open:  [31mfailed)\n"},
-		{"enabled flag off wins", rpc.SemanticIndexStatus{State: rpc.SemanticIndexIdle, Indexed: 5}, "Semantic     off (enable with [semantic_search] enabled = true)\n"},
+		{"enabled flag off wins", rpc.SemanticIndexStatus{State: rpc.SemanticIndexIdle, Indexed: 5}, "Semantic     off (enable with tg settings set semantic_search.enabled true; restart required)\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dash := statusBase()

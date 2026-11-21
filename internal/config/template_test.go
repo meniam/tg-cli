@@ -23,6 +23,14 @@ func TestTemplateLoadsWithDefaults(t *testing.T) {
 	if got.DefaultProfile != "default" || got.Files.Database != "store.db" || got.Behavior.ThrottlePercent != 60 || got.Behavior.FloodAutoWait != "10s" {
 		t.Fatalf("the template does not give the defaults: %+v", got)
 	}
+	if !got.VoiceTranscription.Enabled || got.VoiceTranscription.DailyDownloadMB != 5000 || got.VoiceTranscription.DailyFiles != 500 {
+		t.Fatalf("voice template defaults: %+v", got.VoiceTranscription)
+	}
+	for _, line := range []string{"# enabled = true", "# daily_download_mb = 5000", "# daily_files = 500"} {
+		if !strings.Contains(Template(), line) {
+			t.Errorf("template missing %q", line)
+		}
+	}
 	if len(got.Profiles) != 0 || got.Legacy.Profiles != nil {
 		t.Errorf("template must not contain profile settings: %+v", got.Profiles)
 	}

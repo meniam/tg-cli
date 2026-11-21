@@ -5,7 +5,7 @@ One Daemon per profile holds the connection and the session, and the CLI sends i
 ## First run
 
 ```bash
-tg daemon start --client desktop   # background; the preset is saved in the selected profile, no flag needed afterwards
+tg daemon start                    # background; desktop is the default preset when own credentials are absent
 tg daemon status                   # profile, connection, login, active requests, background_sync block
 tg status                          # text screen for a person (not JSON): account, database, history, background load, jobs
 tg daemon logs --tail 50           # log of Daemon requests and errors for debugging (--follow tails it)
@@ -21,9 +21,9 @@ tg auth status                     # whether the account is logged in and who it
 
 **`tg status`.** It prints plain text for a person: the account, the connection, the database size and chat count, how many chats are loaded to their first message (people, in folders, others), the background load, active jobs, the remaining `FLOOD_WAIT` and the events. It is not for parsing: `--format json|jsonl|toon` gives code 2, and `tg daemon status` returns the same facts as JSON. It asks Telegram for nothing and works after login is lost (the line `Account  not signed in`).
 
-**Background load block.** `daemon status` has a `background_sync` block: `state` (`disabled`, `waiting_window`, `waiting_interval`, `running`), `next_run_at`, `last_run_at`, `last_result` and `last_chat_id`. The scheduled load is the owner's decision: it is off by default, `background_sync.enabled` controls it and requires a Daemon restart. Do not change it unless the owner asks. With `--idle-timeout` the Daemon may stop before a run, because waiting for the schedule does not count as activity.
+**Background load block.** `daemon status` has a `background_sync` block: `state` (`disabled`, `waiting_window`, `waiting_interval`, `running`), `next_run_at`, `last_run_at`, `last_result` and `last_chat_id`. The scheduled load is on by default; `background_sync.enabled` controls it and requires a Daemon restart. Do not change it unless the owner asks. With `--idle-timeout` the Daemon may stop before a run, because waiting for the schedule does not count as activity.
 
-**Semantic search block.** `daemon status` has a `semantic_search` block (always present) and `tg status` a `Semantic` row: `disabled` while `semantic_search.enabled` is off, otherwise the indexer state (`idle`, `indexing`, `unavailable`, `model_missing`, `error`), the model and `indexed` of `total` fragments. `unavailable` means Ollama does not answer and `model_missing` that it lacks the model (`ollama pull bge-m3`); `tg search` keeps working by words in every state. Turning the feature on is the owner's decision and requires a Daemon restart.
+**Semantic search block.** `daemon status` has a `semantic_search` block (always present) and `tg status` a `Semantic` row: `disabled` while `semantic_search.enabled` is off, otherwise the indexer state (`idle`, `indexing`, `unavailable`, `model_missing`, `error`), the model and `indexed` of `total` fragments. `unavailable` means Ollama does not answer and `model_missing` that it lacks the model (`ollama pull bge-m3`); `tg search` keeps working by words in every state. The feature is on by default and a change requires a Daemon restart.
 
 **Status and failures.** `daemon status` shows `connection`, the selected `transport`, the current `active_transport`, the count `transport_switches`, `dc` and the proxy address without the secret. When the client is recreated, a request to Telegram gets code 10 `offline`; a write that was already admitted gets 30 seconds to finish, then its context is canceled, and the Daemon does not retry it itself. On a connection drop, a request to Telegram waits up to 15 seconds and may return code 10 `offline`; local operations remain available.
 

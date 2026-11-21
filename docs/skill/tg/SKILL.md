@@ -42,7 +42,7 @@ tg auth status                     # whether the account is logged in and who it
 Diagnose first. Start the Daemon only when the status shows it is not running (exit code 3). Ask the user before the first start on this machine, because a start can migrate old configuration files; on later runs, start it and retry:
 
 ```bash
-tg daemon start --client desktop
+tg daemon start
 ```
 
 `tg-doctor.sh` only reads: it calls `tg version`, `tg config path` and `tg daemon status`, and takes `--profile <name>` (without it `tg` uses the configured default). Needs Bash 3.2+ and python3. Its exit codes (not `tg` codes): 0 the Daemon runs and the account is logged in; 1 the Daemon is not running or not connected yet (wait, run again); 2 no `tg` or python3, unreadable status, or no login.

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -37,7 +38,8 @@ func (a *app) daemonCommand() *cobra.Command {
 			"because two processes must never share one Telegram session.\n\n" +
 			"Application credentials come from TG_API_ID and TG_API_HASH (your own\n" +
 			"application, https://my.telegram.org) or from --client, an official client\n" +
-			"preset downloaded from the opentele project. The chosen preset is remembered\n" +
+			"preset downloaded from the opentele project. Desktop is the default when\n" +
+			"no other credentials or saved preset are provided. The chosen preset is remembered\n" +
 			"for the profile, so later starts need no flag. Credentials are never passed on\n" +
 			"the command line of the background process, where `ps` would show them.\n\n" +
 			"--device sets the device name in the list of Telegram devices. The default is\n" +
@@ -49,7 +51,7 @@ func (a *app) daemonCommand() *cobra.Command {
 	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[backgroundStartedResult](), ResultVariants: []resultVariant{{Flag: "foreground", Result: typeOf[daemonStartedResult]()}}, Choices: []flagChoices{{Flag: "client", Values: []string{"desktop", "android", "ios", "macos", "web-z", "web-k"}}}})
 	start.Flags().String("transport", "", "Telegram transport: tcp, wss or auto (remembered for the profile)")
 	start.Flags().String("proxy", "", "SOCKS5, HTTP or Telegram proxy URL, or none (remembered for the profile)")
-	start.Flags().String("client", "", "official client preset to use instead of your own application, for example desktop")
+	start.Flags().String("client", "", "official client preset instead of your own application (default desktop when no credentials are set)")
 	start.Flags().String("device", "", "device name Telegram shows for this session, remembered for the profile (default MacBook Pro M1 BRN)")
 	start.Flags().Bool("foreground", false, "run the daemon in this terminal instead of the background")
 	start.Flags().String("journal", "", "internal journal path for a detached daemon")
@@ -109,8 +111,14 @@ func (a *app) credentials(cmd *cobra.Command, paths daemon.Paths) (daemon.Telegr
 	if name == "" {
 		name = a.config.Profiles[filepath.Base(paths.Dir)].Client
 	}
+	if name == "" && !a.storedClient {
+		key, _ := config.LookupSetting("profile.client")
+		if err := json.Unmarshal(key.Default, &name); err != nil {
+			return cfg, fail(exitcode.Failure, "invalid default client preset")
+		}
+	}
 	if name == "" {
-		return cfg, fail(exitcode.Usage, "no application credentials: set TG_API_ID and TG_API_HASH (an application from https://my.telegram.org) or start with --client <preset>, for example --client desktop")
+		return cfg, fail(exitcode.Usage, "no application credentials: set TG_API_ID and TG_API_HASH or use --client <preset>")
 	}
 	if !presetName.MatchString(name) {
 		return cfg, fail(exitcode.Usage, "invalid client preset name %q", name)
