@@ -32,7 +32,7 @@ Another profile has its own job: `tg autostart on --profile work`.
 ## Notes
 
 - The job starts at login, not at power-on before login, and restarts the Daemon only after a crash. `tg daemon stop` leaves it stopped until the next login.
-- A Daemon you started by hand is not under launchd: `on` says so in `note`. Stop it with `tg daemon stop` and run `tg autostart on` again to put it under launchd now.
+- A Daemon you started by hand is not under launchd: `on` then writes the job file but does not load it (`loaded: false`, the reason in `note`), and launchd loads it at the next login. To put the daemon under launchd now, run `tg daemon stop` and then `tg autostart on` again.
 - `executable` in `status` is the binary the job runs. After `tg` moved or was rebuilt elsewhere, run `tg autostart on` again.
 - The job file lives in `~/Library/LaunchAgents/` and holds no secret; its stderr goes to `launchd.err` in the profile directory.
 
