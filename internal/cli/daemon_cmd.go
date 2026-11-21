@@ -53,6 +53,8 @@ func (a *app) daemonCommand() *cobra.Command {
 	start.Flags().Bool("foreground", false, "run the daemon in this terminal instead of the background")
 	start.Flags().String("journal", "", "internal journal path for a detached daemon")
 	_ = start.Flags().MarkHidden("journal")
+	start.Flags().StringArray("startup-source", nil, "internal source of persisted startup settings")
+	_ = start.Flags().MarkHidden("startup-source")
 	start.Flags().Duration("idle-timeout", 0, "stop the daemon after this long without a request, like 30m; 0 means never")
 	logs := a.annotate(&cobra.Command{
 		Use: "logs", Short: "Read the profile journal without a running daemon",
@@ -120,11 +122,6 @@ func (a *app) credentials(cmd *cobra.Command, paths daemon.Paths) (daemon.Telegr
 	if err != nil {
 		return cfg, fail(exitcode.Usage, "%v", err)
 	}
-	if flagClient != "" {
-		if err := a.saveProfile(paths, map[string]string{"client": name}, false); err != nil {
-			return cfg, err
-		}
-	}
 	a.warn(cmd, "note: using the %q official client preset. Telegram puts accounts of unofficial clients under observation (opentele documentation, quoting Telegram's API terms); the risk for this tool is not assessed.", name)
 	cfg.AppID, cfg.AppHash = creds.AppID, creds.AppHash
 	return cfg, nil
@@ -149,9 +146,6 @@ func (a *app) deviceModel(cmd *cobra.Command, paths daemon.Paths) (string, error
 		if unicode.IsControl(r) {
 			return "", fail(exitcode.Usage, "the device name must not contain control characters")
 		}
-	}
-	if err := a.saveProfile(paths, map[string]string{"device": name}, false); err != nil {
-		return "", err
 	}
 	return name, nil
 }
@@ -189,22 +183,6 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 	if idle < 0 {
 		return fail(exitcode.Usage, "--idle-timeout must not be negative")
 	}
-	_, limiter, err := a.daemonThrottle()
-	if err != nil {
-		return err
-	}
-	backgroundSync, err := a.daemonBackgroundSync()
-	if err != nil {
-		return err
-	}
-	semanticSearch, err := a.daemonSemanticSearch()
-	if err != nil {
-		return err
-	}
-	voiceTranscription, err := a.daemonVoiceTranscription()
-	if err != nil {
-		return err
-	}
 	if !foreground {
 		return a.startBackground(cmd, profile, paths, idle)
 	}
@@ -213,22 +191,6 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 		return fail(exitcode.Failure, "a daemon is already running for this profile")
-	}
-	cfg, err := a.credentials(cmd, paths)
-	if err != nil {
-		return err
-	}
-	cfg.Network, err = a.networkSettings(cmd, paths, true)
-	if err != nil {
-		return err
-	}
-	cfg.Throttle = limiter
-	if cfg.DeviceModel, err = a.deviceModel(cmd, paths); err != nil {
-		return err
-	}
-	tg, newTelegram, err := a.telegramFactory(cfg)
-	if err != nil {
-		return fail(exitcode.Failure, "create the Telegram client: %v", err)
 	}
 	logger := a.daemonLog(cmd)
 	if journalPath != "" {
@@ -243,24 +205,15 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		}
 		logger = slog.New(slog.NewTextHandler(journal, &slog.HandlerOptions{Level: level}))
 	}
-	overrides, err := a.settingsOverrides(cmd)
-	if err != nil {
-		return err
-	}
 	err = runDaemon(cmd.Context(), daemon.Options{
 		FileWarningsReported: true,
-		SettingsOverrides:    overrides,
-		ClientPreset:         a.config.Profiles[profile].Client,
 		Profile:              profile,
 		Paths:                paths,
-		Telegram:             tg,
-		NewTelegram:          newTelegram,
-		TelegramConfig:       cfg,
 		Log:                  logger,
 		IdleTimeout:          idle,
-		BackgroundSync:       backgroundSync,
-		SemanticSearch:       semanticSearch,
-		VoiceTranscription:   voiceTranscription,
+		Prepare: func(ctx context.Context, db daemon.ProfileDatabase, options *daemon.Options) error {
+			return a.prepareDaemonSettings(ctx, cmd, paths, db, options, true)
+		},
 	})
 	if err != nil {
 		return a.daemonStartError(err)
@@ -273,6 +226,10 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 // broken move, is a plain failure. The error types carry their own code, so the
 // caller does not have to know each of them.
 func (a *app) daemonStartError(err error) error {
+	var commandErr *cmdError
+	if errors.As(err, &commandErr) {
+		return commandErr
+	}
 	if errors.Is(err, daemon.ErrSessionInUse) {
 		return fail(exitcode.Usage, "%v", err)
 	}
@@ -316,47 +273,30 @@ func (a *app) startBackground(cmd *cobra.Command, profile string, paths daemon.P
 	} else if !rpc.IsNotRunning(err) {
 		return fail(exitcode.Failure, "ask the daemon for its state: %v", err)
 	}
-	if _, err := a.networkSettings(cmd, paths, true); err != nil {
-		return err
-	}
-	// The credentials are resolved here first, so a wrong or missing preset is
-	// an answer of this command and not a silent failure of a process the user
-	// cannot see. Only the client preset name is passed on, and it is saved for
-	// the profile, so the child needs no credential either way.
-	if _, err := a.credentials(cmd, paths); err != nil {
-		return err
-	}
-	if _, err := a.deviceModel(cmd, paths); err != nil {
-		return err
-	}
-	// The database is prepared here, in the parent, before the child is launched:
-	// a big move must not eat the StartTimeout of the child, and a failure has to
-	// be an answer of this command rather than a line in a journal. The order is
-	// the order of Run: the record of the data directory is checked before the
-	// move, because a move deletes the old file. The child finds the database in
-	// place and does nothing.
 	var moved bool
-	err := daemon.WithProfileLock(paths, func() error {
-		if err := daemon.CheckDatabaseBinding(paths); err != nil {
-			return err
-		}
-		var moveErr error
-		moved, moveErr = daemon.MoveLegacyDatabase(paths)
-		if moveErr != nil {
-			return moveErr
-		}
-		return daemon.BindDatabase(paths)
+	err := daemon.WithProfileDatabase(paths, func(db daemon.ProfileDatabase) error {
+		moved = db.Moved()
+		var options daemon.Options
+		return a.prepareDaemonSettings(cmd.Context(), cmd, paths, db, &options, false)
 	})
 	if err != nil {
 		return a.daemonStartError(err)
 	}
 	if moved {
-		// The child logs the line in its journal only when it runs in the
-		// foreground, so the parent reports the move it did itself. The answer of
-		// the command does not change: this is a hint, and --quiet silences it.
 		a.warn(cmd, "note: moved the database from %s to %s", paths.LegacyDatabase, paths.Database)
 	}
 	args := []string{"daemon", "start", "--foreground", "--profile", profile}
+	for _, item := range []struct{ flag, key string }{{"client", "profile.client"}, {"device", "profile.device"}, {"transport", "profile.transport"}, {"proxy", "profile.proxy"}} {
+		if cmd.Flags().Changed(item.flag) {
+			value, _ := cmd.Flags().GetString(item.flag)
+			if value != "" || item.flag == "transport" || item.flag == "proxy" {
+				args = append(args, "--startup-source", item.key+"=flag")
+			}
+		}
+	}
+	if !cmd.Flags().Changed("proxy") && a.deps.Getenv("TG_CLI_PROXY") != "" {
+		args = append(args, "--startup-source", "profile.proxy=env")
+	}
 	args = append(args, "--journal", paths.Log)
 	if idle > 0 {
 		args = append(args, "--idle-timeout", idle.String())

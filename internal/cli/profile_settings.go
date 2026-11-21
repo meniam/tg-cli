@@ -1,9 +1,10 @@
 package cli
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 
 	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
@@ -11,7 +12,32 @@ import (
 )
 
 func (a *app) saveProfile(paths daemon.Paths, changes map[string]string, onlyMissing bool) error {
-	cfg, err := config.UpdateProfile(a.deps.ConfigPath, filepath.Base(paths.Dir), changes, onlyMissing)
+	err := daemon.WithProfileDatabase(paths, func(db daemon.ProfileDatabase) error {
+		stored, err := db.Settings(context.Background())
+		if err != nil {
+			return err
+		}
+		updates := make(map[string]json.RawMessage, len(changes))
+		for name, value := range changes {
+			key := "profile." + name
+			if _, found := stored[key]; onlyMissing && found {
+				continue
+			}
+			encoded, err := config.ParseSettingString(key, value)
+			if err != nil {
+				return err
+			}
+			updates[key] = encoded
+		}
+		if err := db.SetSettings(context.Background(), updates); err != nil {
+			return err
+		}
+		stored, err = db.Settings(context.Background())
+		if err != nil {
+			return err
+		}
+		return a.applyDatabaseSettings(paths, stored)
+	})
 	if err != nil {
 		var invalid *config.Error
 		if errors.As(err, &invalid) {
@@ -19,7 +45,6 @@ func (a *app) saveProfile(paths daemon.Paths, changes map[string]string, onlyMis
 		}
 		return fail(exitcode.Failure, "cannot save profile settings")
 	}
-	a.config = cfg
 	return nil
 }
 

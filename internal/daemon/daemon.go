@@ -48,8 +48,10 @@ type Options struct {
 	TelegramConfig    TelegramConfig
 	Store             *store.DB
 	SettingsOverrides map[string]SettingOverride
-	Access            *access.Loader
-	Log               *slog.Logger
+	// Prepare initializes the client and runtime settings after database locking.
+	Prepare func(context.Context, ProfileDatabase, *Options) error
+	Access  *access.Loader
+	Log     *slog.Logger
 	// FileWarningsReported suppresses warnings already shown by the caller.
 	FileWarningsReported bool
 	// IdleTimeout stops the daemon after this long without a request and with
@@ -206,6 +208,16 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	if moved {
 		log.Info("moved the database", "from", opts.Paths.LegacyDatabase, "to", opts.Paths.Database)
+	}
+	if opts.Prepare != nil {
+		if err := opts.Prepare(ctx, profileDatabase{DB: ownedStore}, &opts); err != nil {
+			return err
+		}
+		overrides, err = validateSettingOverrides(opts.SettingsOverrides)
+		if err != nil {
+			return err
+		}
+		opts.SettingsOverrides = overrides
 	}
 
 	// The lock is ours, so a socket file left here is stale.
