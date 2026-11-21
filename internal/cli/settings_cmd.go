@@ -13,6 +13,11 @@ import (
 	"tg-cli/internal/rpc"
 )
 
+type settingsTokenResetResult struct {
+	Updated bool   `json:"updated"`
+	Hint    string `json:"hint"`
+}
+
 func (a *app) settingsCommand() *cobra.Command {
 	root := &cobra.Command{Use: "settings", Short: "Inspect and change profile settings"}
 	list := a.annotate(&cobra.Command{Use: "list", Short: "List profile settings", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
@@ -155,6 +160,33 @@ func (a *app) settingsCommand() *cobra.Command {
 			return a.success(cmd, result)
 		}}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.SettingsTokenResult]()}))
 	}
+	token.AddCommand(a.annotate(&cobra.Command{
+		Use: "reset", Short: "Reset the owner passphrase while the daemon is stopped",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if a.deps.ReadSecret == nil {
+				return fail(exitcode.Usage, "a terminal is required for confirmation")
+			}
+			answer, err := a.deps.ReadSecret("Reset the owner passphrase? Type yes to confirm: ")
+			if err != nil {
+				return fail(exitcode.Usage, "cannot read confirmation from terminal")
+			}
+			if answer != "yes" {
+				return fail(exitcode.Usage, "owner passphrase reset was not confirmed")
+			}
+			_, paths, err := a.profile(cmd)
+			if err != nil {
+				return err
+			}
+			if err := daemon.ResetOwnerSecretOffline(cmd.Context(), paths); err != nil {
+				if errors.Is(err, daemon.ErrAlreadyRunning) || errors.Is(err, daemon.ErrDatabaseInUse) {
+					return fail(exitcode.Failure, "stop the daemon and release the profile database before resetting the owner passphrase")
+				}
+				return fail(exitcode.Failure, "cannot reset owner passphrase")
+			}
+			return a.success(cmd, settingsTokenResetResult{Updated: true, Hint: "Run tg settings token init to set a new owner passphrase"})
+		},
+	}, dangerous, commandSpec{Safety: safetyLocalWrite, Result: typeOf[settingsTokenResetResult]()}))
 	root.AddCommand(token)
 	return root
 }

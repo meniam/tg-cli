@@ -207,3 +207,27 @@ accepted as an argument.
 **Exit codes.** 0 success; 1 local database error; 2 no terminal or mismatched
 new-phrase confirmation; 3 no Daemon when the local profile cannot be opened; 9
 a missing, wrong, or temporarily locked current phrase.
+
+### tg settings token reset
+
+Removes the stored owner-passphrase hash. It works only while the Daemon is
+stopped, then the owner can create a new passphrase with `tg settings token init`.
+
+```text
+tg settings token reset
+```
+
+<!-- schema:flags tg settings token reset -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Dangerous. **Preconditions.** An interactive
+terminal and a stopped Daemon. The command asks for `yes` without echo; it takes
+no passphrase or confirmation argument.
+
+**Answer fields** (`data`): `updated` and `hint`, which tells the owner to run
+`tg settings token init`.
+
+**Exit codes.** 0 success; 1 the Daemon, profile lock, or database lock is in
+use, or the local reset failed; 2 no terminal or a confirmation other than
+`yes`.
