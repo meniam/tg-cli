@@ -225,7 +225,7 @@ type statusRun struct {
 
 // runStatusCLI runs `tg status` against a daemon that answers the dashboard
 // method with reply. A nil reply means no daemon: the dial is refused.
-func runStatusCLI(t *testing.T, args []string, reply func() (any, error)) statusRun {
+func runStatusCLI(t *testing.T, args []string, reply func() (any, error), options ...func(*Deps)) statusRun {
 	t.Helper()
 	home := audit01Isolate(t)
 	var called bool
@@ -241,6 +241,11 @@ func runStatusCLI(t *testing.T, args []string, reply func() (any, error)) status
 	}
 	done := make(chan struct{})
 	close(done)
+	// The test must never read the launch agents of the real machine.
+	deps.GOOS = "linux"
+	for _, option := range options {
+		option(&deps)
+	}
 	var clientSide net.Conn
 	if reply == nil {
 		deps.DialRPC = func(context.Context, string, string) (*rpc.Client, error) {
@@ -425,6 +430,77 @@ func TestRenderDashboardVoiceStates(t *testing.T) {
 			dash.Voice = tc.st
 			if got := renderDashboard(dash, statusNow()); !strings.Contains(got, tc.want) {
 				t.Errorf("want the line %q in:\n%s", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestStatusShowsTheAutostartState(t *testing.T) {
+	reply := func() (any, error) { return rpc.Dashboard{Profile: "default", PID: 5}, nil }
+	for _, tc := range []struct {
+		name      string
+		goos      string
+		installed bool
+		loaded    bool
+		profile   string
+		want      string // empty: the row must be absent
+	}{
+		{"on", "darwin", true, true, "", "Autostart      On · launchd starts the daemon at login\n"},
+		{"installed but not loaded", "darwin", true, false, "", "Autostart      Installed, not loaded · run tg autostart on\n"},
+		{"off", "darwin", false, false, "", "Autostart      Off · enable with tg autostart on\n"},
+		{"off for another profile", "darwin", false, false, "work", "Autostart      Off · enable with tg autostart on --profile work\n"},
+		{"other system", "linux", false, false, "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			label := "dev.tg-cli.daemon"
+			if tc.profile != "" {
+				label += "." + tc.profile
+			}
+			if tc.installed {
+				dir := filepath.Join(home, "Library", "LaunchAgents")
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, label+".plist"), []byte("<plist/>"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			args := []string{"status"}
+			if tc.profile != "" {
+				args = append(args, "--profile", tc.profile)
+			}
+			run := runStatusCLI(t, args, reply, func(d *Deps) {
+				d.GOOS = tc.goos
+				base := d.Getenv
+				d.Getenv = func(key string) string {
+					if key == "HOME" {
+						return home
+					}
+					return base(key)
+				}
+				d.RunLaunchctl = func(a ...string) (string, error) {
+					if a[0] == "print" && !tc.loaded {
+						return "", os.ErrNotExist
+					}
+					return "", nil
+				}
+			})
+			if run.code != exitcode.OK {
+				t.Fatalf("run=%+v", run)
+			}
+			if tc.want == "" {
+				if strings.Contains(run.stdout, "Autostart") {
+					t.Fatalf("the row must be absent:\n%s", run.stdout)
+				}
+				return
+			}
+			if !strings.Contains(run.stdout, tc.want) {
+				t.Fatalf("stdout lacks %q:\n%s", tc.want, run.stdout)
+			}
+			// The row sits at the end of the TELEGRAM block, before STORAGE.
+			if tg, st, row := strings.Index(run.stdout, "TELEGRAM"), strings.Index(run.stdout, "STORAGE"), strings.Index(run.stdout, "Autostart"); !(tg < row && row < st) {
+				t.Fatalf("the row is out of place:\n%s", run.stdout)
 			}
 		})
 	}

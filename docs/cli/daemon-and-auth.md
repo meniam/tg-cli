@@ -177,6 +177,7 @@ TELEGRAM         TCP · DC 2 · 0 reconnects
   Settings       desktop preset · throttle 60% · flood auto-wait up to 10s
                  Proxy off · idle timeout off
   Access         Read filter off · writes allowed in 1 chat
+  Autostart      On · launchd starts the daemon at login
 
 STORAGE          107.3 MB · schema 9
   Local data     245 chats · 67,583 messages
@@ -188,6 +189,7 @@ STORAGE          107.3 MB · schema 9
 - **History.** A chat is complete when it has been loaded to its first message. The schedule shows the daily window and the next and last runs when known. Active history jobs show their source and progress.
   Each job shows the chat title when it is available in the local database and permitted by the access policy.
 - **Telegram.** Shows the transport, RPC activity, throttle queue, flood wait and access policy. Proxy credentials are redacted.
+  On macOS the last row, `Autostart`, tells whether the launchd job of the profile is on (installed and loaded), installed but not loaded, or off, with the command that turns it on (see [`tg autostart`](#starting-at-login)). The CLI reads it from the machine, not from the Daemon; on another system the row is left out.
 - **Storage.** Size is the main database file in decimal MB, excluding the write-ahead log. Chat and message counts follow the access policy, and deleted messages are excluded. Event counts cover the whole event table.
 
 Settings rows show the effective values in the running Daemon. When an automatic feature is off, its Enable row gives the `tg settings set` command. A result of `restart_required` takes effect after the Daemon restarts.
@@ -278,6 +280,115 @@ tg daemon logs --follow --format jsonl
 **Exit codes.** 0; 2 `--tail` outside 1 to 10000 (`--tail 0` included: `--tail must be between 1 and 10000`); 7 no journal file (`daemon journal does not exist: <path>`).
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 12.3.
+
+## Starting at login
+
+`tg autostart` installs a launchd job so that the Daemon of a profile starts at every login on macOS and starts again after a crash. It writes `~/Library/LaunchAgents/dev.tg-cli.daemon.plist` (another profile adds its name: `dev.tg-cli.daemon.<profile>.plist`) and loads it with `launchctl`. The job runs `tg daemon start --foreground` with the full path of the running binary, so run the command with the installed `tg` (for example `~/.local/bin/tg`), not with a temporary build. The job file holds no secret; own application credentials (`TG_API_ID`, `TG_API_HASH`) are never written to it, and the Daemon uses the settings saved for the profile, among them the official client preset. launchd gives the job a short search path, so the file adds `/opt/homebrew/bin` where `ffmpeg` of the voice transcription lives, and `TG_CLI_HOME` when it was set during `on`. Its stderr goes to `launchd.err` in the profile directory.
+
+The job restarts the Daemon only after a failure: `tg daemon stop` ends it with exit code 0 and launchd leaves it stopped until the next login. A Daemon you started by hand is not under launchd; stop it and run `tg autostart on` again, or wait for the next login. A restart empties the in-memory history sync queue (see [chat sync queue](chats.md#tg-chat-sync-queue)). On another system the three commands answer exit code 2.
+
+### tg autostart on
+
+Writes the launchd job of the profile and loads it. A second `on` replaces a loaded job, for example after the binary moved.
+
+```text
+tg autostart on [flags]
+```
+
+<!-- schema:flags tg autostart on -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** macOS. No running Daemon and no login are needed. `TG_API_ID` and `TG_API_HASH` must be unset.
+
+**Example.**
+
+```sh
+tg autostart on
+tg autostart on --profile work
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"profile":"default","label":"dev.tg-cli.daemon","path":"/Users/alice/Library/LaunchAgents/dev.tg-cli.daemon.plist","enabled":true,"loaded":true,"executable":"/Users/alice/.local/bin/tg"}}
+```
+
+**Answer fields** (`data`): `profile` string, `label` string, `path` string, `enabled` boolean, `loaded` boolean, `executable` string (optional), `note` string (optional). `note` appears when a Daemon is already running outside launchd.
+
+**Exit codes.** 0; 1 launchctl failed (the job file stays and the message carries the launchctl text); 2 not macOS, the application credentials are set, or the binary is a temporary build.
+
+**Verification.** Written and checked by tests with a stub launchctl; not verified on a live account or after a reboot. See [FEATURES.md](../../FEATURES.md), item 2.13.
+
+### tg autostart off
+
+Unloads the launchd job of the profile and deletes its file. A Daemon that launchd runs stops with the job; a Daemon started by hand keeps running.
+
+```text
+tg autostart off [flags]
+```
+
+<!-- schema:flags tg autostart off -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** macOS. Nothing installed is not an error: the command answers `enabled` false.
+
+**Example.**
+
+```sh
+tg autostart off
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"profile":"default","label":"dev.tg-cli.daemon","path":"/Users/alice/Library/LaunchAgents/dev.tg-cli.daemon.plist","enabled":false,"loaded":false,"note":"The daemon that launchd ran was stopped with the job. Start it with `tg daemon start`."}}
+```
+
+**Answer fields** (`data`): the fields of `autostart on`.
+
+**Exit codes.** 0; 1 launchctl failed to unload the job or the file could not be removed; 2 not macOS.
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 2.13.
+
+### tg autostart status
+
+Shows whether the job of the profile is installed and loaded. It changes nothing.
+
+```text
+tg autostart status [flags]
+```
+
+<!-- schema:flags tg autostart status -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** macOS.
+
+**Example.**
+
+```sh
+tg autostart status
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"profile":"default","label":"dev.tg-cli.daemon","path":"/Users/alice/Library/LaunchAgents/dev.tg-cli.daemon.plist","enabled":true,"loaded":true,"executable":"/Users/alice/.local/bin/tg"}}
+```
+
+**Answer fields** (`data`): the fields of `autostart on`. `enabled` tells that the job file exists, `loaded` that launchd knows the job; `executable` is the binary the file points at, so a stale path after a move of `tg` shows here.
+
+**Exit codes.** 0; 2 not macOS.
+
+**Verification.** See [FEATURES.md](../../FEATURES.md), item 2.13.
 
 ## Login
 

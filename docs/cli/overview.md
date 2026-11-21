@@ -6,7 +6,7 @@ This page covers what every command shares: installation, profiles, the Daemon l
 
 | Page | Commands |
 | --- | --- |
-| [daemon-and-auth.md](daemon-and-auth.md) | `daemon start`, `status`, `stop`, `logs`; the top-level `status`; `auth login`, `status`, `resend`, `cancel` |
+| [daemon-and-auth.md](daemon-and-auth.md) | `daemon start`, `status`, `stop`, `logs`; `autostart on`, `off`, `status`; the top-level `status`; `auth login`, `status`, `resend`, `cancel` |
 | [config.md](config.md) | `config path`, `init`, `show`, `migrate` |
 | [chats.md](chats.md) | `chat` reads, unread, changes, state, drafts, typing, administration and `sync` |
 | [messages-read.md](messages-read.md) | `message history`, `get`, `pinned`, `search`, `context`, `comments`, `link`, `export`, `watch` |
@@ -295,8 +295,8 @@ Every command in `tg schema` has a safety class (`safety`) and a `dangerous` mar
 
 | Safety class | Meaning | Commands |
 | --- | --- | --- |
-| `read` | only reads | `auth status`, `daemon status`, `status`, `daemon logs`, `chat list`, `chat resolve`, `chat info`, `chat invite-info`, `chat members`, `chat topics`, `chat common`, `chat sync status`, `message history`, `message get`, `message pinned`, `message search`, `message context`, `message comments`, `message link`, `message export`, `message watch`, `message transcribe`, `note list`, `search`, `schema`, `version`, `voice status`, `voice list`, `chat voice list` |
-| `local_write` | writes to the local database or starts and stops the Daemon | `daemon start`, `daemon stop`, `chat sync start`, `chat sync cancel`, `note add`, `note delete`, `voice install`, `voice cancel`, `voice retry`, `voice backfill`, `chat voice on`, `chat voice off` |
+| `read` | only reads | `auth status`, `daemon status`, `autostart status`, `status`, `daemon logs`, `chat list`, `chat resolve`, `chat info`, `chat invite-info`, `chat members`, `chat topics`, `chat common`, `chat sync status`, `message history`, `message get`, `message pinned`, `message search`, `message context`, `message comments`, `message link`, `message export`, `message watch`, `message transcribe`, `note list`, `search`, `schema`, `version`, `voice status`, `voice list`, `chat voice list` |
+| `local_write` | writes to the local database or starts and stops the Daemon | `daemon start`, `daemon stop`, `autostart on`, `autostart off`, `chat sync start`, `chat sync cancel`, `note add`, `note delete`, `voice install`, `voice cancel`, `voice retry`, `voice backfill`, `chat voice on`, `chat voice off` |
 | `account_write` | changes the Telegram account or its login state | `auth login`, `auth resend`, `auth cancel`, `chat mark-read`, `message send`, `message edit`, `message delete`, `message forward`, `message send-media`, `message react`, `message pin`, `message unpin`, `message poll` |
 
 The `voice` and `chat voice` commands change only the local queue, the chat marks and the engine files, and call no Telegram method; Of them `voice install` is the only one that opens a network connection itself (to `github.com`), and it does so in the CLI process. `message transcribe` keeps the class `read`: it never changes the account, it only fills the local database with a text. Its default path makes no Telegram request except the download of the file, and only `--telegram` asks Telegram to transcribe.

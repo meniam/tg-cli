@@ -354,6 +354,9 @@ var uncoveredCommands = map[string]string{
 	"chat sync start":            "background history command is covered by net.Pipe CLI tests",
 	"chat sync status":           "job status is covered by net.Pipe CLI tests",
 	"chat sync cancel":           "background cancellation is covered by net.Pipe CLI tests",
+	"autostart on":               "the job file and launchctl are covered by stub-launchctl CLI tests in autostart_cmd_test.go",
+	"autostart off":              "the job file and launchctl are covered by stub-launchctl CLI tests in autostart_cmd_test.go",
+	"autostart status":           "the job file and launchctl are covered by stub-launchctl CLI tests in autostart_cmd_test.go",
 	"chat sync queue":            "the batch of chats is covered by net.Pipe CLI tests and by daemon tests on a fake Telegram",
 }
 
