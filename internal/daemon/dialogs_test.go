@@ -162,3 +162,18 @@ func TestFolderDeleteJournalsDefinitionAndResult(t *testing.T) {
 		t.Fatalf("journal %s", data)
 	}
 }
+
+func TestNotifyHidesClosedAndUnknownNumericIDs(t *testing.T) {
+	d, base, _, path := accessTestDaemon(t)
+	writeAccess(t, path, `{"block":[42]}`)
+	silent := true
+	call := func(id string) error {
+		_, err := d.changeNotify(context.Background(), params(t, rpc.NotifyParams{Chat: id, Silent: &silent}))
+		return err
+	}
+	base.missing = false
+	closed := call("42")
+	base.missing = true
+	unknown := call("999")
+	sameRPCError(t, closed, unknown)
+}

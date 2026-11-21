@@ -7,8 +7,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"tg-cli/internal/access"
+	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
 )
 
@@ -157,5 +160,24 @@ func TestAccessFileGuardSeesDanglingSymlink(t *testing.T) {
 	exists, err := fileExists(path)
 	if err != nil || !exists {
 		t.Fatalf("dangling symlink existence = %v, %v", exists, err)
+	}
+}
+
+func TestLegacyConflictDoesNotSuggestDeletingSources(t *testing.T) {
+	legacy := (&LegacySettingsError{Source: "[behavior]"}).Error()
+	if strings.Contains(legacy, "remov") || !strings.Contains(legacy, "backup") {
+		t.Fatalf("unsafe recovery advice: %s", legacy)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "access.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	d := &daemon{opts: Options{Paths: Paths{Access: path}}}
+	policy := access.Denied()
+	d.accessSnapshot = &policy
+	err := d.guardRequest(rpc.Request{Method: rpc.MethodSettingsGet})
+	if err == nil || strings.Contains(err.Error(), "remov") || !strings.Contains(err.Error(), "backup") {
+		t.Fatalf("unsafe RPC recovery advice: %v", err)
 	}
 }

@@ -101,6 +101,16 @@ func (d *daemon) writeReference(ctx context.Context, value string, writing bool)
 		return ref, 0, rpc.ErrChatNotFound()
 	}
 	if writing && !policy.WriteAllowed(id) {
+		if ref.Kind == chatref.ID {
+			_, lookupErr := d.telegram(ctx).Resolve(ctx, ref)
+			if lookupErr != nil {
+				var rpcErr *rpc.Error
+				if errors.As(lookupErr, &rpcErr) && rpcErr.Code == rpc.CodeNotFound {
+					return ref, 0, rpc.ErrUnknownChatID()
+				}
+				return ref, 0, lookupErr
+			}
+		}
 		return ref, 0, rpc.ErrWriteDisabled()
 	}
 	return ref, id, nil

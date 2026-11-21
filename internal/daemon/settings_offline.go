@@ -64,6 +64,7 @@ func OfflineSettings(ctx context.Context, configPath, home, profile, method stri
 			}
 			defer journal.Close()
 			d := &daemon{store: raw.DB, opts: Options{Paths: paths, ConfigPath: configPath, SettingsOverrides: overrides}, settingsSource: "offline", log: slog.New(slog.NewTextHandler(journal, nil)), ownerSecrets: NewOwnerSecrets(raw.DB)}
+			d.ownerSecrets.persistent = true
 			d.refreshAccess(ctx)
 			d.initSettings(ctx)
 			if d.legacyAccessPresent() {

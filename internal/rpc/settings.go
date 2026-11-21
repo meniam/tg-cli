@@ -24,7 +24,8 @@ type SettingValue struct {
 }
 
 type SettingsListParams struct {
-	Prefix string `json:"prefix,omitempty"`
+	Passphrase string `json:"passphrase,omitempty"`
+	Prefix     string `json:"prefix,omitempty"`
 }
 type SettingsListResult struct {
 	Settings []SettingValue `json:"settings"`

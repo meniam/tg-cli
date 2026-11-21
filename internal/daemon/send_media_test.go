@@ -439,3 +439,70 @@ func TestAudit06_SendMediaTelegramAnswerChecks(t *testing.T) {
 		})
 	}
 }
+
+func TestSendMediaRefusesRevokedPermissionAfterFileOpen(t *testing.T) {
+	for _, kind := range []string{"write", "files"} {
+		t.Run(kind, func(t *testing.T) {
+			c := newMediaCase(t)
+			ctx := context.Background()
+			c.d.opts.Access = nil
+			values := map[string]json.RawMessage{"access.write": []byte(`[42]`)}
+			roots, _ := json.Marshal([]string{c.root})
+			values["access.files"] = roots
+			if err := c.db.SetSettings(ctx, values); err != nil {
+				t.Fatal(err)
+			}
+			c.d.refreshAccess(ctx)
+			c.d.openMediaFile = func(roots []string, path string, max int64) (*os.File, int64, error) {
+				f, size, err := fileroot.Open(roots, path, max)
+				if err != nil {
+					return nil, 0, err
+				}
+				revoked := map[string]json.RawMessage{"access." + kind: []byte(`[]`)}
+				if err := c.db.SetSettings(ctx, revoked); err != nil {
+					f.Close()
+					return nil, 0, err
+				}
+				c.d.refreshAccess(ctx)
+				return f, size, nil
+			}
+			_, err := c.d.messageSendMedia(ctx, params(t, c.p))
+			if writeCode(t, err) != rpc.CodeWriteDisabled {
+				t.Fatalf("revoked %s: %v", kind, err)
+			}
+			if c.tg.calls != 0 {
+				t.Fatal("sent after permission was revoked")
+			}
+		})
+	}
+}
+
+func TestEditMediaRefusesRevokedPermissionAfterFileOpen(t *testing.T) {
+	c := newMediaCase(t)
+	ctx := context.Background()
+	c.d.opts.Access = nil
+	c.tg.messages = []rpc.Message{{ID: 7, ChatID: 42, MediaType: "photo"}}
+	f := &audit05EditMediaTelegram{sendMediaTelegram: c.tg}
+	c.d.opts.Telegram = f
+	roots, _ := json.Marshal([]string{c.root})
+	if err := c.db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`), "access.files": roots}); err != nil {
+		t.Fatal(err)
+	}
+	c.d.refreshAccess(ctx)
+	c.d.openMediaFile = func(roots []string, path string, max int64) (*os.File, int64, error) {
+		file, size, err := fileroot.Open(roots, path, max)
+		if err != nil {
+			return nil, 0, err
+		}
+		if err := c.db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[]`)}); err != nil {
+			file.Close()
+			return nil, 0, err
+		}
+		c.d.refreshAccess(ctx)
+		return file, size, nil
+	}
+	_, err := c.d.messageEditMedia(ctx, params(t, rpc.EditMediaParams{Chat: "42", ID: 7, As: "document", File: c.document}))
+	if writeCode(t, err) != rpc.CodeWriteDisabled || f.edits != 0 {
+		t.Fatalf("edit after revocation: %v calls=%d", err, f.edits)
+	}
+}

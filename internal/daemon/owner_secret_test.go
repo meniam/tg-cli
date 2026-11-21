@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -211,5 +212,45 @@ func TestConcurrentOwnerInitAndLockedHashCheck(t *testing.T) {
 	now = now.Add(time.Minute)
 	if err := first.Verify(ctx, "valid initial passphrase"); err == nil || strings.Contains(err.Error(), "corrupted hash") || strings.Contains(err.Error(), "valid initial passphrase") {
 		t.Fatalf("hash failure exposed a secret: %v", err)
+	}
+}
+
+func TestOwnerResetFailureKeepsOfflineLockout(t *testing.T) {
+	dir := t.TempDir()
+	paths := Paths{Dir: dir, Lock: filepath.Join(dir, "daemon.lock"), DatabaseDir: filepath.Join(dir, "db"), Database: filepath.Join(dir, "db", "store.db")}
+	if err := os.MkdirAll(paths.DatabaseDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := db.SetOwnerSecret(ctx, "test hash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetOwnerAttemptState(ctx, 5, time.Now().Add(time.Minute).UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	raw, err := sql.Open("sqlite", paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`CREATE TRIGGER prevent_owner_delete BEFORE DELETE ON owner_secret BEGIN SELECT RAISE(ABORT,'fixture'); END`); err != nil {
+		t.Fatal(err)
+	}
+	raw.Close()
+	if err := ResetOwnerSecretOffline(ctx, paths); err == nil {
+		t.Fatal("reset unexpectedly succeeded")
+	}
+	db, err = store.Open(paths.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	failures, until, err := db.OwnerAttemptState(ctx)
+	if err != nil || failures != 5 || until == 0 {
+		t.Fatalf("failed reset cleared lockout: %d %d %v", failures, until, err)
 	}
 }

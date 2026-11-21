@@ -62,14 +62,15 @@ func (d *daemon) resolvePerson(ctx context.Context, value string, allowPhone, wr
 	if ref.Kind == chatref.ID && !d.policy().Allowed(ref.ID) {
 		return ref, rpc.Chat{}, rpc.ErrUnknownChatID()
 	}
-	if ref.Kind == chatref.ID && write && !d.policy().WriteAllowed(ref.ID) {
-		return ref, rpc.Chat{}, rpc.ErrWriteDisabled()
-	}
 	if err := d.requireAccount(ctx); err != nil {
 		return ref, rpc.Chat{}, err
 	}
 	chat, err := d.telegram(ctx).Resolve(ctx, ref)
 	if err != nil {
+		var rpcErr *rpc.Error
+		if ref.Kind == chatref.ID && errors.As(err, &rpcErr) && rpcErr.Code == rpc.CodeNotFound {
+			return ref, rpc.Chat{}, rpc.ErrUnknownChatID()
+		}
 		return ref, rpc.Chat{}, err
 	}
 	if !d.policy().Allowed(chat.ID) {

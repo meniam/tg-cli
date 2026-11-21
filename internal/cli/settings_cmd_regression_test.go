@@ -495,3 +495,47 @@ func TestSettingsTokenResetWhileDaemonRunning(t *testing.T) {
 		t.Fatalf("hash changed after refused reset: %d %s", r.code, r.stdout)
 	}
 }
+
+func TestSettingsResetRejectsLateLegacySources(t *testing.T) {
+	for _, kind := range []string{"access", "config"} {
+		t.Run(kind, func(t *testing.T) {
+			e := newEnv(t)
+			phrase := "owner passphrase fixture"
+			offline := func(context.Context, string, string) (*rpc.Client, error) { return nil, os.ErrNotExist }
+			r := runSettingsFixture(t, e, []string{"settings", "token", "init"}, []string{phrase, phrase}, offline)
+			if r.code != exitcode.OK {
+				t.Fatalf("init: %d %s", r.code, r.stdout)
+			}
+			paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), "default", daemon.DefaultFileNames())
+			if err != nil {
+				t.Fatal(err)
+			}
+			source := paths.Access
+			content := `{"block":[42]}`
+			if kind == "config" {
+				source = filepath.Join(e.home, ".config", "tg-cli", "config.toml")
+				content = "[behavior]\nthrottle_percent = 45\n"
+			}
+			if err := os.WriteFile(source, []byte(content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			r = runSettingsFixture(t, e, []string{"settings", "token", "reset"}, []string{"yes"}, offline)
+			wanted := source
+			if kind == "config" {
+				wanted = "[behavior]"
+			}
+			if r.code != exitcode.Usage || !strings.Contains(r.stdout, wanted) {
+				t.Fatalf("reset accepted late source: %d %s", r.code, r.stdout)
+			}
+			db, err := store.Open(paths.Database)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			_, found, err := db.OwnerSecret(context.Background())
+			if err != nil || !found {
+				t.Fatalf("owner hash removed: %v", err)
+			}
+		})
+	}
+}

@@ -914,10 +914,10 @@ func (d *daemon) guardRequest(req rpc.Request) error {
 		d.accessMu.RUnlock()
 		if hasSnapshot {
 			if d.legacyAccessPresent() {
-				return rpc.NewError(rpc.CodeInvalidParams, "legacy settings source requires removal: "+d.opts.Paths.Access)
+				return rpc.NewError(rpc.CodeInvalidParams, "legacy settings source conflicts with migration; restore from the migration backup and rerun: "+d.opts.Paths.Access)
 			}
 			if d.legacyConfigPresent() {
-				return rpc.NewError(rpc.CodeInvalidParams, "legacy settings source requires removal: "+d.opts.ConfigPath)
+				return rpc.NewError(rpc.CodeInvalidParams, "legacy settings source conflicts with migration; restore from the migration backup and rerun: "+d.opts.ConfigPath)
 			}
 		}
 	}

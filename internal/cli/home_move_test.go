@@ -210,3 +210,28 @@ func TestDaemonStatusWithNoDataAnywhere(t *testing.T) {
 		}
 	})
 }
+
+func TestSettingsDoesNotMoveUnverifiedLegacyHome(t *testing.T) {
+	e := newHomeMoveEnv(t)
+	source := filepath.Join(e.oldHome, "default", "access.json")
+	e.write(source, `{"allow":[0]}`)
+	r := e.run("settings", "list")
+	if r.code != exitcode.Usage || !strings.Contains(r.stdout, source) {
+		t.Fatalf("unverified home: %d %s", r.code, r.stdout)
+	}
+	e.requireFile(source, `{"allow":[0]}`)
+	e.requireMissing(filepath.Join(e.newHome, "default"))
+}
+
+func TestSettingsResetDoesNotMoveUnverifiedLegacyHome(t *testing.T) {
+	e := newHomeMoveEnv(t)
+	source := filepath.Join(e.oldHome, "default", "access.json")
+	e.write(source, `{"allow":[0]}`)
+	var stdout, stderr safeBuffer
+	code := Execute(context.Background(), []string{"settings", "token", "reset"}, Deps{ConfigPath: e.configPath, Stdout: &stdout, Stderr: &stderr, Getenv: func(k string) string { return e.env[k] }, LegacyHome: e.legacy, ReadSecret: func(string) (string, error) { return "yes", nil }})
+	if code != exitcode.Usage || !strings.Contains(stdout.String(), source) {
+		t.Fatalf("unverified home reset: %d %s", code, stdout.String())
+	}
+	e.requireFile(source, `{"allow":[0]}`)
+	e.requireMissing(filepath.Join(e.newHome, "default"))
+}

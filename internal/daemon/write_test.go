@@ -372,3 +372,65 @@ func TestWriteCountAppearsInStatusWithoutReadFilter(t *testing.T) {
 		t.Fatalf("write-only status: %+v", st.Access)
 	}
 }
+
+func TestWritesHideClosedAndUnknownNumericIDs(t *testing.T) {
+	d, tg, _, path := writeDaemon(t)
+	ctx := context.Background()
+	writeAccess(t, path, `{"block":[42]}`)
+	for _, tc := range []struct {
+		name string
+		call func(string) (any, error)
+	}{
+		{"send", func(id string) (any, error) {
+			return d.messageSend(ctx, params(t, rpc.SendParams{Chat: id, Text: "hello"}))
+		}},
+		{"edit", func(id string) (any, error) {
+			return d.messageEdit(ctx, params(t, rpc.EditParams{Chat: id, ID: 1, Text: "hello"}))
+		}},
+		{"delete", func(id string) (any, error) {
+			return d.messageDelete(ctx, params(t, rpc.DeleteParams{Chat: id, IDs: []int{1}, Revoke: true}))
+		}},
+		{"media", func(id string) (any, error) {
+			return d.messageSendMedia(ctx, params(t, rpc.SendMediaParams{Chat: id, As: "document", Files: []string{"/tmp/file"}}))
+		}},
+		{"forward", func(id string) (any, error) {
+			return d.messageForward(ctx, params(t, rpc.ForwardParams{From: "7", To: id, IDs: []int{1}}))
+		}},
+		{"react", func(id string) (any, error) {
+			return d.messageReact(ctx, params(t, rpc.ReactParams{Chat: id, ID: 1, Emoji: "👍"}))
+		}},
+		{"pin", func(id string) (any, error) { return d.messagePin(ctx, params(t, rpc.PinParams{Chat: id, ID: 1})) }},
+		{"unpin", func(id string) (any, error) { return d.messageUnpin(ctx, params(t, rpc.UnpinParams{Chat: id, ID: 1})) }},
+		{"poll", func(id string) (any, error) {
+			return d.messagePoll(ctx, params(t, rpc.PollParams{Chat: id, Question: "Question?", Options: []string{"yes", "no"}}))
+		}},
+		{"typing", func(id string) (any, error) {
+			return d.chatTyping(ctx, params(t, rpc.TypingParams{Chat: id, Action: "typing"}))
+		}},
+		{"draft_set", func(id string) (any, error) {
+			return d.draftWrite(ctx, params(t, rpc.DraftParams{Chat: id, Text: "draft"}), false)
+		}},
+		{"draft_clear", func(id string) (any, error) { return d.draftWrite(ctx, params(t, rpc.DraftParams{Chat: id}), true) }},
+		{"scheduled_delete", func(id string) (any, error) {
+			return d.scheduledWrite(ctx, params(t, rpc.ScheduledParams{Chat: id, IDs: []int{1}}), false)
+		}},
+		{"scheduled_send", func(id string) (any, error) {
+			return d.scheduledWrite(ctx, params(t, rpc.ScheduledParams{Chat: id, IDs: []int{1}}), true)
+		}},
+		{"edit_media", func(id string) (any, error) {
+			return d.messageEditMedia(ctx, params(t, rpc.EditMediaParams{Chat: id, ID: 1, As: "document", File: "/tmp/file"}))
+		}},
+		{"send_inline", func(id string) (any, error) {
+			return d.messageSendInline(ctx, params(t, rpc.SendInlineParams{Chat: id, QueryID: "1", Result: "x"}))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tg.missing = false
+			_, closed := tc.call("42")
+			tg.missing = true
+			_, unknown := tc.call("999")
+			sameRPCError(t, closed, unknown)
+			tg.missing = false
+		})
+	}
+}

@@ -35,6 +35,22 @@ type migrationProfile struct {
 	standalone []standaloneProfileFile
 }
 
+type removedSource struct {
+	path string
+	data []byte
+	mode os.FileMode
+}
+
+func restoreRemovedSources(sources []removedSource) error {
+	var failures []error
+	for _, source := range sources {
+		if err := restoreLegacyAccess(source.path, source.data, source.mode); err != nil {
+			failures = append(failures, &migrationSourceFailure{Source: source.path, Operation: "restore"})
+		}
+	}
+	return errors.Join(failures...)
+}
+
 type migrationSourceFailure struct {
 	Source    string
 	Operation string
@@ -86,7 +102,7 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 		if err != nil {
 			return err
 		}
-		standaloneNames, err := standaloneProfileNames(home)
+		standaloneNames, err := standaloneProfileNames(home, cfg.Files)
 		if err != nil {
 			return err
 		}
@@ -153,7 +169,7 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 				if err != nil {
 					return err
 				}
-				standalone, err := standaloneProfileNames(home)
+				standalone, err := standaloneProfileNames(home, cfg.Files)
 				if err != nil {
 					return err
 				}
@@ -203,6 +219,15 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 				existing, readErr := store.ReadOnlySettingsAt(ctx, databasePath)
 				if readErr != nil {
 					return readErr
+				}
+				legacyValues, sourceErr := cfg.Legacy.SettingsForProfile(p.name)
+				if sourceErr != nil {
+					return &MigrationInputError{Source: configPath}
+				}
+				for key, sourceValue := range legacyValues {
+					if current, ok := existing[key]; ok && !bytes.Equal(current, sourceValue) {
+						return &MigrationInputError{Source: configPath}
+					}
 				}
 				candidate := make(map[string]json.RawMessage, len(existing)+len(p.prepared.Values))
 				for key, value := range p.prepared.Values {
@@ -354,7 +379,7 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 				if err != nil || !marked {
 					return &migrationSourceFailure{Source: defaultMigrationSource(p, cfg.Legacy, configPath), Operation: "verify"}
 				}
-				for key, expected := range p.changes {
+				for key, expected := range p.prepared.Values {
 					if !bytes.Equal(actual[key], expected) {
 						return &migrationSourceFailure{Source: migrationSource(p, key, configPath), Operation: "verify"}
 					}
@@ -456,20 +481,8 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 					}
 				}
 			}
-			type removedSource struct {
-				path string
-				data []byte
-				mode os.FileMode
-			}
 			var removed []removedSource
-			restore := func() error {
-				for _, source := range removed {
-					if err := restoreLegacyAccess(source.path, source.data, source.mode); err != nil {
-						return &migrationSourceFailure{Source: source.path, Operation: "restore"}
-					}
-				}
-				return nil
-			}
+			restore := func() error { return restoreRemovedSources(removed) }
 			removeSource := func(path string, data []byte, mode os.FileMode) error {
 				if err := os.Remove(path); err != nil {
 					return &MigrationInputError{Source: path}

@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,5 +116,29 @@ func TestReservedProfileName(t *testing.T) {
 	}
 	if _, err := UpdateProfile(filepath.Join(t.TempDir(), "config.toml"), reservedProfile, map[string]string{"client": "desktop"}, false); err == nil {
 		t.Fatal("UpdateProfile accepted the reserved name")
+	}
+}
+
+func TestLoadRejectsConfigSymlinks(t *testing.T) {
+	for _, exists := range []bool{true, false} {
+		t.Run(fmt.Sprintf("target=%t", exists), func(t *testing.T) {
+			dir := t.TempDir()
+			target := filepath.Join(dir, "target.toml")
+			path := filepath.Join(dir, "config.toml")
+			if exists {
+				if err := os.WriteFile(target, []byte("[behavior]\nthrottle_percent = 50\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.Symlink(target, path); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(path); err == nil {
+				t.Fatal("config symlink accepted")
+			}
+			if err := WithLegacyConfigLock(path, func(*LockedLegacyConfig) error { return nil }); err == nil {
+				t.Fatal("migration accepted config symlink")
+			}
+		})
 	}
 }

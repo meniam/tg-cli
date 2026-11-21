@@ -23,7 +23,7 @@ type standaloneProfileFile struct {
 }
 
 // standaloneProfileNames discovers old per-key files without opening them.
-func standaloneProfileNames(home string) ([]string, error) {
+func standaloneProfileNames(home string, files config.Files) ([]string, error) {
 	entries, err := os.ReadDir(home)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -47,7 +47,7 @@ func standaloneProfileNames(home string) ([]string, error) {
 		if !info.IsDir() {
 			continue
 		}
-		for _, key := range standaloneProfileKeys {
+		for _, key := range append(append([]string(nil), standaloneProfileKeys...), files.Database, files.Access) {
 			path := filepath.Join(home, name, key)
 			_, err := os.Lstat(path)
 			if err == nil {

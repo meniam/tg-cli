@@ -13,7 +13,7 @@ import (
 type LegacySettingsError struct{ Source string }
 
 func (e *LegacySettingsError) Error() string {
-	return fmt.Sprintf("legacy settings source %s requires migration or removal", e.Source)
+	return fmt.Sprintf("legacy settings source %s conflicts with migration; restore from the migration backup and rerun", e.Source)
 }
 func (e *LegacySettingsError) ExitCode() int { return 2 }
 

@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -90,14 +91,12 @@ func (d *daemon) adminReference(ctx context.Context, value string, write bool, a
 			return ref, chat, &rpc.Error{Code: rpc.CodeWriteDisabled, Message: "owner must join this chat first", Data: map[string]any{"list": "write"}}
 		}
 	} else {
-		if ref.Kind == chatref.ID && ((write && !policy.WriteAllowed(ref.ID)) || (!write && !policy.AdminAllowed(ref.ID))) {
-			if write {
-				return ref, chat, rpc.ErrWriteDisabled()
-			}
-			return ref, chat, rpc.ErrAdminDisabled()
-		}
 		chat, err = d.telegram(ctx).Resolve(ctx, ref)
 		if err != nil {
+			var rpcErr *rpc.Error
+			if ref.Kind == chatref.ID && errors.As(err, &rpcErr) && rpcErr.Code == rpc.CodeNotFound {
+				return ref, chat, rpc.ErrUnknownChatID()
+			}
 			return ref, chat, err
 		}
 	}

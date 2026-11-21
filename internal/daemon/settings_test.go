@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"tg-cli/internal/access"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
 )
@@ -374,4 +376,91 @@ func TestSettingsRPCTokenChangeRefusalMessages(t *testing.T) {
 		check("wrong", "owner passphrase is wrong")
 	}
 	check(phrase, "owner passphrase temporarily locked")
+}
+
+func TestSettingsWriteReadFailureDeniesExistingPolicy(t *testing.T) {
+	for _, batch := range []bool{false, true} {
+		t.Run(fmt.Sprintf("batch=%t", batch), func(t *testing.T) {
+			d, c, db := settingsFixture(t)
+			ctx := context.Background()
+			if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`)}); err != nil {
+				t.Fatal(err)
+			}
+			d.refreshAccess(ctx)
+			if !d.policy().WriteAllowed(42) {
+				t.Fatal("initial policy did not permit writes")
+			}
+			raw, err := sql.Open("sqlite", db.Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer raw.Close()
+			if _, err := raw.Exec(`CREATE TRIGGER break_policy AFTER INSERT ON settings WHEN NEW.key='behavior.throttle_percent' BEGIN UPDATE settings SET value='null' WHERE key='access.write'; END`); err != nil {
+				t.Fatal(err)
+			}
+			p := rpc.SettingsSetParams{Key: "behavior.throttle_percent", Value: []byte(`70`)}
+			if batch {
+				p = rpc.SettingsSetParams{Changes: map[string]json.RawMessage{"behavior.throttle_percent": []byte(`70`)}}
+			}
+			err = rpcCall(t, c, rpc.MethodSettingsSet, p, nil)
+			settingsCode(t, err, rpc.CodeInternal)
+			if d.policy().WriteAllowed(42) || !d.policy().Closed() {
+				t.Fatal("failed policy read left writes enabled")
+			}
+		})
+	}
+}
+
+func TestSettingsHideClosedIDsInWriteAndAdmin(t *testing.T) {
+	d, c, db := settingsFixture(t)
+	ctx := context.Background()
+	phrase := "owner passphrase fixture"
+	if err := d.ownerSecrets.Init(ctx, phrase); err != nil {
+		t.Fatal(err)
+	}
+	values := map[string]json.RawMessage{"access.allow": []byte(`[1,2,3]`), "access.block": []byte(`[2]`), "access.write": []byte(`[1,2,4]`), "access.admin": []byte(`[1,2,4]`)}
+	if err := db.SetSettings(ctx, values); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshAccess(ctx)
+	for _, key := range []string{"access.write", "access.admin"} {
+		var out rpc.SettingValue
+		if err := rpcCall(t, c, rpc.MethodSettingsGet, rpc.SettingsGetParams{Key: key}, &out); err != nil {
+			t.Fatal(err)
+		}
+		if string(out.Value) != "[1]" || string(out.Stored) != "[1]" {
+			t.Errorf("unprotected %s leaked IDs: %+v", key, out)
+		}
+		if err := rpcCall(t, c, rpc.MethodSettingsGet, rpc.SettingsGetParams{Key: key, Passphrase: phrase}, &out); err != nil {
+			t.Fatal(err)
+		}
+		if string(out.Value) != "[1,2,4]" || string(out.Stored) != "[1,2,4]" {
+			t.Errorf("authorized %s: %+v", key, out)
+		}
+	}
+	for _, tc := range []struct{ phrase, want string }{{"", "[1]"}, {phrase, "[1,2,4]"}} {
+		var out rpc.SettingsListResult
+		if err := rpcCall(t, c, rpc.MethodSettingsList, map[string]string{"prefix": "access.", "passphrase": tc.phrase}, &out); err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range out.Settings {
+			if v.Key == "access.write" || v.Key == "access.admin" {
+				if string(v.Value) != tc.want || string(v.Stored) != tc.want {
+					t.Errorf("list %s: %+v", v.Key, v)
+				}
+			}
+		}
+	}
+	d.accessMu.Lock()
+	denied := access.Denied()
+	d.accessSnapshot = &denied
+	d.accessMu.Unlock()
+	var deniedView rpc.SettingValue
+	if err := rpcCall(t, c, rpc.MethodSettingsGet, rpc.SettingsGetParams{Key: "access.write"}, &deniedView); err != nil {
+		t.Fatal(err)
+	}
+	if string(deniedView.Value) != "[]" || string(deniedView.Stored) != "[]" {
+		t.Errorf("denied snapshot leaked IDs: %+v", deniedView)
+	}
+
 }

@@ -174,11 +174,19 @@ func (a *app) settingsCommand() *cobra.Command {
 			if answer != "yes" {
 				return fail(exitcode.Usage, "owner passphrase reset was not confirmed")
 			}
+			if err := a.guardLegacyHomeSettings(); err != nil {
+				return err
+			}
 			_, paths, err := a.profile(cmd)
 			if err != nil {
 				return err
 			}
-			if err := daemon.ResetOwnerSecretOffline(cmd.Context(), paths); err != nil {
+			if err := daemon.ResetOwnerSecretOfflineWithConfig(cmd.Context(), paths, a.deps.ConfigPath); err != nil {
+				var legacy *daemon.LegacySettingsError
+				var input *daemon.MigrationInputError
+				if errors.As(err, &legacy) || errors.As(err, &input) {
+					return a.daemonStartError(err)
+				}
 				if errors.Is(err, daemon.ErrAlreadyRunning) || errors.Is(err, daemon.ErrDatabaseInUse) {
 					return fail(exitcode.Failure, "stop the daemon and release the profile database before resetting the owner passphrase")
 				}
@@ -203,6 +211,9 @@ func (a *app) settingsSecret(prompt string) (string, error) {
 }
 
 func (a *app) settingsCall(cmd *cobra.Command, method string, params, result any) error {
+	if err := a.guardLegacyHomeSettings(); err != nil {
+		return err
+	}
 	client, err := a.connect(cmd.Context(), cmd)
 	if err == nil {
 		defer client.Close()

@@ -134,10 +134,17 @@ func Load(path string) (Config, error) {
 		return Config{}, err
 	}
 	c := defaults(home)
-	f, err := os.Open(path)
+	entry, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return c, nil
 	}
+	if err != nil {
+		return Config{}, fmt.Errorf("inspect config: %w", err)
+	}
+	if !entry.Mode().IsRegular() {
+		return Config{}, invalid("config must be a regular file")
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("open config: %w", err)
 	}
@@ -145,6 +152,9 @@ func Load(path string) (Config, error) {
 	info, err := f.Stat()
 	if err != nil {
 		return Config{}, fmt.Errorf("stat config: %w", err)
+	}
+	if !os.SameFile(entry, info) || !info.Mode().IsRegular() {
+		return Config{}, invalid("config file changed during inspection")
 	}
 	if info.Mode().Perm()&0o022 != 0 {
 		return Config{}, invalid("config file is writable by group or others")

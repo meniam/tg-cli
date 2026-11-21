@@ -78,7 +78,7 @@ func TestUsersWriteAccessAndDryRun(t *testing.T) {
 	for _, call := range calls {
 		sameRPCError(t, call(false), rpc.ErrWriteDisabled())
 	}
-	if f.writes != 0 || base.resolveCalls != 0 {
+	if f.writes != 0 || base.resolveCalls != len(calls) {
 		t.Fatalf("writes=%d resolves=%d", f.writes, base.resolveCalls)
 	}
 	writeAccess(t, path, `{"write":[77]}`)
@@ -279,5 +279,35 @@ func TestAudit06_ContactSyncWaitsForLogin(t *testing.T) {
 	person, err := db.GetPerson(context.Background(), 7)
 	if err != nil || person.IsContact == nil || !*person.IsContact {
 		t.Fatalf("synced contact: %+v %v", person, err)
+	}
+}
+
+func TestPersonWritesHideClosedAndUnknownNumericIDs(t *testing.T) {
+	d, base, _, path := accessTestDaemon(t)
+	f := &usersFake{fakeTelegram: base}
+	d.opts.Telegram = f
+	writeAccess(t, path, `{"block":[42]}`)
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name string
+		call func(string) (any, error)
+	}{
+		{"block", func(id string) (any, error) { return d.userBlock(ctx, params(t, rpc.BlockParams{User: id})) }},
+		{"unblock", func(id string) (any, error) { return d.userUnblock(ctx, params(t, rpc.BlockParams{User: id})) }},
+		{"contact_add", func(id string) (any, error) {
+			return d.contactAdd(ctx, params(t, rpc.ContactAddParams{User: id, FirstName: "name"}))
+		}},
+		{"contact_delete", func(id string) (any, error) {
+			return d.contactDelete(ctx, params(t, rpc.ContactDeleteParams{User: id, Yes: true}))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base.missing = false
+			_, closed := tc.call("42")
+			base.missing = true
+			_, unknown := tc.call("999")
+			sameRPCError(t, closed, unknown)
+			base.missing = false
+		})
 	}
 }

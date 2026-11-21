@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -216,5 +217,22 @@ func TestChatAdminInviteRequiresKnownAllowedChat(t *testing.T) {
 	}
 	if a.calls != 0 {
 		t.Fatal("dry run joined")
+	}
+}
+
+func TestAdminReferenceHidesClosedAndUnknownNumericIDs(t *testing.T) {
+	d, base, _, path := accessTestDaemon(t)
+	api := &adminTelegram{fakeTelegram: base}
+	d.opts.Telegram = api
+	writeAccess(t, path, `{"block":[-42]}`)
+	for _, write := range []bool{false, true} {
+		t.Run(fmt.Sprintf("write=%t", write), func(t *testing.T) {
+			base.missing = false
+			_, _, closed := d.adminReference(context.Background(), "-42", write, api)
+			base.missing = true
+			_, _, unknown := d.adminReference(context.Background(), "-999", write, api)
+			base.missing = false
+			sameRPCError(t, closed, unknown)
+		})
 	}
 }

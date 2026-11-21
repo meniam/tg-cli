@@ -183,7 +183,12 @@ func (d *daemon) messageEditMedia(ctx context.Context, raw json.RawMessage) (any
 	if p.DryRun {
 		return result, nil
 	}
+	release, err := d.lockMediaWrite(id, []string{p.File}, []rpc.MediaFile{checked})
+	if err != nil {
+		return nil, err
+	}
 	response, err := d.telegram(ctx).EditMedia(ctx, ref, p, checked)
+	release()
 	if err != nil {
 		return nil, err
 	}

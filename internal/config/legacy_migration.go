@@ -21,6 +21,13 @@ type LockedLegacyConfig struct {
 func WithLegacyConfigLock(path string, action func(*LockedLegacyConfig) error) error {
 	return withConfigLock(path, func() error {
 		read := func() ([]byte, bool, error) {
+			entry, err := os.Lstat(path)
+			if errors.Is(err, os.ErrNotExist) {
+				return nil, false, nil
+			}
+			if err != nil || !entry.Mode().IsRegular() {
+				return nil, false, invalid("config must be a regular file")
+			}
 			data, err := os.ReadFile(path)
 			if errors.Is(err, os.ErrNotExist) {
 				return nil, false, nil

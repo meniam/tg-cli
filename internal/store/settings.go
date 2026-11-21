@@ -392,3 +392,65 @@ func ReadOnlySettingsAt(ctx context.Context, path string) (map[string]json.RawMe
 	}
 	return values, nil
 }
+
+// OwnerAttemptState reads the offline passphrase lockout state.
+func (db *DB) OwnerAttemptState(ctx context.Context) (int, int64, error) {
+	var raw string
+	err := db.read.QueryRowContext(ctx, `SELECT value FROM settings_meta WHERE key='owner_attempts'`).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, nil
+	}
+	if err != nil {
+		return 0, 0, errors.New("cannot read owner attempt state")
+	}
+	var state struct {
+		Failures *int   `json:"failures"`
+		Until    *int64 `json:"until"`
+	}
+	if json.Unmarshal([]byte(raw), &state) != nil || state.Failures == nil || state.Until == nil || *state.Failures < 0 || *state.Failures > 1000000 || *state.Until < 0 {
+		return 0, 0, errors.New("invalid owner attempt state")
+	}
+	return *state.Failures, *state.Until, nil
+}
+
+// SetOwnerAttemptState records the offline lockout without storing the phrase.
+func (db *DB) SetOwnerAttemptState(ctx context.Context, failures int, until int64) error {
+	if failures < 0 || until < 0 {
+		return errors.New("invalid owner attempt state")
+	}
+	if failures == 0 && until == 0 {
+		_, err := db.write.ExecContext(ctx, `DELETE FROM settings_meta WHERE key='owner_attempts'`)
+		return err
+	}
+	data, err := json.Marshal(struct {
+		Failures int   `json:"failures"`
+		Until    int64 `json:"until"`
+	}{failures, until})
+	if err != nil {
+		return errors.New("cannot encode owner attempt state")
+	}
+	_, err = db.write.ExecContext(ctx, `INSERT INTO settings_meta(key,value) VALUES('owner_attempts',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, string(data))
+	if err != nil {
+		return errors.New("cannot write owner attempt state")
+	}
+	return nil
+}
+
+// ResetOwnerSecret removes the hash and offline lockout in one transaction.
+func (db *DB) ResetOwnerSecret(ctx context.Context) error {
+	tx, err := db.write.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.New("cannot reset owner secret")
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM owner_secret WHERE id=1`); err != nil {
+		return errors.New("cannot reset owner secret")
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM settings_meta WHERE key='owner_attempts'`); err != nil {
+		return errors.New("cannot reset owner secret")
+	}
+	if err := tx.Commit(); err != nil {
+		return errors.New("cannot reset owner secret")
+	}
+	return nil
+}

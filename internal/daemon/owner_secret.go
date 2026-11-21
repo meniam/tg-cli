@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/crypto/argon2"
+	"tg-cli/internal/config"
 	"tg-cli/internal/store"
 )
 
@@ -34,6 +35,7 @@ const ownerHashBytes = 32
 type OwnerSecrets struct {
 	db           *store.DB
 	mu           sync.Mutex
+	persistent   bool
 	failures     int
 	blockedUntil time.Time
 	now          func() time.Time
@@ -111,6 +113,17 @@ func (o *OwnerSecrets) Init(ctx context.Context, phrase string) error {
 }
 
 func (o *OwnerSecrets) verify(ctx context.Context, phrase string) (string, error) {
+	if o.persistent {
+		failures, until, err := o.db.OwnerAttemptState(ctx)
+		if err != nil {
+			return "", errors.New("owner secret unavailable")
+		}
+		o.failures = failures
+		o.blockedUntil = time.Time{}
+		if until != 0 {
+			o.blockedUntil = time.Unix(0, until)
+		}
+	}
 	if o.now().Before(o.blockedUntil) {
 		return "", ErrOwnerPassphraseLocked
 	}
@@ -129,7 +142,9 @@ func (o *OwnerSecrets) verify(ctx context.Context, phrase string) (string, error
 		return "", errors.New("owner secret unavailable")
 	}
 	if !valid {
-		o.failures++
+		if o.failures < 1000000 {
+			o.failures++
+		}
 		if o.failures >= 5 {
 			delay := time.Minute
 			for i := 5; i < o.failures && delay < time.Hour; i++ {
@@ -140,7 +155,21 @@ func (o *OwnerSecrets) verify(ctx context.Context, phrase string) (string, error
 			}
 			o.blockedUntil = o.now().Add(delay)
 		}
+		if o.persistent {
+			until := int64(0)
+			if !o.blockedUntil.IsZero() {
+				until = o.blockedUntil.UnixNano()
+			}
+			if err := o.db.SetOwnerAttemptState(ctx, o.failures, until); err != nil {
+				return "", errors.New("owner secret unavailable")
+			}
+		}
 		return "", ErrOwnerPassphraseWrong
+	}
+	if o.persistent {
+		if err := o.db.SetOwnerAttemptState(ctx, 0, 0); err != nil {
+			return "", errors.New("owner secret unavailable")
+		}
 	}
 	o.failures = 0
 	o.blockedUntil = time.Time{}
@@ -182,6 +211,17 @@ func (o *OwnerSecrets) Change(ctx context.Context, oldPhrase, newPhrase string) 
 
 // ResetOwnerSecretOffline removes the hash only while both profile and database locks are held.
 func ResetOwnerSecretOffline(ctx context.Context, paths Paths) error {
+	return resetOwnerSecretOffline(ctx, paths, nil)
+}
+
+// ResetOwnerSecretOfflineWithConfig checks legacy sources under the config lock.
+func ResetOwnerSecretOfflineWithConfig(ctx context.Context, paths Paths, configPath string) error {
+	return config.WithLegacyConfigLock(configPath, func(doc *config.LockedLegacyConfig) error {
+		return resetOwnerSecretOffline(ctx, paths, &doc.Config.Legacy)
+	})
+}
+
+func resetOwnerSecretOffline(ctx context.Context, paths Paths, legacy *config.Legacy) error {
 	release, err := acquireLock(paths.Lock)
 	if err != nil {
 		if errors.Is(err, ErrAlreadyRunning) {
@@ -209,7 +249,12 @@ func ResetOwnerSecretOffline(ctx context.Context, paths Paths) error {
 		return errors.New("cannot open profile database")
 	}
 	defer db.Close()
-	if err := db.DeleteOwnerSecret(ctx); err != nil {
+	if legacy != nil {
+		if err := CheckMigratedSettingsSources(ctx, profileDatabase{DB: db}, paths.Access, *legacy); err != nil {
+			return err
+		}
+	}
+	if err := db.ResetOwnerSecret(ctx); err != nil {
 		return errors.New("owner secret unavailable")
 	}
 	return nil

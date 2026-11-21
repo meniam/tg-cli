@@ -313,6 +313,45 @@ func (d *daemon) requireOwner(ctx context.Context, phrase string) error {
 		return rpc.NewError(rpc.CodeInternal, "owner secret unavailable")
 	}
 }
+func visibleSettingIDs(raw json.RawMessage, policies ...access.Policy) json.RawMessage {
+	if raw == nil {
+		return nil
+	}
+	var ids []int64
+	if json.Unmarshal(raw, &ids) != nil {
+		return json.RawMessage(`[]`)
+	}
+	visible := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		allowed := true
+		for _, policy := range policies {
+			if !policy.Allowed(id) {
+				allowed = false
+				break
+			}
+		}
+		if allowed {
+			visible = append(visible, id)
+		}
+	}
+	result, _ := json.Marshal(visible)
+	return result
+}
+
+func (d *daemon) filterSettingVisibility(value rpc.SettingValue, stored map[string]json.RawMessage) rpc.SettingValue {
+	if value.Key != "access.write" && value.Key != "access.admin" {
+		return value
+	}
+	policy, err := access.FromSettings(stored)
+	if err != nil {
+		policy = access.Denied()
+	}
+	current := d.policy()
+	value.Value = visibleSettingIDs(value.Value, policy, current)
+	value.Stored = visibleSettingIDs(value.Stored, policy, current)
+	return value
+}
+
 func (d *daemon) settingsList(ctx context.Context, raw json.RawMessage) (any, error) {
 	var p rpc.SettingsListParams
 	if err := decodeParams(raw, &p); err != nil {
@@ -320,6 +359,13 @@ func (d *daemon) settingsList(ctx context.Context, raw json.RawMessage) (any, er
 	}
 	d.settingsMu.Lock()
 	defer d.settingsMu.Unlock()
+	authorized := false
+	if p.Passphrase != "" {
+		if err := d.requireOwner(ctx, p.Passphrase); err != nil {
+			return nil, err
+		}
+		authorized = true
+	}
 	stored, err := d.settingsRead(ctx)
 	if err != nil {
 		return nil, err
@@ -327,7 +373,11 @@ func (d *daemon) settingsList(ctx context.Context, raw json.RawMessage) (any, er
 	out := rpc.SettingsListResult{Settings: []rpc.SettingValue{}}
 	for _, key := range config.SettingKeys() {
 		if strings.HasPrefix(key.Name, p.Prefix) {
-			out.Settings = append(out.Settings, d.settingValue(key, stored, true))
+			value := d.settingValue(key, stored, true)
+			if !authorized {
+				value = d.filterSettingVisibility(value, stored)
+			}
+			out.Settings = append(out.Settings, value)
 		}
 	}
 	return out, nil
@@ -343,16 +393,22 @@ func (d *daemon) settingsGet(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	d.settingsMu.Lock()
 	defer d.settingsMu.Unlock()
-	if key.Name == "access.allow" || key.Name == "access.block" {
+	authorized := false
+	if key.Name == "access.allow" || key.Name == "access.block" || ((key.Name == "access.write" || key.Name == "access.admin") && p.Passphrase != "") {
 		if err := d.requireOwner(ctx, p.Passphrase); err != nil {
 			return nil, err
 		}
+		authorized = true
 	}
 	stored, err := d.settingsRead(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return d.settingValue(key, stored, false), nil
+	value := d.settingValue(key, stored, false)
+	if !authorized {
+		value = d.filterSettingVisibility(value, stored)
+	}
+	return value, nil
 }
 func (d *daemon) settingsSet(ctx context.Context, raw json.RawMessage) (any, error) {
 	var p rpc.SettingsSetParams
@@ -367,6 +423,20 @@ func (d *daemon) settingsSet(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	return d.settingsWrite(ctx, p.Key, p.Passphrase, "set", p.Value, nil)
 }
+
+// denyAfterSettingsReadFailure replaces the snapshot while preserving refresh order.
+// When locked is true, the caller already owns both access locks.
+func (d *daemon) denyAfterSettingsReadFailure(locked bool) {
+	if !locked {
+		d.accessRefreshMu.Lock()
+		defer d.accessRefreshMu.Unlock()
+		d.accessMu.Lock()
+		defer d.accessMu.Unlock()
+	}
+	policy := access.Denied()
+	d.accessSnapshot = &policy
+}
+
 func (d *daemon) settingsWriteBatch(ctx context.Context, changes map[string]json.RawMessage, phrase string) (any, error) {
 	keys := make([]string, 0, len(changes))
 	parsed := make(map[string]json.RawMessage, len(changes))
@@ -430,10 +500,7 @@ func (d *daemon) settingsWriteBatch(ctx context.Context, changes map[string]json
 	}
 	after, err := d.store.Settings(ctx)
 	if err != nil {
-		if protected {
-			p := access.Denied()
-			d.accessSnapshot = &p
-		}
+		d.denyAfterSettingsReadFailure(protected)
 		return nil, rpc.NewError(rpc.CodeInternal, "settings unavailable")
 	}
 	if protected {
@@ -583,10 +650,7 @@ func (d *daemon) settingsWrite(ctx context.Context, name, phrase, op string, val
 	}
 	stored, err = d.store.Settings(ctx)
 	if err != nil {
-		if key.Protected {
-			p := access.Denied()
-			d.accessSnapshot = &p
-		}
+		d.denyAfterSettingsReadFailure(key.Protected)
 		return nil, rpc.NewError(rpc.CodeInternal, "settings unavailable")
 	}
 	if key.Protected {
