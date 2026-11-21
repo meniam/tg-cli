@@ -17,7 +17,10 @@ func toChat(e dialogs.Elem) (rpc.Chat, bool) {
 	if !ok {
 		return rpc.Chat{}, false
 	}
-	chat := rpc.Chat{Unread: d.UnreadCount}
+	chat := rpc.Chat{Unread: d.UnreadCount, Pinned: d.Pinned}
+	if e.Last != nil {
+		chat.LastMessageDate = int64(e.Last.GetDate())
+	}
 	switch p := d.Peer.(type) {
 	case *tg.PeerUser:
 		chat.ID, chat.Type = p.UserID, "user"

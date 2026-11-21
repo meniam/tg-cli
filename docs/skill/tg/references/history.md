@@ -2,7 +2,7 @@
 
 ## Deep history load
 
-`chat sync start` and `chat sync cancel` have class `local_write`: they read Telegram and write only to the local database. `chat sync status` is `read`. A running Daemon is required, and `start` also needs login.
+`chat sync start`, `chat sync queue` and `chat sync cancel` have class `local_write`: they read Telegram and write only to the local database. `chat sync status` is `read`. A running Daemon is required, and `start` also needs login.
 
 ```bash
 tg chat sync start <chat>      # queue a load, the command returns immediately
@@ -10,11 +10,30 @@ tg chat sync status [<chat>]   # without a chat: tasks of this Daemon run; with 
 tg chat sync start -- -1001234567890   # negative id after --
 ```
 
+Limit the depth when the whole chat is not needed (see [recipes/sync-recent-history.md](../recipes/sync-recent-history.md)); one limit at a time:
+
+```bash
+tg chat sync start <chat> --messages 100   # at least 100 saved messages in the chat
+tg chat sync start <chat> --days 7         # also --months N, or --since 2026-10-01 (RFC 3339 or YYYY-MM-DD)
+```
+
+Queue a batch of chats (see [recipes/sync-active-chats.md](../recipes/sync-active-chats.md)); `--dry-run` shows the picked chats and queues nothing:
+
+```bash
+tg chat sync queue --type user --active-days 60 --unsynced --messages 100 --dry-run
+tg chat sync queue --type user --active-days 60 --unsynced --messages 100
+```
+
 Stop a load only when the user wants it stopped; what is saved stays:
 
 ```bash
 tg chat sync cancel <chat>
+tg chat sync cancel --all   # every queued job and the running one
 ```
+
+- **Depth limits.** `--messages N` stops the load at a page boundary once the chat has N saved messages (counting the saved ones); `--days N`, `--months N` and `--since DATE` stop it once the oldest saved message is that old. Two limits together, a value out of range, or a date in the future is exit code 2. A load that stopped on its limit is `state: done`, `depth_reached: true`, `complete: false`: it is not the whole history, and a later `start` continues from `oldest_id`. The job echoes the limit in `messages` or `since`. When the chat holds enough already, the job is `done` at once with no pages.
+- **Batch queue.** `chat sync queue` reads the dialog list newest first and queues a job for each chat that matches `--type`, `--active-days` (last message not older than N days), `--unsynced` (never loaded: a partly loaded chat is left out), up to `--max-chats` (50 by default, 500 at most). Loaded chats and chats with a job are skipped and counted (`skipped_loaded`, `skipped_active`). The answer lists the picked chats with `title` (untrusted), `last_message_date` and `action` (`queued`, or `would_queue` with `--dry-run`). Closed chats are never picked or shown. A `FLOOD_WAIT` ends the call before anything is queued.
+- **Cancel all.** `cancel --all` takes no chat, cancels every queued job and the running one, scheduled ones included, and answers `cancelled: N`. It needs no login and no connection to Telegram.
 
 - **When to run.** The task needs the whole conversation of a chat or a long period: `tg search` over old messages, an export, a summary over months. For fresh messages `message history` with a cursor is enough: a deep load is slow. Before loading a large chat (thousands of messages or more), tell the user that the database will grow.
 - **How it runs.** The Daemon runs the load in the background, one chat at a time for the whole Daemon; the others wait in the queue (`queued`). A page is 100 messages, going back from `oldest_id` (on the first run, from the newest message), with a 2 second pause between pages: 10,000 messages is 100 pages and at least 200 seconds of pauses, and throttle waits add to it. A page and its progress are written in one transaction. Run `start` once and poll `status` with a pause of tens of seconds, not in a tight loop.
@@ -39,7 +58,7 @@ tg chat sync cancel <chat>
 - **Closed chats.** `start` on a closed chat gives `not_found` (code 7), and it is absent from `status`. If a chat is closed during the load, the task becomes `failed` with `-32006`.
 - **The database grows.** A chat with hundreds of thousands of messages makes the database noticeably larger, and there is no size limit. If space matters, limit the load with `cancel`.
 - **Verified on a live account** (main path): loading a group of 215 messages to `done`; a repeated `start` on a finished chat gives `done` at once without pages and without Telegram; `cancel` and continuing from the saved `oldest_id` on a chat of 3097 messages without overlaps or duplicates, about 2.1 seconds per page; `status` showed `queued`, `running`, `done` and `cancelled`.
-- **Not verified on a live account:** see `FEATURES.md`, item 10.12. These cases are covered only by tests with a Telegram stub.
+- **Not verified on a live account:** the depth limits, `chat sync queue` and `cancel --all` are covered by tests with a Telegram stub only (`FEATURES.md`, item 10.12). Everything else: see `FEATURES.md`, item 10.12. These cases are covered only by tests with a Telegram stub.
 
 ## Chat overview and full data
 

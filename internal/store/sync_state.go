@@ -146,3 +146,20 @@ func (db *DB) ResetSyncState(ctx context.Context, chatID int64) error {
 	}
 	return nil
 }
+
+// MessageBounds returns how many messages of a chat are saved and the Unix time
+// of the oldest one. A deleted message does not count. A chat without saved
+// messages gives zero and zero. The history load uses it to decide whether a
+// depth limit is met.
+func (db *DB) MessageBounds(ctx context.Context, chatID int64) (count int, oldest int64, err error) {
+	var min sql.NullInt64
+	err = db.read.QueryRowContext(ctx,
+		`SELECT count(*), min(date) FROM messages WHERE chat_id=? AND deleted_at IS NULL`, chatID).Scan(&count, &min)
+	if err != nil {
+		return 0, 0, fmt.Errorf("read message bounds %d: %w", chatID, err)
+	}
+	if min.Valid {
+		oldest = min.Int64
+	}
+	return count, oldest, nil
+}

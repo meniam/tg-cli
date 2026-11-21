@@ -119,6 +119,7 @@ func registeredAccessClasses() map[string]string {
 		rpc.MethodMessageSearch: "chat-ref", rpc.MethodMessageContext: "chat-ref", rpc.MethodMessageExportLocal: "chat-ref", rpc.MethodMessageExportMonth: "local-write", rpc.MethodMessageExportVerify: "chat-ref", rpc.MethodMessageComments: "chat-ref", rpc.MethodMessageLink: "chat-ref", rpc.MethodMessageSearchPublic: "chat-search", rpc.MethodChatMarkRead: "chat-write", rpc.MethodChatTyping: "chat-write",
 		rpc.MethodNoteAdd: "local-write", rpc.MethodNoteList: "chat-notes", rpc.MethodNoteDelete: "local-write", rpc.MethodNoteDeleteByAuthor: "local-write", rpc.MethodSearch: "chat-search", rpc.MethodSearchSemantic: "chat-search",
 		rpc.MethodHistorySyncStart: "local-write", rpc.MethodHistorySyncStatus: "chat-search", rpc.MethodHistorySyncCancel: "local-write",
+		rpc.MethodHistorySyncQueue: "chat-search", rpc.MethodHistorySyncCancelAll: "local-write",
 		rpc.MethodSearchIndexStart: "local-write", rpc.MethodSearchIndexStatus: "none", rpc.MethodSearchIndexCancel: "local-write",
 		rpc.MethodVoiceList: "chat-search", rpc.MethodVoiceStatus: "none", rpc.MethodVoiceCancel: "local-write", rpc.MethodVoiceRetry: "local-write", rpc.MethodVoiceBackfill: "local-write",
 		rpc.MethodChatVoiceOn: "local-write", rpc.MethodChatVoiceOff: "local-write", rpc.MethodChatVoiceList: "chat-list",

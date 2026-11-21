@@ -45,6 +45,8 @@ type historySyncTask struct {
 	cancel context.CancelFunc
 	// pause returns the wait before the next page; it is called once per page.
 	pause func() time.Duration
+	// depth is the limit of a depth-limited load; the zero value is no limit.
+	depth historyDepth
 	// final is closed, under the manager mutex, when the job reaches done,
 	// failed or cancelled.
 	final chan struct{}
@@ -115,6 +117,13 @@ func (m *historySyncManager) now() string {
 // one: it cancels the background job, queued or running, and waits only for
 // the manual jobs ahead of it.
 func (m *historySyncManager) start(chatID int64, ref chatref.Ref, state store.SyncProgress) (rpc.HistorySyncJob, error) {
+	return m.startDepth(chatID, ref, state, historyDepth{}, false)
+}
+
+// startDepth is start with a depth limit. depthMet tells that the chat already
+// holds enough saved messages for the limit: the job is done at once, without a
+// request, and it leaves a running background load alone.
+func (m *historySyncManager) startDepth(chatID int64, ref chatref.Ref, state store.SyncProgress, depth historyDepth, depthMet bool) (rpc.HistorySyncJob, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.ctx.Err(); err != nil {
@@ -123,10 +132,10 @@ func (m *historySyncManager) start(chatID int64, ref chatref.Ref, state store.Sy
 	if existing := m.jobs[chatID]; existing != nil && existing.active() && existing.Source == rpc.HistorySyncManual {
 		return existing.HistorySyncJob, nil
 	}
-	if !state.Complete {
+	if !state.Complete && !depthMet {
 		m.cancelBackgroundLocked()
 	}
-	return m.enqueueLocked(chatID, ref, state, rpc.HistorySyncManual, nil), nil
+	return m.enqueueLocked(chatID, ref, state, rpc.HistorySyncManual, nil, depth, depthMet), nil
 }
 
 // startBackground queues a background load only when the manager is idle.
@@ -141,10 +150,10 @@ func (m *historySyncManager) startBackground(chatID int64, ref chatref.Ref, stat
 	if m.current != nil || len(m.queue) > 0 {
 		return rpc.HistorySyncJob{}, rpc.NewError(rpc.CodeBusy, "history sync is busy")
 	}
-	return m.enqueueLocked(chatID, ref, state, rpc.HistorySyncBackground, pause), nil
+	return m.enqueueLocked(chatID, ref, state, rpc.HistorySyncBackground, pause, historyDepth{}, false), nil
 }
 
-func (m *historySyncManager) enqueueLocked(chatID int64, ref chatref.Ref, state store.SyncProgress, source string, pause func() time.Duration) rpc.HistorySyncJob {
+func (m *historySyncManager) enqueueLocked(chatID int64, ref chatref.Ref, state store.SyncProgress, source string, pause func() time.Duration, depth historyDepth, depthMet bool) rpc.HistorySyncJob {
 	if pause == nil {
 		pause = defaultHistorySyncPause
 	}
@@ -157,12 +166,14 @@ func (m *historySyncManager) enqueueLocked(chatID int64, ref chatref.Ref, state 
 			FirstMessageDate: state.FirstMessageDate,
 			StartedAt:        when, UpdatedAt: when,
 		},
-		ref: ref, ctx: jobCtx, cancel: cancel, pause: pause, final: make(chan struct{}),
+		ref: ref, ctx: jobCtx, cancel: cancel, pause: pause, depth: depth, final: make(chan struct{}),
 	}
+	task.Messages, task.Since = depth.Messages, depth.sinceText()
 	if state.OldestID != nil {
 		task.offset = *state.OldestID
 	}
-	if state.Complete {
+	if state.Complete || depthMet {
+		task.DepthReached = depthMet && !state.Complete
 		m.setStateLocked(task, rpc.HistorySyncDone, 0, "")
 		cancel()
 	} else {
@@ -227,6 +238,31 @@ func (m *historySyncManager) cancelBackground() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.cancelBackgroundLocked()
+}
+
+// cancelAll cancels every queued job and the running one, whatever their source,
+// and returns how many it cancelled. Saved pages stay.
+func (m *historySyncManager) cancelAll() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cancelled := 0
+	for _, task := range append([]*historySyncTask(nil), m.queue...) {
+		m.cancelTaskLocked(task)
+		cancelled++
+	}
+	if m.current != nil && m.current.active() {
+		m.cancelTaskLocked(m.current)
+		cancelled++
+	}
+	return cancelled
+}
+
+// activeJob reports whether the chat has a queued or running job.
+func (m *historySyncManager) activeJob(chatID int64) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	task := m.jobs[chatID]
+	return task != nil && task.active()
 }
 
 // waitJob blocks while the job of the chat is queued or running and returns
@@ -368,6 +404,18 @@ func (m *historySyncManager) finish(task *historySyncTask, state string, code in
 	m.setStateLocked(task, state, code, message)
 }
 
+// finishDepth ends a job that reached its depth limit: it is done, but not
+// complete, so the next load goes on from the oldest saved message.
+func (m *historySyncManager) finishDepth(task *historySyncTask) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if task.State == rpc.HistorySyncCancelled {
+		return
+	}
+	task.DepthReached = true
+	m.setStateLocked(task, rpc.HistorySyncDone, 0, "")
+}
+
 func (m *historySyncManager) fail(task *historySyncTask, err error) {
 	if task.ctx.Err() != nil {
 		m.finish(task, rpc.HistorySyncCancelled, 0, "")
@@ -469,6 +517,17 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 		} else {
 			m.recordPage(task, nil, 0)
 		}
+		if task.depth.active() {
+			count, oldest, err := m.d.store.MessageBounds(ctx, task.ChatID)
+			if err != nil {
+				fail(err)
+				return
+			}
+			if task.depth.satisfied(count, oldest) {
+				m.finishDepth(task)
+				return
+			}
+		}
 		offset = page.RawNextOffsetID
 		timer := m.clock.NewTimer(task.pause())
 		select {
@@ -543,7 +602,25 @@ func (d *daemon) historySyncStart(ctx context.Context, params json.RawMessage) (
 	if err != nil {
 		return nil, err
 	}
-	return d.sync.start(chatID, ref, progress)
+	depth, err := parseHistoryDepth(p.Messages, p.Since, d.sync.clock.Now())
+	if err != nil {
+		return nil, err
+	}
+	depthMet := false
+	if depth.active() && !progress.Complete {
+		count, oldest, err := d.store.MessageBounds(ctx, chatID)
+		if err != nil {
+			return nil, err
+		}
+		depthMet = depth.satisfied(count, oldest)
+	}
+	return d.sync.startDepth(chatID, ref, progress, depth, depthMet)
+}
+
+// historySyncCancelAll drops the whole queue and the running job. It is local:
+// it needs no connection.
+func (d *daemon) historySyncCancelAll(_ context.Context, _ json.RawMessage) (any, error) {
+	return rpc.HistorySyncCancelAllResult{Cancelled: d.sync.cancelAll()}, nil
 }
 
 func (d *daemon) historySyncStatus(ctx context.Context, params json.RawMessage) (any, error) {

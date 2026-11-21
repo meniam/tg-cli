@@ -23,42 +23,44 @@ const (
 	MethodChatTopics    = "chat.topics"
 	MethodChatCommon    = "chat.common"
 
-	MethodChatResolve         = "chat.resolve"
-	MethodChatInfo            = "chat.info"
-	MethodChatOverview        = "chat.overview"
-	MethodChatInviteInfo      = "chat.invite_info"
-	MethodMessageHistory      = "message.history"
-	MethodMessageDownload     = "message.download"
-	MethodMessageGet          = "message.get"
-	MethodMessagePinned       = "message.pinned"
-	MethodMessageSend         = "message.send"
-	MethodMessageSendMedia    = "message.send_media"
-	MethodMessageEdit         = "message.edit"
-	MethodMessageDelete       = "message.delete"
-	MethodMessageForward      = "message.forward"
-	MethodMessageReact        = "message.react"
-	MethodMessagePin          = "message.pin"
-	MethodMessageUnpin        = "message.unpin"
-	MethodMessagePoll         = "message.poll"
-	MethodMessageSearch       = "message.search"
-	MethodMessageSearchPublic = "message.search_public"
-	MethodMessageContext      = "message.context"
-	MethodMessageExportLocal  = "message.export_local"
-	MethodMessageComments     = "message.comments"
-	MethodMessageLink         = "message.link"
-	MethodChatMarkRead        = "chat.mark_read"
-	MethodNoteAdd             = "note.add"
-	MethodNoteList            = "note.list"
-	MethodNoteDelete          = "note.delete"
-	MethodNoteDeleteByAuthor  = "note.delete_by_author"
-	MethodSearch              = "search"
-	MethodSearchSemantic      = "search.semantic"
-	MethodHistorySyncStart    = "history_sync.start"
-	MethodHistorySyncStatus   = "history_sync.status"
-	MethodHistorySyncCancel   = "history_sync.cancel"
-	MethodSubscribe           = "subscribe"
-	MethodUnsubscribe         = "unsubscribe"
-	MethodEvent               = "event"
+	MethodChatResolve          = "chat.resolve"
+	MethodChatInfo             = "chat.info"
+	MethodChatOverview         = "chat.overview"
+	MethodChatInviteInfo       = "chat.invite_info"
+	MethodMessageHistory       = "message.history"
+	MethodMessageDownload      = "message.download"
+	MethodMessageGet           = "message.get"
+	MethodMessagePinned        = "message.pinned"
+	MethodMessageSend          = "message.send"
+	MethodMessageSendMedia     = "message.send_media"
+	MethodMessageEdit          = "message.edit"
+	MethodMessageDelete        = "message.delete"
+	MethodMessageForward       = "message.forward"
+	MethodMessageReact         = "message.react"
+	MethodMessagePin           = "message.pin"
+	MethodMessageUnpin         = "message.unpin"
+	MethodMessagePoll          = "message.poll"
+	MethodMessageSearch        = "message.search"
+	MethodMessageSearchPublic  = "message.search_public"
+	MethodMessageContext       = "message.context"
+	MethodMessageExportLocal   = "message.export_local"
+	MethodMessageComments      = "message.comments"
+	MethodMessageLink          = "message.link"
+	MethodChatMarkRead         = "chat.mark_read"
+	MethodNoteAdd              = "note.add"
+	MethodNoteList             = "note.list"
+	MethodNoteDelete           = "note.delete"
+	MethodNoteDeleteByAuthor   = "note.delete_by_author"
+	MethodSearch               = "search"
+	MethodSearchSemantic       = "search.semantic"
+	MethodHistorySyncStart     = "history_sync.start"
+	MethodHistorySyncStatus    = "history_sync.status"
+	MethodHistorySyncCancel    = "history_sync.cancel"
+	MethodHistorySyncQueue     = "history_sync.queue"
+	MethodHistorySyncCancelAll = "history_sync.cancel_all"
+	MethodSubscribe            = "subscribe"
+	MethodUnsubscribe          = "unsubscribe"
+	MethodEvent                = "event"
 
 	MethodUserProfile   = "user.profile"
 	MethodUserBlock     = "user.block"
@@ -263,6 +265,10 @@ type Chat struct {
 	Title    string `json:"title" untrusted:"true"`
 	Username string `json:"username,omitempty" untrusted:"true"`
 	Unread   int    `json:"unread"`
+	// LastMessageDate is the Unix time of the last message of the dialog, zero for
+	// a dialog without one. Pinned dialogs come first in the list whatever their date.
+	LastMessageDate int64 `json:"last_message_date,omitempty"`
+	Pinned          bool  `json:"-"`
 	// Scam, Fake and Restricted travel with the chat object of Telegram and are
 	// stored with the chat by the Daemon. They are not part of this answer: the
 	// fields of `chat info` are where an agent reads them, so a list and a resolve
@@ -433,8 +439,57 @@ type HistoryPage struct {
 }
 
 // HistorySyncParams identifies one chat for starting or cancelling a sync.
+// Messages and Since limit the depth of a start: the load stops at a page
+// boundary once the chat holds at least Messages saved messages, or once the
+// oldest saved message is not newer than Since (RFC 3339). They exclude each
+// other; without them the load goes back to the first message.
 type HistorySyncParams struct {
-	Chat string `json:"chat"`
+	Chat     string `json:"chat"`
+	Messages int    `json:"messages,omitempty"`
+	Since    string `json:"since,omitempty"`
+}
+
+// HistorySyncQueueParams select a batch of chats for MethodHistorySyncQueue.
+type HistorySyncQueueParams struct {
+	Type       string `json:"type,omitempty"`
+	ActiveDays int    `json:"active_days,omitempty"`
+	Unsynced   bool   `json:"unsynced,omitempty"`
+	MaxChats   int    `json:"max_chats,omitempty"`
+	Messages   int    `json:"messages,omitempty"`
+	Since      string `json:"since,omitempty"`
+	DryRun     bool   `json:"dry_run,omitempty"`
+}
+
+// Actions of one chat in a HistorySyncQueueResult.
+const (
+	HistorySyncActionQueued     = "queued"
+	HistorySyncActionWouldQueue = "would_queue"
+)
+
+// HistorySyncQueueChat is one chat picked by the batch.
+type HistorySyncQueueChat struct {
+	ChatID          int64  `json:"chat_id"`
+	Title           string `json:"title" untrusted:"true"`
+	LastMessageDate int64  `json:"last_message_date,omitempty"`
+	Action          string `json:"action"`
+}
+
+// HistorySyncQueueResult is the result of MethodHistorySyncQueue. Queued is the
+// number of jobs put in the queue (zero for a dry run), SkippedLoaded counts the
+// chats that match but are loaded enough already, SkippedActive the chats that
+// already have a queued or running job.
+type HistorySyncQueueResult struct {
+	DryRun        bool                   `json:"dry_run"`
+	Queued        int                    `json:"queued"`
+	WouldQueue    int                    `json:"would_queue"`
+	SkippedLoaded int                    `json:"skipped_loaded"`
+	SkippedActive int                    `json:"skipped_active"`
+	Chats         []HistorySyncQueueChat `json:"chats"`
+}
+
+// HistorySyncCancelAllResult is the result of MethodHistorySyncCancelAll.
+type HistorySyncCancelAllResult struct {
+	Cancelled int `json:"cancelled"`
 }
 
 // HistorySyncStatusParams optionally selects one chat; an empty chat lists jobs.
@@ -474,8 +529,13 @@ type HistorySyncJob struct {
 	WaitSeconds      int    `json:"wait_seconds,omitempty"`
 	ErrorCode        int    `json:"error_code,omitempty"`
 	Error            string `json:"error,omitempty"`
-	StartedAt        string `json:"started_at"`
-	UpdatedAt        string `json:"updated_at"`
+	// Messages and Since echo the depth limit of the start; DepthReached tells that
+	// the job stopped on the limit, not at the first message (Complete stays false).
+	Messages     int    `json:"messages,omitempty"`
+	Since        string `json:"since,omitempty"`
+	DepthReached bool   `json:"depth_reached,omitempty"`
+	StartedAt    string `json:"started_at"`
+	UpdatedAt    string `json:"updated_at"`
 }
 
 // HistorySyncJobs is the status result when no chat was selected.
