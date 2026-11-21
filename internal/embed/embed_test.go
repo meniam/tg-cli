@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // secret stands for the text of a private message. No error may contain it.
@@ -433,5 +434,106 @@ func TestNewDoesNotChangeTheCallersHTTPClient(t *testing.T) {
 	}
 	if h.CheckRedirect != nil {
 		t.Fatal("New changed the redirect rule of the caller's client")
+	}
+}
+
+func TestEmbedContextLengthFallback(t *testing.T) {
+	long := strings.Repeat("я🙂", 150)
+	for _, tc := range []struct {
+		name  string
+		texts []string
+		want  []string
+	}{
+		{"batch", []string{"a", "bb", long, "ccc", "dddd"}, []string{"a", "bb", string([]rune(long)[:150]), "ccc", "dddd"}},
+		{"single", []string{long}, []string{string([]rune(long)[:150])}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFake(t, func(w http.ResponseWriter, r *http.Request, req recorded) {
+				for _, s := range req.Input {
+					if !utf8.ValidString(s) {
+						t.Error("invalid UTF-8")
+					}
+					if utf8.RuneCountInString(s) > 160 {
+						w.WriteHeader(http.StatusRequestEntityTooLarge)
+						fmt.Fprint(w, `{"error":"the input length exceeds the context length"}`)
+						return
+					}
+				}
+				lengthVectors(w, r, req)
+			})
+			got, err := f.client(t, Options{}).Embed(context.Background(), tc.texts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %d vectors", len(got))
+			}
+			for i, s := range tc.want {
+				if got[i][0] != float32(len(s)) {
+					t.Fatalf("vector %d = %v", i, got[i])
+				}
+			}
+			requests := f.requests()
+			found := false
+			for _, req := range requests {
+				for _, s := range req.Input {
+					if s == string([]rune(long)[:150]) {
+						found = true
+					}
+				}
+			}
+			if !found {
+				t.Fatal("shortened prefix was not sent")
+			}
+		})
+	}
+}
+
+func TestEmbedContextLengthErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  int
+		body    string
+		retries bool
+	}{
+		{"too dense", 413, `{"error":"the input length exceeds the context length"}`, true},
+		{"other 413", 413, `{"error":"different error"}`, false},
+		{"server error", 500, `{"error":"the input length exceeds the context length"}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFake(t, func(w http.ResponseWriter, _ *http.Request, _ recorded) {
+				w.WriteHeader(tc.status)
+				fmt.Fprint(w, tc.body)
+			})
+			_, err := f.client(t, Options{}).Embed(context.Background(), []string{strings.Repeat(secret, 100)})
+			var status *StatusError
+			if !errors.As(err, &status) || status.Code != tc.status {
+				t.Fatalf("error = %v", err)
+			}
+			if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "context length") {
+				t.Fatalf("error leaked text: %v", err)
+			}
+			count := len(f.requests())
+			if (!tc.retries && count != 1) || (tc.retries && (count < 2 || count > 14)) {
+				t.Fatalf("requests = %d", count)
+			}
+		})
+	}
+}
+
+func TestEmbedContextLengthCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newFake(t, func(w http.ResponseWriter, _ *http.Request, _ recorded) {
+		cancel()
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		fmt.Fprint(w, `{"error":"the input length exceeds the context length"}`)
+	})
+	_, err := f.client(t, Options{}).Embed(ctx, []string{strings.Repeat("x", 1000)})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v", err)
+	}
+	if len(f.requests()) != 1 {
+		t.Fatalf("requests = %d", len(f.requests()))
 	}
 }
