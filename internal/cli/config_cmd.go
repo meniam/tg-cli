@@ -10,7 +10,6 @@ import (
 	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
-	"tg-cli/internal/netconf"
 )
 
 type configPathResult struct {
@@ -71,11 +70,11 @@ type configShowResult struct {
 	DBDir              string                         `json:"db_dir"`
 	DefaultProfile     string                         `json:"default_profile"`
 	Files              configFilesResult              `json:"files"`
-	Behavior           configBehaviorResult           `json:"behavior"`
-	BackgroundSync     configBackgroundSyncResult     `json:"background_sync"`
-	SemanticSearch     configSemanticSearchResult     `json:"semantic_search"`
-	VoiceTranscription configVoiceTranscriptionResult `json:"voice_transcription"`
-	Profiles           map[string]configProfileResult `json:"profiles"`
+	Behavior           configBehaviorResult           `json:"-"`
+	BackgroundSync     configBackgroundSyncResult     `json:"-"`
+	SemanticSearch     configSemanticSearchResult     `json:"-"`
+	VoiceTranscription configVoiceTranscriptionResult `json:"-"`
+	Profiles           map[string]configProfileResult `json:"-"`
 }
 type configInitResult struct {
 	Path    string `json:"path"`
@@ -92,7 +91,7 @@ func (a *app) configCommand() *cobra.Command {
 	cmd.AddCommand(a.annotate(&cobra.Command{Use: "path", Short: "Print the configuration file path", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return a.success(cmd, configPathResult{Path: a.deps.ConfigPath})
 	}}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[configPathResult]()}))
-	cmd.AddCommand(a.annotate(&cobra.Command{Use: "show", Short: "Show configuration with proxy credentials redacted", Args: cobra.NoArgs, RunE: a.configShow}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[configShowResult]()}))
+	cmd.AddCommand(a.annotate(&cobra.Command{Use: "show", Short: "Show configuration paths and file names", Args: cobra.NoArgs, RunE: a.configShow}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[configShowResult]()}))
 	cmd.AddCommand(a.annotate(&cobra.Command{Use: "init", Short: "Write the configuration template", Args: cobra.NoArgs, RunE: a.configInit}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[configInitResult]()}))
 	cmd.AddCommand(a.annotate(&cobra.Command{Use: "migrate", Short: "Migrate legacy profile settings into the configuration", Args: cobra.NoArgs, RunE: a.configMigrate}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[configMigrateResult]()}))
 	return cmd
@@ -133,14 +132,7 @@ func (a *app) configShow(cmd *cobra.Command, _ []string) error {
 			return fail(exitcode.Usage, "%v", err)
 		}
 	}
-	result := configShowResult{Home: a.config.Home, DBDir: dbRoot, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}, Behavior: configBehaviorResult{a.config.Behavior.ThrottlePercent, a.config.Behavior.FloodAutoWait, a.config.Behavior.ExpectUser}, BackgroundSync: configBackgroundSyncResult(a.config.BackgroundSync), SemanticSearch: configSemanticSearchResult(a.config.SemanticSearch), VoiceTranscription: configVoiceTranscriptionResult(a.config.VoiceTranscription), Profiles: map[string]configProfileResult{}}
-	for name, p := range a.config.Profiles {
-		proxy, err := netconf.ParseProxy(p.Proxy)
-		if err != nil {
-			return fail(exitcode.Usage, "invalid profile proxy")
-		}
-		result.Profiles[name] = configProfileResult{p.Client, p.Device, p.Transport, proxy.Redacted()}
-	}
+	result := configShowResult{Home: a.config.Home, DBDir: dbRoot, DefaultProfile: a.config.DefaultProfile, Files: configFilesResult{files.Database, files.Session, files.Log, files.Deletions, files.Access}}
 	return a.success(cmd, result)
 }
 func (a *app) configMigrate(cmd *cobra.Command, _ []string) error {

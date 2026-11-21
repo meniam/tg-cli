@@ -19,7 +19,7 @@ func (a *app) messageSendMediaCommand() *cobra.Command {
 		Use: "send-media <chat>", Short: "Send files as photo, video, audio, voice or document",
 		Long: "Send one file or an album of 2 to 10 files of the same type. Use --as to choose the type; " +
 			"repeat --file for an album. The owner must allow the chat in write and the file directory " +
-			"in the files list of the access file. Put -- before a negative chat id. JSONL prints one sent message per line; " +
+			"in access.files. Put -- before a negative chat id. JSONL prints one sent message per line; " +
 			"use JSON, TOON or human to see the full dry-run result.",
 		Args: cobra.ExactArgs(1), RunE: a.messageSendMedia,
 	}, noRisk, commandSpec{Safety: safetyAccountWrite, Result: typeOf[rpc.SendMediaResult](),
@@ -102,9 +102,9 @@ func (a *app) messageSendMedia(cmd *cobra.Command, args []string) error {
 			if strings.Contains(ce.msg, "access.files") {
 				a.warn(cmd, "ask the owner to add the file directory to access.files")
 			} else if strings.Contains(ce.msg, "file roots to files") || strings.Contains(ce.msg, "files in access.json") {
-				a.warn(cmd, "ask the owner to add the file directory to files in this profile's %s", a.config.Files.Access)
+				a.warn(cmd, "ask the owner to add the file directory to access.files")
 			} else {
-				a.warn(cmd, "add the chat to the write list in this profile's %s", a.config.Files.Access)
+				a.warn(cmd, "ask the owner to add the chat to access.write")
 			}
 		}
 		return err

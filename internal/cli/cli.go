@@ -201,6 +201,7 @@ func (a *app) rootCommand() *cobra.Command {
 	addOutputFlags(root)
 	root.AddCommand(
 		a.configCommand(),
+		a.settingsCommand(),
 		a.daemonCommand(),
 		a.authCommand(),
 		a.sessionCommand(),

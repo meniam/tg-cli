@@ -10,6 +10,7 @@ An index of the documentation of `tg`, a console client for a personal Telegram 
 | to start the Daemon, log in, read the Daemon journal | [cli/daemon-and-auth.md](cli/daemon-and-auth.md) |
 | to transfer a session between profiles | [cli/session.md](cli/session.md) |
 | to inspect, show, or migrate configuration | [cli/config.md](cli/config.md) |
+| to inspect or change profile settings and access permissions | [cli/settings.md](cli/settings.md) |
 | to list, resolve and describe chats, read members, topics and common chats, mark a chat read, load a whole chat history | [cli/chats.md](cli/chats.md) |
 | to read folders, account sessions, blocked peers and notification defaults | [cli/folders-and-account.md](cli/folders-and-account.md) |
 | to read messages, search Telegram, read the context of a message or the comments of a post, build a message link, export saved messages, follow live events | [cli/messages-read.md](cli/messages-read.md) |
