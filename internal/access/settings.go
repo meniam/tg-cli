@@ -1,6 +1,7 @@
 package access
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -28,3 +29,23 @@ func FromSettings(settings map[string]json.RawMessage) (Policy, error) {
 
 // Denied returns a policy that denies all operations and hides all chats.
 func Denied() Policy { return denyAll }
+
+// LegacySettings validates an old access document and returns detached fields
+// named for the settings registry. It never includes input values in errors.
+func LegacySettings(data []byte) (map[string]json.RawMessage, error) {
+	if _, err := parse(data); err != nil {
+		return nil, errors.New("invalid access settings")
+	}
+	fields := make(map[string]json.RawMessage)
+	if len(bytes.TrimSpace(data)) == 0 {
+		return fields, nil
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, errors.New("invalid access settings")
+	}
+	for key, value := range raw {
+		fields["access."+key] = bytes.Clone(value)
+	}
+	return fields, nil
+}

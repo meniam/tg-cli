@@ -44,6 +44,13 @@ func (a *app) applyDatabaseSettings(paths daemon.Paths, values map[string]json.R
 // prepareDaemonSettings reads and validates the startup snapshot while the
 // profile database is locked. A background parent also saves explicit changes.
 func (a *app) prepareDaemonSettings(ctx context.Context, cmd *cobra.Command, paths daemon.Paths, db daemon.ProfileDatabase, opts *daemon.Options, createClient bool) error {
+	if err := daemon.CheckMigratedSettingsSources(ctx, db, paths.Access, a.config.Legacy); err != nil {
+		var legacy *daemon.LegacySettingsError
+		if errors.As(err, &legacy) {
+			return fail(exitcode.Usage, "%v", legacy)
+		}
+		return fail(exitcode.Failure, "cannot inspect legacy settings")
+	}
 	stored, err := db.Settings(ctx)
 	if err != nil {
 		return fail(exitcode.Failure, "cannot read profile settings")

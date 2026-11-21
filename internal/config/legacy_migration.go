@@ -1,0 +1,142 @@
+package config
+
+import (
+	"bytes"
+	"errors"
+	"os"
+
+	"github.com/pelletier/go-toml/v2"
+	"github.com/pelletier/go-toml/v2/unstable"
+)
+
+// LockedLegacyConfig is valid only during WithLegacyConfigLock.
+type LockedLegacyConfig struct {
+	Config  Config
+	Content []byte
+	Exists  bool
+	path    string
+}
+
+// WithLegacyConfigLock holds the configuration lock for the complete operation.
+func WithLegacyConfigLock(path string, action func(*LockedLegacyConfig) error) error {
+	return withConfigLock(path, func() error {
+		read := func() ([]byte, bool, error) {
+			data, err := os.ReadFile(path)
+			if errors.Is(err, os.ErrNotExist) {
+				return nil, false, nil
+			}
+			if err != nil {
+				return nil, false, invalid("cannot read config file")
+			}
+			return data, true, nil
+		}
+		before, existsBefore, err := read()
+		if err != nil {
+			return err
+		}
+		cfg, err := Load(path)
+		if err != nil {
+			return err
+		}
+		after, existsAfter, err := read()
+		if err != nil {
+			return err
+		}
+		if existsBefore != existsAfter || !bytes.Equal(before, after) {
+			return invalid("config file changed during inspection")
+		}
+		return action(&LockedLegacyConfig{Config: cfg, Content: bytes.Clone(before), Exists: existsBefore, path: path})
+	})
+}
+
+// RemoveLegacy removes old settings while preserving standalone comments and
+// every expression outside those sections. The caller must hold the lock and
+// verify that all settings were committed and backed up before calling it.
+func (c *LockedLegacyConfig) RemoveLegacy() error {
+	updated, err := StripLegacy(c.Content)
+	if err != nil {
+		return err
+	}
+	if bytes.Equal(updated, c.Content) {
+		return nil
+	}
+	if err := writeAtomic(c.path, updated); err != nil {
+		return invalid("cannot update config file")
+	}
+	return nil
+}
+
+// StripLegacy removes the old settings expressions from a TOML document.
+func StripLegacy(data []byte) ([]byte, error) {
+	type span struct{ start, end int }
+	var spans []span
+	var parser unstable.Parser
+	parser.Reset(data)
+	var current []string
+	for parser.NextExpression() {
+		node := parser.Expression()
+		var start, end int
+		switch node.Kind {
+		case unstable.Table, unstable.ArrayTable:
+			current = nodeKeys(node)
+			if len(current) == 0 || !legacySection(current[0]) {
+				continue
+			}
+			it := node.Key()
+			if !it.Next() {
+				return nil, invalid("invalid legacy section")
+			}
+			offset := int(it.Node().Raw.Offset)
+			start = bytes.LastIndexByte(data[:offset], '\n') + 1
+			end = lineEnd(data, offset)
+		case unstable.KeyValue:
+			keys := nodeKeys(node)
+			isLegacy := len(current) > 0 && legacySection(current[0])
+			if len(current) == 0 && len(keys) > 0 {
+				isLegacy = legacySection(keys[0])
+			}
+			if !isLegacy {
+				continue
+			}
+			offset := int(node.Raw.Offset)
+			stop := int(node.Raw.Offset + node.Raw.Length)
+			if offset < 0 || stop > len(data) || stop < offset {
+				return nil, invalid("invalid legacy configuration")
+			}
+			start = bytes.LastIndexByte(data[:offset], '\n') + 1
+			end = lineEnd(data, stop)
+		default:
+			continue
+		}
+		if start < 0 || end < start || end > len(data) {
+			return nil, invalid("invalid legacy configuration")
+		}
+		spans = append(spans, span{start, end})
+	}
+	if parser.Error() != nil {
+		return nil, invalid("invalid TOML configuration")
+	}
+	output := make([]byte, 0, len(data))
+	last := 0
+	for _, item := range spans {
+		if item.start < last {
+			return nil, invalid("invalid legacy configuration")
+		}
+		output = append(output, data[last:item.start]...)
+		last = item.end
+	}
+	output = append(output, data[last:]...)
+	var probe struct {
+		Behavior       map[string]any            `toml:"behavior"`
+		BackgroundSync map[string]any            `toml:"background_sync"`
+		SemanticSearch map[string]any            `toml:"semantic_search"`
+		Profiles       map[string]map[string]any `toml:"profiles"`
+	}
+	if err := toml.Unmarshal(output, &probe); err != nil || probe.Behavior != nil || probe.BackgroundSync != nil || probe.SemanticSearch != nil || probe.Profiles != nil {
+		return nil, invalid("cannot remove legacy sections")
+	}
+	return output, nil
+}
+func legacySection(name string) bool {
+	return name == "behavior" || name == "background_sync" || name == "semantic_search" || name == "profiles"
+}

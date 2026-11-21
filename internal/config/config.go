@@ -40,8 +40,18 @@ type Config struct {
 	VoiceTranscription VoiceTranscription `toml:"voice_transcription"`
 	// Profiles holds settings for each named profile.
 	Profiles map[string]Profile `toml:"profiles"`
+	// Legacy holds the old sections separately for migration.
+	Legacy Legacy `toml:"-" json:"-"`
 	// Warnings contains diagnostics that do not reveal proxy credentials.
 	Warnings []string `toml:"-"`
+}
+
+// Legacy records the old sections and their explicitly set values.
+type Legacy struct {
+	Behavior       map[string]any
+	BackgroundSync map[string]any
+	SemanticSearch map[string]any
+	Profiles       map[string]map[string]any
 }
 
 // Files holds the file names within a profile directory.
@@ -157,12 +167,19 @@ func Load(path string) (Config, error) {
 		}
 		return Config{}, invalid("invalid TOML configuration")
 	}
-	// The decode above succeeded, so this one cannot fail on the same text.
+	// Decode explicitly set legacy values separately for migration.
 	var probe struct {
-		Home *string `toml:"home"`
+		Home           *string                   `toml:"home"`
+		Behavior       map[string]any            `toml:"behavior"`
+		BackgroundSync map[string]any            `toml:"background_sync"`
+		SemanticSearch map[string]any            `toml:"semantic_search"`
+		Profiles       map[string]map[string]any `toml:"profiles"`
 	}
-	_ = toml.Unmarshal(content, &probe)
+	if err := toml.Unmarshal(content, &probe); err != nil {
+		return Config{}, invalid("invalid legacy configuration")
+	}
 	c.HomeSet = probe.Home != nil
+	c.Legacy = Legacy{Behavior: probe.Behavior, BackgroundSync: probe.BackgroundSync, SemanticSearch: probe.SemanticSearch, Profiles: probe.Profiles}
 	c.Home, err = validateHome(c.Home)
 	if err != nil {
 		return Config{}, err

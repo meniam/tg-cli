@@ -14,6 +14,7 @@ type ProfileDatabase interface {
 	Settings(context.Context) (map[string]json.RawMessage, error)
 	SetSettings(context.Context, map[string]json.RawMessage) error
 	DeleteSetting(context.Context, string) error
+	SettingsMigrated(context.Context) (bool, error)
 	Moved() bool
 }
 

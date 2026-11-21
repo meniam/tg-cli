@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -50,16 +51,26 @@ func readSettings(ctx context.Context, queryer settingsQueryer) (map[string]json
 
 // SetSettings validates and writes the supplied keys in one transaction.
 func (db *DB) SetSettings(ctx context.Context, changes map[string]json.RawMessage) error {
-	return db.setSettings(ctx, changes, false)
+	return db.setSettings(ctx, changes, false, nil)
 }
 
 // ImportLegacySettings writes imported settings and the migration marker atomically.
 // It refuses to import again when a marker already exists.
 func (db *DB) ImportLegacySettings(ctx context.Context, changes map[string]json.RawMessage) error {
-	return db.setSettings(ctx, changes, true)
+	return db.setSettings(ctx, changes, true, nil)
 }
 
-func (db *DB) setSettings(ctx context.Context, changes map[string]json.RawMessage, markMigrated bool) error {
+// ImportLegacySettingsChecked verifies the transaction and performs the caller's
+// pre-commit work before committing the values and migration marker. The
+// callback must not write to this database while the transaction is open.
+func (db *DB) ImportLegacySettingsChecked(ctx context.Context, changes map[string]json.RawMessage, beforeCommit func(map[string]json.RawMessage) error) error {
+	if beforeCommit == nil {
+		return errors.New("migration verification is required")
+	}
+	return db.setSettings(ctx, changes, true, beforeCommit)
+}
+
+func (db *DB) setSettings(ctx context.Context, changes map[string]json.RawMessage, markMigrated bool, beforeCommit func(map[string]json.RawMessage) error) error {
 	canonical := make(map[string]json.RawMessage, len(changes))
 	for key, value := range changes {
 		parsed, err := config.ParseSettingJSON(key, value)
@@ -107,6 +118,20 @@ func (db *DB) setSettings(ctx context.Context, changes map[string]json.RawMessag
 	if markMigrated {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO settings_meta(key,value) VALUES(?, '1')`, settingsMigrationKey); err != nil {
 			return fmt.Errorf("write settings migration marker: %w", err)
+		}
+	}
+	if beforeCommit != nil {
+		written, err := readSettings(ctx, tx)
+		if err != nil {
+			return err
+		}
+		for key, expected := range canonical {
+			if !bytes.Equal(written[key], expected) {
+				return errors.New("settings migration verification failed")
+			}
+		}
+		if err := beforeCommit(written); err != nil {
+			return err
 		}
 	}
 	if err := tx.Commit(); err != nil {
