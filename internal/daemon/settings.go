@@ -7,6 +7,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"time"
 
 	"tg-cli/internal/access"
 	"tg-cli/internal/config"
@@ -36,6 +37,138 @@ func validateSettingOverrides(input map[string]SettingOverride) (map[string]Sett
 	return out, nil
 }
 
+// liveSetting returns a detached value already applied to a live component.
+func (d *daemon) liveSetting(name string) (json.RawMessage, bool) {
+	d.liveMu.RLock()
+	defer d.liveMu.RUnlock()
+	value, ok := d.liveValues[name]
+	return bytes.Clone(value), ok
+}
+
+func (d *daemon) backgroundConfig() BackgroundSyncConfig {
+	d.liveMu.RLock()
+	defer d.liveMu.RUnlock()
+	if d.liveBackground != nil {
+		return *d.liveBackground
+	}
+	return d.opts.BackgroundSync
+}
+
+// applyBackgroundSettings publishes related scheduler values together.
+func (d *daemon) applyBackgroundSettings(names []string, stored map[string]json.RawMessage) {
+	changed := false
+	for _, name := range names {
+		if strings.HasPrefix(name, "background_sync.") && name != "background_sync.enabled" {
+			if _, overridden := d.opts.SettingsOverrides[name]; !overridden {
+				changed = true
+				break
+			}
+		}
+	}
+	if !changed {
+		return
+	}
+	cfg := d.backgroundConfig()
+	for _, name := range []string{
+		"background_sync.window_start", "background_sync.window_end",
+		"background_sync.interval_min", "background_sync.interval_max",
+		"background_sync.page_pause_min", "background_sync.page_pause_max",
+	} {
+		key, _ := config.LookupSetting(name)
+		value := key.Default
+		if v, ok := stored[name]; ok {
+			value = v
+		}
+		if override, ok := d.opts.SettingsOverrides[name]; ok {
+			value = override.Value
+		}
+		var text string
+		if json.Unmarshal(value, &text) != nil {
+			continue
+		}
+		var duration time.Duration
+		var err error
+		if key.Type == "clock" {
+			duration, err = config.ParseClock(text)
+		} else {
+			duration, err = config.ParsePositiveDuration(text)
+		}
+		if err != nil {
+			continue
+		}
+		switch name {
+		case "background_sync.window_start":
+			cfg.WindowStart = duration
+		case "background_sync.window_end":
+			cfg.WindowEnd = duration
+		case "background_sync.interval_min":
+			cfg.IntervalMin = duration
+		case "background_sync.interval_max":
+			cfg.IntervalMax = duration
+		case "background_sync.page_pause_min":
+			cfg.PagePauseMin = duration
+		case "background_sync.page_pause_max":
+			cfg.PagePauseMax = duration
+		}
+	}
+	d.liveMu.Lock()
+	d.liveBackground = &cfg
+	d.liveMu.Unlock()
+	if d.background != nil {
+		d.background.setConfig(cfg)
+	}
+}
+
+// applyLiveSetting is called under settingsMu after the database commit.
+func (d *daemon) applyLiveSetting(key config.SettingKey, stored map[string]json.RawMessage) bool {
+	if key.Protected {
+		return true
+	}
+	if key.Apply != "live" {
+		return false
+	}
+	value := key.Default
+	if v, ok := stored[key.Name]; ok {
+		value = v
+	}
+	if override, ok := d.opts.SettingsOverrides[key.Name]; ok {
+		value = override.Value
+	}
+	switch key.Name {
+	case "behavior.throttle_percent":
+		if d.opts.TelegramConfig.Throttle == nil {
+			return false
+		}
+		var n float64
+		if json.Unmarshal(value, &n) != nil || d.opts.TelegramConfig.Throttle.SetPercent(n) != nil {
+			return false
+		}
+	case "behavior.flood_autowait":
+		if d.opts.TelegramConfig.Throttle == nil {
+			return false
+		}
+		var v string
+		if json.Unmarshal(value, &v) != nil {
+			return false
+		}
+		duration, err := time.ParseDuration(v)
+		if err != nil || d.opts.TelegramConfig.Throttle.SetFloodAutoWait(duration) != nil {
+			return false
+		}
+	case "semantic_search.min_similarity", "behavior.expect_user":
+	case "background_sync.window_start", "background_sync.window_end", "background_sync.interval_min", "background_sync.interval_max", "background_sync.page_pause_min", "background_sync.page_pause_max":
+	default:
+		return false
+	}
+	d.liveMu.Lock()
+	if d.liveValues == nil {
+		d.liveValues = make(map[string]json.RawMessage)
+	}
+	d.liveValues[key.Name] = bytes.Clone(value)
+	d.liveMu.Unlock()
+	return true
+}
+
 func (d *daemon) registerSettings() {
 	d.handle(rpc.MethodSettingsList, d.settingsList)
 	d.handle(rpc.MethodSettingsGet, d.settingsGet)
@@ -60,6 +193,37 @@ func (d *daemon) initSettings(ctx context.Context) {
 	values, err := d.store.Settings(ctx)
 	if err == nil {
 		d.settingsInitial = values
+		effective := make(map[string]json.RawMessage, len(values)+len(d.opts.SettingsOverrides))
+		for name, value := range values {
+			effective[name] = value
+		}
+		for name, override := range d.opts.SettingsOverrides {
+			effective[name] = override.Value
+		}
+		valid := config.ValidateSettings(effective) == nil
+		if !valid && d.log != nil {
+			d.log.Error("settings unavailable")
+		}
+		names := make([]string, 0, len(values)+len(d.opts.SettingsOverrides))
+		seen := make(map[string]bool)
+		for name := range values {
+			names = append(names, name)
+			seen[name] = true
+		}
+		for name := range d.opts.SettingsOverrides {
+			if !seen[name] {
+				names = append(names, name)
+			}
+		}
+		if valid {
+			d.applyBackgroundSettings(names, values)
+		}
+		for _, name := range names {
+			key, ok := config.LookupSetting(name)
+			if ok && !key.Protected && (valid || !strings.HasPrefix(name, "background_sync.")) {
+				d.applyLiveSetting(key, values)
+			}
+		}
 	}
 }
 
@@ -272,6 +436,7 @@ func (d *daemon) settingsWriteBatch(ctx context.Context, changes map[string]json
 			d.log.Error("access policy unavailable")
 		}
 	}
+	d.applyBackgroundSettings(keys, after)
 	result := rpc.SettingsBatchWriteResult{Settings: make([]rpc.SettingsWriteResult, 0, len(keys))}
 	for _, name := range keys {
 		key, _ := config.LookupSetting(name)
@@ -287,17 +452,16 @@ func (d *daemon) settingsWriteBatch(ctx context.Context, changes map[string]json
 				d.log.Info("setting updated", "key", name, "source", "rpc")
 			}
 		}
-		if !key.Protected {
-			if d.settingsPending == nil {
-				d.settingsPending = make(map[string]bool)
-			}
-			d.settingsPending[name] = true
+		applied := d.applyLiveSetting(key, after)
+		if d.settingsPending == nil {
+			d.settingsPending = make(map[string]bool)
 		}
+		d.settingsPending[name] = !applied
 		item := rpc.SettingsWriteResult{SettingValue: d.settingValue(key, after, false), Previous: old, Applied: "restart_required"}
 		if key.Secret {
 			item.Previous = json.RawMessage(`"[REDACTED]"`)
 		}
-		if key.Protected {
+		if applied {
 			item.Applied = "live"
 		} else {
 			item.RestartRequired = true
@@ -431,17 +595,17 @@ func (d *daemon) settingsWrite(ctx context.Context, name, phrase, op string, val
 			d.log.Info("setting updated", "key", name, "source", "rpc")
 		}
 	}
-	if !key.Protected {
-		if d.settingsPending == nil {
-			d.settingsPending = make(map[string]bool)
-		}
-		d.settingsPending[name] = true
+	d.applyBackgroundSettings([]string{name}, stored)
+	applied := d.applyLiveSetting(key, stored)
+	if d.settingsPending == nil {
+		d.settingsPending = make(map[string]bool)
 	}
+	d.settingsPending[name] = !applied
 	result := rpc.SettingsWriteResult{SettingValue: d.settingValue(key, stored, false), Previous: old, Applied: "restart_required"}
 	if key.Secret {
 		result.Previous = json.RawMessage(`"[REDACTED]"`)
 	}
-	if key.Protected {
+	if applied {
 		result.Applied = "live"
 	} else {
 		result.RestartRequired = true

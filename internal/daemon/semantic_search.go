@@ -55,6 +55,9 @@ func (d *daemon) searchSemantic(ctx context.Context, params json.RawMessage) (an
 	// The request overrides the setting; a hand-built Options has no setting, so
 	// its zero means no threshold.
 	minSimilarity := d.opts.SemanticSearch.MinSimilarity
+	if value, ok := d.liveSetting("semantic_search.min_similarity"); ok {
+		_ = json.Unmarshal(value, &minSimilarity)
+	}
 	if p.MinSimilarity != nil {
 		minSimilarity = *p.MinSimilarity
 		if math.IsNaN(minSimilarity) || minSimilarity < 0 || minSimilarity > 1 {

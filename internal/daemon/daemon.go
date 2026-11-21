@@ -88,6 +88,9 @@ type daemon struct {
 	accessMu             sync.RWMutex
 	accessRefreshMu      sync.Mutex
 	settingsMu           sync.Mutex
+	liveMu               sync.RWMutex
+	liveValues           map[string]json.RawMessage
+	liveBackground       *BackgroundSyncConfig
 	settingsInitial      map[string]json.RawMessage
 	settingsPending      map[string]bool
 	accessSnapshot       *access.Policy
@@ -895,6 +898,11 @@ func (d *daemon) guardRequest(req rpc.Request) error {
 	}
 	if kind := d.getAuthLost(); kind != "" && accountMethod(req.Method) {
 		return rpc.NewError(rpc.CodeNotAuthorized, "authorization lost: "+kind+"; log in again")
+	}
+	if req.ExpectUser == "" && accountMethod(req.Method) {
+		if value, ok := d.liveSetting("behavior.expect_user"); ok {
+			_ = json.Unmarshal(value, &req.ExpectUser)
+		}
 	}
 	return d.account.check(req)
 }
