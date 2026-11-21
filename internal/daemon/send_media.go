@@ -189,6 +189,11 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockMediaWrite(chatID, p.Files, files)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var replay rpc.SendMediaResult
 		if err := json.Unmarshal(saved, &replay); err != nil {
 			return nil, err
@@ -197,6 +202,11 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 		return replay, nil
 	}
 	if p.DryRun {
+		releaseAccess, err := d.lockMediaWrite(chatID, p.Files, files)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		types := make([]string, len(files))
 		sizes := make([]int64, len(files))
 		for i, file := range files {

@@ -554,3 +554,83 @@ func TestIdempotentWritesRefuseRevocationWhileWaiting(t *testing.T) {
 		})
 	}
 }
+
+func TestIdempotentReplayDeniesChatClosedWhileWaiting(t *testing.T) {
+	d, _, db, _ := writeDaemon(t)
+	d.opts.Access = nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`)}); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshAccess(ctx)
+	raw := params(t, rpc.SendParams{Chat: "42", Text: "hello", IdempotencyKey: "fixture"})
+	if _, err := d.messageSend(ctx, raw); err != nil {
+		t.Fatal(err)
+	}
+	release, err := d.idempotencyLocks.lock(ctx, 42, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type answer struct {
+		v   any
+		err error
+	}
+	done := make(chan answer, 1)
+	go func() { v, err := d.messageSend(ctx, raw); done <- answer{v, err} }()
+	for {
+		d.idempotencyLocks.mu.Lock()
+		entry := d.idempotencyLocks.entries[idempotencyKey{chatID: 42, key: "fixture"}]
+		waiting := entry != nil && entry.refs == 2
+		d.idempotencyLocks.mu.Unlock()
+		if waiting {
+			break
+		}
+		if ctx.Err() != nil {
+			release()
+			t.Fatal("request did not wait")
+		}
+		runtime.Gosched()
+	}
+	if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.block": []byte(`[42]`)}); err != nil {
+		release()
+		t.Fatal(err)
+	}
+	d.refreshAccess(ctx)
+	release()
+	got := <-done
+	if got.v != nil || writeCode(t, got.err) != rpc.CodeNotFound {
+		t.Fatalf("closed replay returned data: %+v %v", got.v, got.err)
+	}
+}
+
+type editRevocationTelegram struct {
+	*writeTelegram
+	revoke func()
+}
+
+func (f *editRevocationTelegram) CheckText(ctx context.Context, p rpc.SendParams) (rpc.TextCheck, error) {
+	f.revoke()
+	return f.writeTelegram.CheckText(ctx, p)
+}
+
+func TestEditRefusesRevocationDuringTextCheck(t *testing.T) {
+	d, base, db, _ := writeDaemon(t)
+	d.opts.Access = nil
+	ctx := context.Background()
+	if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`)}); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshAccess(ctx)
+	fake := &editRevocationTelegram{writeTelegram: base, revoke: func() {
+		if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[]`)}); err != nil {
+			t.Error(err)
+		}
+		d.refreshAccess(ctx)
+	}}
+	d.opts.Telegram = fake
+	_, err := d.messageEdit(ctx, params(t, rpc.EditParams{Chat: "42", ID: 1, Text: "hello", Parse: "html"}))
+	if writeCode(t, err) != rpc.CodeWriteDisabled || len(base.calls) != 0 {
+		t.Fatalf("edit after revoke: %v calls=%v", err, base.calls)
+	}
+}

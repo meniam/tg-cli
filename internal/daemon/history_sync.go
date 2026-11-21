@@ -487,6 +487,9 @@ func (d *daemon) resolveHistorySyncChat(ctx context.Context, name string) (chatr
 	if err != nil {
 		return chatref.Ref{}, 0, err
 	}
+	if err := d.requireAccount(ctx); err != nil {
+		return chatref.Ref{}, 0, err
+	}
 	chat, err := d.requireAllowedChat(ctx, ref)
 	if err != nil {
 		return chatref.Ref{}, 0, err
@@ -564,6 +567,9 @@ func (d *daemon) historySyncStatus(ctx context.Context, params json.RawMessage) 
 func (d *daemon) historySyncCancel(ctx context.Context, params json.RawMessage) (any, error) {
 	var p rpc.HistorySyncParams
 	if err := decodeParams(params, &p); err != nil {
+		return nil, err
+	}
+	if err := d.requireAccount(ctx); err != nil {
 		return nil, err
 	}
 	chatID, err := d.existingHistorySyncChat(ctx, p.Chat)

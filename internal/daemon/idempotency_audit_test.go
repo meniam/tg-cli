@@ -48,7 +48,8 @@ func TestAudit05_IdempotentSendRejectsMalformedKey(t *testing.T) {
 
 // The same key and parameters under another method is a conflict too.
 func TestAudit05_IdempotencyKeyConflictsAcrossMethods(t *testing.T) {
-	d, _, _, _ := writeDaemon(t)
+	d, _, _, path := writeDaemon(t)
+	writeAccess(t, path, `{"write":[42]}`)
 	ctx := context.Background()
 	body := map[string]string{"text": "x"}
 	session, _, replayed, err := d.beginIdempotency(ctx, 42, "shared", rpc.MethodMessageSend, body, false)

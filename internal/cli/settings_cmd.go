@@ -26,7 +26,7 @@ func (a *app) settingsCommand() *cobra.Command {
 		phrase := ""
 		if showIDs {
 			var err error
-			phrase, err = a.settingsSecret("Owner passphrase: ")
+			phrase, err = a.settingsIDsSecret()
 			if err != nil {
 				return err
 			}
@@ -48,7 +48,7 @@ func (a *app) settingsCommand() *cobra.Command {
 		}
 		if showIDs {
 			var err error
-			phrase, err = a.settingsSecret("Owner passphrase: ")
+			phrase, err = a.settingsIDsSecret()
 			if err != nil {
 				return err
 			}
@@ -213,6 +213,17 @@ func (a *app) settingsCommand() *cobra.Command {
 	}, dangerous, commandSpec{Safety: safetyLocalWrite, Result: typeOf[settingsTokenResetResult]()}))
 	root.AddCommand(token)
 	return root
+}
+
+func (a *app) settingsIDsSecret() (string, error) {
+	phrase, err := a.settingsSecret("Owner passphrase: ")
+	if err != nil {
+		return "", err
+	}
+	if phrase == "" {
+		return "", fail(exitcode.Usage, "owner passphrase is required")
+	}
+	return phrase, nil
 }
 
 func (a *app) settingsSecret(prompt string) (string, error) {

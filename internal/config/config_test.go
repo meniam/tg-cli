@@ -142,3 +142,35 @@ func TestLoadRejectsConfigSymlinks(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckUnchangedRejectsLateSymlink(t *testing.T) {
+	for _, present := range []bool{true, false} {
+		t.Run(fmt.Sprintf("present=%t", present), func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "config.toml")
+			target := filepath.Join(dir, "target.toml")
+			if present {
+				if err := os.WriteFile(path, []byte("# same\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(target, []byte("# same\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := WithLegacyConfigLock(path, func(doc *LockedLegacyConfig) error {
+				if present {
+					if err := os.Remove(path); err != nil {
+						return err
+					}
+				}
+				if err := os.Symlink(target, path); err != nil {
+					return err
+				}
+				return doc.CheckUnchanged()
+			})
+			if err == nil {
+				t.Fatal("late symlink accepted")
+			}
+		})
+	}
+}

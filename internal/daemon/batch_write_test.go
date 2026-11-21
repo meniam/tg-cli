@@ -3,10 +3,13 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
@@ -143,5 +146,125 @@ func TestForwardCopyChangesIdempotency(t *testing.T) {
 	_, err = d.messageForward(context.Background(), params(t, p))
 	if writeCode(t, err) != rpc.CodeInvalidParams {
 		t.Fatalf("captions without copy: %v", err)
+	}
+}
+
+func TestDeleteBatchStopsAfterAcknowledgedRevocation(t *testing.T) {
+	d, tg, db, _ := writeDaemon(t)
+	d.opts.Access = nil
+	ctx := context.Background()
+	if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`)}); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshAccess(ctx)
+	finished := make(chan struct{})
+	tg.onDelete = func() {
+		tg.onDelete = nil
+		if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[]`)}); err != nil {
+			t.Error(err)
+		}
+		go func() { defer close(finished); d.refreshAccess(ctx) }()
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case <-finished:
+				return
+			case <-deadline:
+				t.Error("revocation did not reach policy lock")
+				return
+			default:
+			}
+			if !d.accessMu.TryRLock() {
+				return
+			}
+			d.accessMu.RUnlock()
+			runtime.Gosched()
+		}
+	}
+	ids := make([]int, 101)
+	for i := range ids {
+		ids[i] = i + 1
+	}
+	out, err := d.deleteChunks(ctx, chatref.Ref{Kind: chatref.ID, ID: 42}, 42, 1, rpc.DeleteParams{IDs: ids, Revoke: true})
+	<-finished
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := out.(rpc.DeleteResult)
+	if len(tg.calls) != 1 || !res.Partial || len(res.Deleted) != 100 || len(res.Errors) != 1 {
+		t.Fatalf("batch after revoke: calls=%v result=%+v", tg.calls, res)
+	}
+}
+
+type scheduledRevocationTelegram struct {
+	*writeTelegram
+	calls  int
+	revoke func()
+}
+
+func (f *scheduledRevocationTelegram) ScheduledDelete(_ context.Context, _ chatref.Ref, ids []int) (rpc.ScheduledResult, error) {
+	f.calls++
+	if f.calls == 1 {
+		f.revoke()
+	}
+	return rpc.ScheduledResult{Deleted: ids}, nil
+}
+func (f *scheduledRevocationTelegram) ScheduledSendNow(_ context.Context, _ chatref.Ref, ids []int) (rpc.ScheduledResult, error) {
+	f.calls++
+	if f.calls == 1 {
+		f.revoke()
+	}
+	return rpc.ScheduledResult{}, nil
+}
+
+func TestScheduledBatchStopsAfterAcknowledgedRevocation(t *testing.T) {
+	for _, send := range []bool{false, true} {
+		t.Run(fmt.Sprintf("send=%t", send), func(t *testing.T) {
+			d, base, db, _ := writeDaemon(t)
+			d.opts.Access = nil
+			ctx := context.Background()
+			if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`)}); err != nil {
+				t.Fatal(err)
+			}
+			d.refreshAccess(ctx)
+			finished := make(chan struct{})
+			fake := &scheduledRevocationTelegram{writeTelegram: base}
+			d.opts.Telegram = fake
+			fake.revoke = func() {
+				if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[]`)}); err != nil {
+					t.Error(err)
+				}
+				go func() { defer close(finished); d.refreshAccess(ctx) }()
+				deadline := time.After(5 * time.Second)
+				for {
+					select {
+					case <-finished:
+						return
+					case <-deadline:
+						t.Error("revocation did not reach policy lock")
+						return
+					default:
+					}
+					if !d.accessMu.TryRLock() {
+						return
+					}
+					d.accessMu.RUnlock()
+					runtime.Gosched()
+				}
+			}
+			ids := make([]int, 101)
+			for i := range ids {
+				ids[i] = i + 1
+			}
+			out, err := d.scheduledWrite(ctx, params(t, rpc.ScheduledParams{Chat: "42", IDs: ids}), send)
+			<-finished
+			if err != nil {
+				t.Fatal(err)
+			}
+			res := out.(rpc.ScheduledResult)
+			if fake.calls != 1 || !res.Partial || len(res.Errors) != 1 {
+				t.Fatalf("scheduled after revoke: calls=%d result=%+v", fake.calls, res)
+			}
+		})
 	}
 }

@@ -130,7 +130,7 @@ tg note delete <id> | --author owner|ai --yes [flags]
 **Safety class:** `local_write`. Dangerous. **Output formats:** `json`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon. The command is dangerous: a deleted note cannot be restored. A single note by id needs no `--yes`. All notes of an author need `--author owner|ai --yes`; without `--yes` the command is exit code 2 (`would delete all ai notes; confirm with ...`) and deletes nothing. Giving no id and no author, or both, is exit code 2. Note that `--author` also deletes the notes of closed chats and is not filtered by the access lists.
+**Preconditions.** A running Daemon. The command is dangerous: a deleted note cannot be restored. A single note by id needs no `--yes`. All visible notes of an author need `--author owner|ai --yes`; without `--yes` the command is exit code 2 (`would delete all ai notes; confirm with ...`) and deletes nothing. Giving no id and no author, or both, is exit code 2. Notes of closed chats are neither deleted nor included in `deleted`.
 
 **Example.**
 

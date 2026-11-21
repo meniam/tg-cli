@@ -311,3 +311,16 @@ func TestPersonWritesHideClosedAndUnknownNumericIDs(t *testing.T) {
 		})
 	}
 }
+
+func TestPersonWriteChecksAccountBeforeHiddenID(t *testing.T) {
+	d, base, _, path := accessTestDaemon(t)
+	d.opts.Telegram = &usersFake{fakeTelegram: base}
+	writeAccess(t, path, `{"block":[42]}`)
+	base.user = nil
+	call := func(id string) error {
+		_, err := d.userBlock(context.Background(), params(t, rpc.BlockParams{User: id}))
+		return err
+	}
+	closed, unknown := call("42"), call("999")
+	sameRPCError(t, closed, unknown)
+}

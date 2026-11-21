@@ -196,6 +196,11 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockChatWrite(id)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var replay rpc.SendResult
 		if err := json.Unmarshal(saved, &replay); err != nil {
 			return nil, err
@@ -290,7 +295,12 @@ func (d *daemon) messageEdit(ctx context.Context, raw json.RawMessage) (any, err
 		}
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(id)
+	if err != nil {
+		return nil, err
+	}
 	res, err := d.telegram(ctx).Edit(ctx, ref, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}
@@ -373,6 +383,11 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockChatWrite(id, fromID)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var replay rpc.ForwardResult
 		if err := json.Unmarshal(saved, &replay); err != nil {
 			return nil, err
@@ -502,6 +517,11 @@ func (d *daemon) messagePoll(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockChatWrite(id)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var replay rpc.SendResult
 		if err := json.Unmarshal(saved, &replay); err != nil {
 			return nil, err

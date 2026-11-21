@@ -579,3 +579,17 @@ func TestSettingsShowIDsRequiresExplicitFlagAndPhrase(t *testing.T) {
 		t.Fatalf("missing terminal: %d calls %d", r.code, calls)
 	}
 }
+
+func TestSettingsShowIDsRejectsEmptyPhraseBeforeConnecting(t *testing.T) {
+	for _, args := range [][]string{{"settings", "list", "--show-ids"}, {"settings", "get", "access.write", "--show-ids"}} {
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			e := newEnv(t)
+			calls := 0
+			dial := func(context.Context, string, string) (*rpc.Client, error) { calls++; return nil, os.ErrNotExist }
+			r := runSettingsFixture(t, e, args, []string{""}, dial)
+			if r.code != exitcode.Usage || calls != 0 {
+				t.Fatalf("empty phrase: exit=%d calls=%d", r.code, calls)
+			}
+		})
+	}
+}

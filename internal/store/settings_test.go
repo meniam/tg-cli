@@ -203,3 +203,18 @@ func TestOwnerAttemptStateRejectsMalformedValues(t *testing.T) {
 		}
 	}
 }
+
+func TestOwnerAttemptStateRejectsInconsistentLockout(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	now := time.Unix(1700000000, 0)
+	db.now = func() time.Time { return now }
+	for _, raw := range []string{`{"failures":5,"until":0}`, `{"failures":1,"until":1700000001000000000}`, `{"failures":5,"until":1700007200000000000}`, `{"failures":-1,"until":0}`} {
+		if _, err := db.write.Exec(`INSERT INTO settings_meta(key,value) VALUES('owner_attempts',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, raw); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := db.OwnerAttemptState(ctx); err == nil {
+			t.Errorf("accepted inconsistent lockout: %s", raw)
+		}
+	}
+}

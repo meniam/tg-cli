@@ -191,47 +191,49 @@ func (d *daemon) registerSettings() {
 	d.handle(rpc.MethodSettingsTokenChange, d.settingsTokenChange)
 }
 
-func (d *daemon) initSettings(ctx context.Context) {
+func (d *daemon) initSettings(ctx context.Context) error {
 	d.settingsMu.Lock()
 	defer d.settingsMu.Unlock()
 	if d.store == nil {
-		return
+		d.denyAfterSettingsReadFailure(false)
+		return errors.New("settings unavailable")
 	}
 	values, err := d.store.Settings(ctx)
-	if err == nil {
-		d.settingsInitial = values
-		effective := make(map[string]json.RawMessage, len(values)+len(d.opts.SettingsOverrides))
-		for name, value := range values {
-			effective[name] = value
-		}
-		for name, override := range d.opts.SettingsOverrides {
-			effective[name] = override.Value
-		}
-		valid := config.ValidateSettings(effective) == nil
-		if !valid && d.log != nil {
-			d.log.Error("settings unavailable")
-		}
-		names := make([]string, 0, len(values)+len(d.opts.SettingsOverrides))
-		seen := make(map[string]bool)
-		for name := range values {
+	if err != nil {
+		d.denyAfterSettingsReadFailure(false)
+		return errors.New("settings unavailable")
+	}
+	effective := make(map[string]json.RawMessage, len(values)+len(d.opts.SettingsOverrides))
+	for name, value := range values {
+		effective[name] = value
+	}
+	for name, override := range d.opts.SettingsOverrides {
+		effective[name] = override.Value
+	}
+	if err := config.ValidateSettings(effective); err != nil {
+		d.denyAfterSettingsReadFailure(false)
+		return errors.New("settings unavailable")
+	}
+	d.settingsInitial = values
+	names := make([]string, 0, len(values)+len(d.opts.SettingsOverrides))
+	seen := make(map[string]bool)
+	for name := range values {
+		names = append(names, name)
+		seen[name] = true
+	}
+	for name := range d.opts.SettingsOverrides {
+		if !seen[name] {
 			names = append(names, name)
-			seen[name] = true
-		}
-		for name := range d.opts.SettingsOverrides {
-			if !seen[name] {
-				names = append(names, name)
-			}
-		}
-		if valid {
-			d.applyBackgroundSettings(names, values)
-		}
-		for _, name := range names {
-			key, ok := config.LookupSetting(name)
-			if ok && !key.Protected && (valid || !strings.HasPrefix(name, "background_sync.")) {
-				d.applyLiveSetting(key, values)
-			}
 		}
 	}
+	d.applyBackgroundSettings(names, values)
+	for _, name := range names {
+		key, ok := config.LookupSetting(name)
+		if ok && !key.Protected {
+			d.applyLiveSetting(key, values)
+		}
+	}
+	return nil
 }
 
 func (d *daemon) settingsRead(ctx context.Context) (map[string]json.RawMessage, error) {

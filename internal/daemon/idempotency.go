@@ -40,6 +40,11 @@ func (d *daemon) beginIdempotency(ctx context.Context, chatID int64, key, method
 		return nil, nil, false, err
 	}
 	session := &idempotencySession{d: d, chatID: chatID, key: key, method: method, hash: sum[:], release: release}
+	releaseAccess, err := d.lockChatWrite(chatID)
+	if err != nil {
+		release()
+		return nil, nil, false, err
+	}
 	var record store.IdempotencyRecord
 	var found bool
 	if dry {
@@ -48,6 +53,7 @@ func (d *daemon) beginIdempotency(ctx context.Context, chatID int64, key, method
 		record, _, err = d.store.ReserveIdempotency(ctx, store.IdempotencyRecord{ChatID: chatID, Key: key, Method: method, ParamsHash: sum[:]})
 		found = err == nil
 	}
+	releaseAccess()
 	if err != nil {
 		release()
 		return nil, nil, false, err

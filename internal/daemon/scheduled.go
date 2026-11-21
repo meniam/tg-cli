@@ -52,10 +52,17 @@ func (d *daemon) scheduledWrite(ctx context.Context, raw json.RawMessage, send b
 			continue
 		}
 		var part rpc.ScheduledResult
-		if send {
-			part, err = d.telegram(ctx).ScheduledSendNow(ctx, ref, ids)
+		releaseAccess, accessErr := d.lockChatWrite(id)
+		if accessErr != nil {
+			err = accessErr
+			stopped = accessErr
 		} else {
-			part, err = d.telegram(ctx).ScheduledDelete(ctx, ref, ids)
+			if send {
+				part, err = d.telegram(ctx).ScheduledSendNow(ctx, ref, ids)
+			} else {
+				part, err = d.telegram(ctx).ScheduledDelete(ctx, ref, ids)
+			}
+			releaseAccess()
 		}
 		if err != nil {
 			if first == nil {

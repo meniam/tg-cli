@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -504,5 +505,115 @@ func TestEditMediaRefusesRevokedPermissionAfterFileOpen(t *testing.T) {
 	_, err := c.d.messageEditMedia(ctx, params(t, rpc.EditMediaParams{Chat: "42", ID: 7, As: "document", File: c.document}))
 	if writeCode(t, err) != rpc.CodeWriteDisabled || f.edits != 0 {
 		t.Fatalf("edit after revocation: %v calls=%d", err, f.edits)
+	}
+}
+
+func TestMediaDryRunDoesNotExposeRevokedFiles(t *testing.T) {
+	c := newMediaCase(t)
+	ctx := context.Background()
+	c.d.opts.Access = nil
+	roots, _ := json.Marshal([]string{c.root})
+	if err := c.db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`), "access.files": roots}); err != nil {
+		t.Fatal(err)
+	}
+	c.d.refreshAccess(ctx)
+	c.d.openMediaFile = func(roots []string, path string, max int64) (*os.File, int64, error) {
+		f, size, err := fileroot.Open(roots, path, max)
+		if err != nil {
+			return nil, 0, err
+		}
+		if err := c.db.SetSettings(ctx, map[string]json.RawMessage{"access.files": []byte(`[]`)}); err != nil {
+			f.Close()
+			return nil, 0, err
+		}
+		c.d.refreshAccess(ctx)
+		return f, size, nil
+	}
+	c.p.DryRun = true
+	out, err := c.d.messageSendMedia(ctx, params(t, c.p))
+	if out != nil || writeCode(t, err) != rpc.CodeWriteDisabled {
+		t.Fatalf("dry-run exposed revoked file: %+v %v", out, err)
+	}
+}
+
+func TestEditMediaDryRunDoesNotExposeRevokedFiles(t *testing.T) {
+	c := newMediaCase(t)
+	ctx := context.Background()
+	c.d.opts.Access = nil
+	c.tg.messages = []rpc.Message{{ID: 7, ChatID: 42, MediaType: "photo"}}
+	roots, _ := json.Marshal([]string{c.root})
+	if err := c.db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`), "access.files": roots}); err != nil {
+		t.Fatal(err)
+	}
+	c.d.refreshAccess(ctx)
+	c.d.openMediaFile = func(roots []string, path string, max int64) (*os.File, int64, error) {
+		f, size, err := fileroot.Open(roots, path, max)
+		if err != nil {
+			return nil, 0, err
+		}
+		if err := c.db.SetSettings(ctx, map[string]json.RawMessage{"access.files": []byte(`[]`)}); err != nil {
+			f.Close()
+			return nil, 0, err
+		}
+		c.d.refreshAccess(ctx)
+		return f, size, nil
+	}
+	out, err := c.d.messageEditMedia(ctx, params(t, rpc.EditMediaParams{Chat: "42", ID: 7, As: "document", File: c.document, DryRun: true}))
+	if out != nil || writeCode(t, err) != rpc.CodeWriteDisabled {
+		t.Fatalf("dry-run exposed revoked file: %+v %v", out, err)
+	}
+}
+
+func TestMediaReplayDoesNotExposeClosedChat(t *testing.T) {
+	c := newMediaCase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c.d.opts.Access = nil
+	roots, _ := json.Marshal([]string{c.root})
+	if err := c.db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`), "access.files": roots}); err != nil {
+		t.Fatal(err)
+	}
+	c.d.refreshAccess(ctx)
+	c.p.IdempotencyKey = "fixture"
+	raw := params(t, c.p)
+	if _, err := c.d.messageSendMedia(ctx, raw); err != nil {
+		t.Fatal(err)
+	}
+	release, err := c.d.idempotencyLocks.lock(ctx, 42, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type answer struct {
+		v   any
+		err error
+	}
+	done := make(chan answer, 1)
+	go func() { v, err := c.d.messageSendMedia(ctx, raw); done <- answer{v, err} }()
+	for {
+		c.d.idempotencyLocks.mu.Lock()
+		entry := c.d.idempotencyLocks.entries[idempotencyKey{chatID: 42, key: "fixture"}]
+		waiting := entry != nil && entry.refs == 2
+		c.d.idempotencyLocks.mu.Unlock()
+		if waiting {
+			break
+		}
+		if ctx.Err() != nil {
+			release()
+			t.Fatal("request did not wait")
+		}
+		runtime.Gosched()
+	}
+	if err := c.db.SetSettings(ctx, map[string]json.RawMessage{"access.block": []byte(`[42]`)}); err != nil {
+		release()
+		t.Fatal(err)
+	}
+	c.d.refreshAccess(ctx)
+	release()
+	got := <-done
+	if got.v != nil || writeCode(t, got.err) != rpc.CodeNotFound {
+		t.Fatalf("media replay exposed closed chat: %+v %v", got.v, got.err)
+	}
+	if c.tg.calls != 1 {
+		t.Fatalf("unexpected sends: %d", c.tg.calls)
 	}
 }

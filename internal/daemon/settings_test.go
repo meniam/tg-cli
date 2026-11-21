@@ -467,3 +467,22 @@ func TestSettingsHideClosedIDsInWriteAndAdmin(t *testing.T) {
 	}
 
 }
+
+func TestInitSettingsReadFailureClosesExistingSnapshot(t *testing.T) {
+	d, _, db := settingsFixture(t)
+	ctx := context.Background()
+	if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.write": []byte(`[42]`), "behavior.expect_user": []byte(`"42"`)}); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshAccess(ctx)
+	if !d.policy().WriteAllowed(42) {
+		t.Fatal("fixture policy denied")
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	d.initSettings(ctx)
+	if p := d.policy(); !p.Closed() || p.WriteAllowed(42) {
+		t.Fatal("initialization read failure left policy open")
+	}
+}

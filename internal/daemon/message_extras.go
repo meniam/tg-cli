@@ -107,6 +107,11 @@ func (d *daemon) messageSendSticker(ctx context.Context, raw json.RawMessage) (a
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockChatWrite(id)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var result rpc.SendStickerResult
 		if err := json.Unmarshal(saved, &result); err != nil {
 			return nil, err
@@ -186,6 +191,11 @@ func (d *daemon) messageEditMedia(ctx context.Context, raw json.RawMessage) (any
 		result.CaptionLength = &length
 	}
 	if p.DryRun {
+		releaseAccess, err := d.lockMediaWrite(id, []string{p.File}, []rpc.MediaFile{checked})
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		return result, nil
 	}
 	release, err := d.lockMediaWrite(id, []string{p.File}, []rpc.MediaFile{checked})
@@ -238,6 +248,11 @@ func (d *daemon) messageSendInline(ctx context.Context, raw json.RawMessage) (an
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockChatWrite(chatID)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var result rpc.SendResult
 		if err := json.Unmarshal(saved, &result); err != nil {
 			return nil, err

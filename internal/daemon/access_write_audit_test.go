@@ -174,6 +174,18 @@ func TestRegisteredWritesHideClosedAndUnknownIDs(t *testing.T) {
 			if closed.Code != rpc.CodeNotFound || closed.Code != unknown.Code || closed.Message != unknown.Message {
 				t.Fatalf("closed: %v; unknown: %v", closed, unknown)
 			}
+			tg.mu.Lock()
+			tg.user = nil
+			tg.mu.Unlock()
+			closed, unknown = call("77"), call("999")
+			if closed.Code != unknown.Code || closed.Message != unknown.Message {
+				t.Errorf("unauthorized closed: %v; unknown: %v", closed, unknown)
+			}
+			tg.mu.Lock()
+			tg.user = &rpc.User{ID: 42}
+			tg.mu.Unlock()
+			// Network errors during Resolve may distinguish unknown IDs; this is
+			// an accepted risk in .agents/plans/20261120_2242_settings_in_database.md.
 		})
 	}
 }

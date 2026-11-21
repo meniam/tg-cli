@@ -232,6 +232,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("listen on %s: %w", opts.Paths.Socket, err)
 	}
 	defer func() { _ = os.Remove(opts.Paths.Socket) }()
+	defer l.Close()
 	if err := os.Chmod(opts.Paths.Socket, 0o600); err != nil {
 		_ = l.Close()
 		return fmt.Errorf("restrict socket: %w", err)
@@ -244,7 +245,9 @@ func Run(ctx context.Context, opts Options) error {
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore, startedAt: time.Now()}
 	d.ownerSecrets = NewOwnerSecrets(ownedStore)
 	d.refreshAccess(runCtx)
-	d.initSettings(runCtx)
+	if err := d.initSettings(runCtx); err != nil {
+		return err
+	}
 	d.admission.unblock(opts.Telegram)
 	defer d.openSemantic()()
 	// The indexer starts before anything that can send it a trigger exists.

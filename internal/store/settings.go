@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"time"
 
 	"tg-cli/internal/config"
 )
@@ -408,6 +409,9 @@ func (db *DB) OwnerAttemptState(ctx context.Context) (int, int64, error) {
 		Until    *int64 `json:"until"`
 	}
 	if json.Unmarshal([]byte(raw), &state) != nil || state.Failures == nil || state.Until == nil || *state.Failures < 0 || *state.Failures > 1000000 || *state.Until < 0 {
+		return 0, 0, errors.New("invalid owner attempt state")
+	}
+	if (*state.Failures >= 5 && *state.Until == 0) || (*state.Failures < 5 && *state.Until != 0) || (*state.Until != 0 && time.Unix(0, *state.Until).After(db.now().Add(time.Hour))) {
 		return 0, 0, errors.New("invalid owner attempt state")
 	}
 	return *state.Failures, *state.Until, nil

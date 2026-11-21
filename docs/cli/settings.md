@@ -48,7 +48,9 @@ passphrase and returns all ids in those four lists.
 has `key`, `value`, `source`, `stored` when set, `overridden_by` when an
 override wins, and `restart_required`.
 
-**Exit codes.** 0 success; 1 a local database error; 2 invalid configuration.
+**Exit codes.** 0 success; 1 a local database error; 2 invalid configuration or
+no terminal for `--show-ids`; 9 a missing, wrong, or temporarily locked owner
+passphrase for `--show-ids`.
 
 ### tg settings get
 
@@ -236,5 +238,6 @@ no passphrase or confirmation argument.
 `tg settings token init`.
 
 **Exit codes.** 0 success; 1 the Daemon, profile lock, or database lock is in
-use, or the local reset failed; 2 no terminal or a confirmation other than
-`yes`.
+use, or the local reset failed; 2 no terminal, a confirmation other than
+`yes`, or a legacy settings source that must be restored from its migration
+backup before retrying.

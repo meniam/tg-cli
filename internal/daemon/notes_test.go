@@ -270,3 +270,30 @@ func TestNoteRPCValidationSearchAndSecrets(t *testing.T) {
 		t.Errorf("secret appeared in log: %s", logs.String())
 	}
 }
+
+func TestDeleteNotesByAuthorPreservesClosedChats(t *testing.T) {
+	d, _, db, path := accessTestDaemon(t)
+	ctx := context.Background()
+	hidden, visible := int64(42), int64(43)
+	for _, id := range []int64{hidden, visible} {
+		if _, err := db.AddNote(ctx, store.Note{Kind: "chat", ChatID: &id, Body: "fixture", Author: "ai"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeAccess(t, path, `{"block":[42]}`)
+	out, err := d.noteDeleteByAuthor(ctx, params(t, rpc.NoteDeleteByAuthorParams{Author: "ai"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := out.(rpc.NoteDeleteResult).Deleted; got != 1 {
+		t.Fatalf("deleted count=%d, want 1", got)
+	}
+	notes, err := db.ListNotes(ctx, store.NoteFilter{Author: "ai"})
+	if err != nil || len(notes) != 1 || notes[0].ChatID == nil || *notes[0].ChatID != hidden {
+		t.Fatalf("hidden note changed: %+v %v", notes, err)
+	}
+	out, err = d.noteDeleteByAuthor(ctx, params(t, rpc.NoteDeleteByAuthorParams{Author: "ai"}))
+	if err != nil || out.(rpc.NoteDeleteResult).Deleted != 0 {
+		t.Fatalf("hidden count leaked: %+v %v", out, err)
+	}
+}

@@ -2,12 +2,15 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
+	"time"
 )
 
 type adminTelegram struct {
@@ -234,5 +237,55 @@ func TestAdminReferenceHidesClosedAndUnknownNumericIDs(t *testing.T) {
 			base.missing = false
 			sameRPCError(t, closed, unknown)
 		})
+	}
+}
+
+type kickJournalTelegram struct {
+	*adminTelegram
+	selfCalls atomic.Int32
+	reached   chan struct{}
+}
+
+func (f *kickJournalTelegram) Self(ctx context.Context) (*rpc.User, error) {
+	user, err := f.fakeTelegram.Self(ctx)
+	if f.selfCalls.Add(1) == 3 {
+		close(f.reached)
+	}
+	return user, err
+}
+
+func TestKickRefusesRevocationDuringJournal(t *testing.T) {
+	d, base, db, _ := accessTestDaemon(t)
+	d.opts.Access = nil
+	base.resolved = &rpc.Chat{ID: -77, Type: "supergroup"}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.admin": []byte(`[-77]`)}); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshAccess(ctx)
+	fake := &kickJournalTelegram{adminTelegram: &adminTelegram{fakeTelegram: base}, reached: make(chan struct{})}
+	d.opts.Telegram = fake
+	d.deletionsMu.Lock()
+	done := make(chan error, 1)
+	go func() {
+		_, err := d.chatAdmin(ctx, "kick", params(t, adminParams{Chat: "-77", User: "5"}))
+		done <- err
+	}()
+	select {
+	case <-fake.reached:
+	case <-ctx.Done():
+		d.deletionsMu.Unlock()
+		t.Fatal("kick did not reach journal")
+	}
+	if err := db.SetSettings(ctx, map[string]json.RawMessage{"access.admin": []byte(`[]`)}); err != nil {
+		d.deletionsMu.Unlock()
+		t.Fatal(err)
+	}
+	d.refreshAccess(ctx)
+	d.deletionsMu.Unlock()
+	err := <-done
+	if writeCode(t, err) != rpc.CodeWriteDisabled || fake.calls != 0 {
+		t.Fatalf("kick after revoke: %v calls=%d", err, fake.calls)
 	}
 }

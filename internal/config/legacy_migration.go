@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 
 	"github.com/pelletier/go-toml/v2"
@@ -58,7 +59,30 @@ func WithLegacyConfigLock(path string, action func(*LockedLegacyConfig) error) e
 
 // CheckUnchanged checks an unmodified configuration before finishing migration.
 func (c *LockedLegacyConfig) CheckUnchanged() error {
-	current, readErr := os.ReadFile(c.path)
+	entry, err := os.Lstat(c.path)
+	if errors.Is(err, os.ErrNotExist) {
+		if c.Exists {
+			return invalid("config file changed during migration")
+		}
+		return nil
+	}
+	if err != nil || !entry.Mode().IsRegular() || !c.Exists {
+		return invalid("config file changed during migration")
+	}
+	f, err := os.Open(c.path)
+	if err != nil {
+		return invalid("config file changed during migration")
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || !os.SameFile(entry, info) {
+		return invalid("config file changed during migration")
+	}
+	current, readErr := io.ReadAll(f)
+	after, statErr := os.Lstat(c.path)
+	if statErr != nil || !after.Mode().IsRegular() || !os.SameFile(info, after) {
+		return invalid("config file changed during migration")
+	}
 	if errors.Is(readErr, os.ErrNotExist) {
 		if c.Exists {
 			return invalid("config file changed during migration")

@@ -59,11 +59,11 @@ func (d *daemon) resolvePerson(ctx context.Context, value string, allowPhone, wr
 		return chatref.Ref{}, rpc.Chat{}, err
 	}
 	ref, _ := chatref.Parse(value)
-	if ref.Kind == chatref.ID && !d.policy().Allowed(ref.ID) {
-		return ref, rpc.Chat{}, rpc.ErrUnknownChatID()
-	}
 	if err := d.requireAccount(ctx); err != nil {
 		return ref, rpc.Chat{}, err
+	}
+	if ref.Kind == chatref.ID && !d.policy().Allowed(ref.ID) {
+		return ref, rpc.Chat{}, rpc.ErrUnknownChatID()
 	}
 	chat, err := d.telegram(ctx).Resolve(ctx, ref)
 	if err != nil {

@@ -257,7 +257,16 @@ func (d *daemon) noteDeleteByAuthor(ctx context.Context, params json.RawMessage)
 	if err := decodeParams(params, &p); err != nil {
 		return nil, err
 	}
-	count, err := d.store.DeleteNotesByAuthor(ctx, p.Author)
+	policy := d.policy()
+	d.accessMu.RLock()
+	if d.accessSnapshot != nil {
+		policy = *d.accessSnapshot
+	}
+	if d.legacyAccessPresent() || d.legacyConfigPresent() {
+		policy = access.Denied()
+	}
+	count, err := d.store.DeleteVisibleNotesByAuthor(ctx, p.Author, chatFilter(policy))
+	d.accessMu.RUnlock()
 	if err != nil {
 		return nil, storeError(err)
 	}
