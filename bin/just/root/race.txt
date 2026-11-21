@@ -1,0 +1,7 @@
+    Runs all tests of the module with the Go race detector.
+
+  What runs
+    1. go test -race ./...
+
+    It takes about two minutes and is not part of just test or just check.
+    Run it only when the owner asks for it.

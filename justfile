@@ -89,6 +89,16 @@ test help="":
     set -x
     go test ./...
 
+# Run the tests with the race detector, only on the owner's command
+[group('checks')]
+[arg("help", long="help", short="h", value="1")]
+race help="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ -z "{{ help }}" ]] || exec bash bin/lib/recipe-help.sh race
+    set -x
+    go test -race ./...
+
 # Format check, vet and tests in a row, as before a commit
 [group('checks')]
 [arg("help", long="help", short="h", value="1")]

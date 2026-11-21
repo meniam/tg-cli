@@ -20,6 +20,7 @@
     just fmt                    Format the code with gofmt
     just vet                    Static analysis with go vet
     just test                   Run the tests
+    just race                   Run the tests with the race detector, only on the owner's command
     just check                  Format check, vet and tests in a row, as before a commit
 
   Maintenance
