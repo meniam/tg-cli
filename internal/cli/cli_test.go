@@ -770,13 +770,61 @@ func (e *testEnv) stopDaemon(d *daemonRun) {
 	}
 }
 
-func (e *testEnv) savedProfile(name string) config.Profile {
+func (e *testEnv) setProfileSettings(name string, values map[string]json.RawMessage) {
 	e.t.Helper()
-	cfg, err := config.Load(filepath.Join(e.home, ".config", "tg-cli", "config.toml"))
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), name, daemon.DefaultFileNames())
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	return cfg.Profiles[name]
+	err = daemon.WithProfileDatabase(paths, func(db daemon.ProfileDatabase) error { return db.SetSettings(context.Background(), values) })
+	if err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+func (e *testEnv) setting(name string) json.RawMessage {
+	e.t.Helper()
+	params, err := json.Marshal(rpc.SettingsGetParams{Key: name})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	value, err := daemon.OfflineSettings(context.Background(), filepath.Join(e.home, ".config", "tg-cli", "config.toml"), e.home, "default", rpc.MethodSettingsGet, params, nil)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return value.(rpc.SettingValue).Value
+}
+
+func (e *testEnv) savedProfile(name string) config.Profile {
+	e.t.Helper()
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), name, daemon.DefaultFileNames())
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	if _, err := os.Stat(paths.Database); os.IsNotExist(err) {
+		return config.Profile{}
+	} else if err != nil {
+		e.t.Fatal(err)
+	}
+	var profile config.Profile
+	err = daemon.WithProfileDatabase(paths, func(db daemon.ProfileDatabase) error {
+		values, err := db.Settings(context.Background())
+		if err != nil {
+			return err
+		}
+		for key, dst := range map[string]*string{"profile.client": &profile.Client, "profile.device": &profile.Device, "profile.transport": &profile.Transport, "profile.proxy": &profile.Proxy} {
+			if raw, ok := values[key]; ok {
+				if err := json.Unmarshal(raw, dst); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return profile
 }
 
 func (e *testEnv) usePreset() {
@@ -806,9 +854,9 @@ func TestStartWithClientPresetAndRemembersIt(t *testing.T) {
 	if got := e.savedProfile("default").Client; got != "desktop" {
 		t.Fatalf("saved preset %q", got)
 	}
-	info, err := os.Stat(filepath.Join(e.home, ".config", "tg-cli", "config.toml"))
+	info, err := os.Stat(filepath.Join(e.dbRoot(), "default", "store.db"))
 	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("config permissions: %v, %v", info, err)
+		t.Fatalf("database permissions: %v, %v", info, err)
 	}
 	d = e.startDaemon()
 	e.mu.Lock()

@@ -153,52 +153,32 @@ func TestValidateSettingPairs(t *testing.T) {
 }
 
 func TestTemplateDocumentedSettingDefaults(t *testing.T) {
-	section := ""
-	seen := map[string]bool{}
-	for _, line := range strings.Split(Template(), "\n") {
-		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "#"))
-		switch line {
-		case "[behavior]", "[background_sync]", "[semantic_search]":
-			section = strings.Trim(line, "[]")
-			continue
-		case "[profiles.default]":
-			section = "profile"
-			continue
-		}
-		name, value, ok := strings.Cut(line, " = ")
-		if !ok || strings.ContainsAny(name, " \t") {
-			continue
-		}
-		full := section + "." + name
-		// These examples intentionally demonstrate non-default values.
-		switch full {
-		case "behavior.expect_user", "profile.client", "profile.device", "profile.proxy":
-			continue
-		}
-		key, ok := LookupSetting(full)
-		if !ok {
-			continue
-		}
-		parsed, err := ParseSettingJSON(full, json.RawMessage(value))
-		if err != nil {
-			t.Fatalf("template %s: %v", full, err)
-		}
-		if string(parsed) != string(key.Default) {
-			t.Errorf("template %s = %s, default %s", full, parsed, key.Default)
-		}
-		seen[full] = true
+	expected := map[string]string{
+		"behavior.throttle_percent": `60`, "behavior.flood_autowait": `"10s"`, "behavior.expect_user": `""`,
+		"background_sync.enabled": `false`, "background_sync.window_start": `"08:00"`, "background_sync.window_end": `"20:00"`, "background_sync.interval_min": `"40m"`, "background_sync.interval_max": `"3h"`, "background_sync.page_pause_min": `"2s"`, "background_sync.page_pause_max": `"8s"`,
+		"semantic_search.enabled": `false`, "semantic_search.ollama_url": `"http://127.0.0.1:11434"`, "semantic_search.model": `"bge-m3"`, "semantic_search.batch": `16`, "semantic_search.interval": `"10m"`, "semantic_search.min_similarity": `0.5`,
+		"profile.client": `""`, "profile.device": `""`, "profile.transport": `"tcp"`, "profile.proxy": `"none"`,
 	}
 	for _, key := range SettingKeys() {
-		if strings.HasPrefix(key.Name, "access.") || key.Name == "behavior.expect_user" || key.Name == "profile.client" || key.Name == "profile.device" || key.Name == "profile.proxy" {
+		if strings.HasPrefix(key.Name, "access.") {
 			continue
 		}
-		if !seen[key.Name] {
-			t.Errorf("template has no default assignment for %s", key.Name)
+		if _, ok := expected[key.Name]; !ok {
+			t.Errorf("missing expected default for %s", key.Name)
 		}
 	}
-	for _, comment := range []string{`# Default: "" (no check)`, `# Default: "" (not chosen:`, `# Default: "" (the Telegram client`, `# Default: "" (no proxy; "none" also means no proxy)`} {
-		if !strings.Contains(Template(), comment) {
-			t.Errorf("template missing %q", comment)
+	for name, want := range expected {
+		key, ok := LookupSetting(name)
+		if !ok || string(key.Default) != want {
+			t.Errorf("%s default = %s, want %s", name, key.Default, want)
+		}
+		if ok && key.Validate(key.Default) != nil {
+			t.Errorf("invalid default for %s", name)
+		}
+	}
+	for _, section := range []string{"[behavior]", "[background_sync]", "[semantic_search]", "[profiles.default]"} {
+		if strings.Contains(Template(), section) {
+			t.Errorf("template contains legacy section %s", section)
 		}
 	}
 }

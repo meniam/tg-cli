@@ -161,23 +161,23 @@ func TestInvalidSemanticSearchStopsBeforeClientAndLauncher(t *testing.T) {
 // and the environment through `daemon start --foreground` into daemon.Options.
 func TestSemanticSearchReachesDaemonOptions(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		file string
-		env  map[string]string
-		want daemon.SemanticSearchConfig
+		name   string
+		values map[string]json.RawMessage
+		env    map[string]string
+		want   daemon.SemanticSearchConfig
 	}{
-		{"off by default", "", nil, defaultSemanticSearch},
-		{"file and environment", "[semantic_search]\nenabled = false\nmodel = \"file-model\"\nbatch = 32\n", map[string]string{
+		{"off by default", nil, nil, defaultSemanticSearch},
+		{"database and environment", map[string]json.RawMessage{"semantic_search.enabled": []byte("false"), "semantic_search.model": []byte(`"file-model"`), "semantic_search.batch": []byte("32")}, map[string]string{
 			"TG_CLI_SEMANTIC_SEARCH_ENABLED":  "true",
 			"TG_CLI_SEMANTIC_SEARCH_INTERVAL": "2h",
 		}, daemon.SemanticSearchConfig{Enabled: true, OllamaURL: "http://127.0.0.1:11434", Model: "file-model", Batch: 32, Interval: 2 * time.Hour, MinSimilarity: 0.5}},
-		{"threshold from file", "[semantic_search]\nmin_similarity = 0.6\n", nil, daemon.SemanticSearchConfig{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute, MinSimilarity: 0.6}},
-		{"threshold from environment", "[semantic_search]\nmin_similarity = 0.6\n", map[string]string{"TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY": "0"}, daemon.SemanticSearchConfig{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute}},
+		{"threshold from database", map[string]json.RawMessage{"semantic_search.min_similarity": []byte("0.6")}, nil, daemon.SemanticSearchConfig{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute, MinSimilarity: 0.6}},
+		{"threshold from environment", map[string]json.RawMessage{"semantic_search.min_similarity": []byte("0.6")}, map[string]string{"TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY": "0"}, daemon.SemanticSearchConfig{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t)
-			if tc.file != "" {
-				writeConfig(t, e, tc.file)
+			if tc.values != nil {
+				e.setProfileSettings("default", tc.values)
 			}
 			for key, value := range tc.env {
 				e.env[key] = value
@@ -185,9 +185,11 @@ func TestSemanticSearchReachesDaemonOptions(t *testing.T) {
 			var received daemon.Options
 			called := false
 			previous := runDaemon
-			runDaemon = func(_ context.Context, opts daemon.Options) error {
-				received, called = opts, true
-				return nil
+			runDaemon = func(ctx context.Context, opts daemon.Options) error {
+				called = true
+				err := daemon.WithProfileDatabase(opts.Paths, func(db daemon.ProfileDatabase) error { return opts.Prepare(ctx, db, &opts) })
+				received = opts
+				return err
 			}
 			t.Cleanup(func() { runDaemon = previous })
 			var stdout, stderr safeBuffer
@@ -203,30 +205,36 @@ func TestSemanticSearchReachesDaemonOptions(t *testing.T) {
 	}
 }
 
-// TestConfigShowListsSemanticSearch keeps `config show` complete: the section is
-// printed as read from the file, with the defaults for what the file omits.
+// TestConfigShowListsSemanticSearch checks that settings move from config show to the registry.
 func TestConfigShowListsSemanticSearch(t *testing.T) {
-	e := newEnv(t)
-	for name, text := range map[string]string{
-		"defaults": "",
-		"file":     "[semantic_search]\nenabled = true\nmodel = \"gemma\"\nbatch = 64\n",
+	for _, tc := range []struct {
+		name                  string
+		values                map[string]json.RawMessage
+		enabled, model, batch string
+	}{
+		{"defaults", nil, "false", `"bge-m3"`, "16"},
+		{"database", map[string]json.RawMessage{"semantic_search.enabled": []byte("true"), "semantic_search.model": []byte(`"gemma"`), "semantic_search.batch": []byte("64")}, "true", `"gemma"`, "64"},
 	} {
-		t.Run(name, func(t *testing.T) {
-			writeConfig(t, e, text)
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			if tc.values != nil {
+				e.setProfileSettings("default", tc.values)
+			}
 			r := e.run("config", "show")
 			if r.code != exitcode.OK {
-				t.Fatalf("show: %d %s %s", r.code, r.stdout, r.stderr)
+				t.Fatalf("show: %d %s", r.code, r.stdout)
 			}
-			var got configShowResult
-			if err := json.Unmarshal(parse(t, r).Data, &got); err != nil {
+			var data map[string]json.RawMessage
+			if err := json.Unmarshal(parse(t, r).Data, &data); err != nil {
 				t.Fatal(err)
 			}
-			want := configSemanticSearchResult{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: "10m", MinSimilarity: 0.5}
-			if name == "file" {
-				want.Enabled, want.Model, want.Batch = true, "gemma", 64
+			if _, ok := data["semantic_search"]; ok {
+				t.Fatal("settings in config show")
 			}
-			if got.SemanticSearch != want {
-				t.Fatalf("semantic_search = %+v, want %+v", got.SemanticSearch, want)
+			for key, want := range map[string]string{"semantic_search.enabled": tc.enabled, "semantic_search.ollama_url": `"http://127.0.0.1:11434"`, "semantic_search.model": tc.model, "semantic_search.batch": tc.batch, "semantic_search.interval": `"10m"`, "semantic_search.min_similarity": "0.5"} {
+				if got := string(e.setting(key)); got != want {
+					t.Errorf("%s = %s, want %s", key, got, want)
+				}
 			}
 		})
 	}

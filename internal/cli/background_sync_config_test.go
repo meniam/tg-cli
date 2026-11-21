@@ -202,17 +202,17 @@ func TestInvalidBackgroundSyncStopsBeforeClientAndLauncher(t *testing.T) {
 // and the environment through `daemon start --foreground` into daemon.Options.
 func TestBackgroundSyncReachesDaemonOptions(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		file string
-		env  map[string]string
-		want daemon.BackgroundSyncConfig
+		name   string
+		values map[string]json.RawMessage
+		env    map[string]string
+		want   daemon.BackgroundSyncConfig
 	}{
-		{"off by default", "", nil, daemon.BackgroundSyncConfig{
+		{"off by default", nil, nil, daemon.BackgroundSyncConfig{
 			WindowStart: 8 * time.Hour, WindowEnd: 20 * time.Hour,
 			IntervalMin: 40 * time.Minute, IntervalMax: 3 * time.Hour,
 			PagePauseMin: 2 * time.Second, PagePauseMax: 8 * time.Second,
 		}},
-		{"file and environment", "[background_sync]\nenabled = false\nwindow_end = \"19:30\"\n", map[string]string{
+		{"database and environment", map[string]json.RawMessage{"background_sync.enabled": []byte("false"), "background_sync.window_end": []byte(`"19:30"`)}, map[string]string{
 			"TG_CLI_BACKGROUND_SYNC_ENABLED":      "true",
 			"TG_CLI_BACKGROUND_SYNC_INTERVAL_MAX": "2h",
 		}, daemon.BackgroundSyncConfig{
@@ -224,8 +224,8 @@ func TestBackgroundSyncReachesDaemonOptions(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t)
-			if tc.file != "" {
-				writeConfig(t, e, tc.file)
+			if tc.values != nil {
+				e.setProfileSettings("default", tc.values)
 			}
 			for key, value := range tc.env {
 				e.env[key] = value
@@ -233,9 +233,11 @@ func TestBackgroundSyncReachesDaemonOptions(t *testing.T) {
 			var received daemon.Options
 			called := false
 			previous := runDaemon
-			runDaemon = func(_ context.Context, opts daemon.Options) error {
-				received, called = opts, true
-				return nil
+			runDaemon = func(ctx context.Context, opts daemon.Options) error {
+				called = true
+				err := daemon.WithProfileDatabase(opts.Paths, func(db daemon.ProfileDatabase) error { return opts.Prepare(ctx, db, &opts) })
+				received = opts
+				return err
 			}
 			t.Cleanup(func() { runDaemon = previous })
 			var stdout, stderr safeBuffer
@@ -251,30 +253,36 @@ func TestBackgroundSyncReachesDaemonOptions(t *testing.T) {
 	}
 }
 
-// TestConfigShowListsBackgroundSync keeps `config show` complete: the section is
-// printed as read from the file, with the defaults for what the file omits.
+// TestConfigShowListsBackgroundSync checks that settings move from config show to the registry.
 func TestConfigShowListsBackgroundSync(t *testing.T) {
-	e := newEnv(t)
-	for name, text := range map[string]string{
-		"defaults": "",
-		"file":     "[background_sync]\nenabled = true\nwindow_start = \"09:00\"\n",
+	for _, tc := range []struct {
+		name           string
+		values         map[string]json.RawMessage
+		enabled, start string
+	}{
+		{"defaults", nil, "false", `"08:00"`},
+		{"database", map[string]json.RawMessage{"background_sync.enabled": []byte("true"), "background_sync.window_start": []byte(`"09:00"`)}, "true", `"09:00"`},
 	} {
-		t.Run(name, func(t *testing.T) {
-			writeConfig(t, e, text)
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			if tc.values != nil {
+				e.setProfileSettings("default", tc.values)
+			}
 			r := e.run("config", "show")
 			if r.code != exitcode.OK {
-				t.Fatalf("show: %d %s %s", r.code, r.stdout, r.stderr)
+				t.Fatalf("show: %d %s", r.code, r.stdout)
 			}
-			var got configShowResult
-			if err := json.Unmarshal(parse(t, r).Data, &got); err != nil {
+			var data map[string]json.RawMessage
+			if err := json.Unmarshal(parse(t, r).Data, &data); err != nil {
 				t.Fatal(err)
 			}
-			want := configBackgroundSyncResult{WindowStart: "08:00", WindowEnd: "20:00", IntervalMin: "40m", IntervalMax: "3h", PagePauseMin: "2s", PagePauseMax: "8s"}
-			if name == "file" {
-				want.Enabled, want.WindowStart = true, "09:00"
+			if _, ok := data["background_sync"]; ok {
+				t.Fatal("settings in config show")
 			}
-			if got.BackgroundSync != want {
-				t.Fatalf("background_sync = %+v, want %+v", got.BackgroundSync, want)
+			for key, want := range map[string]string{"background_sync.enabled": tc.enabled, "background_sync.window_start": tc.start, "background_sync.window_end": `"20:00"`, "background_sync.interval_min": `"40m"`, "background_sync.interval_max": `"3h"`, "background_sync.page_pause_min": `"2s"`, "background_sync.page_pause_max": `"8s"`} {
+				if got := string(e.setting(key)); got != want {
+					t.Errorf("%s = %s, want %s", key, got, want)
+				}
 			}
 		})
 	}

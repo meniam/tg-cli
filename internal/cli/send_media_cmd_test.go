@@ -115,7 +115,7 @@ func TestSendMediaCLIDryRunAndHints(t *testing.T) {
 		hint string
 	}{
 		{"files disabled", rpc.NewError(rpc.CodeWriteDisabled, "sending files is disabled: ask the owner to set access.files"), 9, "ask the owner"},
-		{"chat disabled", rpc.ErrWriteDisabled(), 9, "write list"},
+		{"chat disabled", rpc.ErrWriteDisabled(), 9, "access.write"},
 		{"not found", rpc.NewError(rpc.CodeNotFound, "file not found"), 7, ""},
 		{"telegram", rpc.NewError(rpc.CodeTelegram, "MEDIA_INVALID"), 5, ""},
 		{"flood", &rpc.Error{Code: rpc.CodeFloodWait, Message: "FLOOD_WAIT", Data: map[string]any{"retry_after_seconds": 2}}, 6, ""},

@@ -36,8 +36,25 @@ func TestConfigPathAndShow(t *testing.T) {
 	if err := json.Unmarshal(parse(t, r).Data, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Profiles["default"].Proxy != "socks5://localhost:1080" || got.Profiles["default"].Client != "desktop" {
-		t.Fatalf("unexpected profile: %+v", got.Profiles["default"])
+	if got.DefaultProfile != "default" || got.DBDir != e.dbRoot() {
+		t.Fatalf("unexpected config: %+v", got)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(parse(t, r).Data, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if len(fields) != 4 {
+		t.Fatalf("unexpected config fields: %v", fields)
+	}
+	r = e.run("config", "migrate")
+	if r.code != exitcode.OK {
+		t.Fatalf("migrate: %d %s", r.code, r.stdout)
+	}
+	if got := e.savedProfile("default"); got.Client != "desktop" || got.Proxy != "socks5://alice:SECRET123@localhost:1080" {
+		t.Fatalf("settings not migrated: %+v", got)
+	}
+	if value := string(e.setting("profile.proxy")); value != `"[REDACTED]"` {
+		t.Fatalf("proxy not redacted: %s", value)
 	}
 }
 func TestConfigMigrateAndShow(t *testing.T) {
@@ -74,12 +91,15 @@ func TestConfigMigrateAndShow(t *testing.T) {
 	if r.code != exitcode.OK {
 		t.Fatalf("show: %d %s", r.code, r.stdout)
 	}
-	var got configShowResult
-	if err := json.Unmarshal(parse(t, r).Data, &got); err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(filepath.Join(dir, "device")); err != nil {
+		t.Fatalf("show changed legacy file: %v", err)
 	}
-	if got.Profiles["default"].Device != "Laptop" {
-		t.Fatal("show did not migrate profile")
+	r = e.run("config", "migrate")
+	if r.code != exitcode.Usage || !strings.Contains(r.stdout, "device") {
+		t.Fatalf("late legacy file: %d %s", r.code, r.stdout)
+	}
+	if got := e.savedProfile("default").Client; got != "desktop" {
+		t.Fatalf("migrated client changed: %q", got)
 	}
 }
 func TestConfigShowChecksAllSocketPaths(t *testing.T) {
@@ -106,7 +126,7 @@ func TestSchemaConfigKeys(t *testing.T) {
 	if err := json.Unmarshal(parse(t, r).Data, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc.SchemaVersion != 1 {
+	if doc.SchemaVersion != 2 {
 		t.Fatalf("schema version %d", doc.SchemaVersion)
 	}
 	var keys []string
@@ -116,26 +136,26 @@ func TestSchemaConfigKeys(t *testing.T) {
 	wantKeys := []string{
 		"home", "default_profile",
 		"files.database", "files.session", "files.log", "files.deletions", "files.access",
-		"behavior.throttle_percent", "behavior.flood_autowait", "behavior.expect_user",
-		"background_sync.enabled", "background_sync.window_start", "background_sync.window_end",
-		"background_sync.interval_min", "background_sync.interval_max",
-		"background_sync.page_pause_min", "background_sync.page_pause_max",
-		"semantic_search.enabled", "semantic_search.ollama_url", "semantic_search.model",
-		"semantic_search.batch", "semantic_search.interval", "semantic_search.min_similarity",
-		"voice_transcription.enabled", "voice_transcription.ffmpeg", "voice_transcription.max_voice_mb",
-		"voice_transcription.max_video_note_mb", "voice_transcription.max_video_mb", "voice_transcription.max_video_minutes",
-		"voice_transcription.daily_download_mb", "voice_transcription.daily_files", "voice_transcription.pause", "voice_transcription.threads",
-		"profiles.<profile>.client", "profiles.<profile>.device", "profiles.<profile>.transport", "profiles.<profile>.proxy",
 	}
 	if !reflect.DeepEqual(keys, wantKeys) {
 		t.Fatalf("config schema keys:\n got %q\nwant %q", keys, wantKeys)
 	}
-	for _, item := range doc.Config {
-		if item.Key == "behavior.expect_user" && item.Environment == "TG_CLI_EXPECT_USER" && item.Flag == "--expect-user" {
-			return
+	expected := map[string]bool{}
+	for _, key := range config.SettingKeys() {
+		expected[key.Name] = true
+	}
+	for _, item := range doc.Settings {
+		if !expected[item.Key] {
+			t.Errorf("unexpected setting %s", item.Key)
+		}
+		delete(expected, item.Key)
+		if item.Key == "behavior.expect_user" && (item.Environment != "TG_CLI_EXPECT_USER" || item.Flag != "--expect-user") {
+			t.Fatal("expect_user overrides missing")
 		}
 	}
-	t.Fatal("expect_user config schema missing")
+	if len(expected) != 0 {
+		t.Fatalf("missing settings: %v", expected)
+	}
 }
 
 func TestSchemaConfigCommands(t *testing.T) {

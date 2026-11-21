@@ -83,6 +83,11 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 			}
 			profiles = append(profiles, migrationProfile{name: name, paths: paths})
 		}
+		for _, profile := range profiles {
+			if err := checkDatabase(profile.paths); err != nil {
+				return err
+			}
+		}
 		// A completed migration with no legacy sources is a read-only no-op,
 		// even while another profile's daemon is running.
 		if len(standaloneNames) == 0 && cfg.Legacy.Behavior == nil && cfg.Legacy.BackgroundSync == nil && cfg.Legacy.SemanticSearch == nil && cfg.Legacy.Profiles == nil {
@@ -137,6 +142,9 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 			}
 			for i := range profiles {
 				p := &profiles[i]
+				if err := checkDatabase(p.paths); err != nil {
+					return err
+				}
 				p.prepared, err = PrepareLegacySettings(ctx, cfg.Legacy, p.name, configPath, p.paths.Access)
 				if err != nil {
 					return err
@@ -453,8 +461,9 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 		var ce *config.Error
 		var input *MigrationInputError
 		var legacy *LegacySettingsError
+		var conflict *FileConflictError
 		switch {
-		case errors.As(err, &input), errors.As(err, &legacy):
+		case errors.As(err, &input), errors.As(err, &legacy), errors.As(err, &conflict):
 			return result, err
 		case errors.As(err, &ce):
 			return result, &MigrationInputError{Source: configPath}
