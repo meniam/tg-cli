@@ -15,6 +15,7 @@ func (a *app) chatCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE:  a.chatList,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.ChatListResult](), Choices: chatTypeChoices(), ItemPath: "chats"})
+	list.Flags().String("cursor", "", "continue after a previous page")
 	list.Flags().Int("limit", 50, "maximum number of chats, 1 to 500")
 	list.Flags().String("type", "", "chat type: user, bot, group, supergroup or channel")
 
@@ -55,9 +56,16 @@ func (a *app) chatList(cmd *cobra.Command, _ []string) error {
 	}
 	limit, _ := cmd.Flags().GetInt("limit")
 	chatType, _ := cmd.Flags().GetString("type")
+	cursor, _ := cmd.Flags().GetString("cursor")
 	var res rpc.ChatListResult
-	if err := a.callOne(cmd, rpc.MethodChatList, rpc.ChatListParams{Limit: limit, Type: chatType}, &res); err != nil {
+	if err := a.callOne(cmd, rpc.MethodChatList, rpc.ChatListParams{Limit: limit, Type: chatType, Cursor: cursor}, &res); err != nil {
 		return err
 	}
-	return emitList(a, cmd, settings, res, res.Chats, "")
+	if err := emitList(a, cmd, settings, res, res.Chats, res.NextCursor); err != nil {
+		return err
+	}
+	if res.NextCursor != "" {
+		a.warn(cmd, "more chats: continue with --cursor %q", res.NextCursor)
+	}
+	return nil
 }

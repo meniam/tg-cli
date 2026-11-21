@@ -8,9 +8,9 @@ PR: —
 
 ## Status
 
-- Current status: in_progress
+- Current status: done (код влит в main; деплой по команде владельца)
 - Last update: 2026-11-21
-- Next safe step: Codex добавляет `--cursor` и `next_cursor` в `chat list`.
+- Next safe step: деплой по команде владельца, затем `tg chat list --type user --cursor ...` до конца списка.
 
 ## Context and sources
 
@@ -34,5 +34,5 @@ PR: —
 
 | Check | Command | Expected result | Status |
 | --- | --- | --- | --- |
-| Тесты | `go test -count=1 ./internal/tgclient ./internal/daemon ./internal/cli ./internal/rpc` | зелёные | not_run |
-| Полная проверка | `just check` | зелёная | not_run |
+| Тесты | `go test -count=1 ./internal/tgclient ./internal/daemon ./internal/cli ./internal/rpc` | зелёные | ok |
+| Полная проверка | `just check` | зелёная | ok |

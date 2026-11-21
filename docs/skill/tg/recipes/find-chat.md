@@ -21,7 +21,7 @@ The Daemon is running and the login exists (`tg daemon status`).
 ## Commands
 
 ```bash
-tg chat list --limit 100 --fields chats.id,chats.title,chats.type,chats.username
+tg chat list --limit 100 --fields next_cursor,chats.id,chats.title,chats.type,chats.username
 tg search "release" --scope chats                  # in the local database, no Telegram
 tg chat resolve @release_team                    # id, type and title by @username or link
 tg chat info -- -1001234567890                   # description, size, settings
@@ -29,7 +29,7 @@ tg chat info -- -1001234567890                   # description, size, settings
 
 ## Notes
 
-- `chat list` returns new chats first, `--limit` is 1 to 500. Chats closed by access lists are not in it.
+- `chat list` returns new chats first, `--limit` is 1 to 500. Only visible chats count. Pass `next_cursor` to `--cursor` with the same `--type` until the cursor is absent.
 - `tg search --scope chats` searches only among already saved chats. If a chat was never read, find it through `chat list` or `chat resolve`.
 - Put a negative id after `--`.
 

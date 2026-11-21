@@ -73,7 +73,7 @@ type audit05HoldingTelegram struct {
 	release chan struct{}
 }
 
-func (f *audit05HoldingTelegram) Chats(ctx context.Context, limit int, chatType string) ([]rpc.Chat, error) {
+func (f *audit05HoldingTelegram) Chats(ctx context.Context, limit int, chatType string, after rpc.DialogOffset, allowed func(int64) bool) ([]rpc.Chat, *rpc.DialogOffset, error) {
 	select {
 	case f.entered <- struct{}{}:
 	default:
@@ -81,9 +81,9 @@ func (f *audit05HoldingTelegram) Chats(ctx context.Context, limit int, chatType 
 	select {
 	case <-f.release:
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
-	return f.fakeTelegram.Chats(ctx, limit, chatType)
+	return f.fakeTelegram.Chats(ctx, limit, chatType, after, allowed)
 }
 
 // TestIdleStopEndsAnIdleDaemon is the behaviour of the decision: with a timeout

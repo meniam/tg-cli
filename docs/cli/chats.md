@@ -23,6 +23,7 @@ tg chat list [flags]
 <!-- schema:flags tg chat list -->
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
+| `--cursor` | string | `none` | continue after a previous page |
 | `--limit` | int | `50` | maximum number of chats, 1 to 500 |
 | `--type` | string | `none` | chat type: user, bot, group, supergroup or channel |
 <!-- /schema:flags -->
@@ -30,12 +31,15 @@ tg chat list [flags]
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon and a login. Chats closed by the access lists are absent. The list is topped up from Telegram until `--limit`, until the dialogs run out or until 500 dialogs have been requested, so with many closed chats it can be shorter than `--limit`.
+**Preconditions.** A running Daemon and a login. Chats closed by the access lists are absent. Only visible chats of the requested type count toward `--limit`.
+
+Pass `data.next_cursor` to `--cursor` with the same `--type` to continue. You can change `--limit`. Stop when the cursor is absent or empty. After a Daemon restart or a change to chat visibility, start again without a cursor.
 
 **Example.**
 
 ```sh
 tg chat list --limit 20 --type group
+tg chat list --type group --cursor "$next_cursor"
 tg chat list --limit 2 --format jsonl
 ```
 
@@ -45,9 +49,9 @@ tg chat list --limit 2 --format jsonl
 {"ok":true,"data":{"chats":[{"id":-1001234567890,"type":"supergroup","title":"Release team","username":"release_team","unread":3},{"id":987654321,"type":"user","title":"Alice","unread":0}]}}
 ```
 
-**Answer fields** (`data`): `chats` array, `chats.id` integer, `chats.type` string, `chats.title` string (untrusted), `chats.username` string (optional, untrusted), `chats.unread` integer.
+**Answer fields** (`data`): `chats` array, `chats.id` integer, `chats.type` string, `chats.title` string (untrusted), `chats.username` string (optional, untrusted), `chats.unread` integer, `next_cursor` string (optional).
 
-**Exit codes.** 0; 2 `--limit` outside 1 to 500, or an unknown `--type`; 3 no Daemon; 4 no login; 6 `FLOOD_WAIT` longer than the auto-wait.
+**Exit codes.** 0; 2 `--limit` outside 1 to 500, an unknown `--type`, or an invalid cursor; 3 no Daemon; 4 no login; 6 `FLOOD_WAIT` longer than the auto-wait.
 
 **Verification.** Unread message counts are returned in `unread`. Read the messages with [`message unread`](messages-read.md#tg-message-unread), including a forum topic with `--topic`; list unread chats with [`chat unread`](#tg-chat-unread). See [FEATURES.md](../../FEATURES.md), item 7.1.
 

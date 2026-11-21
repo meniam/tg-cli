@@ -284,17 +284,21 @@ func (f *fakeTelegram) LoginQR(ctx context.Context, show func(context.Context, r
 	return nil
 }
 
-func (f *fakeTelegram) Chats(_ context.Context, limit int, chatType string) ([]rpc.Chat, error) {
+func (f *fakeTelegram) Chats(_ context.Context, limit int, chatType string, after rpc.DialogOffset, allowed func(int64) bool) ([]rpc.Chat, *rpc.DialogOffset, error) {
 	f.audit01Record("Chats")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []rpc.Chat
-	for _, c := range f.chats {
-		if chatType == "" || c.Type == chatType {
+	for i := int(after.Skip); i < len(f.chats); i++ {
+		c := f.chats[i]
+		if (chatType == "" || c.Type == chatType) && allowed(c.ID) {
+			if len(out) == limit {
+				return out, &rpc.DialogOffset{Skip: int64(i)}, nil
+			}
 			out = append(out, c)
 		}
 	}
-	return out[:min(limit, len(out))], nil
+	return out, nil, nil
 }
 
 func (f *fakeTelegram) Members(context.Context, chatref.Ref, rpc.MembersParams) (rpc.MembersResult, error) {

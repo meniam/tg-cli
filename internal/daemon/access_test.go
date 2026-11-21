@@ -1,12 +1,16 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"tg-cli/internal/access"
@@ -169,18 +173,55 @@ func TestChatAccessRejectsDirectReferencesAndPreservesMissingError(t *testing.T)
 func TestChatListBackfillsAndPersistsOnlyVisibleChats(t *testing.T) {
 	d, tg, db, path := accessTestDaemon(t)
 	ctx := context.Background()
-	tg.chats = []rpc.Chat{{ID: 1, Type: "group", Title: "Hidden"}, {ID: 2, Type: "group", Title: "Visible"}, {ID: 3, Type: "group", Title: "Also visible"}}
-	writeAccess(t, path, `{"block":[1]}`)
-	result, err := d.chatList(ctx, params(t, rpc.ChatListParams{Limit: 1}))
+	const hidden = 987654321
+	tg.chats = []rpc.Chat{{ID: 1, Type: "group"}, {ID: 2, Type: "group"}, {ID: hidden, Type: "group", Title: "Private title"}, {ID: 3, Type: "group"}, {ID: 4, Type: "user"}, {ID: 5, Type: "group"}, {ID: 6, Type: "group"}}
+	writeAccess(t, path, `{"allow":[2,3,4,5,987654321],"block":[987654321]}`)
+	page := func(p rpc.ChatListParams) rpc.ChatListResult {
+		t.Helper()
+		result, err := d.chatList(ctx, params(t, p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result.(rpc.ChatListResult)
+	}
+	first := page(rpc.ChatListParams{Type: "group", Limit: 1})
+	if len(first.Chats) != 1 || first.Chats[0].ID != 2 || first.NextCursor == "" {
+		t.Fatalf("first page: %+v", first)
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(first.NextCursor)
 	if err != nil {
 		t.Fatal(err)
 	}
-	chats := result.(rpc.ChatListResult).Chats
-	if len(chats) != 1 || chats[0].ID != 2 || tg.chatsCalls != 2 {
-		t.Errorf("chats=%+v calls=%d", chats, tg.chatsCalls)
+	for _, v := range [][]byte{[]byte("987654321"), []byte("Private title"), binary.BigEndian.AppendUint64(nil, hidden), binary.LittleEndian.AppendUint64(nil, hidden)} {
+		if bytes.Contains(raw, v) || strings.Contains(first.NextCursor, string(v)) || strings.Contains(first.NextCursor, base64.RawURLEncoding.EncodeToString(v)) {
+			t.Fatal("cursor disclosed hidden chat")
+		}
 	}
-	if _, err := db.GetChat(ctx, 1); !errors.Is(err, store.ErrNotFound) {
-		t.Errorf("hidden chat stored: %v", err)
+	if json.Valid(raw) {
+		t.Fatal("cursor contains plaintext JSON")
+	}
+	last := page(rpc.ChatListParams{Type: "group", Limit: 2, Cursor: first.NextCursor})
+	if len(last.Chats) != 2 || last.Chats[0].ID != 3 || last.Chats[1].ID != 5 || last.NextCursor != "" {
+		t.Fatalf("last page: %+v", last)
+	}
+	bad := func(server *daemon, token, kind string) {
+		t.Helper()
+		_, err := server.chatList(ctx, params(t, rpc.ChatListParams{Cursor: token, Type: kind}))
+		sameRPCError(t, err, rpc.NewError(rpc.CodeInvalidParams, "cursor is not valid, start the list again"))
+	}
+	bad(d, first.NextCursor, "user")
+	bad(d, first.NextCursor[:10], "group")
+	raw[0] ^= 1
+	bad(d, base64.RawURLEncoding.EncodeToString(raw), "group")
+	other, _, _, otherPath := accessTestDaemon(t)
+	writeAccess(t, otherPath, `{"allow":[2,3,4,5,987654321],"block":[987654321]}`)
+	bad(other, first.NextCursor, "group")
+	writeAccess(t, path, `{"block":[3]}`)
+	bad(d, first.NextCursor, "group")
+	for _, id := range []int64{1, hidden, 6} {
+		if _, err := db.GetChat(ctx, id); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("hidden chat %d stored: %v", id, err)
+		}
 	}
 	if _, err := db.GetChat(ctx, 2); err != nil {
 		t.Errorf("visible chat not stored: %v", err)
