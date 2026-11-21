@@ -145,6 +145,7 @@ type voiceRun struct {
 	job       store.VoiceJob
 	cancel    context.CancelFunc
 	cancelled bool
+	stage     string // guarded by the worker mutex
 }
 
 // voiceWorker is the single worker of the voice queue. One goroutine takes the
@@ -516,7 +517,7 @@ func (w *voiceWorker) status(ctx context.Context) (rpc.VoiceStatus, error) {
 	}
 	if w.current != nil {
 		j := w.current.job
-		st.Current = &rpc.VoiceCurrentJob{ChatID: j.ChatID, MessageID: j.MessageID, Kind: j.Kind, Source: j.Source, StartedAt: j.StartedAt}
+		st.Current = &rpc.VoiceCurrentJob{ChatID: j.ChatID, MessageID: j.MessageID, Kind: j.Kind, Source: j.Source, StartedAt: j.StartedAt, Stage: w.current.stage}
 	}
 	return st, nil
 }

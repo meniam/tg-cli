@@ -133,7 +133,7 @@ tg search "invoice" --scope chats,messages --prefix   # local database, no login
 echo "Follow up on Monday" | tg note add --chat @username --author ai --tag followup -
 ```
 
-**4. See what the daemon is doing.** `tg status` prints one text screen for a person: the account, the connection, the access lists, the size of the database, how many chats are loaded to their first message, the background load, the active jobs, the throttle and the events. It has no JSON form (`tg daemon status` has the same facts as JSON) and without a running daemon it exits with code 3.
+**4. See what the daemon is doing.** Run `tg status` for vector coverage, transcription queues and limits, history jobs, Telegram activity, storage and the daemon’s active settings. For machine-readable daemon state, use `tg daemon status`.
 
 ```sh
 tg status

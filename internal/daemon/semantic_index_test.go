@@ -460,7 +460,7 @@ func TestSemanticIndexOllamaFailuresBecomeStatusAndSearchStillWorks(t *testing.T
 			f.seedTwoConversations()
 			f.emb.set(func(e *fakeEmbedder) { e.infoErr = tc.err })
 			st := f.run()
-			if st.State != tc.state || st.Reason == "" {
+			if st.State != tc.state || st.Reason == "" || st.CoverageMeasured {
 				t.Fatalf("state %q reason %q, want %q with a reason", st.State, st.Reason, tc.state)
 			}
 			if strings.Contains(st.Reason, semanticMarker) {
@@ -491,7 +491,7 @@ func TestSemanticIndexFailedBatchKeepsStoredBatchesAndNextRunContinues(t *testin
 	f.x.cfg.Batch = 1
 	f.emb.set(func(e *fakeEmbedder) { e.embedErr = fmt.Errorf("%w: gone", embed.ErrUnavailable); e.failOnCall = 2 })
 	st := f.run()
-	if st.State != rpc.SemanticIndexUnavailable || st.Embedded != 1 || len(f.list()) != 1 {
+	if st.State != rpc.SemanticIndexUnavailable || !st.CoverageMeasured || st.Embedded != 1 || len(f.list()) != 1 {
 		t.Fatalf("after a failure in the second batch: state %q embedded %d stored %d", st.State, st.Embedded, len(f.list()))
 	}
 	_, _, seen := f.emb.counts()

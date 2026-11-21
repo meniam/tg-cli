@@ -152,6 +152,7 @@ func (x *semanticIndexer) reserveLocked() context.Context {
 	x.st.State = rpc.SemanticIndexIndexing
 	x.st.Reason = ""
 	x.st.Embedded, x.st.Removed = 0, 0
+	x.st.CoverageMeasured = false
 	x.st.StartedAt = &started
 	x.st.FinishedAt = nil
 	x.st.NextRunAt = nil
@@ -313,7 +314,10 @@ func (x *semanticIndexer) pass(ctx context.Context) outcome {
 		byKey[m.Key()] = m
 	}
 	jobs, indexed := x.plan(frags, byKey, info)
-	x.update(func(s *rpc.SemanticIndexStatus) { s.Model, s.ModelDigest, s.Indexed = info.Name, info.Digest, indexed })
+	x.update(func(s *rpc.SemanticIndexStatus) {
+		s.Model, s.ModelDigest, s.Indexed = info.Name, info.Digest, indexed
+		s.CoverageMeasured = true
+	})
 	return x.embedAll(ctx, jobs, text, info)
 }
 

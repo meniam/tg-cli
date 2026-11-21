@@ -7,7 +7,7 @@ One Daemon per profile holds the connection and the session, and the CLI sends i
 ```bash
 tg daemon start --client desktop   # background; the preset is saved in config.toml, no flag needed afterwards
 tg daemon status                   # profile, connection, login, active requests, background_sync block
-tg status                          # text screen for a person (not JSON): account, database, history, background load, jobs
+tg status                          # text dashboard: vectors, transcription, history, Telegram, storage, settings
 tg daemon logs --tail 50           # log of Daemon requests and errors for debugging (--follow tails it)
 tg auth login                      # the human runs this (! tg auth login): number, code, 2FA (or --qr)
 tg auth status                     # whether the account is logged in and who it is
@@ -19,11 +19,11 @@ tg auth status                     # whether the account is logged in and who it
 
 **Proxy.** `TG_CLI_PROXY='socks5://...' tg daemon start`. SOCKS5 works with TCP and WSS. An HTTP proxy `http://user:password@host:port` works only with WSS and `auto`; with it `auto` uses WSS at once, and the Basic password is sent to the proxy without TLS. MTProxy cannot be used with WSS and `auto`. Settings are saved in `[profiles.<name>]` of `config.toml`; `--proxy none` removes the proxy.
 
-**`tg status`.** It prints plain text for a person: the account, the connection, the database size and chat count, how many chats are loaded to their first message (people, in folders, others), the background load, active jobs, the remaining `FLOOD_WAIT` and the events. It is not for parsing: `--format json|jsonl|toon` gives code 2, and `tg daemon status` returns the same facts as JSON. It asks Telegram for nothing and works after login is lost (the line `Account  not signed in`).
+**`tg status`.** Shows the daemon’s state and active settings in five sections: vector index, transcription, history, Telegram and storage. It makes no Telegram request and works after login is lost. Use `tg daemon status` for machine-readable daemon state. Explicit `--format json|jsonl|toon` returns exit code 2.
 
 **Background load block.** `daemon status` has a `background_sync` block: `state` (`disabled`, `waiting_window`, `waiting_interval`, `running`), `next_run_at`, `last_run_at`, `last_result` and `last_chat_id`. The scheduled load is the owner's decision: it is off by default, the `[background_sync]` section of `config.toml` turns it on, and you do not turn it on or edit the config yourself. With `--idle-timeout` the Daemon may stop before a run, because waiting for the schedule does not count as activity.
 
-**Semantic search block.** `daemon status` has a `semantic_search` block (always present) and `tg status` a `Semantic` row: `disabled` while `[semantic_search]` is off, otherwise the indexer state (`idle`, `indexing`, `unavailable`, `model_missing`, `error`), the model and `indexed` of `total` fragments. `unavailable` means Ollama does not answer and `model_missing` that it lacks the model (`ollama pull bge-m3`); `tg search` keeps working by words in every state. Turning the feature on is the owner's decision (`[semantic_search] enabled = true` in `config.toml`, then restart the Daemon).
+**Semantic search block.** `daemon status` has a `semantic_search` block (always present) and `tg status` a `VECTOR INDEX` section: `disabled` while `[semantic_search]` is off, otherwise the indexer state (`idle`, `indexing`, `unavailable`, `model_missing`, `error`), the model and `indexed` of `total` fragments. `unavailable` means Ollama does not answer and `model_missing` that it lacks the model (`ollama pull bge-m3`); `tg search` keeps working by words in every state. Turning the feature on is the owner's decision (`[semantic_search] enabled = true` in `config.toml`, then restart the Daemon).
 
 **Status and failures.** `daemon status` shows `connection`, the selected `transport`, the current `active_transport`, the count `transport_switches`, `dc` and the proxy address without the secret. When the client is recreated, a request to Telegram gets code 10 `offline`; a write that was already admitted gets 30 seconds to finish, then its context is canceled, and the Daemon does not retry it itself. On a connection drop, a request to Telegram waits up to 15 seconds and may return code 10 `offline`; local operations remain available.
 

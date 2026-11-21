@@ -130,7 +130,7 @@ A fresh profile without a login and without `access.json`:
 
 ### tg status
 
-Prints a text dashboard for a person: what the Daemon is doing, who the account is, how full the local database is and how far the history load has come. The Daemon collects the numbers in one request (the `dashboard` method) that only reads: it makes no Telegram request, and the answer has chat IDs but no chat title or message text. The command prints the answer and adds nothing of its own.
+Shows the vector index, transcription queue, history, Telegram connection and local storage. Each section pairs the daemon's current state with the settings it started with, including environment overrides. The command reads one snapshot through the local `dashboard` method. It makes no Telegram request.
 
 ```text
 tg status [flags]
@@ -140,58 +140,56 @@ tg status [flags]
 No command flags.
 <!-- /schema:flags -->
 
-**Safety class:** `read`. Not dangerous. **Output formats:** `human`.
+**Safety class** `read`. **Output format** `human`.
 
-**Preconditions.** A running Daemon. No login and no connection: after a lost login the command still prints what the Daemon knows, and the `Account` row says `not signed in`.
+The daemon must be running. The status remains available while Telegram is offline or signed out. Use [daemon status](#tg-daemon-status) for machine-readable daemon state.
 
-The output is text and has no JSON form: an explicit `--format json`, `jsonl` or `toon` exits with code 2 before the Daemon is asked, `--human` and `--format human` are accepted and change nothing. For the same facts as JSON use [daemon status](#tg-daemon-status).
-
-**Example.**
-
-```sh
-tg status
-```
-
-**Output.**
+**Example output**
 
 ```text
-tg status  profile default  daemon pid 80307, up 3d 4h
+TG STATUS · default
+Telegram online · signed in as @name · PID 80307 · up 3d 4h
 
-Account      @name (id 114954417), signed in
-Connection   ready, tcp, dc 2, reconnects 0
-Access       lists off, writes allowed in 1 chat
-Database     107.3 MB, schema 9, 245 chats, 67583 messages
-History      4 of 245 chats loaded to the first message
-             people 3 of 27 | in folders 0 of 12 | others 1 of 206
-Background   on, window 08:00-20:00, waiting for the next run
-             next run 14:35, last run 11:02 (chat 123, done)
-Semantic     on, bge-m3, 6500 of 6500 fragments indexed, last run 11:20
-Voice        on, 3 queued, 12 done today, 48 MB, paused: budget until 2026-11-21 00:00
-Jobs         chat sync: none | chat full: none
-Throttle     no flood wait, 0 queued
-Events       12 in the last hour, 71052 stored
+VECTOR INDEX     Idle · 100.0%
+  Coverage       6,500 / 6,500 fragments · 0 remaining
+  Last run       0 embedded · 0 removed
+  Timing         last run 11:20 · next run 12:05
+  Settings       bge-m3 via Ollama · batch 16 · every 10m
+                 Minimum similarity 0.50
+
+TRANSCRIPTION    Paused · budget until 2026-11-21 00:00
+  Queue          3 waiting · 0 running
+  Outcomes       40 done · 0 failed · 0 skipped
+  Today          12 / 200 files · 48 / 2,000 MiB downloaded
+  Limits         Voice 30 MiB · video note 50 MiB · video 500 MiB / 120 min
+  Settings       4 threads · 3s between downloads
+
+HISTORY          4 / 245 chats loaded to the first message
+  Coverage       People 3/27 · folders 0/12 · other 1/206
+  Schedule       On · 08:00–20:00 · next run 14:35 · last run 11:02 (chat 123, done)
+  Settings       40m–3h between runs · 2s–8s between pages
+  Jobs           History sync idle · chat details idle
+
+TELEGRAM         TCP · DC 2 · 0 reconnects
+  Requests       0 active · 0 waiting · no flood wait
+  Settings       desktop preset · throttle 60% · flood auto-wait up to 10s
+                 Proxy off · idle timeout off
+  Access         Read filter off · writes allowed in 1 chat
+
+STORAGE          107.3 MB · schema 9
+  Local data     245 chats · 67,583 messages
+  Events         12 in the last hour · 71,052 stored
 ```
 
-**How to read the blocks.**
+- **Vector index.** Coverage counts indexed fragments of the current model. Run counters show fragments embedded and removed. If an indexing run fails, the section shows the reason, any coverage measured during the run and the retry time when known.
+- **Transcription.** Queue outcomes cover the saved jobs. Today's usage counts downloads, including files whose transcription failed. A running job shows its media type, processing stage and elapsed time. The last failure is available for the current daemon session. See [voice.md](voice.md).
+- **History.** A chat is complete when it has been loaded to its first message. The schedule shows the daily window and the next and last runs when known. Active history jobs show their source and progress.
+- **Telegram.** Shows the transport, RPC activity, throttle queue, flood wait and access policy. Proxy credentials are redacted.
+- **Storage.** Size is the main database file in decimal MB, excluding the write-ahead log. Chat and message counts follow the access policy, and deleted messages are excluded. Event counts cover the whole event table.
 
-- **Header.** The profile, the PID of the Daemon and its uptime (`3d 4h`, `4h 12m`, `1m 30s`).
-- **Account.** `@username (id N), signed in`, or the name when the account has no username. `not signed in` when nobody is logged in or the login was lost.
-- **Connection.** The state (`ready`, `connecting`, `disconnected`, `restarting` or `offline`), the transport (`auto (using wss)` when the Daemon picked it), the data center and the number of reconnects. `unavailable` when the client reports nothing.
-- **Access.** `lists off`, or `lists on (allow N, block M)` when the read filter is on, or `access file unreadable, every chat closed`; then `writes off` or `writes allowed in N chats`. The counts are those of [`daemon status`](#tg-daemon-status), and no ID is shown.
-- **Database.** The size of the `store.db` file in decimal megabytes (the write-ahead log is not counted), the schema version, and the number of chats and of messages that the access lists show. A closed chat is in no count; a message marked deleted is not counted either.
-- **History.** How many of the visible chats are loaded to their first message (`complete`), in total and in three groups: people (type `user`), chats the owner pinned or included in a folder, and the others, bots included. The groups are the ones the scheduled load picks from, in that order.
-- **Background.** The scheduled history load: `off (enable with [background_sync] enabled = true)`, or `on`, the window and the state (`waiting for the window to open`, `waiting for the next run`, `running`). The second line has the next run and the last run with its chat and result (`done`, `cancelled`, `failed` or `skipped`; a `skipped` run names no chat), or `no run yet`. The fields are those of the `background_sync` block of [`daemon status`](#tg-daemon-status).
-- **Semantic.** The semantic indexer: `off (enable with [semantic_search] enabled = true)`, or `on`, the Ollama model and how many fragments have a vector, then the state: `indexing` while a run is in progress, `last run HH:MM` when idle (`no run yet` before the first run, and `(cancelled)` after a cancelled one), or the failure with its reason, for example `unavailable (Ollama is not reachable at http://127.0.0.1:11434)` or `model missing (...)`. After a failure the counters are left out. The fields are those of the `semantic_search` block of [`daemon status`](#tg-daemon-status).
-- **Voice.** The local transcription queue: `off (enable with [voice_transcription] enabled = true)`, `on, engine not installed (missing ...)` when the speech engine or `ffmpeg` is not in place, or `on`, the jobs queued (and running, when one is), the jobs done and the megabytes downloaded today, `paused: budget until <time>` (or `paused: engine_missing` or `paused: offline`) while the queue waits, and `last failure: <reason>` after a failed or skipped job. The fields are those of the `voice` block of [`daemon status`](#tg-daemon-status).
-- **Jobs.** The active `chat sync` jobs, each with its chat, state, source (`manual` or `background`), pages and loaded messages, and the state of `chat full` while that job runs; `none` when idle.
-- **Throttle.** The rest of the account-wide `FLOOD_WAIT` pause, and the number of requests that wait in the throttle queue.
-- **Events.** The events of the stream stored in the last hour and in the whole `events` table.
+Clock times use the CLI's local time zone. Dates appear when a run falls on another day.
 
-Clock times are in the local time of the machine that runs `tg status`: `HH:MM` for today, the date and time for another day.
-
-**Exit codes.** 0; 2 a JSON format was requested; 3 no Daemon is running for the profile: stdout stays empty, and stderr says `daemon is not running` and `start it with tg daemon start` (with `--profile <name>` added when another profile was chosen); a Daemon that does not know the `dashboard` method, such as an older one, answers with an error envelope.
-
-**Verification.** The text is checked against golden files and the method against a fake Telegram client in tests; it was not run on a live account. See [FEATURES.md](../../FEATURES.md), item 12.4.
+**Exit codes** 0 on success. 2 when `--format json`, `jsonl` or `toon` is requested. 3 when the daemon is not running, with a start hint on stderr. An older daemon without the `dashboard` method returns an error envelope.
 
 ### tg daemon stop
 

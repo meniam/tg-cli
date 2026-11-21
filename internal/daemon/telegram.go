@@ -117,10 +117,12 @@ type Telegram interface {
 
 // TelegramConfig is what a Telegram client needs to be created.
 type TelegramConfig struct {
-	Network     netconf.Settings
-	AppID       int
-	AppHash     string
-	SessionPath string
+	// ClientPreset is the selected official preset, empty for an own application.
+	ClientPreset string
+	Network      netconf.Settings
+	AppID        int
+	AppHash      string
+	SessionPath  string
 	// StatePath is the profile database used for update checkpoints.
 	StatePath string
 	// DeviceModel is the device name Telegram shows for this session.

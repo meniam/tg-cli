@@ -31,6 +31,8 @@ const (
 	VoiceStateWorking = "working"
 	// VoiceStatePaused: the queue waits; VoiceStatus.Paused says why.
 	VoiceStatePaused = "paused"
+	// VoiceStateUnavailable: the dashboard could not read the queue.
+	VoiceStateUnavailable = "unavailable"
 )
 
 // Reasons the queue is paused, and the machine words a job ends with.
@@ -63,6 +65,7 @@ type VoiceCurrentJob struct {
 	Kind      string `json:"kind"`
 	Source    string `json:"source"`
 	StartedAt int64  `json:"started_at"`
+	Stage     string `json:"stage,omitempty"`
 }
 
 // VoiceStatus is the state of the voice queue. Every string is a machine word,

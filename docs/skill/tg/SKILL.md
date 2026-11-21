@@ -33,7 +33,7 @@ Details and reasons: [references/safety.md](references/safety.md).
 ```bash
 bash <skill-folder>/scripts/tg-doctor.sh   # one call: tg version, config path, Daemon, login, next step
 tg daemon status                   # profile, connection, login, active requests, background_sync block
-tg status                          # one text screen for a person (not JSON): account, database, history, background load, jobs
+tg status                          # text dashboard: vectors, transcription, history, Telegram, storage, settings
 tg auth status                     # whether the account is logged in and who it is
 ```
 
