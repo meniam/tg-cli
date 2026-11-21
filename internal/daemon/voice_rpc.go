@@ -74,6 +74,13 @@ func (d *daemon) voiceTarget(ctx context.Context, value string) (int64, error) {
 		if !policy.Allowed(ref.ID) {
 			return 0, rpc.ErrUnknownChatID()
 		}
+		known, err := d.store.ChatKnown(ctx, ref.ID)
+		if err != nil {
+			return 0, err
+		}
+		if !known {
+			return 0, rpc.ErrUnknownChatID()
+		}
 		return ref.ID, nil
 	case chatref.Username:
 		chat, err := d.store.FindChatByUsername(ctx, ref.Username)

@@ -649,3 +649,118 @@ func TestRestoreMigrationSourcesContinuesAfterConflict(t *testing.T) {
 		t.Fatalf("restore errors not combined: %v", err)
 	}
 }
+
+func TestSettingsMigrationConcurrentSourceChange(t *testing.T) {
+	for _, tc := range []struct{ source, when string }{
+		{"access", "before"}, {"access", "staged"}, {"access", "both"},
+		{"config", "before"}, {"config", "staged"}, {"config", "recreated"},
+	} {
+		t.Run(tc.source+"/"+tc.when, func(t *testing.T) {
+			home, cfg := migrationTestHome(t)
+			path := cfg
+			old, newer, newest := "[behavior]\nthrottle_percent=40\n", "[behavior]\nthrottle_percent=25\n", "[behavior]\nthrottle_percent=10\n"
+			if tc.source == "access" {
+				path = filepath.Join(home, "default", "access.json")
+				old, newer, newest = "{}", `{"block":[42]}`, `{"block":[42,43]}`
+			}
+			writeMigrationSource(t, path, old)
+			var staged string
+			save := func(name, content string) {
+				tmp := name + ".editor-tmp"
+				writeMigrationSource(t, tmp, content)
+				if err := os.Rename(tmp, name); err != nil {
+					t.Fatal(err)
+				}
+			}
+			rename := func(from, to string) error {
+				if from != path {
+					return os.Rename(from, to)
+				}
+				staged = to
+				if fi, err := os.Stat(filepath.Dir(to)); err != nil || fi.Mode().Perm() != 0700 {
+					t.Fatalf("staging directory permissions: %v %v", fi, err)
+				}
+				if tc.when == "before" {
+					save(from, newer)
+				}
+				if err := os.Rename(from, to); err != nil {
+					return err
+				}
+				if tc.when == "staged" || tc.when == "both" {
+					save(to, newer)
+				}
+				if tc.when == "both" || tc.when == "recreated" {
+					save(from, newest)
+				}
+				return nil
+			}
+			ctx := context.Background()
+			result, err := migrateSettings(ctx, cfg, home, "default", rename)
+			if err == nil || !strings.Contains(err.Error(), "source changed during the move") || !strings.Contains(err.Error(), path) {
+				t.Fatalf("expected conflict at %s, got %v", path, err)
+			}
+			want := newer
+			if tc.when == "both" || tc.when == "recreated" {
+				want = newest
+				retained := newer
+				if tc.when == "recreated" {
+					retained = old
+				}
+				data, e := os.ReadFile(staged)
+				if e != nil || string(data) != retained || !strings.Contains(err.Error(), staged) {
+					t.Fatalf("retained source %s: %q, %v, conflict %v", staged, data, e, err)
+				}
+			}
+			data, e := os.ReadFile(path)
+			if e != nil || string(data) != want {
+				t.Fatalf("latest source: %q, %v", data, e)
+			}
+			if rel, e := filepath.Rel(result.Backup, staged); e != nil || !filepath.IsLocal(rel) {
+				t.Fatalf("staged outside backup: %s", staged)
+			}
+			_, err = MigrateSettings(ctx, cfg, home, "default")
+			var legacy *LegacySettingsError
+			if !errors.As(err, &legacy) || !strings.Contains(err.Error(), path) {
+				t.Fatalf("retry missed Q8: %v", err)
+			}
+		})
+	}
+}
+
+func TestSettingsMigrationRetainsChangedSourceType(t *testing.T) {
+	for _, kind := range []string{"directory", "symlink"} {
+		t.Run(kind, func(t *testing.T) {
+			home, cfg := migrationTestHome(t)
+			path := filepath.Join(home, "default", "access.json")
+			writeMigrationSource(t, path, `{"block":[77]}`)
+			target := filepath.Join(home, "editor-source")
+			writeMigrationSource(t, target, `{"block":[77]}`)
+			_, err := migrateSettings(t.Context(), cfg, home, "default", func(from, to string) error {
+				if err := os.Remove(from); err != nil {
+					return err
+				}
+				if kind == "symlink" {
+					if err := os.Symlink(target, from); err != nil {
+						return err
+					}
+				} else if err := os.Mkdir(from, 0700); err != nil {
+					return err
+				}
+				return os.Rename(from, to)
+			})
+			var changed *changedSource
+			if !errors.As(err, &changed) {
+				t.Fatalf("wanted source conflict: %v", err)
+			}
+			entry, err := os.Lstat(path)
+			if err != nil || (kind == "directory" && !entry.IsDir()) || (kind == "symlink" && entry.Mode()&os.ModeSymlink == 0) {
+				t.Fatalf("lost %s: %v %v", kind, entry, err)
+			}
+			_, err = MigrateSettings(t.Context(), cfg, home, "default")
+			var legacy *LegacySettingsError
+			if !errors.As(err, &legacy) || legacy.Source != path {
+				t.Fatalf("retry missed Q8: %v", err)
+			}
+		})
+	}
+}

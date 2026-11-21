@@ -172,13 +172,6 @@ func (d *daemon) chatVoiceOn(ctx context.Context, params json.RawMessage) (any, 
 	if err != nil {
 		return nil, err
 	}
-	known, err := d.store.ChatKnown(ctx, chatID)
-	if err != nil {
-		return nil, err
-	}
-	if !known {
-		return nil, rpc.ErrUnknownChatID()
-	}
 	w, err := d.voiceQueue()
 	if err != nil {
 		return nil, err

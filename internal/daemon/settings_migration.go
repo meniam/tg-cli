@@ -91,6 +91,10 @@ func defaultMigrationSource(p *migrationProfile, legacy config.Legacy, configPat
 // MigrateSettings migrates all known profiles under the configuration and
 // profile locks. A partially committed migration refuses old sources on retry.
 func MigrateSettings(ctx context.Context, configPath, home, selected string) (SettingsMigrationResult, error) {
+	return migrateSettings(ctx, configPath, home, selected, os.Rename)
+}
+
+func migrateSettings(ctx context.Context, configPath, home, selected string, rename func(string, string) error) (SettingsMigrationResult, error) {
 	var result SettingsMigrationResult
 	err := config.WithLegacyConfigLock(configPath, func(doc *config.LockedLegacyConfig) error {
 		cfg := doc.Config
@@ -199,6 +203,21 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 				if err := checkDatabase(p.paths); err != nil {
 					return err
 				}
+				databasePath := p.paths.Database
+				if _, statErr := os.Stat(databasePath); errors.Is(statErr, os.ErrNotExist) {
+					databasePath = p.paths.LegacyDatabase
+				} else if statErr != nil {
+					return errors.New("cannot inspect profile database")
+				}
+				marked, err := store.SettingsMigratedAt(databasePath)
+				if err != nil {
+					return err
+				}
+				if marked {
+					if err := CheckNoLegacySettingsSources(p.paths.Access, cfg.Legacy); err != nil {
+						return fmt.Errorf("%s: %w", configPath, err)
+					}
+				}
 				p.prepared, err = PrepareLegacySettings(ctx, cfg.Legacy, p.name, configPath, p.paths.Access)
 				if err != nil {
 					return err
@@ -209,12 +228,6 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 				}
 				for _, source := range p.standalone {
 					p.prepared.Values[source.key] = source.value
-				}
-				databasePath := p.paths.Database
-				if _, statErr := os.Stat(databasePath); errors.Is(statErr, os.ErrNotExist) {
-					databasePath = p.paths.LegacyDatabase
-				} else if statErr != nil {
-					return errors.New("cannot inspect profile database")
 				}
 				existing, readErr := store.ReadOnlySettingsAt(ctx, databasePath)
 				if readErr != nil {
@@ -442,7 +455,7 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 					return err
 				}
 				if !now.AccessExists || now.AccessMode != p.prepared.AccessMode || !bytes.Equal(now.AccessData, p.prepared.AccessData) {
-					return &MigrationInputError{Source: p.paths.Access}
+					return &changedSource{path: p.paths.Access}
 				}
 			}
 			for i := range profiles {
@@ -482,10 +495,10 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 				}
 			}
 			var removed []removedSource
-			restore := func() error { return restoreRemovedSources(removed) }
+
 			removeSource := func(path string, data []byte, mode os.FileMode) error {
-				if err := os.Remove(path); err != nil {
-					return &MigrationInputError{Source: path}
+				if err := finishSource(result.Backup, path, data, mode, "", rename); err != nil {
+					return err
 				}
 				removed = append(removed, removedSource{path: path, data: data, mode: mode})
 				if err := syncDir(filepath.Dir(path)); err != nil {
@@ -497,26 +510,17 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 				p := &profiles[i]
 				if p.prepared.AccessExists {
 					if err := removeSource(p.paths.Access, p.prepared.AccessData, p.prepared.AccessMode); err != nil {
-						if restoreErr := restore(); restoreErr != nil {
-							return restoreErr
-						}
-						return err
+						return errors.Join(err, restoreRemovedSources(removed))
 					}
 				}
 				for _, source := range p.standalone {
 					if err := removeSource(source.path, source.raw, source.mode); err != nil {
-						if restoreErr := restore(); restoreErr != nil {
-							return restoreErr
-						}
-						return err
+						return errors.Join(err, restoreRemovedSources(removed))
 					}
 				}
 			}
-			if err := doc.RemoveLegacy(); err != nil {
-				if restoreErr := restore(); restoreErr != nil {
-					return restoreErr
-				}
-				return &MigrationInputError{Source: configPath}
+			if err := finishConfig(result.Backup, configPath, doc, rename); err != nil {
+				return errors.Join(err, restoreRemovedSources(removed))
 			}
 			result.Migrated = anySource
 			return nil
@@ -528,8 +532,9 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 		var legacy *LegacySettingsError
 		var conflict *FileConflictError
 		var sourceFailure *migrationSourceFailure
+		var changed *changedSource
 		switch {
-		case errors.As(err, &input), errors.As(err, &legacy), errors.As(err, &conflict), errors.As(err, &sourceFailure):
+		case errors.As(err, &changed), errors.As(err, &input), errors.As(err, &legacy), errors.As(err, &conflict), errors.As(err, &sourceFailure):
 			return result, err
 		case errors.As(err, &ce):
 			return result, &MigrationInputError{Source: configPath}

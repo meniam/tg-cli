@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
 )
@@ -258,7 +259,10 @@ func (m *chatFullSyncManager) selectChats(ctx context.Context, chat string, refr
 			return []store.FullSyncChat{candidate}, nil
 		}
 	}
-	return nil, rpc.NewError(rpc.CodeNotFound, rpc.ErrChatNotFound().Message)
+	if ref, err := chatref.Parse(chat); err == nil && ref.Kind == chatref.ID {
+		return nil, rpc.ErrUnknownChatID()
+	}
+	return nil, rpc.ErrChatNotFound()
 }
 
 // cancel stops the job after the chat it is reading. A job that is already

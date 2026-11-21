@@ -71,8 +71,17 @@ func validWriteIDs(ids []int) error {
 	return nil
 }
 
-// writeReference checks visibility before permission to write. Numeric IDs need
-// no Telegram lookup, while other references use the same resolution as reads.
+// checkNumericPeer makes a missing numeric peer indistinguishable from a closed one.
+func (d *daemon) checkNumericPeer(ctx context.Context, ref chatref.Ref) error {
+	_, err := d.telegram(ctx).Resolve(ctx, ref)
+	var rpcErr *rpc.Error
+	if errors.As(err, &rpcErr) && rpcErr.Code == rpc.CodeNotFound {
+		return rpc.ErrUnknownChatID()
+	}
+	return err
+}
+
+// writeReference checks visibility before permission to write.
 func (d *daemon) writeReference(ctx context.Context, value string, writing bool) (chatref.Ref, int64, error) {
 	ref, err := parseChatNoInvite(value)
 	if err != nil {
@@ -103,13 +112,8 @@ func (d *daemon) writeReference(ctx context.Context, value string, writing bool)
 	}
 	if writing && !policy.WriteAllowed(id) {
 		if ref.Kind == chatref.ID {
-			_, lookupErr := d.telegram(ctx).Resolve(ctx, ref)
-			if lookupErr != nil {
-				var rpcErr *rpc.Error
-				if errors.As(lookupErr, &rpcErr) && rpcErr.Code == rpc.CodeNotFound {
-					return ref, 0, rpc.ErrUnknownChatID()
-				}
-				return ref, 0, lookupErr
+			if err := d.checkNumericPeer(ctx, ref); err != nil {
+				return ref, 0, err
 			}
 		}
 		return ref, 0, rpc.ErrWriteDisabled()
@@ -351,6 +355,11 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 	from, fromID, err := d.writeReference(ctx, p.From, false)
 	if err != nil {
 		return nil, err
+	}
+	if from.Kind == chatref.ID && d.policy().Enabled() {
+		if err := d.checkNumericPeer(ctx, from); err != nil {
+			return nil, err
+		}
 	}
 	to, id, err := d.writeReference(ctx, p.To, true)
 	if err != nil {

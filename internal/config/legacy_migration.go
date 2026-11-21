@@ -56,10 +56,8 @@ func WithLegacyConfigLock(path string, action func(*LockedLegacyConfig) error) e
 	})
 }
 
-// RemoveLegacy removes old settings while preserving standalone comments and
-// every expression outside those sections. The caller must hold the lock and
-// verify that all settings were committed and backed up before calling it.
-func (c *LockedLegacyConfig) RemoveLegacy() error {
+// CheckUnchanged checks an unmodified configuration before finishing migration.
+func (c *LockedLegacyConfig) CheckUnchanged() error {
 	current, readErr := os.ReadFile(c.path)
 	if errors.Is(readErr, os.ErrNotExist) {
 		if c.Exists {
@@ -68,16 +66,6 @@ func (c *LockedLegacyConfig) RemoveLegacy() error {
 		current = nil
 	} else if readErr != nil || !c.Exists || !bytes.Equal(current, c.Content) {
 		return invalid("config file changed during migration")
-	}
-	updated, err := StripLegacy(c.Content)
-	if err != nil {
-		return err
-	}
-	if bytes.Equal(updated, c.Content) {
-		return nil
-	}
-	if err := writeAtomic(c.path, updated); err != nil {
-		return invalid("cannot update config file")
 	}
 	return nil
 }

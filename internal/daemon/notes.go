@@ -142,6 +142,20 @@ func (d *daemon) noteAdd(ctx context.Context, params json.RawMessage) (any, erro
 	default:
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "kind must be chat, person, or message")
 	}
+	// Numeric notes work offline. Under a visibility filter accept only
+	// locally known chats, so note creation cannot identify blocked IDs.
+	if note.ChatID != nil && policy.Enabled() {
+		ref, _ := chatref.Parse(p.Chat)
+		if ref.Kind == chatref.ID {
+			known, err := d.store.ChatKnown(ctx, *note.ChatID)
+			if err != nil {
+				return nil, err
+			}
+			if !known {
+				return nil, rpc.ErrChatNotFound()
+			}
+		}
+	}
 	stored, err := d.store.AddNote(ctx, note)
 	if err != nil {
 		return nil, storeError(err)
