@@ -1,463 +1,616 @@
-import { bindSettings } from "/settings.js";
+// Wiring: the session exchange, routing, the feed lifecycle and the event
+// stream. The viewer is read-only: it never sends, edits or marks anything.
+//
+// Navigation has three rules. The list is always a real entry behind a chat,
+// including after a direct link, so Back never leaves the viewer. A jump to one
+// message is an entry on top of the live chat view, which is kept and restored
+// when Back returns to the plain chat. And every switch of chat or target bumps
+// one generation, so a late answer can never draw over a newer selection.
+
+import { api, action, notify, node, initials, avatarTint } from "/api.js";
+import { createChatList, messageHref } from "/chatlist.js";
+import { createFeed } from "/feed.js";
+import { createSearch } from "/search.js";
+import { createDetails } from "/details.js";
 
 const byID = (id) => document.getElementById(id);
-const list = byID("chats");
-const timeline = byID("timeline");
-const messages = byID("messages");
-const searchForm = byID("search");
-const panel = byID("panel");
-const panelContent = byID("panel-content");
-const state = { chats: [], folders: [], folder: 0, chat: "", topic: 0, cursor: "", rows: [], version: 0 };
-const dayFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
-const timeFormat = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
+const OVERVIEW_LIMIT = 500;
+const LIST_STATE = { tg: "list" };
+const CHAT_STATE = { tg: "chat" };
 
-function node(tag, text = "", className = "") {
-  const element = document.createElement(tag);
-  element.textContent = text;
-  if (className) element.className = className;
-  return element;
-}
+const state = {
+  chats: [],
+  folders: [],
+  folder: 0,
+  chat: "",
+  chatTitle: "",
+  topic: 0,
+  rows: [],
+  cursor: "",
+  anchor: "",
+  // If a chat, topic or target changes, this number changes with it; a response
+  // that belongs to an older selection is dropped instead of drawn.
+  version: 0,
+  // The newest page of the open chat and its scroll offset, kept while a jump
+  // shows one narrow window instead.
+  liveView: null,
+  search: null,
+  globalSearch: null,
+  localSearch: null,
+  pins: [],
+  pinIndex: 0,
+  // Chats whose pinned preview the reader dismissed in this tab.
+  pinHidden: new Set(),
+  allowed: () => true,
+  jump: () => {},
+};
 
-function button(text, handler, className = "") {
-  const element = node("button", text, className);
-  element.type = "button";
-  element.addEventListener("click", handler);
-  return element;
-}
+const chatList = createChatList({
+  state,
+  onOpenChat: (chat) => {
+    if (state.search) chatList.closeResults();
+    navigate(messageHref(chat), CHAT_STATE);
+  },
+  onClearSearch: () => {
+    state.globalSearch = null;
+    byID("global-query").value = "";
+    byID("global-clear").hidden = true;
+  },
+});
 
-function notify(message) {
-  const status = byID("status");
-  status.textContent = message;
-  status.hidden = !message;
-}
+const search = createSearch({
+  state,
+  chatList,
+  hrefFor: (hit) => messageHref(hit.chat_id != null ? String(hit.chat_id) : state.chat, String(hit.id)),
+  onOpenHit: (hit) => {
+    const chat = hit.chat_id != null ? String(hit.chat_id) : state.chat;
+    // A hit inside the open chat replaces the live view, so keep it for Back.
+    if (chat === state.chat) saveLiveView();
+    navigate(messageHref(chat, String(hit.id)), CHAT_STATE);
+  },
+});
 
-async function api(method, params = {}, write = false) {
-  const headers = { "Content-Type": "application/json" };
-  if (write) headers["X-Tg-Web"] = "settings";
-  const response = await fetch("/api/" + method, { method: "POST", headers, body: JSON.stringify(params) });
-  if (!response.ok) {
-    if (response.status === 401) throw new Error("Session expired. Open the URL printed by tg web.");
-    throw new Error((await response.text()).trim() || response.statusText);
-  }
-  return response.json();
-}
+const details = createDetails({ state });
 
-function action(fn) {
-  return async (...args) => {
-    try {
-      notify("");
-      await fn(...args);
-    } catch (error) {
-      notify(error.message);
-    }
-  };
-}
+const feed = createFeed({
+  onOlder: action(() => loadHistory("", { older: true })),
+  onJump: (id) => jumpToMessage(id),
+});
+state.jump = (id) => jumpToMessage(id);
 
-function inFolder(chat, folder) {
-  if (!folder) return true;
-  if (folder.exclude?.some((peer) => peer.id === chat.chat_id)) return false;
-  if ([...(folder.pinned || []), ...(folder.include || [])].some((peer) => peer.id === chat.chat_id)) return true;
-  const rules = folder.rules;
-  if (!rules) return false;
-  if (rules.exclude_archived && chat.archived || rules.exclude_muted && chat.muted || rules.exclude_read && !chat.unread && !chat.unread_mark) return false;
-  return (chat.type === "user" && (chat.contact ? rules.contacts : rules.non_contacts)) ||
-    (chat.type === "bot" && rules.bots) || (chat.type === "channel" && rules.broadcasts) ||
-    (["group", "supergroup"].includes(chat.type) && rules.groups);
-}
-
-function renderChats() {
-  const folder = state.folders.find((item) => item.id === state.folder);
-  const folderPins = folder?.pinned?.map((peer) => peer.id) || [];
-  const isPinned = (chat) => folder ? folderPins.includes(chat.chat_id) : Boolean(chat.pinned);
-  const chats = state.chats.filter((chat) => inFolder(chat, folder));
-  chats.sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)) || (b.last_message?.date || 0) - (a.last_message?.date || 0));
-  list.replaceChildren(...chats.map((chat) => {
-    const title = chat.title || String(chat.chat_id);
-    const row = button("", () => route(String(chat.chat_id)), "chat");
-    if (String(chat.chat_id) === state.chat) row.setAttribute("aria-current", "true");
-    row.append(
-      node("span", Array.from(title)[0]?.toLocaleUpperCase() || "?", "avatar"),
-      node("strong", title),
-      node("small", chat.last_message?.date ? timeFormat.format(chat.last_message.date * 1000) : ""),
-      node("span", chat.last_message?.text || chat.type, "preview"),
-      node("small", [chat.pinned ? "Pinned" : "", chat.muted ? "Muted" : "", chat.unread || ""].filter(Boolean).join(" · ")),
-    );
-    return row;
-  }));
-  if (!chats.length) list.append(node("p", "No local chats in this folder.", "empty"));
-}
-
-function renderFolders() {
-  byID("folders").replaceChildren(...[{ id: 0, title: "All chats" }, ...state.folders].map((folder) => {
-    const tab = button(folder.title, () => {
-      state.folder = folder.id;
-      renderFolders();
-      if (!searchForm.elements.query.value.trim()) renderChats();
-    });
-    if (state.folder === folder.id) tab.setAttribute("aria-current", "true");
-    return tab;
-  }));
+/**
+ * A chat opened by a direct link may be missing from a truncated overview, so
+ * the open chat itself is always considered visible; everything else must be
+ * present in the policy-filtered overview.
+ */
+function refreshAllowed() {
+  const allowed = new Set(state.chats.map((chat) => String(chat.chat_id)));
+  state.allowed = (id) => allowed.has(String(id)) || String(id) === state.chat;
 }
 
 async function loadChats() {
-  const { chats } = await api("chat.overview", { limit: 500 });
-  state.chats = chats;
-  if (!searchForm.elements.query.value.trim()) renderChats();
+  const { chats } = await api("chat.overview", { limit: OVERVIEW_LIMIT });
+  state.chats = chats || [];
+  refreshAllowed();
+  chatList.render();
+  chatList.renderFolders();
 }
 
-function route(chat, message = "") {
-  closePanel();
-  const fragment = chat ? "#/chat/" + chat + (message ? "/" + message : "") : "";
+function overviewOf(chat) {
+  return state.chats.find((item) => String(item.chat_id) === chat);
+}
+
+/**
+ * A direct chat link has no entry behind it, so Back would leave the viewer. The
+ * list is inserted once as the previous entry; the marker in history.state keeps
+ * a reload from inserting it again.
+ */
+function ownDirectEntry() {
+  if (!/^#\/chat\//.test(location.hash) || history.state?.tg === "chat") return;
+  // capture first: pushState changes location.href, so reading it afterwards
+  // would push the list address and lose the direct chat and its anchor.
+  const target = location.pathname + location.hash;
+  history.replaceState(LIST_STATE, "", location.pathname);
+  history.pushState(CHAT_STATE, "", target);
+}
+
+/** Pushes a new address; an unchanged address only re-reads the route. */
+function navigate(fragment, navState = CHAT_STATE) {
   if (location.hash === fragment) {
-    void readRoute();
-  } else {
-    location.hash = fragment;
+    void readRoute(true);
+    return;
   }
+  history.pushState(navState, "", fragment || location.pathname);
+  void readRoute(true);
 }
 
-const readRoute = action(async () => {
+function showPartial(partial) {
+  // A compact affordance in the header, not a bar of its own: the remedy is in
+  // the tooltip and in Details, which the badge opens.
+  byID("history-badge").hidden = !partial;
+  state.historyPartial = partial;
+}
+
+function setHeader(chat) {
+  const overview = overviewOf(chat);
+  state.chatTitle = overview?.title || chat || "";
+  const title = state.chatTitle || "Messages";
+  byID("chat-title").textContent = title;
+  byID("chat-subtitle").textContent = chat ? "Local history" : "Pick a chat on the left";
+  const avatar = byID("chat-avatar");
+  avatar.textContent = initials(title);
+  if (chat) avatar.dataset.tint = avatarTint(chat);
+  else delete avatar.dataset.tint;
+  byID("open-details").disabled = !chat;
+  byID("search-chat").disabled = !chat;
+  byID("history-badge").disabled = !chat;
+  byID("back").hidden = !chat;
+  showPartial(Boolean(chat) && overview?.history_complete !== true);
+}
+
+/** Drops everything the previous chat showed, so no stale page can appear. */
+function resetConversation(chat) {
+  state.version++;
+  state.chat = chat;
+  state.chatTitle = "";
+  state.topic = 0;
+  state.rows = [];
+  state.cursor = "";
+  state.anchor = "";
+  state.liveView = null;
+  state.pins = [];
+  state.pinIndex = 0;
+  state.localSearch = null;
+  search.resetChat();
+  byID("options").hidden = true;
+  byID("pin-plate").hidden = true;
+  byID("unavailable").hidden = true;
+  feed.clear();
+  feed.setOlderVisible(false);
+  if (chat) feed.draw([], { chat });
+}
+
+/** Marks a chat unreadable: its content goes away, the reason stays. */
+function showUnavailable(message) {
+  state.rows = [];
+  state.cursor = "";
+  feed.clear();
+  feed.setOlderVisible(false);
+  const note = byID("unavailable");
+  note.hidden = false;
+  note.textContent = message;
+}
+
+/** Saves the live chat view before a jump replaces it with one window. */
+function saveLiveView() {
+  if (!state.chat || state.anchor || !state.rows.length) return;
+  state.liveView = {
+    chat: state.chat,
+    topic: state.topic,
+    rows: state.rows,
+    cursor: state.cursor,
+    scroll: feed.scrollTop(),
+  };
+}
+
+function restoreLiveView(view) {
+  state.anchor = "";
+  state.rows = view.rows;
+  state.cursor = view.cursor;
+  feed.draw(view.rows, { mode: "reset", chat: view.chat });
+  feed.setOlderVisible(Boolean(view.cursor));
+  feed.scrollTo(view.scroll);
+  markHighlight("");
+  state.liveView = null;
+}
+
+// popstate and hashchange both fire for one history move, and either can carry
+// an unchanged address: one route key keeps a single move from loading twice.
+let routedKey = null;
+
+const readRoute = action(async (force = false) => {
+  const key = location.hash + "|" + (history.state?.tg || "");
+  if (!force && key === routedKey) return;
+  routedKey = key;
   const match = /^#\/chat\/(-?\d+)(?:\/(\d+))?$/.exec(location.hash);
   const chat = match?.[1] || "";
-  state.chat = chat;
-  state.anchor = match?.[2] || "";
-  state.topic = 0;
-  state.cursor = "";
-  state.rows = [];
-  state.version++;
+  const anchor = match?.[2] || "";
+  const changed = chat !== state.chat;
+
+  if (changed) {
+    resetConversation(chat);
+  }
+  state.anchor = anchor;
   document.body.dataset.screen = chat ? "chat" : "list";
-  byID("details").disabled = !chat;
-  searchForm.querySelector(".scope").hidden = !chat;
-  const overview = state.chats.find((item) => String(item.chat_id) === chat);
-  byID("chat-title").textContent = overview?.title || chat || "Messages";
-  byID("partial").hidden = !chat || overview?.history_complete === true;
-  byID("pinned").hidden = true;
-  byID("options").hidden = true;
-  renderMessages();
-  if (!searchForm.elements.query.value.trim()) renderChats();
-  if (!chat) return;
-  await Promise.all([loadHistory(match[2]), loadChatInfo()]);
+  setHeader(chat);
+  chatList.render();
+
+  if (!chat) {
+    feed.clear();
+    return;
+  }
+  if (changed) {
+    await Promise.all([loadHistory(anchor), loadChatInfo()]);
+    return;
+  }
+  if (anchor) {
+    // A jump inside the open chat: an entry on top of the live view.
+    state.version++;
+    if (feed.scrollToMessage(anchor, "smooth")) {
+      markHighlight(anchor);
+      return;
+    }
+    await loadContext(anchor);
+    return;
+  }
+  // Back to the plain chat: the live view is closer than a fresh load.
+  const view = state.liveView;
+  if (view && view.chat === chat && view.topic === state.topic) {
+    restoreLiveView(view);
+    return;
+  }
+  state.version++;
+  await loadHistory();
 });
 
 async function loadChatInfo() {
   const version = state.version;
-  const info = await api("chat.info", { chat: state.chat });
-  if (version !== state.version || !info) return;
-  byID("chat-title").textContent = info.title || state.chat;
+  const chat = state.chat;
+  let info = null;
+  try {
+    info = await api("chat.info", { chat });
+  } catch (error) {
+    if (error.status === 401) throw error;
+    if (version !== state.version || chat !== state.chat) return;
+    if (error.status === 404 || error.status === 403) {
+      showUnavailable("This chat is not in the local database, or the access policy closes it.");
+    }
+    return;
+  }
+  if (version !== state.version || chat !== state.chat) return;
+  byID("chat-title").textContent = info.title || chat;
+  state.chatTitle = info.title || chat;
+  byID("chat-avatar").textContent = initials(state.chatTitle);
   const topics = byID("topics");
-  topics.replaceChildren(new Option("All topics", "0"), ...(info.topics || []).map((topic) => new Option(topic.title, topic.id)));
-  byID("options").hidden = !info.topics?.length;
-  const pinned = byID("pinned");
-  pinned.hidden = !info.pinned?.length;
-  pinned.replaceChildren(...(info.pinned || []).map((item) => button(item.text || ("Message " + item.id), () => route(state.chat, item.id))));
+  if (info.topics?.length) {
+    topics.replaceChildren(
+      new Option("All topics", "0"),
+      ...info.topics.map((topic) => new Option(topic.title || "Topic " + topic.id, topic.id)),
+    );
+    byID("options").hidden = false;
+  }
+  state.pins = info.pinned || [];
+  state.pinIndex = 0;
+  renderPinPlate();
 }
 
-async function loadHistory(anchor, older = false) {
+/**
+ * One pinned preview at a time, as in Web K: segment bars for how many pins the
+ * local database holds, the "Pinned Message" label, one ellipsized preview and
+ * a control for the rest. The plate is hidden per chat and can be dismissed
+ * locally; nothing here writes anywhere.
+ */
+function renderPinPlate() {
+  const plate = byID("pin-plate");
+  const pins = state.pins || [];
+  const dismissed = state.pinHidden.has(state.chat);
+  plate.hidden = !state.chat || !pins.length || dismissed;
+  if (plate.hidden) return;
+
+  const index = Math.min(state.pinIndex || 0, pins.length - 1);
+  state.pinIndex = index;
+  const pin = pins[index];
+
+  // Segment indicators: one bar per stored pin, the active one brighter.
+  const bars = byID("pin-bars");
+  bars.replaceChildren(...pins.slice(0, 4).map((_, bar) => {
+    const segment = node("span", "", "pin-bar");
+    if (bar === index) segment.classList.add("is-active");
+    return segment;
+  }));
+
+  byID("pin-counter").textContent = pins.length > 1 ? `${index + 1}/${pins.length}` : "";
+  byID("pin-preview").textContent = pin.text?.replace(/\s+/g, " ").trim()
+    || (pin.media_type ? "Media" : "Message " + pin.id);
+  byID("pin-all").hidden = pins.length < 2;
+  byID("pin-open").setAttribute("aria-label",
+    `Pinned message ${index + 1} of ${pins.length}: ${byID("pin-preview").textContent}`);
+}
+
+byID("pin-open").addEventListener("click", () => {
+  const pins = state.pins || [];
+  if (!pins.length) return;
+  jumpToMessage(pins[Math.min(state.pinIndex || 0, pins.length - 1)].id);
+});
+byID("pin-all").addEventListener("click", () => details.open("info"));
+byID("pin-hide").addEventListener("click", () => {
+  if (!state.chat) return;
+  state.pinHidden.add(state.chat);
+  renderPinPlate();
+  byID("open-details").focus();
+});
+
+/** Cycling through pins keeps the plate honest when several are stored. */
+function cyclePin(step) {
+  const pins = state.pins || [];
+  if (pins.length < 2) return;
+  state.pinIndex = ((state.pinIndex || 0) + step + pins.length) % pins.length;
+  renderPinPlate();
+}
+byID("pin-plate").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+    event.preventDefault();
+    cyclePin(1);
+  } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+    event.preventDefault();
+    cyclePin(-1);
+  }
+});
+
+function sortRows(rows) {
+  return [...rows].sort((a, b) => a.id - b.id);
+}
+
+/** Deduplicates by id when an older page overlaps what the feed already shows. */
+function mergeRows(older, current) {
+  const seen = new Set(current.map((row) => row.id));
+  return [...older.filter((row) => !seen.has(row.id)), ...current];
+}
+
+/** Reads one page of the open chat; a closed chat clears the conversation. */
+async function fetchPage(method, params, version, chat) {
+  try {
+    return await api(method, params);
+  } catch (error) {
+    if (error.status === 401) throw error;
+    if (version !== state.version || chat !== state.chat) return null;
+    if (error.status === 404 || error.status === 403) {
+      showUnavailable("This chat is not readable now. The access policy may have changed.");
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Reloads the window around a message the reader already sees, without
+ * marking it: a reconnect or a cursor gap is not a jump to a target.
+ */
+async function reloadAround(id) {
+  if (!id) {
+    await loadHistory();
+    return;
+  }
+  const version = state.version;
+  const chat = state.chat;
+  const result = await fetchPage("message.context", { chat, id: Number(id), before: 20, after: 20 }, version, chat);
+  if (!result || version !== state.version || chat !== state.chat) return;
+  const rows = sortRows(result.messages || []);
+  state.rows = rows;
+  state.cursor = result.next_cursor || (rows[0] ? String(rows[0].id) : "");
+  feed.draw(rows, { mode: "reset", chat });
+  feed.setOlderVisible(Boolean(state.cursor));
+  feed.scrollToMessage(String(id));
+  markHighlight("");
+  if (details.isOpen()) void details.refresh();
+}
+
+async function loadHistory(anchor = "", { older = false } = {}) {
   const version = state.version;
   const topic = state.topic;
-  const height = timeline.scrollHeight;
+  const chat = state.chat;
   const result = anchor
-    ? await api("message.context", { chat: state.chat, id: Number(anchor), before: 20, after: 20 })
-    : await api("message.history", { chat: state.chat, cursor: older ? state.cursor : "", topic });
-  if (version !== state.version || topic !== state.topic) return;
-  const rows = [...(result.messages || [])].sort((a, b) => a.id - b.id);
-  state.rows = older ? [...rows, ...state.rows] : rows;
+    ? await fetchPage("message.context", { chat, id: Number(anchor), before: 20, after: 20 }, version, chat)
+    : await fetchPage("message.history", { chat, cursor: older ? state.cursor : "", topic }, version, chat);
+  if (!result || version !== state.version || chat !== state.chat || topic !== state.topic) return;
+  const rows = sortRows(result.messages || []);
+  if (older) {
+    const fresh = mergeRows(rows, state.rows);
+    if (fresh.length === state.rows.length) {
+      // Every row of this page is already drawn: only the cursor moves.
+      state.cursor = result.next_cursor || "";
+      feed.setOlderVisible(Boolean(state.cursor));
+      return;
+    }
+    state.rows = fresh;
+    feed.draw(rows, { mode: "prepend", chat });
+  } else {
+    state.rows = rows;
+    feed.draw(rows, { mode: "reset", chat, anchor });
+  }
   state.cursor = result.next_cursor || (anchor && rows[0] ? String(rows[0].id) : "");
-  renderMessages(anchor);
-  if (anchor) byID("msg-" + anchor)?.scrollIntoView({ block: "center" });
-  else if (older) timeline.scrollTop += timeline.scrollHeight - height;
-  else timeline.scrollTop = timeline.scrollHeight;
+  feed.setOlderVisible(Boolean(state.cursor));
+  if (anchor) feed.scrollToMessage(String(anchor));
+  else if (!older) feed.toBottom();
+  if (details.isOpen()) void details.refresh();
 }
 
-const waiting = new Set();
-const thumbnails = new Map();
-let downloading = 0;
-let pausedUntil = 0;
-let pauseTimer;
-const observer = new IntersectionObserver((entries) => {
-  for (const entry of entries) {
-    if (entry.isIntersecting) {
-      waiting.add(entry.target);
-      const image = entry.target.querySelector("img");
-      const url = entry.target.dataset.thumbnail;
-      image.src = thumbnails.get(url) || url + "&preview=1";
-    } else {
-      waiting.delete(entry.target);
-    }
-  }
-  void downloadThumbnails();
-}, { root: timeline });
+/** Loads one narrow window around a target and marks it. */
+async function loadContext(id) {
+  const version = state.version;
+  const chat = state.chat;
+  const result = await fetchPage("message.context", { chat, id: Number(id), before: 20, after: 20 }, version, chat);
+  if (!result || version !== state.version || chat !== state.chat) return;
+  const rows = sortRows(result.messages || []);
+  state.rows = rows;
+  state.cursor = result.next_cursor || (rows[0] ? String(rows[0].id) : "");
+  feed.draw(rows, { mode: "reset", chat, anchor: String(id) });
+  feed.setOlderVisible(Boolean(state.cursor));
+  feed.scrollToMessage(String(id), "smooth");
+  if (details.isOpen()) void details.refresh();
+}
 
-async function downloadThumbnails() {
-  if (Date.now() < pausedUntil) {
-    clearTimeout(pauseTimer);
-    pauseTimer = setTimeout(downloadThumbnails, pausedUntil - Date.now());
+async function jumpToMessage(id) {
+  const target = String(id);
+  if (details.isOpen()) details.hide();
+  saveLiveView();
+  state.anchor = target;
+  state.version++;
+  if (!location.hash.endsWith("/" + target)) {
+    history.pushState(CHAT_STATE, "", messageHref(state.chat, target));
+  }
+  if (feed.scrollToMessage(target, "smooth")) {
+    markHighlight(target);
     return;
   }
-  while (downloading < 3 && waiting.size) {
-    const media = waiting.values().next().value;
-    waiting.delete(media);
-    if (!media.isConnected || thumbnails.has(media.dataset.thumbnail)) continue;
-    observer.unobserve(media);
-    downloading++;
-    const url = media.dataset.thumbnail;
-    void (async () => {
-      try {
-        const response = await fetch(url);
-        if (response.status === 429) {
-          pausedUntil = Math.max(pausedUntil, Date.now() + 1000 * (Number(response.headers.get("Retry-After")) || 30));
-          if (media.isConnected) waiting.add(media);
-        } else if (response.ok && media.isConnected) {
-          if (thumbnails.size > 250) {
-            URL.revokeObjectURL(thumbnails.values().next().value);
-            thumbnails.delete(thumbnails.keys().next().value);
-          }
-          const src = URL.createObjectURL(await response.blob());
-          thumbnails.set(url, src);
-          media.querySelector("img").src = src;
-        } else {
-          await response.body?.cancel();
-        }
-      } catch {
-        // The message still shows its media description and embedded preview.
-      } finally {
-        downloading--;
-        void downloadThumbnails();
-      }
-    })();
-  }
+  await loadContext(target);
 }
 
-function renderMessages(anchor = state.anchor) {
-  byID("older-row").hidden = !state.cursor;
-  observer.disconnect();
-  messages.replaceChildren();
-  if (!state.rows.length) {
-    messages.append(node("p", state.chat ? "No messages in local history." : "Select a chat to view its local history.", "empty"));
-    return;
+function markHighlight(id) {
+  for (const card of byID("messages").querySelectorAll(".message.highlight")) {
+    card.classList.remove("highlight");
   }
-  let previousDay;
-  const fragment = document.createDocumentFragment();
-  for (const message of state.rows) {
-    const date = new Date(message.date);
-    const day = dayFormat.format(date);
-    if (day !== previousDay) {
-      previousDay = day;
-      fragment.append(node("div", day, "day"));
-    }
-    const card = node("article", "", "message" + (message.out ? " out" : ""));
-    card.id = "msg-" + message.id;
-    if (String(message.id) === anchor) card.classList.add("highlight");
-    if (message.sender?.name) card.append(node("strong", message.sender.name, "sender"));
-    if (message.forwarded) card.append(node("div", "Forwarded message"));
-    if (message.reply_to) {
-      const quote = state.rows.find((row) => row.id === message.reply_to);
-      card.append(button(quote?.text?.slice(0, 75) || ("Reply to " + message.reply_to), () => route(state.chat, message.reply_to)));
-    }
-    if (message.text) {
-      const paragraph = node("p");
-      formatText(paragraph, message.text, message.entities || []);
-      card.append(paragraph);
-    }
-    if (message.media_type) {
-      const label = message.media_name || message.media_type;
-      const media = node("div", label + (message.media_size ? " · " + Math.ceil(message.media_size / 1024) + " KB" : ""));
-      if (["photo", "video", "sticker", "document", "animation", "video_note"].includes(message.media_type)) {
-        const preview = node("img");
-        preview.alt = message.media_type + " preview";
-        preview.hidden = true;
-        preview.addEventListener("load", () => { preview.hidden = false; });
-        media.dataset.thumbnail = "/api/thumb?chat=" + encodeURIComponent(state.chat) + "&id=" + message.id;
-        media.append(preview);
-        observer.observe(media);
-      }
-      card.append(media);
-    }
-    if (message.service) card.append(node("small", message.service));
-    if (message.reactions?.length) card.append(node("small", message.reactions.map((item) => item.emoji + " " + item.count).join("  ")));
-    if (message.link) {
-      const link = safeLink(message.link, "Open in Telegram");
-      if (link) card.append(link);
-    }
-    const clock = node("time", timeFormat.format(date) + (message.edited ? " · edited" : ""));
-    clock.dateTime = message.date;
-    card.append(clock);
-    fragment.append(card);
-  }
-  messages.append(fragment);
+  if (id) byID("msg-" + id)?.classList.add("highlight");
 }
 
-function safeLink(value, text) {
-  try {
-    const url = new URL(value);
-    if (!["http:", "https:", "tg:", "mailto:"].includes(url.protocol)) return null;
-    const link = node("a", text);
-    link.href = url.href;
-    link.rel = "noopener noreferrer";
-    link.target = "_blank";
-    return link;
-  } catch {
-    return null;
-  }
-}
-
-function formatText(container, text, entities) {
-  const tags = { bold: "strong", italic: "em", code: "code", pre: "code", blockquote: "q", underline: "u", strike: "s" };
-  let offset = 0;
-  for (const entity of [...entities].sort((a, b) => a.offset - b.offset)) {
-    const end = entity.offset + entity.length;
-    if (entity.offset < offset || end > text.length || end <= entity.offset) continue;
-    const piece = text.slice(entity.offset, end);
-    const formatted = entity.type === "url" || entity.type === "text_url"
-      ? safeLink(entity.url || piece, piece)
-      : tags[entity.type] ? node(tags[entity.type], piece) : null;
-    if (!formatted) continue;
-    container.append(text.slice(offset, entity.offset), formatted);
-    offset = end;
-  }
-  container.append(text.slice(offset));
-}
-
-let searchVersion = 0;
-const search = action(async () => {
-  const version = ++searchVersion;
-  const query = searchForm.elements.query.value.trim();
-  if (!query) {
-    renderChats();
-    return;
-  }
-  const result = await api("search", { query, scopes: ["messages"], chat: searchForm.elements.local.checked ? state.chat : "", limit: 60 });
-  if (version !== searchVersion) return;
-  list.replaceChildren(...(result.hits || []).map((hit) => {
-    const item = button("", () => route(String(hit.chat_id), hit.id), "chat");
-    item.append(node("span", "↗", "avatar"), node("strong", hit.chat_title || String(hit.chat_id)), node("small"), node("span", hit.snippet, "preview"));
-    return item;
-  }));
-  if (!list.childElementCount) list.append(node("p", "No matching messages.", "empty"));
-});
-
-searchForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  void search();
-});
-searchForm.elements.query.addEventListener("input", () => {
-  if (!searchForm.elements.query.value.trim()) void search();
-});
-byID("back").addEventListener("click", () => { document.body.dataset.screen = "list"; });
-byID("older").addEventListener("click", action(async () => {
-  byID("older").disabled = true;
-  try { await loadHistory("", true); }
-  finally { byID("older").disabled = false; }
-}));
 byID("topics").addEventListener("change", action(async (event) => {
+  // The topic does not change the address, so this is a reload, not a move.
   state.topic = Number(event.target.value);
   state.anchor = "";
+  state.liveView = null;
+  state.rows = [];
+  state.cursor = "";
+  state.version++;
+  feed.clear();
+  history.replaceState(CHAT_STATE, "", messageHref(state.chat));
   await loadHistory();
 }));
+byID("open-details").addEventListener("click", () => details.open("info"));
+byID("history-badge").addEventListener("click", () => details.open("info"));
+byID("access").addEventListener("click", () => details.open("access"));
+byID("back").addEventListener("click", () => {
+  // The list is always an entry behind a chat, including after a direct link.
+  if (location.hash) history.back();
+  else document.body.dataset.screen = "list";
+});
+window.addEventListener("popstate", () => { void readRoute(); });
+window.addEventListener("hashchange", () => { void readRoute(); });
 
-function openPanel(title) {
-  byID("panel-title").textContent = title;
-  panelContent.replaceChildren();
-  panel.hidden = false;
-  document.body.dataset.screen = "panel";
-}
+let searchTimer;
+byID("chat-query").addEventListener("input", () => {
+  search.invalidateChat();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { void search.runChat(); }, 350);
+});
 
-function closePanel() {
-  panel.hidden = true;
-  document.body.dataset.screen = state.chat ? "chat" : "list";
-}
-
-byID("close").addEventListener("click", closePanel);
-byID("details").addEventListener("click", action(async () => {
-  openPanel("Chat details");
-  const info = await api("chat.info", { chat: state.chat });
-  panelContent.append(node("h2", info.title));
-  if (info.username) panelContent.append(node("p", "@" + info.username));
-  if (info.member_count != null) panelContent.append(node("p", info.member_count + " members"));
-  if (info.about) panelContent.append(node("p", info.about));
-  await showChatSettings();
-}));
-byID("access").addEventListener("click", action(showAccess));
-
+/** Server-Sent Events: one row, one card or one reload, never a full redraw. */
 function events() {
   let source;
   let reconnect;
-  const refresh = async (event) => {
+  let chatRefresh = 0;
+  let stale = false;
+
+  const scheduleChats = () => {
+    if (chatRefresh) return;
+    chatRefresh = setTimeout(() => {
+      chatRefresh = 0;
+      void loadChats().catch((error) => {
+        if (error.status !== 401) notify(error.message);
+      });
+    }, 250);
+  };
+
+  const countNew = () => {
+    const visible = feed.firstVisibleID();
+    const index = state.rows.findIndex((row) => String(row.id) === visible);
+    return index < 0 ? 1 : Math.max(1, state.rows.length - index - 1);
+  };
+
+  const apply = async (event) => {
     const update = JSON.parse(event.data);
     if (!update) return;
-    if (!["message.new", "message.edit", "message.delete", "reaction", "read", "gap"].includes(update.type)) return;
-    await loadChats();
-    if (update.type === "gap" && state.chat) {
-      await loadHistory();
+    const known = ["message.new", "message.edit", "message.delete", "reaction", "read", "gap"];
+    if (!known.includes(update.type)) return;
+    scheduleChats();
+    if (update.type === "read") return;
+    if (!state.chat) return;
+    // A jump window is a fixed target; live updates belong to the live view.
+    if (state.anchor) return;
+    if (update.type === "gap") {
+      // A cursor gap means the local window may miss events. Reload the window
+      // the reader sees and keep the anchor where it was.
+      if (String(update.chat_id ?? "") && String(update.chat_id) !== state.chat) return;
+      await reloadAround(feed.firstVisibleID());
       return;
     }
-    if (!state.chat || String(update.chat_id) !== state.chat) return;
-    const version = state.version;
-    const atBottom = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80;
+    if (String(update.chat_id) !== state.chat) return;
     const data = update.data || {};
-    switch (update.type) {
-      case "message.new":
-      case "message.edit": {
-        if (!data.id || (state.topic && data.topic_id !== state.topic)) break;
-        const page = await api("message.context", { chat: state.chat, id: data.id, before: 0, after: 0 });
-        if (version !== state.version || !page.messages?.[0]) return;
-        const item = page.messages[0];
-        const index = state.rows.findIndex((row) => row.id === item.id);
-        if (index >= 0) state.rows[index] = item;
-        else if (update.type === "message.new") state.rows.push(item);
-        break;
-      }
-      case "message.delete":
-        state.rows = state.rows.filter((row) => !data.ids?.includes(row.id));
-        break;
-      case "reaction": {
-        const row = state.rows.find((item) => item.id === data.message_id);
-        if (row) row.reactions = data.reactions;
-        break;
-      }
-      default:
-        return;
+    if (update.type === "message.delete") {
+      const ids = data.ids || [];
+      state.rows = state.rows.filter((row) => !ids.includes(row.id));
+      feed.removeCards(ids);
+      return;
     }
-    renderMessages();
-    if (atBottom && !state.anchor) timeline.scrollTop = timeline.scrollHeight;
+    if (update.type === "reaction") {
+      const row = state.rows.find((item) => item.id === data.message_id);
+      if (!row) return;
+      row.reactions = data.reactions || [];
+      feed.replaceCard(row, { chat: state.chat, anchor: state.anchor });
+      return;
+    }
+    if (!data.id) return;
+    if (state.topic && data.topic_id !== state.topic) return;
+    const version = state.version;
+    const page = await api("message.context", { chat: state.chat, id: data.id, before: 0, after: 0 });
+    if (version !== state.version || !page.messages?.[0]) return;
+    const item = page.messages[0];
+    const index = state.rows.findIndex((row) => row.id === item.id);
+    if (index >= 0) {
+      state.rows[index] = item;
+      feed.replaceCard(item, { chat: state.chat, anchor: state.anchor });
+      return;
+    }
+    if (update.type !== "message.new") return;
+    state.rows.push(item);
+    state.rows.sort((a, b) => a.id - b.id);
+    const readingBottom = feed.atBottom();
+    feed.draw([item], { mode: "append", chat: state.chat });
+    if (!readingBottom) feed.showJump(countNew());
   };
+
   const connect = () => {
     source = new EventSource("/api/events");
-    source.onmessage = (event) => { void refresh(event).catch((error) => notify(error.message)); };
+    source.onmessage = (event) => {
+      void apply(event).catch((error) => {
+        if (error.status !== 401) notify(error.message);
+      });
+    };
     source.onerror = () => {
       if (source.readyState !== EventSource.CLOSED) return;
+      if (stale) return;
+      stale = true;
       clearTimeout(reconnect);
-      reconnect = setTimeout(action(async () => {
-        await loadChats();
-        if (state.chat) await loadHistory();
-        connect();
-      }), 3000);
+      reconnect = setTimeout(() => {
+        void action(async () => {
+          stale = false;
+          await loadChats();
+          if (state.chat && !state.anchor) await reloadAround(feed.firstVisibleID());
+          connect();
+        })();
+      }, 3000);
     };
+    source.onopen = () => { stale = false; };
   };
   connect();
 }
-
-async function showAccess() {
-  openPanel("Access");
-  panelContent.append(node("p", "Access settings are loading…"));
-  await renderAccessSettings();
-}
-
-const { renderAccessSettings, showChatSettings } = bindSettings({
-  api, node, button, action, notify, panelContent, state, loadChats, renderFolders, renderChats,
-});
 
 const start = action(async () => {
   const token = new URLSearchParams(location.hash.slice(1)).get("token");
   if (token) {
     history.replaceState(null, "", location.pathname);
-    const response = await fetch("/api/session", { method: "POST", headers: { Authorization: "Bearer " + token } });
-    if (!response.ok) throw new Error("Open a fresh URL from tg web.");
+    const response = await fetch("/api/session", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token },
+    });
+    if (!response.ok) throw new Error("Open a fresh URL printed by tg web.");
   }
-  const [folders] = await Promise.all([api("folder.list"), loadChats()]);
+  const folders = await api("folder.list");
   state.folders = (folders.folders || []).filter((folder) => folder.id > 0);
-  renderFolders();
-  window.addEventListener("hashchange", readRoute);
-  if (location.hash) await readRoute();
+  await loadChats();
+  if (location.hash) {
+    ownDirectEntry();
+    await readRoute();
+  }
   events();
 });
 

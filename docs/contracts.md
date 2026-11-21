@@ -219,11 +219,11 @@ out of the version trigger.
 `tg web` serves embedded assets and talks to the profile daemon over its
 Unix socket. The gateway checks the request host and uses same-origin POST
 requests. The browser exchanges the token in the URL fragment for an
-HttpOnly cookie. Settings writes require that cookie and a custom request
-header. The daemon applies the current access policy to data and settings.
+HttpOnly cookie. The gateway forwards only allowlisted read methods.
+It rejects write methods before calling the daemon. The daemon applies
+the current access policy to reads and events.
 
-The gateway permits a fixed set of RPC methods. The history, folders and
-search read SQLite. Server-Sent Events follow the daemon event journal.
-On-demand thumbnail downloads use the daemon throttle and the authorized
-preview cache. Dialog and folder settings use the same permissions as CLI
-commands. The Access panel shows list counts, flags and file roots.
+History, folders and search read SQLite. Server-Sent Events follow the
+daemon event journal. On-demand thumbnail downloads use the daemon throttle
+and the authorized preview cache. The Access panel shows list counts,
+flags and file roots.

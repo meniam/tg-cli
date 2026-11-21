@@ -72,3 +72,4 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-20 — [Файлы для расшифровки качаются в закрытый временный каталог демона под суточным бюджетом](20261120_2239_voice_files_download_to_a_private_temp_dir_under_a_daily_budget.md)
 - 2026-11-21 — [Веб-сервер работает отдельным процессом и вызывает методы демона по белому списку](20261121_0146_web_uses_the_daemon_and_a_fixed_allowlist.md)
 - 2026-11-21 — [Панель Access показывает правила, запись защищает решение о парольной фразе](20261121_0146_web_access_panel_reads_current_policy.md)
+- 2026-11-21 — [HTTP-шлюз tg web разрешает только чтение](20261121_0316_web_gateway_reads_only.md)

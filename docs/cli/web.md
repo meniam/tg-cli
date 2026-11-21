@@ -41,9 +41,14 @@ been saved yet, run [`tg folder list`](folders-and-account.md#tg-folder-list). M
 to `config.toml` to exist and appear in the policy's `downloads` list. The
 daemon stores them in `.tg-web/<profile>/<chat_id>/`.
 
-The **Details** panel changes local history scheduling and selected Telegram
-dialog settings. The **Access** panel shows the profile’s access policy. Telegram dialog and folder changes
-require `dialogs: true`. See [Access policy](access.md).
+The search field above the chat list searches all saved messages. Use the
+search button in the chat header to search that chat. A result opens the
+message in context.
+
+Select the chat name to see its details, pinned messages and local history
+mode. **Attachments** lists files and other media from the messages loaded
+in the current view. **Access** shows the profile’s access policy. The
+browser is read-only. See [Access policy](access.md).
 
 Exit codes include 1 for a server error, 2 for invalid options, 3 if the daemon
 is absent and 4 if there is no authorized session. [Exit codes](overview.md#exit-codes)

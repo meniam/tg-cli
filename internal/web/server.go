@@ -127,10 +127,10 @@ func newGateway(address, token string, dial func(context.Context) (*rpc.Client, 
 		panic(err)
 	}
 	a.routes.Handle("GET /{$}", http.FileServerFS(static))
-	a.routes.Handle("GET /app.js", http.FileServerFS(static))
+	for _, name := range []string{"app.js", "api.js", "chatlist.js", "feed.js", "search.js", "details.js", "style.css"} {
+		a.routes.Handle("GET /"+name, http.FileServerFS(static))
+	}
 	a.routes.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	a.routes.Handle("GET /style.css", http.FileServerFS(static))
-	a.routes.Handle("GET /settings.js", http.FileServerFS(static))
 	a.routes.HandleFunc("POST /api/session", a.session)
 	a.routes.HandleFunc("POST /api/{method}", a.call)
 	a.routes.HandleFunc("GET /api/events", a.events)
@@ -183,6 +183,10 @@ func (a *gateway) session(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// readMethods is the whole surface of the viewer, and it is read-only. A write
+// stays available through the CLI and the daemon, never through an HTTP request:
+// the viewer has no way to change Telegram, the local settings or the access
+// lists, whatever headers or cookies a request carries.
 var readMethods = map[string]string{
 	"chat.overview":   rpc.MethodChatOverview,
 	"chat.info":       rpc.MethodWebChat,
@@ -194,27 +198,8 @@ var readMethods = map[string]string{
 	"search":          rpc.MethodSearch,
 }
 
-var settingsMethods = map[string]string{
-	"chat.settings.set": rpc.MethodWebSetChatSettings,
-	"chat.mute":         rpc.MethodChatMute,
-	"chat.unmute":       rpc.MethodChatUnmute,
-	"chat.archive":      rpc.MethodChatArchive,
-	"chat.unarchive":    rpc.MethodChatUnarchive,
-	"chat.pin_dialog":   rpc.MethodChatPinDialog,
-	"chat.unpin_dialog": rpc.MethodChatUnpinDialog,
-	"folder.edit":       rpc.MethodFolderEdit,
-}
-
 func (a *gateway) call(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("method")
-	method, ok := readMethods[name]
-	if !ok && r.Header.Get("X-Tg-Web") == "settings" {
-		if cookie, err := r.Cookie(a.cookieName()); err == nil {
-			if subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(a.token)) == 1 {
-				method, ok = settingsMethods[name]
-			}
-		}
-	}
+	method, ok := readMethods[r.PathValue("method")]
 	if !ok {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
@@ -234,15 +219,7 @@ func (a *gateway) call(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Expected one JSON object", http.StatusBadRequest)
 		return
 	}
-	switch method {
-	case rpc.MethodFolderEdit:
-		for name := range params {
-			if name != "id" && name != "add" && name != "remove" {
-				http.Error(w, "Only folder membership can be changed here", http.StatusBadRequest)
-				return
-			}
-		}
-	case rpc.MethodSearch:
+	if method == rpc.MethodSearch {
 		// The viewer searches visible messages, including when called outside its UI.
 		params["scopes"] = json.RawMessage(`["messages"]`)
 		delete(params, "include_deleted")
