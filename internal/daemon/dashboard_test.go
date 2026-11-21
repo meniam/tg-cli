@@ -292,8 +292,12 @@ func TestDashboardListsOnlyActiveSyncJobs(t *testing.T) {
 	startSync(t, d, 2)
 	<-entered
 	got := callDashboard(t, d)
-	if len(got.Jobs.Sync) != 1 || got.Jobs.Sync[0] != (rpc.DashboardSyncJob{ChatID: 2, State: rpc.HistorySyncRunning, Source: rpc.HistorySyncManual}) {
+	if len(got.Jobs.Sync) != 1 || got.Jobs.Sync[0] != (rpc.DashboardSyncJob{ChatID: 2, ChatTitle: "Bob", State: rpc.HistorySyncRunning, Source: rpc.HistorySyncManual}) {
 		t.Fatalf("running job: %+v", got.Jobs.Sync)
+	}
+	jobs, err := d.dashboardJobs(context.Background(), func(int64) bool { return false })
+	if err != nil || len(jobs.Sync) != 1 || jobs.Sync[0].ChatTitle != "" {
+		t.Fatalf("blocked chat title: %+v, error: %v", jobs.Sync, err)
 	}
 	cancelSync(t, d, 2)
 	awaitSyncState(t, d, 2, rpc.HistorySyncCancelled)
@@ -301,6 +305,26 @@ func TestDashboardListsOnlyActiveSyncJobs(t *testing.T) {
 	if got := callDashboard(t, d); len(got.Jobs.Sync) != 0 {
 		t.Fatalf("a cancelled job is listed: %+v", got.Jobs.Sync)
 	}
+}
+
+func TestDashboardSyncJobWithoutTitle(t *testing.T) {
+	d, tg, db, _ := dashboardFixture(t)
+	if err := db.UpsertChats(context.Background(), []store.Chat{{ID: 13, Type: "user"}}); err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	tg.syncTelegram.page = func(ctx context.Context, _ chatref.Ref, _ int) (rpc.HistoryPage, error) {
+		close(entered)
+		<-ctx.Done()
+		return rpc.HistoryPage{}, ctx.Err()
+	}
+	startSync(t, d, 13)
+	<-entered
+	jobs := callDashboard(t, d).Jobs.Sync
+	if len(jobs) != 1 || jobs[0].ChatTitle != "" {
+		t.Fatalf("job without title: %+v", jobs)
+	}
+	cancelSync(t, d, 13)
 }
 
 // With the scheduler on, the block is the one of the daemon status.

@@ -445,8 +445,15 @@ func dashboardJobs(j rpc.DashboardJobs) []string {
 	}
 	lines := []string{fmt.Sprintf("History sync · %s · %s", dashboardCount(int64(len(j.Sync)), "job"), full)}
 	for _, job := range j.Sync {
-		lines = append(lines, dashboardNumbers.Sprintf("Chat %s · %s (%s) · %s · %d messages loaded",
-			fmt.Sprint(job.ChatID), dashboardState(job.State), plainText(job.Source), dashboardCount(int64(job.Pages), "page"), job.Loaded))
+		name := strings.TrimSpace(plainText(job.ChatTitle))
+		if title := []rune(name); len(title) > 40 {
+			name = string(title[:39]) + "…"
+		}
+		if name != "" {
+			name = " " + name
+		}
+		lines = append(lines, dashboardNumbers.Sprintf("Chat %s%s · %s (%s) · %s · %d messages loaded",
+			fmt.Sprint(job.ChatID), name, dashboardState(job.State), plainText(job.Source), dashboardCount(int64(job.Pages), "page"), job.Loaded))
 	}
 	return lines
 }

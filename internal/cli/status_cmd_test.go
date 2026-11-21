@@ -112,7 +112,7 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 	}
 	busy.Jobs = rpc.DashboardJobs{
 		Sync: []rpc.DashboardSyncJob{
-			{ChatID: -1001, State: rpc.HistorySyncRunning, Source: rpc.HistorySyncBackground, Pages: 4, Loaded: 400},
+			{ChatID: -1001, ChatTitle: "Team chat", State: rpc.HistorySyncRunning, Source: rpc.HistorySyncBackground, Pages: 4, Loaded: 400},
 			{ChatID: 77, State: rpc.HistorySyncWaitingFlood, Source: rpc.HistorySyncManual, Pages: 1, Loaded: 100},
 		},
 		Full: rpc.DashboardFullJob{State: rpc.ChatFullRunning, Done: 12, Total: 80},
@@ -149,6 +149,24 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 			}
 			if got != string(want) {
 				t.Errorf("text differs from %s\n--- got\n%s--- want\n%s", tc.golden, got, want)
+			}
+		})
+	}
+}
+
+func TestDashboardJobTitles(t *testing.T) {
+	for _, tc := range []struct{ name, title, want string }{
+		{"named", "Имя Фамилия", "Chat 42 Имя Фамилия"},
+		{"empty", "", "Chat 42"},
+		{"controls", "First\nSecond\x1b[2J", "Chat 42 First Second [2J"},
+		{"long", strings.Repeat("я", 41), "Chat 42 " + strings.Repeat("я", 39) + "…"},
+		{"boundary", strings.Repeat("я", 40), "Chat 42 " + strings.Repeat("я", 40)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lines := dashboardJobs(rpc.DashboardJobs{Sync: []rpc.DashboardSyncJob{{ChatID: 42, ChatTitle: tc.title, State: "running", Source: "manual"}}})
+			want := tc.want + " · running (manual) · 0 pages · 0 messages loaded"
+			if lines[1] != want {
+				t.Errorf("got %q, want %q", lines[1], want)
 			}
 		})
 	}

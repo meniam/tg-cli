@@ -8,9 +8,9 @@ PR: —
 
 ## Status
 
-- Current status: in_progress
+- Current status: done
 - Last update: 2026-11-21
-- Next safe step: Codex добавляет название чата в данные панели и в строку задания.
+- Next safe step: нет, влито и задеплоено в этот же день.
 
 ## Context and sources
 
@@ -34,5 +34,5 @@ PR: —
 
 | Check | Command | Expected result | Status |
 | --- | --- | --- | --- |
-| Тесты | `go test -count=1 ./internal/cli ./internal/daemon ./internal/rpc` | зелёные | not_run |
-| Полная проверка | `just check` | зелёная | not_run |
+| Тесты | `go test -count=1 ./internal/cli ./internal/daemon ./internal/rpc` | зелёные | ok |
+| Полная проверка | `just check` | зелёная | ok |
