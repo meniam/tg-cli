@@ -8,13 +8,10 @@ PR: —
 
 ## Status
 
-- Current status: in_progress (2026-11-21: ветка и worktree `../tg-cli-settings`
+- Current status: done (2026-11-21: влит в main, задеплоен; шаг владельца `tg settings token init` в терминале остаётся)
   созданы, coder взял Э1; 2026-11-20 владелец ответил на Q1-Q13)
 - Last update: 2026-11-21
-- Next safe step: coder выполняет Э1 (реестр настроек, `internal/config/settings.go`),
-  менеджер проверяет `just check` и diff. Параллельно и без блокировки Э1: менеджер согласует с владельцем разведение
-  с `web_viewer` и текст для `AGENTS.md` (раздел «Предложения менеджеру»); оба
-  нужны до Э8.
+- Next safe step: владелец выполняет `tg settings token init` в терминале; до этого запись `access.*` отказывает всем по замыслу.
 - Восемь строк Decision log с `Confirmed: no` (реестр в `internal/config`,
   `expect_user` из базы в Daemon, коды отказа по фразе, ограничение подбора,
   ключ `[files] access`, цепочка старых файлов профиля, `settings.*` без
@@ -664,3 +661,4 @@ PR: —
 | Q11. Ответ `tg config show` | Сейчас он печатает все секции; агенты могут его разбирать | A: только ключи файла (`home`, `db_dir`, `default_profile`, `files`), остальное в `tg settings list`; запись changelog `Изменено` --breaking. B: прежняя форма, значения из базы через Daemon или офлайн | A. Цена: ломается разбор старого ответа; B оставляет две команды, показывающие одно и то же | решён 2026-11-20, A, changelog `--breaking` и правка навыка `tg`: [запись](../decisions/20261120_2344_config_show_prints_only_the_keys_of_the_file.md) |
 | Q12. `tg settings export|import` | Резервная копия и перенос настроек между профилями | A: не сейчас; копия настроек это копия базы. B: `export` в JSON без секретов и без id `allow`, `block`; `import` с фразой для `access.*` | A. Цена: второй профиль настраивается руками | решён 2026-11-20, A: Decision log, строка Q12 |
 | Q13. Фраза в веб-панели (пересечение с `web_viewer`, фазы 2 и 3) | Решение владельца: фразу набирают в терминале; веб хочет править все поля доступа (Q10 `web_viewer`) | A: веб спрашивает фразу в форме и передаёт её Daemon; правило «терминал» расширяется до «терминал или форма веб-панели». B: веб правит только настройки вне `access.*`, списки остаются за `tg settings`. C: веб показывает списки только для чтения | C до отдельного решения владельца в плане `web_viewer`. Цена: фаза 3 `web_viewer` теряет правку списков из браузера | решён 2026-11-20, C: Decision log, строка Q13; форма фразы в вебе остаётся за `web_viewer` |
+- 2026-11-21: ветка влита в main вместе со status dashboard, веб-клиентом, исправлением 413 и voice list (коммит d8ef9b9), задеплоена `just install`. Копия перед деплоем: `~/.config/tg-cli/.db-backup-20261121-settings` (store.db, vectors.db, config.toml, access.json без session.json). Перенос прошёл: access.json удалён из каталога профиля (копия в `~/.config/tg-cli/.config-migration-*`), config.toml без активных ключей, в базе шесть явных значений и `access.write`. Прогон `go test -race` не запускался по правилу владельца.
