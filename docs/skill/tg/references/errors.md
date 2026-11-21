@@ -7,7 +7,7 @@ Every command except the streams `message watch` and `message export` prints one
 | 0 | ok | |
 | 1 | failure | other error or partial success of a batch (`data.partial: true`, errors in `data.errors`): for a partial batch read `data.errors` and the processed items in the data (there is no top-level `error.message`); retry only items that you know were not processed (for `message forward` check the destination first, see `writing.md`) |
 | 2 | usage | wrong arguments, flags or environment: fix the call. Usually Telegram was not called, but a few Telegram rejections are mapped to 2 too (for example `REACTION_INVALID`); the command's own section and `error.message` say which |
-| 3 | daemon_not_running | run `tg daemon start` and retry |
+| 3 | daemon_not_running | no Daemon answers for the profile of this command (the error text names it): check that the profile is the intended one, run the check in `SKILL.md` ("First run"), then `tg --profile <name> daemon start` on the verdict `daemon_stopped` |
 | 4 | not_authorized | no login, login lost or `--expect-user` did not match: read `data.authorized` and the profile in `tg daemon status`; the human runs `tg auth login` only when the authorization is missing or lost (`daemon status` can exit 0 while logged out, and a mismatch can happen while logged in) |
 | 5 | telegram_error | show the reason from `error.message`; do not retry blindly |
 | 6 | flood_wait | Telegram asks to wait, the time is in `error.message`. Do not retry at once and do not loop retries. The tool does not retry a write itself, the decision is yours |
@@ -18,7 +18,7 @@ Every command except the streams `message watch` and `message export` prints one
 
 ## By symptom
 
-- **`daemon_not_running` (3).** Run `tg daemon start`. For `message watch`, code 3 means the Daemon is stopped or the connection is closed.
+- **`daemon_not_running` (3).** Read the profile named in the error: a running Daemon of another profile does not answer for this one. Run `tg-doctor.sh --profile <name>` and start the Daemon only on `daemon_stopped`. For `message watch`, code 3 means the Daemon is stopped or the connection is closed.
 - **`not_authorized` (4).** Check `tg auth status` and `--expect-user`. Only the human logs in: suggest `! tg auth login`. If the Daemon shows `auth_lost`, stop it before importing a session; for a new login do not stop the Daemon (see `references/daemon-auth.md`).
 - **`flood_wait` (6).** While the background history load waits out a long pause, any command that calls Telegram gets code 6 at once, with the remaining seconds (unless the Daemon was started with `TG_CLI_FLOOD_AUTOWAIT=0`: then commands queue instead). Wait for the pause to end or work locally. Global search (`message search --public`) quickly hits this code: make one or two probes with a pause.
 - **`not_found` (7) for a chat that should exist.** The chat is closed by the access lists (indistinguishable from a nonexistent one), the `@username` did not resolve or the numeric id is unknown. Do not look for the same chat through another link: tell the user.

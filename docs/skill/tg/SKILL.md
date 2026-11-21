@@ -30,28 +30,49 @@ Details and reasons: [references/safety.md](references/safety.md).
 
 ## First run
 
+Run the check once at the start of a task, not before every command:
+
 ```bash
-bash <skill-folder>/scripts/tg-doctor.sh   # one call: tg version, config path, Daemon, login, next step
-tg daemon status                   # profile, connection, login, active requests, background_sync block
-tg status                          # text dashboard: vectors, transcription, history, Telegram, storage, settings
-tg auth status                     # whether the account is logged in and who it is
+bash <skill-folder>/scripts/tg-doctor.sh [--profile <name>]   # tg, config, every profile with its Daemon, login, verdict
 ```
+
+The last line is `verdict: <word> profile=<name>`. Decide from the verdict, not from the exit code of the script (its codes are not `tg` codes):
+
+| Verdict | Meaning | Next step |
+| --- | --- | --- |
+| `ready` | The Daemon of the profile runs and the account is logged in | Run commands |
+| `daemon_stopped` | Nothing answers on the socket of this profile | Start it: `tg --profile <name> daemon start` |
+| `daemon_connecting` | The Daemon runs, Telegram is not connected yet | Wait a few seconds, check again; never start a second Daemon |
+| `login_missing`, `login_pending` | The Daemon runs, the account is not logged in (or a login is in progress) | The human runs `! tg --profile <name> auth login`; never start another login |
+| `status_unreadable` | `tg` could not answer for another reason (sandbox, permissions, a broken profile) | Report the message; this is not "stopped": start nothing |
+| `no_tg` | `tg` is not in PATH | Install the binary (`just install` in the repository) |
+
+After the check, trust the result for the rest of the task. A later `tg` command that exits with code 3 means the Daemon of the profile **of that command** stopped; run the check again then, not before.
+
+### Profiles
+
+Each profile is one account with its own Daemon, session and database. The script lists every profile directory it finds under the data directory and the Daemon state of each. The selected profile is `--profile` when given, otherwise `default_profile` from `config.toml`; `tg` never picks another one on its own.
+
+- One profile on disk: use it. Pass `--profile <name>` anyway when the verdict names a profile other than `default`.
+- Several profiles: ask the user which account the task is about. Do not guess from the state of the Daemons. Pass `--profile <name>` to every `tg` command of the task.
+- Exit code 3 from a command without `--profile` can mean the wrong profile: the error text names the profile it tried. A running Daemon of another profile does not count.
+- To check one more profile: `tg-doctor.sh --profile <name>`, or `tg --profile <name> daemon status` (exit code 0 the Daemon answers, 3 nobody answers).
+
+### Start the Daemon
+
+Start only on the verdict `daemon_stopped`, never on `status_unreadable` or `daemon_connecting`. Ask the user before the first start on this machine, because a start can migrate old configuration files; on later runs, start it and run the check again:
+
+```bash
+tg --profile <name> daemon start
+```
+
+The script only reads: it calls `tg version`, `tg config path`, `tg config show` and `tg daemon status`, and lists profile directories without opening their files. It needs Bash 3.2+; with python3 it also reads the login, without python3 it reports the Daemon from exit codes and says to run `tg auth status`.
+
+`tg` exit code 3: no Daemon answers for the profile of that command. Exit code 4: no login, a lost login, or an `--expect-user` mismatch. Read `data.authorized` and the profile in `tg daemon status` first, and ask the human to log in (`! tg auth login`) only when the authorization is missing or lost. The Daemon survives the end of a command but not a restart of the machine or a logout: after one, expect `daemon_stopped`. Transport, proxy, config and session loss: [references/daemon-auth.md](references/daemon-auth.md).
 
 ### Browser access
 
 Use `tg web` at the owner’s request to browse saved chats or open chat settings. Use `--open` to launch the browser. Treat the printed URL as a credential. The **Access** panel shows the current policy.
-
-### Start the Daemon
-
-Diagnose first. Start the Daemon only when the status shows it is not running (exit code 3). Ask the user before the first start on this machine, because a start can migrate old configuration files; on later runs, start it and retry:
-
-```bash
-tg daemon start
-```
-
-`tg-doctor.sh` only reads: it calls `tg version`, `tg config path` and `tg daemon status`, and takes `--profile <name>` (without it `tg` uses the configured default). Needs Bash 3.2+ and python3. Its exit codes (not `tg` codes): 0 the Daemon runs and the account is logged in; 1 the Daemon is not running or not connected yet (wait, run again); 2 no `tg` or python3, unreadable status, or no login.
-
-`tg` exit code 3: the Daemon is not running. Exit code 4: no login, a lost login, or an `--expect-user` mismatch. Read `data.authorized` and the profile in `tg daemon status` first, and ask the human to log in (`! tg auth login`) only when the authorization is missing or lost. Transport, proxy, config and session loss: [references/daemon-auth.md](references/daemon-auth.md).
 
 ## Ask the tool about its capabilities
 

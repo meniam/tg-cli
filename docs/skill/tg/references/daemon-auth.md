@@ -5,15 +5,17 @@ One Daemon per profile holds the connection and the session, and the CLI sends i
 ## First run
 
 ```bash
-tg daemon start                    # background; desktop is the default preset when own credentials are absent
-tg daemon status                   # profile, connection, login, active requests, background_sync block
+tg --profile <name> daemon start   # background; desktop is the default preset when own credentials are absent
+tg --profile <name> daemon status  # profile, connection, login, active requests, background_sync block
 tg status                          # text dashboard: vectors, transcription, history, Telegram, storage, settings
 tg daemon logs --tail 50           # log of Daemon requests and errors for debugging (--follow tails it)
 tg auth login                      # the human runs this (! tg auth login): number, code, 2FA (or --qr)
 tg auth status                     # whether the account is logged in and who it is
 ```
 
-`tg daemon start` is idempotent: for a profile with a live Daemon it reports that Daemon and does not start a second one. One command checks the environment: `tg daemon status`. Exit code 3 means the Daemon is not running. Exit code 4 means no login, a lost login or an `--expect-user` mismatch: check `data.authorized` and the profile in `tg daemon status` before asking for a login.
+`tg daemon start` is idempotent: for a profile with a live Daemon it reports that Daemon and does not start a second one. To tell which Daemons run, use `scripts/tg-doctor.sh` (every profile on disk, the selected one in detail, a `verdict:` line; see "First run" in `SKILL.md`) or, for one profile, `tg --profile <name> daemon status`. Exit code 3 means nothing answers on the socket of that profile. Any other failure of `daemon status` (for example a sandbox that blocks the socket) is not "stopped": do not start a Daemon on it. Exit code 4 means no login, a lost login or an `--expect-user` mismatch: check `data.authorized` and the profile in `tg daemon status` before asking for a login.
+
+**Profiles.** There is no command that lists profiles. They are the directories `<home>/<profile>/` that hold `session.json` or `daemon.sock` (`home` is in `tg config show`; `db` and `models` are not profiles). With several profiles, never choose one yourself: ask the user and pass `--profile <name>` to every command.
 
 **Transport.** Set it at start: `tg daemon start --transport wss` or `tg daemon start --transport auto`. Choose `auto` when TCP may be blocked: it starts with TCP and recreates the client on WSS of the same DC after a connection or handshake error, and also if TCP did not become `ready` within 10 seconds. WSS stays until the Daemon stops. To change the network of a running Daemon, first run `daemon stop`.
 
