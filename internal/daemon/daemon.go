@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -84,6 +85,7 @@ type Options struct {
 const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
+	chatCursors          chatCursorCodec
 	thumbMu              sync.Mutex
 	thumbSlots           chan struct{}
 	admission            telegramAdmission
@@ -845,35 +847,32 @@ func (d *daemon) chatList(ctx context.Context, params json.RawMessage) (any, err
 		return nil, err
 	}
 	policy := d.policy()
-	requested := limit
-	chats, err := d.telegram(ctx).Chats(ctx, requested, p.Type)
+	scope := d.chatCursorScope(policy, p.Type)
+	after, err := d.chatCursors.open(p.Cursor, scope)
 	if err != nil {
 		return nil, err
 	}
-	if policy.Enabled() {
-		for {
-			visible := make([]rpc.Chat, 0, len(chats))
-			for _, chat := range chats {
-				if policy.Allowed(chat.ID) {
-					visible = append(visible, chat)
-				}
-			}
-			if len(visible) >= limit || len(chats) < requested || requested == maxChatLimit {
-				chats = visible[:min(len(visible), limit)]
-				break
-			}
-			requested = min(requested*2, maxChatLimit)
-			chats, err = d.telegram(ctx).Chats(ctx, requested, p.Type)
-			if err != nil {
-				return nil, err
-			}
-		}
+	if policy.Closed() {
+		return rpc.ChatListResult{Chats: []rpc.Chat{}}, nil
+	}
+	chats, next, err := d.telegram(ctx).Chats(ctx, limit, p.Type, after, policy.Allowed)
+	if err != nil {
+		return nil, err
+	}
+	// A filtered scan may span several Telegram requests and throttle waits.
+	// Discard it if visibility changed before publication and persistence.
+	if !bytes.Equal(scope, d.chatCursorScope(d.policy(), p.Type)) {
+		return nil, invalidChatCursor()
+	}
+	var cursor string
+	if next != nil {
+		cursor = d.chatCursors.seal(*next, scope)
 	}
 	if chats == nil {
 		chats = []rpc.Chat{}
 	}
 	d.saveChats(ctx, rpc.MethodChatList, chats, true)
-	return rpc.ChatListResult{Chats: chats}, nil
+	return rpc.ChatListResult{Chats: chats, NextCursor: cursor}, nil
 }
 
 // decodeParams decodes params into v; absent params leave v untouched.

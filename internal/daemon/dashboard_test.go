@@ -50,9 +50,9 @@ func (t *dashboardTelegram) Self(ctx context.Context) (*rpc.User, error) {
 	t.record("Self")
 	return t.syncTelegram.Self(ctx)
 }
-func (t *dashboardTelegram) Chats(ctx context.Context, limit int, chatType string) ([]rpc.Chat, error) {
+func (t *dashboardTelegram) Chats(ctx context.Context, limit int, chatType string, after rpc.DialogOffset, allowed func(int64) bool) ([]rpc.Chat, *rpc.DialogOffset, error) {
 	t.record("Chats")
-	return t.syncTelegram.Chats(ctx, limit, chatType)
+	return t.syncTelegram.Chats(ctx, limit, chatType, after, allowed)
 }
 func (t *dashboardTelegram) Resolve(ctx context.Context, ref chatref.Ref) (rpc.Chat, error) {
 	t.record("Resolve")

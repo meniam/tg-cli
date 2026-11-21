@@ -13,6 +13,8 @@ import (
 
 func chatListsFixture(method string, _ json.RawMessage) (any, error) {
 	switch method {
+	case rpc.MethodChatList:
+		return rpc.ChatListResult{Chats: []rpc.Chat{{ID: 1, Type: "user", Title: "Ann"}}, NextCursor: "NEXT"}, nil
 	case rpc.MethodChatMembers:
 		return rpc.MembersResult{Members: []rpc.Member{{ID: 5, Name: "Foreign\nname", Username: "foreign", Role: "admin"}}, NextOffset: 12}, nil
 	case rpc.MethodChatTopics:
@@ -31,6 +33,12 @@ func TestChatListsCLIRequests(t *testing.T) {
 		method string
 		check  func(*testing.T, json.RawMessage)
 	}{
+		{"list", []string{"chat", "list", "--type", "user", "--limit", "2", "--cursor", "OLD"}, rpc.MethodChatList, func(t *testing.T, raw json.RawMessage) {
+			var p rpc.ChatListParams
+			if err := json.Unmarshal(raw, &p); err != nil || p != (rpc.ChatListParams{Type: "user", Limit: 2, Cursor: "OLD"}) {
+				t.Fatalf("params %+v %v", p, err)
+			}
+		}},
 		{"members negative id", []string{"chat", "members", "--search", "Foreign", "--filter", "admins", "--offset", "10", "--limit", "2", "--", "-1001234567890"}, rpc.MethodChatMembers, func(t *testing.T, raw json.RawMessage) {
 			var p rpc.MembersParams
 			if err := json.Unmarshal(raw, &p); err != nil || p.Chat != "-1001234567890" || p.Search != "Foreign" || p.Filter != "admins" || p.Offset != 10 || p.Limit != 2 {
@@ -167,6 +175,7 @@ func TestChatListsSchemaAndResponseFields(t *testing.T) {
 		name, item string
 		result     any
 	}{
+		{"chat list", "chats", rpc.ChatListResult{Chats: []rpc.Chat{{ID: 1, Type: "user"}}, NextCursor: "NEXT"}},
 		{"chat members", "members", rpc.MembersResult{Members: []rpc.Member{{ID: 5, Name: "Ann", Role: "admin"}}, NextOffset: 6}},
 		{"chat topics", "topics", rpc.TopicsResult{Topics: []rpc.Topic{{ID: 7, Title: "Topic", Created: "2026-11-14T10:00:00Z"}}, NextCursor: "NEXT"}},
 		{"chat common", "chats", rpc.CommonChatsResult{Chats: []rpc.CommonChat{{ID: -77, Type: "group", Title: "Shared"}}, NextCursor: "NEXT"}},

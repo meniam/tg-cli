@@ -249,8 +249,9 @@ type AuthCancelResult struct {
 // ChatListParams are the parameters of MethodChatList. Type filters by chat
 // type: user, bot, group, supergroup or channel; empty means all.
 type ChatListParams struct {
-	Limit int    `json:"limit,omitempty"`
-	Type  string `json:"type,omitempty"`
+	Cursor string `json:"cursor,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+	Type   string `json:"type,omitempty"`
 }
 
 // Chat is a dialog of the account. Chat types are "user", "bot", "group",
@@ -277,9 +278,16 @@ type Chat struct {
 	Raw json.RawMessage `json:"-"`
 }
 
+// DialogOffset is the internal Telegram position sealed by the daemon. Skip
+// counts dialogs without a chronological position after the last offset.
+type DialogOffset struct {
+	Date, MessageID, PeerID, AccessHash, Skip int64
+}
+
 // ChatListResult is the result of MethodChatList.
 type ChatListResult struct {
-	Chats []Chat `json:"chats"`
+	Chats      []Chat `json:"chats"`
+	NextCursor string `json:"next_cursor,omitempty"`
 }
 
 // ChatRefParams point at a chat the way a user writes it: @username, a numeric

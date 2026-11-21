@@ -49,7 +49,7 @@ type Telegram interface {
 	LoginQR(ctx context.Context, show func(ctx context.Context, token rpc.QRToken) error, password func(context.Context) (string, error)) error
 	// Chats returns up to limit dialogs, newest first. A chat type (user, bot,
 	// group, supergroup, channel) keeps only the dialogs of that type.
-	Chats(ctx context.Context, limit int, chatType string) ([]rpc.Chat, error)
+	Chats(ctx context.Context, limit int, chatType string, after rpc.DialogOffset, allowed func(int64) bool) ([]rpc.Chat, *rpc.DialogOffset, error)
 	Members(ctx context.Context, ref chatref.Ref, p rpc.MembersParams) (rpc.MembersResult, error)
 	Topics(ctx context.Context, ref chatref.Ref, p rpc.TopicsParams) (rpc.TopicsResult, error)
 	CommonChats(ctx context.Context, ref chatref.Ref, p rpc.CommonChatsParams) (rpc.CommonChatsResult, error)

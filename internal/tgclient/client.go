@@ -9,6 +9,7 @@ import (
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/telegram/query"
+	"github.com/gotd/td/telegram/query/dialogs"
 	"github.com/gotd/td/telegram/updates"
 	"github.com/gotd/td/tg"
 
@@ -201,22 +202,59 @@ func (c *Client) Self(ctx context.Context) (*rpc.User, error) {
 // (user, bot, group, supergroup, channel) keeps only the dialogs of that type.
 // Every dialog read also teaches the peer cache, so that references to these
 // chats by id resolve later.
-func (c *Client) Chats(ctx context.Context, limit int, chatType string) ([]rpc.Chat, error) {
-	return c.chats(ctx, limit, chatType, false)
+func (c *Client) Chats(ctx context.Context, limit int, chatType string, after rpc.DialogOffset, allowed func(int64) bool) ([]rpc.Chat, *rpc.DialogOffset, error) {
+	return c.dialogPage(ctx, limit, chatType, after, allowed, false)
 }
 
 func (c *Client) chats(ctx context.Context, limit int, chatType string, requireCache bool) ([]rpc.Chat, error) {
+	chats, _, err := c.dialogPage(ctx, limit, chatType, rpc.DialogOffset{}, nil, requireCache)
+	return chats, err
+}
+
+func (c *Client) dialogPage(ctx context.Context, limit int, chatType string, after rpc.DialogOffset, allowed func(int64) bool, requireCache bool) ([]rpc.Chat, *rpc.DialogOffset, error) {
 	m, err := c.manager(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	it := query.GetDialogs(c.tg.API()).BatchSize(min(limit, 100)).Iter()
+	q := query.GetDialogs(c.tg.API())
+	var it *dialogs.Iterator
+	if allowed == nil {
+		it = q.BatchSize(min(limit, 100)).Iter()
+	} else {
+		it = chatDialogIterator(q, 100)
+	}
+	return readDialogPage(ctx, it, limit, chatType, after, allowed, func(users []tg.UserClass, groups []tg.ChatClass) error {
+		err := m.Apply(ctx, users, groups)
+		if requireCache {
+			return err
+		}
+		return nil
+	})
+}
+
+// The iterator counts raw rows against the reported total. An inclusive
+// boundary counts twice and can stop it before the last distinct dialog.
+func chatDialogIterator(q dialogs.Query, batch int) *dialogs.Iterator {
+	return dialogs.NewIterator(dialogs.QueryFunc(func(ctx context.Context, req dialogs.Request) (tg.MessagesDialogsClass, error) {
+		result, err := q.Query(ctx, req)
+		if page, ok := result.(*tg.MessagesDialogsSlice); ok && err == nil {
+			page.Count = 0 // Let the iterator stop on an empty or non-advancing page.
+		}
+		return result, err
+	}), batch)
+}
+
+func readDialogPage(ctx context.Context, it *dialogs.Iterator, limit int, chatType string, after rpc.DialogOffset, allowed func(int64) bool, cache func([]tg.UserClass, []tg.ChatClass) error) ([]rpc.Chat, *rpc.DialogOffset, error) {
+	it.OffsetDate(int(after.Date)).OffsetID(int(after.MessageID)).OffsetPeer(dialogOffsetPeer(after))
+	position := after
+	remaining := after.Skip
+	var next *rpc.DialogOffset
 	chats := make([]rpc.Chat, 0, min(limit, 100))
 	users := map[int64]tg.UserClass{}
 	var groups []tg.ChatClass
 	seen := map[int64]bool{}
 	listed := map[int64]bool{} // the dialog iterator may repeat a boundary dialog between pages
-	for len(chats) < limit && it.Next(ctx) {
+	for it.Next(ctx) {
 		elem := it.Value()
 		for id, u := range elem.Entities.Users() {
 			users[id] = u
@@ -233,23 +271,68 @@ func (c *Client) chats(ctx context.Context, limit int, chatType string, requireC
 				groups = append(groups, ch)
 			}
 		}
-		if chat, ok := toChat(elem); ok && (chatType == "" || chat.Type == chatType) && !listed[chat.ID] {
-			listed[chat.ID] = true
+		chat, ok := toChat(elem)
+		if !ok || listed[chat.ID] {
+			continue
+		}
+		dialog := elem.Dialog.(*tg.Dialog)
+		// Telegram may repeat the boundary and the pinned prefix on resume.
+		if after.PeerID != 0 && (chat.ID == after.PeerID || dialog.Pinned) {
+			continue
+		}
+		listed[chat.ID] = true
+		if remaining > 0 {
+			remaining--
+			continue
+		}
+		if (chatType == "" || chat.Type == chatType) && (allowed == nil || allowed(chat.ID)) {
+			if len(chats) == limit {
+				next = &position
+				break
+			}
 			chats = append(chats, chat)
+			if allowed == nil && len(chats) == limit {
+				break
+			}
+		}
+		// Pinned and message-less dialogs have no chronological offset. Replay
+		// this run from the preceding anchor when a page ends inside it.
+		if dialog.Pinned || elem.Last == nil {
+			position.Skip++
+			continue
+		}
+		position = rpc.DialogOffset{Date: int64(elem.Last.GetDate()), MessageID: int64(elem.Last.GetID()), PeerID: chat.ID}
+		switch peer := elem.Entities.OffsetPeer(dialog.Peer).(type) {
+		case *tg.InputPeerUser:
+			position.AccessHash = peer.AccessHash
+		case *tg.InputPeerChannel:
+			position.AccessHash = peer.AccessHash
 		}
 	}
 	if err := it.Err(); err != nil {
-		return nil, mapError(err)
+		return nil, nil, mapError(err)
 	}
 	userList := make([]tg.UserClass, 0, len(users))
 	for _, u := range users {
 		userList = append(userList, u)
 	}
-	// A failed cache update must not fail the listing.
-	if err := m.Apply(ctx, userList, groups); err != nil && requireCache {
-		return nil, mapError(err)
+	if err := cache(userList, groups); err != nil {
+		return nil, nil, mapError(err)
 	}
-	return chats, nil
+	return chats, next, nil
+}
+
+func dialogOffsetPeer(offset rpc.DialogOffset) tg.InputPeerClass {
+	switch {
+	case offset.PeerID > 0:
+		return &tg.InputPeerUser{UserID: offset.PeerID, AccessHash: offset.AccessHash}
+	case offset.PeerID < -channelIDBase:
+		return &tg.InputPeerChannel{ChannelID: -channelIDBase - offset.PeerID, AccessHash: offset.AccessHash}
+	case offset.PeerID < 0:
+		return &tg.InputPeerChat{ChatID: -offset.PeerID}
+	default:
+		return &tg.InputPeerEmpty{}
+	}
 }
 
 func toUser(u *tg.User) *rpc.User {
