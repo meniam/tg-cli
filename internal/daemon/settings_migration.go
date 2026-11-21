@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -32,6 +33,43 @@ type migrationProfile struct {
 	staged     *store.LegacyImport
 	changes    map[string]json.RawMessage
 	standalone []standaloneProfileFile
+}
+
+type migrationSourceFailure struct {
+	Source    string
+	Operation string
+}
+
+func (e *migrationSourceFailure) Error() string {
+	return fmt.Sprintf("cannot %s legacy settings source %s", e.Operation, e.Source)
+}
+
+func migrationSource(p *migrationProfile, key, configPath string) string {
+	if strings.HasPrefix(key, "access.") && p.prepared.AccessExists {
+		return p.paths.Access
+	}
+	for _, source := range p.standalone {
+		if key == source.key {
+			return source.path
+		}
+	}
+	return configPath
+}
+
+func defaultMigrationSource(p *migrationProfile, legacy config.Legacy, configPath string) string {
+	if legacy.Behavior != nil || legacy.BackgroundSync != nil || legacy.SemanticSearch != nil {
+		return configPath
+	}
+	if _, ok := legacy.Profiles[p.name]; ok {
+		return configPath
+	}
+	if p.prepared.AccessExists {
+		return p.paths.Access
+	}
+	if len(p.standalone) > 0 {
+		return p.standalone[0].path
+	}
+	return configPath
 }
 
 // MigrateSettings migrates all known profiles under the configuration and
@@ -268,14 +306,28 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 				p.changes = changes
 				p.staged, err = p.db.BeginLegacyImport(ctx, changes)
 				if err != nil {
-					return errors.New("cannot stage profile settings migration")
+					source := defaultMigrationSource(p, cfg.Legacy, configPath)
+					var verification *store.LegacyVerificationError
+					if errors.As(err, &verification) {
+						source = migrationSource(p, verification.Key, configPath)
+					}
+					return &migrationSourceFailure{Source: source, Operation: "stage or verify"}
 				}
 			}
 			// No transaction is committed until all profiles and source copies verify.
 			if anySource {
 				result.Backup, err = BackupLegacySettings(home, filepath.Base(configPath), doc.Content, doc.Exists, backups)
 				if err != nil {
-					return err
+					source := configPath
+					var copyErr *backupSourceError
+					if errors.As(err, &copyErr) {
+						if copyErr.Profile != "" {
+							source = filepath.Join(home, copyErr.Profile, copyErr.Name)
+						}
+					} else if !globalLegacy && len(backups) > 0 {
+						source = filepath.Join(home, backups[0].Profile, backups[0].Name)
+					}
+					return &migrationSourceFailure{Source: source, Operation: "back up"}
 				}
 			}
 			if err := checkProfiles(); err != nil {
@@ -296,15 +348,15 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 				}
 				actual, err := p.db.Settings(ctx)
 				if err != nil {
-					return errors.New("cannot verify profile settings migration")
+					return &migrationSourceFailure{Source: defaultMigrationSource(p, cfg.Legacy, configPath), Operation: "verify"}
 				}
 				marked, err := p.db.SettingsMigrated(ctx)
 				if err != nil || !marked {
-					return errors.New("cannot verify profile settings migration")
+					return &migrationSourceFailure{Source: defaultMigrationSource(p, cfg.Legacy, configPath), Operation: "verify"}
 				}
 				for key, expected := range p.changes {
 					if !bytes.Equal(actual[key], expected) {
-						return errors.New("cannot verify profile settings migration")
+						return &migrationSourceFailure{Source: migrationSource(p, key, configPath), Operation: "verify"}
 					}
 				}
 			}
@@ -413,7 +465,7 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 			restore := func() error {
 				for _, source := range removed {
 					if err := restoreLegacyAccess(source.path, source.data, source.mode); err != nil {
-						return errors.New("cannot restore legacy sources")
+						return &migrationSourceFailure{Source: source.path, Operation: "restore"}
 					}
 				}
 				return nil
@@ -462,8 +514,9 @@ func MigrateSettings(ctx context.Context, configPath, home, selected string) (Se
 		var input *MigrationInputError
 		var legacy *LegacySettingsError
 		var conflict *FileConflictError
+		var sourceFailure *migrationSourceFailure
 		switch {
-		case errors.As(err, &input), errors.As(err, &legacy), errors.As(err, &conflict):
+		case errors.As(err, &input), errors.As(err, &legacy), errors.As(err, &conflict), errors.As(err, &sourceFailure):
 			return result, err
 		case errors.As(err, &ce):
 			return result, &MigrationInputError{Source: configPath}

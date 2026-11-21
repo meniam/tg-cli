@@ -3,6 +3,7 @@ package daemon
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,6 +13,16 @@ import (
 type LegacyBackupFile struct {
 	Profile, Name string
 	Data          []byte
+}
+
+// backupSourceError identifies which source copy failed without exposing its data.
+type backupSourceError struct {
+	Profile string
+	Name    string
+}
+
+func (e *backupSourceError) Error() string {
+	return fmt.Sprintf("cannot back up legacy source %s", e.Name)
 }
 
 // BackupLegacySettings writes and verifies private copies without changing sources.
@@ -42,7 +53,7 @@ func BackupLegacySettings(home, configName string, configData []byte, configExis
 	}
 	if configExists {
 		if err = writeLegacyBackup(filepath.Join(dir, configName), configData); err != nil {
-			return "", err
+			return "", &backupSourceError{Name: configName}
 		}
 	}
 	made := make(map[string]bool)
@@ -50,19 +61,24 @@ func BackupLegacySettings(home, configName string, configData []byte, configExis
 		profileDir := filepath.Join(dir, f.Profile)
 		if !made[f.Profile] {
 			if err = os.Mkdir(profileDir, 0700); err != nil {
-				return "", errors.New("cannot create migration backup")
+				return "", &backupSourceError{Profile: f.Profile, Name: f.Name}
 			}
 			if err = os.Chmod(profileDir, 0700); err != nil {
-				return "", errors.New("cannot secure migration backup")
+				return "", &backupSourceError{Profile: f.Profile, Name: f.Name}
 			}
 			made[f.Profile] = true
 		}
 		if err = writeLegacyBackup(filepath.Join(profileDir, f.Name), f.Data); err != nil {
-			return "", err
+			return "", &backupSourceError{Profile: f.Profile, Name: f.Name}
 		}
 	}
 	for profile := range made {
 		if err = syncDir(filepath.Join(dir, profile)); err != nil {
+			for _, source := range files {
+				if source.Profile == profile {
+					return "", &backupSourceError{Profile: source.Profile, Name: source.Name}
+				}
+			}
 			return "", errors.New("cannot sync migration backup")
 		}
 	}

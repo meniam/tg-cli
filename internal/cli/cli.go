@@ -122,6 +122,9 @@ func Execute(ctx context.Context, args []string, deps Deps) int {
 	// The command that failed may be a subcommand, an unknown name or nothing at
 	// all: the format is read from wherever cobra stopped.
 	message := withIDHint(err.Error(), args)
+	if ce == nil && command != nil && (command.CommandPath() == "tg settings" || strings.HasPrefix(command.CommandPath(), "tg settings ")) {
+		message = "invalid settings command arguments"
+	}
 	if exit == exitcode.Usage && command != nil && command.Runnable() && !strings.Contains(message, "choose a subcommand:") {
 		message += "\nusage: " + command.UseLine()
 	}

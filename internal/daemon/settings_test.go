@@ -212,7 +212,7 @@ func TestSettingsRPCRestartValuesRemainAtStartup(t *testing.T) {
 }
 
 func TestSettingsRPCJournalDoesNotLeakValues(t *testing.T) {
-	d, c, _ := settingsFixture(t)
+	d, c, db := settingsFixture(t)
 	logs := &safeBuffer{}
 	d.log = slog.New(slog.NewTextHandler(logs, nil))
 	phrase := "valid owner passphrase"
@@ -227,7 +227,14 @@ func TestSettingsRPCJournalDoesNotLeakValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	hash, found, err := db.OwnerSecret(context.Background())
+	if err != nil || !found {
+		t.Fatalf("owner hash unavailable: %v", err)
+	}
 	text := logs.String()
+	if strings.Contains(text, hash) {
+		t.Fatal("owner hash found in journal")
+	}
 	if !strings.Contains(text, "access.allow") || !strings.Contains(text, "added=1") || !strings.Contains(text, "source=rpc") {
 		t.Fatalf("missing journal data: %s", text)
 	}

@@ -253,6 +253,11 @@ func (db *DB) ReplaceOwnerSecret(ctx context.Context, previous, next string) (bo
 	return n == 1, nil
 }
 
+// LegacyVerificationError identifies the setting whose staged value did not match.
+type LegacyVerificationError struct{ Key string }
+
+func (e *LegacyVerificationError) Error() string { return "cannot verify migration settings" }
+
 // LegacyImport is a verified but not yet committed profile migration.
 type LegacyImport struct{ tx *sql.Tx }
 
@@ -308,7 +313,7 @@ func (db *DB) BeginLegacyImport(ctx context.Context, changes map[string]json.Raw
 	}
 	for key, value := range canonical {
 		if !bytes.Equal(actual[key], value) {
-			return fail(errors.New("cannot verify migration settings"))
+			return fail(&LegacyVerificationError{Key: key})
 		}
 	}
 	return &LegacyImport{tx: tx}, nil

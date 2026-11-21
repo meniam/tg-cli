@@ -127,6 +127,15 @@ func TestOwnerResetRequiresOfflineLock(t *testing.T) {
 		t.Fatalf("reset with running daemon: %v", err)
 	}
 	release()
+	releaseDB, err := LockDatabase(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ResetOwnerSecretOffline(ctx, paths); !errors.Is(err, ErrDatabaseInUse) {
+		releaseDB()
+		t.Fatalf("reset with busy database: %v", err)
+	}
+	releaseDB()
 	if err := ResetOwnerSecretOffline(ctx, paths); err != nil {
 		t.Fatal(err)
 	}
@@ -165,5 +174,42 @@ func TestOwnerResetErrorsHidePaths(t *testing.T) {
 	err = ResetOwnerSecretOffline(ctx, paths)
 	if err == nil || strings.Contains(err.Error(), dir) || strings.Contains(err.Error(), "private-db") {
 		t.Fatalf("binding error leaks path: %v", err)
+	}
+}
+
+func TestConcurrentOwnerInitAndLockedHashCheck(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "store.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	first, second := NewOwnerSecrets(db), NewOwnerSecrets(db)
+	start := make(chan struct{})
+	outcomes := make(chan error, 2)
+	for _, owner := range []*OwnerSecrets{first, second} {
+		go func(o *OwnerSecrets) { <-start; outcomes <- o.Init(ctx, "valid initial passphrase") }(owner)
+	}
+	close(start)
+	a, b := <-outcomes, <-outcomes
+	if !((a == nil && errors.Is(b, ErrOwnerPassphraseExists)) || (b == nil && errors.Is(a, ErrOwnerPassphraseExists))) {
+		t.Fatalf("concurrent initialization: %v, %v", a, b)
+	}
+	now := time.Unix(1000, 0)
+	first.now = func() time.Time { return now }
+	for i := 0; i < 5; i++ {
+		if err := first.Verify(ctx, "incorrect phrase"); !errors.Is(err, ErrOwnerPassphraseWrong) {
+			t.Fatal(err)
+		}
+	}
+	if err := db.SetOwnerSecret(ctx, "corrupted hash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Verify(ctx, "valid initial passphrase"); !errors.Is(err, ErrOwnerPassphraseLocked) {
+		t.Fatalf("hash examined before lock: %v", err)
+	}
+	now = now.Add(time.Minute)
+	if err := first.Verify(ctx, "valid initial passphrase"); err == nil || strings.Contains(err.Error(), "corrupted hash") || strings.Contains(err.Error(), "valid initial passphrase") {
+		t.Fatalf("hash failure exposed a secret: %v", err)
 	}
 }
