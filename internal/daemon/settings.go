@@ -169,6 +169,13 @@ func (d *daemon) applyLiveSetting(key config.SettingKey, stored map[string]json.
 	return true
 }
 
+func (d *daemon) settingsWriteSource() string {
+	if d.settingsSource == "offline" {
+		return "offline"
+	}
+	return "rpc"
+}
+
 func (d *daemon) registerSettings() {
 	d.handle(rpc.MethodSettingsList, d.settingsList)
 	d.handle(rpc.MethodSettingsGet, d.settingsGet)
@@ -380,6 +387,9 @@ func (d *daemon) settingsWriteBatch(ctx context.Context, changes map[string]json
 	sort.Strings(keys)
 	d.settingsMu.Lock()
 	defer d.settingsMu.Unlock()
+	if d.settingsSource == "offline" && d.legacyAccessPresent() {
+		return nil, &LegacySettingsError{Source: d.opts.Paths.Access}
+	}
 	if protected {
 		if err := d.requireOwner(ctx, phrase); err != nil {
 			return nil, err
@@ -407,6 +417,9 @@ func (d *daemon) settingsWriteBatch(ctx context.Context, changes map[string]json
 		defer d.accessRefreshMu.Unlock()
 		d.accessMu.Lock()
 		defer d.accessMu.Unlock()
+	}
+	if d.settingsSource == "offline" && d.legacyAccessPresent() {
+		return nil, &LegacySettingsError{Source: d.opts.Paths.Access}
 	}
 	if err := d.store.SetSettings(ctx, parsed); err != nil {
 		var ce *config.Error
@@ -447,9 +460,9 @@ func (d *daemon) settingsWriteBatch(ctx context.Context, changes map[string]json
 		if d.log != nil {
 			if key.Type == "ids" || key.Type == "paths" {
 				added, removed := settingListDifference(old, after[name])
-				d.log.Info("setting updated", "key", name, "source", "rpc", "added", added, "removed", removed)
+				d.log.Info("setting updated", "key", name, "source", d.settingsWriteSource(), "added", added, "removed", removed)
 			} else {
-				d.log.Info("setting updated", "key", name, "source", "rpc")
+				d.log.Info("setting updated", "key", name, "source", d.settingsWriteSource())
 			}
 		}
 		applied := d.applyLiveSetting(key, after)
@@ -496,6 +509,9 @@ func (d *daemon) settingsWrite(ctx context.Context, name, phrase, op string, val
 	}
 	d.settingsMu.Lock()
 	defer d.settingsMu.Unlock()
+	if d.settingsSource == "offline" && d.legacyAccessPresent() {
+		return nil, &LegacySettingsError{Source: d.opts.Paths.Access}
+	}
 	if key.Protected {
 		if err := d.requireOwner(ctx, phrase); err != nil {
 			return nil, err
@@ -550,6 +566,9 @@ func (d *daemon) settingsWrite(ctx context.Context, name, phrase, op string, val
 		d.accessMu.Lock()
 		defer d.accessMu.Unlock()
 	}
+	if d.settingsSource == "offline" && d.legacyAccessPresent() {
+		return nil, &LegacySettingsError{Source: d.opts.Paths.Access}
+	}
 	if op == "unset" {
 		err = d.store.DeleteSetting(ctx, name)
 	} else {
@@ -590,9 +609,9 @@ func (d *daemon) settingsWrite(ctx context.Context, name, phrase, op string, val
 				current = v
 			}
 			added, removed := settingListDifference(old, current)
-			d.log.Info("setting updated", "key", name, "source", "rpc", "added", added, "removed", removed)
+			d.log.Info("setting updated", "key", name, "source", d.settingsWriteSource(), "added", added, "removed", removed)
 		} else {
-			d.log.Info("setting updated", "key", name, "source", "rpc")
+			d.log.Info("setting updated", "key", name, "source", d.settingsWriteSource())
 		}
 	}
 	d.applyBackgroundSettings([]string{name}, stored)

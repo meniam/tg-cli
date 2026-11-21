@@ -7,6 +7,7 @@ import (
 
 	"tg-cli/internal/access"
 	"tg-cli/internal/chatref"
+	"tg-cli/internal/config"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
 )
@@ -52,12 +53,33 @@ func (d *daemon) legacyAccessPresent() bool {
 	return !os.IsNotExist(err)
 }
 
+// legacyConfigPresent checks the current config, not only its startup snapshot.
+// An unreadable or replaced source fails closed without logging its contents.
+func (d *daemon) legacyConfigPresent() bool {
+	path := d.opts.ConfigPath
+	if path == "" {
+		return false
+	}
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return false
+	}
+	if err != nil || !info.Mode().IsRegular() {
+		return true
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		return true
+	}
+	return CheckNoLegacySettingsSources("", cfg.Legacy) != nil
+}
+
 func (d *daemon) policy() access.Policy {
 	d.accessMu.RLock()
 	if d.accessSnapshot != nil {
 		policy := *d.accessSnapshot
 		d.accessMu.RUnlock()
-		if d.legacyAccessPresent() {
+		if d.legacyAccessPresent() || d.legacyConfigPresent() {
 			return access.Denied()
 		}
 		return policy

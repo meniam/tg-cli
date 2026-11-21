@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"tg-cli/internal/clientpreset"
+	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
@@ -151,17 +152,35 @@ func (a *app) deviceModel(cmd *cobra.Command, paths daemon.Paths) (string, error
 }
 
 func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
-	// The previous data directory moves first: its legacy profile files belong
-	// to the migration that follows.
-	if err := a.moveLegacyHome(cmd); err != nil {
+	if err := a.guardLegacyHomeSettings(); err != nil {
 		return err
 	}
-	if err := a.migrateProfiles(); err != nil {
+	// The previous data directory moves before the settings migration.
+	if err := a.moveLegacyHome(cmd); err != nil {
 		return err
 	}
 	profile, paths, err := a.profile(cmd)
 	if err != nil {
 		return err
+	}
+	if _, pingErr := daemon.Ping(cmd.Context(), paths.Socket); pingErr == nil {
+		if err := daemon.CheckNoLegacySettingsSources(paths.Access, a.config.Legacy); err != nil {
+			return a.daemonStartError(err)
+		}
+	} else if !rpc.IsNotRunning(pingErr) {
+		return fail(exitcode.Failure, "cannot inspect daemon state")
+	} else {
+		migrated, err := daemon.MigrateSettings(cmd.Context(), a.deps.ConfigPath, filepath.Dir(paths.Dir), profile)
+		if err != nil {
+			return a.daemonStartError(err)
+		}
+		for _, moved := range migrated.Moved {
+			a.warn(cmd, "note: moved the database from %s to %s", moved.LegacyDatabase, moved.Database)
+		}
+		a.config, err = config.Load(a.deps.ConfigPath)
+		if err != nil {
+			return fail(exitcode.Failure, "cannot reload configuration")
+		}
 	}
 	warnings, err := daemon.CheckFileNames(paths)
 	if err != nil {
@@ -209,6 +228,7 @@ func (a *app) daemonStart(cmd *cobra.Command, _ []string) error {
 		FileWarningsReported: true,
 		Profile:              profile,
 		Paths:                paths,
+		ConfigPath:           a.deps.ConfigPath,
 		Log:                  logger,
 		IdleTimeout:          idle,
 		Prepare: func(ctx context.Context, db daemon.ProfileDatabase, options *daemon.Options) error {

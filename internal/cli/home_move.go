@@ -44,3 +44,17 @@ func (a *app) moveLegacyHome(cmd *cobra.Command) error {
 	}
 	return nil
 }
+
+// guardLegacyHomeSettings prevents the independent home move from relocating
+// migration sources before the settings transaction has verified them.
+func (a *app) guardLegacyHomeSettings() error {
+	if a.deps.LegacyHome == nil || a.config.HomeSet || a.deps.Getenv("TG_CLI_HOME") != "" {
+		return nil
+	}
+	f := a.config.Files
+	err := daemon.CheckLegacyHomeSettings(a.deps.LegacyHome(), a.config.Home, daemon.FileNames{Database: f.Database, Session: f.Session, Log: f.Log, Deletions: f.Deletions, Access: f.Access})
+	if err != nil {
+		return a.daemonStartError(err)
+	}
+	return nil
+}

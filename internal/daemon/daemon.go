@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,6 +43,7 @@ type Options struct {
 	ClientPreset string
 	Profile      string
 	Paths        Paths
+	ConfigPath   string
 	Telegram     Telegram
 	// NewTelegram constructs a replacement for the single-use client.
 	NewTelegram       func(context.Context, TelegramConfig) (Telegram, error)
@@ -90,6 +92,7 @@ type daemon struct {
 	accessMu             sync.RWMutex
 	accessRefreshMu      sync.Mutex
 	settingsMu           sync.Mutex
+	settingsSource       string
 	liveMu               sync.RWMutex
 	liveValues           map[string]json.RawMessage
 	liveBackground       *BackgroundSyncConfig
@@ -905,6 +908,19 @@ func needsTelegram(method string) bool {
 
 // guardRequest rejects account operations after authorization loss.
 func (d *daemon) guardRequest(req rpc.Request) error {
+	if accountMethod(req.Method) || strings.HasPrefix(req.Method, "settings.") {
+		d.accessMu.RLock()
+		hasSnapshot := d.accessSnapshot != nil
+		d.accessMu.RUnlock()
+		if hasSnapshot {
+			if d.legacyAccessPresent() {
+				return rpc.NewError(rpc.CodeInvalidParams, "legacy settings source requires removal: "+d.opts.Paths.Access)
+			}
+			if d.legacyConfigPresent() {
+				return rpc.NewError(rpc.CodeInvalidParams, "legacy settings source requires removal: "+d.opts.ConfigPath)
+			}
+		}
+	}
 	if d.opts.NewTelegram != nil && needsTelegram(req.Method) && d.admission.isBlocked() {
 		return rpc.NewError(rpc.CodeOffline, "telegram is offline")
 	}

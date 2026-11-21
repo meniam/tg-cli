@@ -13,7 +13,7 @@ import (
 type LegacySettingsError struct{ Source string }
 
 func (e *LegacySettingsError) Error() string {
-	return fmt.Sprintf("legacy settings source %s exists after migration", e.Source)
+	return fmt.Sprintf("legacy settings source %s requires migration or removal", e.Source)
 }
 func (e *LegacySettingsError) ExitCode() int { return 2 }
 
@@ -26,6 +26,11 @@ func CheckMigratedSettingsSources(ctx context.Context, db ProfileDatabase, acces
 	if !migrated {
 		return nil
 	}
+	return CheckNoLegacySettingsSources(accessPath, legacy)
+}
+
+// CheckNoLegacySettingsSources fails closed if an old source exists.
+func CheckNoLegacySettingsSources(accessPath string, legacy config.Legacy) error {
 	if accessPath != "" {
 		_, err := os.Lstat(accessPath)
 		if err == nil {

@@ -43,13 +43,13 @@ func (a *app) sessionCommand() *cobra.Command {
 	return group
 }
 func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
-	if err := a.migrateProfiles(); err != nil {
-		return err
-	}
 	yes, _ := cmd.Flags().GetBool("yes")
 	out, _ := cmd.Flags().GetString("out")
 	if !yes || out == "" || out == "-" {
 		return fail(exitcode.Usage, "--yes and --out are required")
+	}
+	if err := a.guardLegacyHomeSettings(); err != nil {
+		return err
 	}
 	profile, p, err := a.profile(cmd)
 	if err != nil {
@@ -58,6 +58,9 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 	absoluteOut, err := filepath.Abs(out)
 	if err != nil {
 		return fail(exitcode.Usage, "invalid output path")
+	}
+	if _, err := daemon.MigrateSettings(cmd.Context(), a.deps.ConfigPath, filepath.Dir(p.Dir), profile); err != nil {
+		return a.daemonStartError(err)
 	}
 	var export rpc.SessionExportResult
 	c, err := a.connect(cmd.Context(), cmd)
@@ -76,7 +79,14 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 			if e != nil {
 				return fail(exitcode.Failure, "cannot read profile settings")
 			}
-			client := a.config.Profiles[profile].Client
+			migrated, e := db.SettingsMigrated(cmd.Context())
+			if e != nil {
+				return fail(exitcode.Failure, "cannot read profile settings")
+			}
+			client := ""
+			if !migrated {
+				client = a.config.Profiles[profile].Client
+			}
 			if value, ok := stored["profile.client"]; ok {
 				if json.Unmarshal(value, &client) != nil {
 					return fail(exitcode.Failure, "cannot read profile settings")
@@ -113,9 +123,6 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 	return a.success(cmd, result)
 }
 func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
-	if err := a.migrateProfiles(); err != nil {
-		return err
-	}
 	yes, _ := cmd.Flags().GetBool("yes")
 	from, _ := cmd.Flags().GetString("from")
 	force, _ := cmd.Flags().GetBool("force")
@@ -177,6 +184,14 @@ func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
 		}
 		return nil
 	}, func(db daemon.ProfileDatabase) error {
+		if err := daemon.CheckMigratedSettingsSources(cmd.Context(), db, p.Access, a.config.Legacy); err != nil {
+			var legacy *daemon.LegacySettingsError
+			var input *daemon.MigrationInputError
+			if errors.As(err, &legacy) || errors.As(err, &input) {
+				return fail(exitcode.Usage, "%v", err)
+			}
+			return fail(exitcode.Failure, "cannot inspect legacy settings")
+		}
 		writeSession := func() error {
 			if e := daemon.WriteSession(p, data.Session); e != nil {
 				return fail(exitcode.Failure, "cannot write session")
@@ -198,13 +213,19 @@ func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
 				return fail(exitcode.Failure, "cannot read profile settings")
 			}
 		} else {
-			legacy, found, err := config.LegacyProfileClient(a.deps.ConfigPath, profile)
+			migrated, err := db.SettingsMigrated(cmd.Context())
 			if err != nil {
-				return fail(exitcode.Failure, "cannot read client preset")
+				return fail(exitcode.Failure, "cannot read profile settings")
 			}
 			client = data.Client
-			if found {
-				client = legacy
+			if !migrated {
+				legacy, found, err := config.LegacyProfileClient(a.deps.ConfigPath, profile)
+				if err != nil {
+					return fail(exitcode.Failure, "cannot read client preset")
+				}
+				if found {
+					client = legacy
+				}
 			}
 			journal, e = daemon.OpenJournal(p.Log)
 			if e != nil {

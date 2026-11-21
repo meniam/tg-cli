@@ -182,9 +182,9 @@ func (a *app) rootCommand() *cobra.Command {
 		if err != nil {
 			var configErr *config.Error
 			if errors.As(err, &configErr) {
-				return fail(exitcode.Usage, "%v", err)
+				return fail(exitcode.Usage, "invalid config %s: %v", path, configErr)
 			}
-			return fail(exitcode.Failure, "%v", err)
+			return fail(exitcode.Failure, "cannot read config %s", path)
 		}
 		a.config = cfg
 		seen := make(map[string]bool)

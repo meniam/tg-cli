@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 
 	"tg-cli/internal/config"
@@ -250,4 +251,139 @@ func (db *DB) ReplaceOwnerSecret(ctx context.Context, previous, next string) (bo
 		return false, fmt.Errorf("change owner secret: %w", err)
 	}
 	return n == 1, nil
+}
+
+// LegacyImport is a verified but not yet committed profile migration.
+type LegacyImport struct{ tx *sql.Tx }
+
+// BeginLegacyImport stages a complete migration and reads it back before commit.
+func (db *DB) BeginLegacyImport(ctx context.Context, changes map[string]json.RawMessage) (*LegacyImport, error) {
+	canonical := make(map[string]json.RawMessage, len(changes))
+	for key, value := range changes {
+		parsed, err := config.ParseSettingJSON(key, value)
+		if err != nil {
+			return nil, errors.New("invalid migration settings")
+		}
+		canonical[key] = parsed
+	}
+	tx, err := db.write.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, errors.New("cannot begin settings migration")
+	}
+	fail := func(err error) (*LegacyImport, error) { _ = tx.Rollback(); return nil, err }
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM settings_meta WHERE key=?`, settingsMigrationKey).Scan(&count); err != nil {
+		return fail(errors.New("cannot read settings migration marker"))
+	}
+	if count != 0 {
+		return fail(errors.New("settings migration marker already exists"))
+	}
+	values, err := readSettings(ctx, tx)
+	if err != nil {
+		return fail(errors.New("cannot read settings"))
+	}
+	for key, value := range canonical {
+		values[key] = value
+	}
+	if err := config.ValidateSettings(values); err != nil {
+		return fail(errors.New("invalid migration settings"))
+	}
+	keys := make([]string, 0, len(canonical))
+	for key := range canonical {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	now := db.now().Unix()
+	for _, key := range keys {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`, key, string(canonical[key]), now); err != nil {
+			return fail(errors.New("cannot write migration settings"))
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO settings_meta(key,value) VALUES(?, '1')`, settingsMigrationKey); err != nil {
+		return fail(errors.New("cannot write settings migration marker"))
+	}
+	actual, err := readSettings(ctx, tx)
+	if err != nil {
+		return fail(errors.New("cannot verify migration settings"))
+	}
+	for key, value := range canonical {
+		if !bytes.Equal(actual[key], value) {
+			return fail(errors.New("cannot verify migration settings"))
+		}
+	}
+	return &LegacyImport{tx: tx}, nil
+}
+
+// Commit publishes the staged values and marker.
+func (m *LegacyImport) Commit() error {
+	if err := m.tx.Commit(); err != nil {
+		return errors.New("cannot commit settings migration")
+	}
+	return nil
+}
+
+// Rollback discards staged changes; it is safe after Commit.
+func (m *LegacyImport) Rollback() { _ = m.tx.Rollback() }
+
+// SettingsMigratedAt reads the marker without opening a writable database.
+// A missing database or a database before the settings schema is not migrated.
+func SettingsMigratedAt(path string) (bool, error) {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	} else if err != nil {
+		return false, errors.New("cannot inspect profile database")
+	}
+	db, err := sql.Open("sqlite", dsn(path, "ro"))
+	if err != nil {
+		return false, errors.New("cannot open profile database")
+	}
+	defer db.Close()
+	var name string
+	err = db.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name='settings_meta'`).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, errors.New("cannot read settings migration marker")
+	}
+	var value string
+	err = db.QueryRow(`SELECT value FROM settings_meta WHERE key=?`, settingsMigrationKey).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil || value != "1" {
+		return false, errors.New("invalid settings migration marker")
+	}
+	return true, nil
+}
+
+// ReadOnlySettingsAt reads existing settings without creating or migrating a database.
+func ReadOnlySettingsAt(ctx context.Context, path string) (map[string]json.RawMessage, error) {
+	values := make(map[string]json.RawMessage)
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return values, nil
+	} else if err != nil {
+		return nil, errors.New("cannot inspect profile database")
+	}
+	db, err := sql.Open("sqlite", dsn(path, "ro"))
+	if err != nil {
+		return nil, errors.New("cannot open profile database")
+	}
+	defer db.Close()
+	var name string
+	err = db.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type='table' AND name='settings'`).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return values, nil
+	}
+	if err != nil {
+		return nil, errors.New("cannot read profile settings")
+	}
+	values, err = readSettings(ctx, db)
+	if err != nil {
+		return nil, errors.New("cannot read profile settings")
+	}
+	if err := config.ValidateSettings(values); err != nil {
+		return nil, errors.New("invalid profile settings")
+	}
+	return values, nil
 }

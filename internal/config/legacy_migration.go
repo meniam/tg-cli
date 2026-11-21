@@ -53,6 +53,15 @@ func WithLegacyConfigLock(path string, action func(*LockedLegacyConfig) error) e
 // every expression outside those sections. The caller must hold the lock and
 // verify that all settings were committed and backed up before calling it.
 func (c *LockedLegacyConfig) RemoveLegacy() error {
+	current, readErr := os.ReadFile(c.path)
+	if errors.Is(readErr, os.ErrNotExist) {
+		if c.Exists {
+			return invalid("config file changed during migration")
+		}
+		current = nil
+	} else if readErr != nil || !c.Exists || !bytes.Equal(current, c.Content) {
+		return invalid("config file changed during migration")
+	}
 	updated, err := StripLegacy(c.Content)
 	if err != nil {
 		return err

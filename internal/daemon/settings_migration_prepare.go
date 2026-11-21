@@ -24,6 +24,7 @@ func (e *MigrationInputError) ExitCode() int { return 2 }
 type PreparedLegacySettings struct {
 	Values       map[string]json.RawMessage
 	AccessData   []byte
+	AccessMode   os.FileMode
 	AccessExists bool
 }
 
@@ -83,6 +84,7 @@ func PrepareLegacySettings(ctx context.Context, legacy config.Legacy, profile, c
 	}
 	result.Values = values
 	result.AccessData = raw
+	result.AccessMode = info.Mode().Perm()
 	result.AccessExists = true
 	return result, nil
 }

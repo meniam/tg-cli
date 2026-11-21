@@ -2,7 +2,6 @@ package cli
 
 import (
 	"errors"
-	"fmt"
 	"path/filepath"
 	"sort"
 
@@ -113,9 +112,6 @@ func (a *app) configInit(cmd *cobra.Command, _ []string) error {
 }
 
 func (a *app) configShow(cmd *cobra.Command, _ []string) error {
-	if err := a.migrateProfiles(); err != nil {
-		return err
-	}
 	home := a.config.Home
 	if env := a.deps.Getenv("TG_CLI_HOME"); env != "" {
 		home = env
@@ -148,24 +144,18 @@ func (a *app) configShow(cmd *cobra.Command, _ []string) error {
 	return a.success(cmd, result)
 }
 func (a *app) configMigrate(cmd *cobra.Command, _ []string) error {
+	if err := a.guardLegacyHomeSettings(); err != nil {
+		return err
+	}
 	home := a.config.Home
 	if env := a.deps.Getenv("TG_CLI_HOME"); env != "" {
 		home = env
 	}
-	result, err := config.MigrateProfiles(a.deps.ConfigPath, home)
+	settingsResult, err := daemon.MigrateSettings(cmd.Context(), a.deps.ConfigPath, home, a.config.DefaultProfile)
 	if err != nil {
-		var invalid *config.Error
-		if errors.As(err, &invalid) {
-			return fail(exitcode.Usage, "%v", err)
-		}
-		return fail(exitcode.Failure, "migrate profile settings: %v", err)
+		return a.daemonStartError(err)
 	}
-	for _, warning := range result.Warnings {
-		fmt.Fprintln(a.deps.Stderr, "warning: "+warning)
-	}
-	warnings := result.Warnings
-	if warnings == nil {
-		warnings = []string{}
-	}
-	return a.success(cmd, configMigrateResult{Migrated: result.Backup != "", Backup: result.Backup, Warnings: warnings})
+	warnings := []string{}
+	backup := settingsResult.Backup
+	return a.success(cmd, configMigrateResult{Migrated: settingsResult.Migrated, Backup: backup, Warnings: warnings})
 }
