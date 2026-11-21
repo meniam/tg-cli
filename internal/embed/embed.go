@@ -21,7 +21,7 @@ import (
 
 const (
 	// numCtx is the context window asked from the model. bge-m3 reads up to 8192
-	// tokens; Ollama truncates a longer input instead of failing.
+	// tokens; Ollama can reject a longer input. The client retries its prefix.
 	numCtx = 8192
 	// keepAlive keeps the model loaded between two indexing runs, so the query
 	// embedding of a search does not pay the load time.
@@ -36,6 +36,8 @@ const (
 	maxResponseBytes = 64 << 20
 	// maxErrorBytes bounds the part of an error body that is read.
 	maxErrorBytes = 4 << 10
+	// maxRetryRunes bounds the first shortened input and the number of retries.
+	maxRetryRunes = 131072
 
 	// DefaultBatch is the number of texts per request when Options.Batch is zero.
 	DefaultBatch = 16
@@ -184,7 +186,7 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	out := make([][]float32, 0, len(texts))
 	dim := 0
 	for _, batch := range splitBatches(texts, c.batch) {
-		vectors, err := c.embedBatch(ctx, batch)
+		vectors, err := c.embedWithFallback(ctx, batch)
 		if err != nil {
 			return nil, err
 		}
@@ -201,6 +203,39 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 		out = append(out, vectors...)
 	}
 	return out, nil
+}
+
+// embedWithFallback isolates rejected batches and halves a rejected text by runes.
+func (c *Client) embedWithFallback(ctx context.Context, texts []string) ([][]float32, error) {
+	vectors, err := c.embedBatch(ctx, texts)
+	var tooLong *contextLengthError
+	if !errors.As(err, &tooLong) {
+		return vectors, err
+	}
+	if len(texts) > 1 {
+		out := make([][]float32, 0, len(texts))
+		for _, text := range texts {
+			v, err := c.embedWithFallback(ctx, []string{text})
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, v...)
+		}
+		return out, nil
+	}
+	runes := []rune(texts[0])
+	for len(runes) >= 64 {
+		n := len(runes) / 2
+		if n > maxRetryRunes {
+			n = maxRetryRunes
+		}
+		runes = runes[:n]
+		vectors, err = c.embedBatch(ctx, []string{string(runes)})
+		if !errors.As(err, &tooLong) {
+			return vectors, err
+		}
+	}
+	return nil, tooLong.StatusError
 }
 
 // splitBatches cuts texts into consecutive runs of at most size texts whose
@@ -299,15 +334,28 @@ func transportError(ctx context.Context, err error) error {
 }
 
 // statusError turns an error status into a typed error. Only the status code
-// and the fact of "not found" are used: the error text of the service is not
+// and recognized error conditions are used: the error text of the service is not
 // copied, so nothing it echoes can reach a log.
 func statusError(resp *http.Response) error {
 	text, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBytes))
+	if resp.StatusCode == http.StatusRequestEntityTooLarge {
+		var body struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(text, &body) == nil && body.Error == "the input length exceeds the context length" {
+			return &contextLengthError{StatusError: &StatusError{Code: resp.StatusCode}}
+		}
+	}
 	if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(string(text)), "not found") {
 		return fmt.Errorf("%w (HTTP %d)", ErrModelMissing, resp.StatusCode)
 	}
 	return &StatusError{Code: resp.StatusCode}
 }
+
+// contextLengthError is internal; callers can still inspect its StatusError.
+type contextLengthError struct{ *StatusError }
+
+func (e *contextLengthError) Unwrap() error { return e.StatusError }
 
 type tagsResponse struct {
 	Models []struct {
