@@ -3,7 +3,7 @@ title: Transcribe a voice message, a video note or a video
 task: «расшифруй голосовое», «что сказано в кружке», «переведи голосовое в текст», «что в войсе», «расшифруй видео»
 writes: true
 access: [none]
-commands: [voice install, voice status, message transcribe, voice retry]
+commands: [voice install, voice status, voice list, message transcribe, voice retry]
 live_checked: no
 tags: [voice, transcription, reading]
 ---
@@ -24,6 +24,7 @@ The Daemon is running and logged in, and the chat is found (`find-chat`). The me
 tg voice install --check                       # installed? missing: ffmpeg, runtime, model, vad
 tg message transcribe @release_team 4711 --wait 120s --fields text,source,pending,cached
 tg voice status                                # the queue: state, queued, running, last_failure
+tg voice list --state failed                   # which jobs failed and why: reason per job, no message text
 tg voice retry @release_team 4711              # only after a failed job, with the user's go-ahead
 ```
 
@@ -38,7 +39,7 @@ tg voice retry @release_team 4711              # only after a failed job, with t
 
 - `pending: true` is not an error: the job goes on, ask again later with the same command. Do not start another job for the same message by hand.
 - `error.reason: engine_missing` (exit code 2): the engine or `ffmpeg` is missing. `too_large` and `too_long` (exit code 2): the file is above the limit, nothing was downloaded. `download`, `convert`, `engine`, `disk` (exit code 1): read `tg voice status` and tell the user the reason word; do not loop retries.
-- The engine knows Russian only: another language gives noise. A recording without speech gives an empty text and the job ends `done` with the reason `no_speech`.
+- The engine knows Russian only: another language gives noise. A recording without speech gives an empty text and the job ends `done` with the reason `no_speech`; a video or a video note without a sound track gives an empty text and `done` with `no_audio`, which is not a failure. To see why jobs failed or were skipped, read `tg voice list --state failed` (or `skipped`): the `reason` of each job, newest first.
 - A chat closed by `access.json` is `not_found`, as for every command.
 
 ## Verify

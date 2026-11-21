@@ -15,7 +15,7 @@ This page covers what every command shares: installation, profiles, the Daemon l
 | [users-and-contacts.md](users-and-contacts.md) | `user profile`, `block`, `unblock`; `contact list`, `add`, `delete`, `search` |
 | [folders-and-account.md](folders-and-account.md) | `folder list`; `account sessions`, `blocked`, `notify` |
 | [notes-and-search.md](notes-and-search.md) | `note add`, `list`, `delete`; `search`; `version`; `schema` |
-| [voice.md](voice.md) | `voice install`, `status`, `cancel`, `retry`, `backfill`; `chat voice on`, `off`, `list`; the local queue behind `message transcribe` |
+| [voice.md](voice.md) | `voice install`, `status`, `list`, `cancel`, `retry`, `backfill`; `chat voice on`, `off`, `list`; the local queue behind `message transcribe` |
 | [access.md](access.md) | `access.json`: chat access lists, the `write` list, the `files` roots |
 
 The tool is early. Verification status is tracked in [FEATURES.md](../../FEATURES.md). Do not point the tool at an account you cannot afford to lose: `tg` is an unofficial client, and with `--client` it presents the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited are open questions in [INTENT.md](../../INTENT.md).
@@ -294,7 +294,7 @@ Every command in `tg schema` has a safety class (`safety`) and a `dangerous` mar
 
 | Safety class | Meaning | Commands |
 | --- | --- | --- |
-| `read` | only reads | `auth status`, `daemon status`, `status`, `daemon logs`, `chat list`, `chat resolve`, `chat info`, `chat invite-info`, `chat members`, `chat topics`, `chat common`, `chat sync status`, `message history`, `message get`, `message pinned`, `message search`, `message context`, `message comments`, `message link`, `message export`, `message watch`, `message transcribe`, `note list`, `search`, `schema`, `version`, `voice status`, `chat voice list` |
+| `read` | only reads | `auth status`, `daemon status`, `status`, `daemon logs`, `chat list`, `chat resolve`, `chat info`, `chat invite-info`, `chat members`, `chat topics`, `chat common`, `chat sync status`, `message history`, `message get`, `message pinned`, `message search`, `message context`, `message comments`, `message link`, `message export`, `message watch`, `message transcribe`, `note list`, `search`, `schema`, `version`, `voice status`, `voice list`, `chat voice list` |
 | `local_write` | writes to the local database or starts and stops the Daemon | `daemon start`, `daemon stop`, `chat sync start`, `chat sync cancel`, `note add`, `note delete`, `voice install`, `voice cancel`, `voice retry`, `voice backfill`, `chat voice on`, `chat voice off` |
 | `account_write` | changes the Telegram account or its login state | `auth login`, `auth resend`, `auth cancel`, `chat mark-read`, `message send`, `message edit`, `message delete`, `message forward`, `message send-media`, `message react`, `message pin`, `message unpin`, `message poll` |
 

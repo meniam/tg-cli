@@ -123,6 +123,49 @@ exit 1
 	}
 }
 
+// A video recorded without sound is told apart from a broken file by the text
+// ffmpeg prints, in both wordings of its versions; every other failure stays a
+// plain failure, and neither error leaks a path.
+func TestExecConvertTellsAFileWithoutAudioFromABrokenOne(t *testing.T) {
+	in := filepath.Join(t.TempDir(), "silent-secret-chat.mp4")
+	for name, stderr := range map[string]string{
+		"new wording":   "[wav @ 0x600003e5c000] Output file does not contain any stream",
+		"old wording":   "Output file #0 does not contain any stream",
+		"other case":    "OUTPUT FILE #0 DOES NOT CONTAIN ANY STREAM",
+		"after a noise": "Error opening filters!\n" + strings.Repeat("x", 3000) + "\nOutput file does not contain any stream",
+	} {
+		t.Run(name, func(t *testing.T) {
+			stub := script(t, "cat >&2 <<'EOT'\n"+stderr+"\nEOT\nexit 1\n")
+			err := Convert(context.Background(), stub, in, wavPath(t), 0)
+			if !errors.Is(err, ErrNoAudio) || !errors.Is(err, ErrExit) {
+				t.Fatalf("error = %v, want ErrNoAudio and ErrExit", err)
+			}
+			if strings.Contains(err.Error(), "silent-secret-chat") || strings.Contains(err.Error(), filepath.Dir(in)) {
+				t.Errorf("error leaks the input: %s", err)
+			}
+		})
+	}
+	for name, body := range map[string]string{
+		"broken file":     `echo "Invalid data found when processing input" >&2` + "\nexit 1\n",
+		"no stderr":       "exit 1\n",
+		"another stream":  `echo "Stream map '0:a' matches no streams." >&2` + "\nexit 1\n",
+		"success but odd": `echo "Output file does not contain any stream" >&2` + "\n" + lastArg + `echo wav > "$last"` + "\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := Convert(context.Background(), script(t, body), in, wavPath(t), 0)
+			if errors.Is(err, ErrNoAudio) {
+				t.Fatalf("error = %v, must not be ErrNoAudio", err)
+			}
+			if name != "success but odd" && !errors.Is(err, ErrExit) {
+				t.Fatalf("error = %v, want ErrExit", err)
+			}
+			if name == "success but odd" && err != nil {
+				t.Fatalf("a run that succeeded gave %v", err)
+			}
+		})
+	}
+}
+
 func TestExecConvertTimeoutKillsProcessGroup(t *testing.T) {
 	// The shell starts a child that holds the pipes; killing only the shell would hang Wait.
 	stub := script(t, "sleep 60 &\nsleep 60\n")

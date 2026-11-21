@@ -282,6 +282,7 @@ var uncoveredCommands = map[string]string{
 	"search index cancel":        "answers an error while [semantic_search] is off; the indexer is covered by daemon tests on a fake embedder and the status shape by `search index status`",
 	"chat voice on":              "marks a chat the local database knows, which the fake Telegram of this fixture never saved; the marks, the backfill and the refusals are covered by daemon and CLI tests (VoiceSource)",
 	"chat voice off":             "marks a chat the local database knows, which the fake Telegram of this fixture never saved; the marks, the backfill and the refusals are covered by daemon and CLI tests (VoiceSource)",
+	"voice list":                 "needs a job in the queue, which only the worker or a manual request makes; the fields of a filled page are compared with the schema in TestVoiceListCommand",
 	"voice retry":                "needs the speech engine installed, which no test downloads; the queue and the retry are covered by daemon tests on a fake engine",
 	"chat changes":               "local history is covered by daemon and store tests",
 	"message unread":             "access is covered by daemon tests",

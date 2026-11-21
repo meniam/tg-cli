@@ -42,7 +42,7 @@ func (a *app) messageDiscoveryCommands() []*cobra.Command {
 	search.Flags().Int("limit", 20, "results per page, 1 to 100")
 	search.Flags().String("cursor", "", "continue after a previous page")
 
-	context := a.annotate(&cobra.Command{Use: "context <chat> <id> | context <message-link>", Short: "Read messages around one message (read only)", Args: cobra.RangeArgs(1, 2), RunE: a.messageContext}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.MessagesResult](), Args: []argSpec{{Name: "chat_or_link", Required: true}, {Name: "id", Required: false}}, ItemPath: "messages"})
+	context := a.annotate(&cobra.Command{Use: "context <chat> <id> | context <message-link>", Short: "Read messages around one message (read only)", Args: cobra.RangeArgs(1, 2), RunE: a.messageContext}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.ContextResult](), Args: []argSpec{{Name: "chat_or_link", Required: true}, {Name: "id", Required: false}}, ItemPath: "messages"})
 	context.Flags().Int("before", 5, "messages before the target, 0 to 50 (default 5)")
 	context.Flags().Int("after", 5, "messages after the target, 0 to 50 (default 5)")
 	context.Flags().Bool("local", false, "read only the local database, without Telegram")
@@ -156,7 +156,7 @@ func (a *app) messageContext(cmd *cobra.Command, args []string) error {
 	}
 	// Include zero explicitly: omitted RPC values mean the Daemon's default of five.
 	p := map[string]any{"chat": chat, "id": id, "before": before, "after": after, "local": local}
-	var res rpc.MessagesResult
+	var res rpc.ContextResult
 	if err := a.callOne(cmd, rpc.MethodMessageContext, p, &res); err != nil {
 		return err
 	}

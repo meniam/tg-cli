@@ -15,6 +15,7 @@ import (
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
+	"tg-cli/internal/voice/exec"
 )
 
 // voiceOutcome is how a job ended. State and Reason go to the queue row; the
@@ -260,6 +261,9 @@ func (w *voiceWorker) execute(ctx context.Context, run *voiceRun) voiceOutcome {
 		if ctx.Err() != nil {
 			return w.abort(run)
 		}
+		if errors.Is(err, exec.ErrNoAudio) {
+			return w.finishWithoutAudio(ctx, job, file.Size)
+		}
 		return voiceFailed("convert")
 	}
 	// The media is no longer needed; its space may be needed by the engine.
@@ -302,6 +306,25 @@ func (w *voiceWorker) execute(ctx context.Context, run *voiceRun) voiceOutcome {
 		reason = "no_speech"
 	}
 	return voiceDone(reason, file.Size)
+}
+
+// finishWithoutAudio ends the job of a video or a video note that has no audio
+// stream. That is not a fault: the job is done with the reason "no_audio". An
+// empty text is stored, as for a speechless recording, so a later read of the
+// message finds a finished transcription instead of waiting for one. Its engine
+// is empty: no engine ran.
+func (w *voiceWorker) finishWithoutAudio(ctx context.Context, job store.VoiceJob, bytes int64) voiceOutcome {
+	// The access list may have changed while the job ran.
+	if !w.d.policy().Allowed(job.ChatID) {
+		return voiceSkipped("closed")
+	}
+	if err := w.d.store.PutTranscription(context.WithoutCancel(ctx), store.Transcription{
+		ChatID: job.ChatID, MessageID: job.MessageID, Text: "", Raw: json.RawMessage(`{"voice_local":{"no_audio":true}}`),
+		Source: store.TranscriptionSourceLocal,
+	}); err != nil {
+		return voiceFailed("store")
+	}
+	return voiceDone("no_audio", bytes)
 }
 
 func nonNilSegments(s []VoiceSegment) []VoiceSegment {

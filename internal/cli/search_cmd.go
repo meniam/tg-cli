@@ -13,6 +13,13 @@ import (
 // searchScopes are the scopes `search` accepts, in the order results are grouped.
 func searchScopes() []string { return []string{"chats", "people", "messages", "notes"} }
 
+// searchMediaChoices are the attachment types the --media flag of the local
+// `search` accepts. The daemon checks them, so the list is repeated here for the
+// schema and the usage error.
+func searchMediaChoices() []flagChoices {
+	return []flagChoices{{Flag: "media", Values: []string{"voice", "video_note", "video", "photo", "document", "gif", "audio"}}}
+}
+
 func (a *app) searchCommand() *cobra.Command {
 	cmd := a.annotate(&cobra.Command{
 		Use: "search [flags] <query>", Short: "Search the local database",
@@ -30,7 +37,7 @@ func (a *app) searchCommand() *cobra.Command {
 			"counted in vector_dropped; --min-similarity X (0 to 1) overrides the setting\n" +
 			"for one query and 0 turns the threshold off.",
 		Args: cobra.ExactArgs(1), RunE: a.search,
-	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[localSearchResult](), Args: []argSpec{{Name: "query", Required: true}}, Choices: append(authorChoices(), scopeChoices()...), ItemPath: "hits"})
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[localSearchResult](), Args: []argSpec{{Name: "query", Required: true}}, Choices: append(append(authorChoices(), scopeChoices()...), searchMediaChoices()...), ItemPath: "hits"})
 	cmd.SetFlagErrorFunc(func(*cobra.Command, error) error {
 		return fail(exitcode.Usage, "invalid search flags")
 	})
@@ -39,6 +46,7 @@ func (a *app) searchCommand() *cobra.Command {
 	cmd.Flags().String("chat", "", "restrict message and note hits to this chat")
 	cmd.Flags().Int("limit", 20, "hits per scope, 1 to 100")
 	cmd.Flags().Bool("prefix", false, "match the last query term as a prefix")
+	cmd.Flags().String("media", "", "keep only messages with this attachment: voice, video_note, video, photo, document, gif or audio (messages scope only)")
 	cmd.Flags().Bool("deleted", false, "include messages marked deleted")
 	cmd.Flags().Bool("semantic", false, "search conversation fragments by words and meaning (messages only; --limit counts fragments)")
 	cmd.Flags().Float64("min-similarity", 0, "with --semantic: lowest cosine similarity of a vector hit, 0 to 1 (0 turns the threshold off; default from [semantic_search] min_similarity)")
@@ -64,13 +72,32 @@ func (a *app) search(cmd *cobra.Command, args []string) error {
 	if author != "" && author != "owner" && author != "ai" {
 		return fail(exitcode.Usage, "--author must be owner or ai")
 	}
+	media, _ := cmd.Flags().GetString("media")
+	if media != "" {
+		if !slices.Contains(searchMediaChoices()[0].Values, media) {
+			return fail(exitcode.Usage, "--media must be voice, video_note, video, photo, document, gif, or audio")
+		}
+		// The filter belongs to messages: with no --scope it implies messages,
+		// and a scope that names chats, people or notes contradicts it.
+		if len(scopes) == 0 {
+			scopes = []string{"messages"}
+		}
+		for _, scope := range scopes {
+			if scope != "messages" {
+				return fail(exitcode.Usage, "--media applies to the messages scope only")
+			}
+		}
+	}
 	if semantic, _ := cmd.Flags().GetBool("semantic"); semantic {
+		if media != "" {
+			return fail(exitcode.Usage, "--media does not combine with --semantic")
+		}
 		return a.searchSemantic(cmd, args[0], scopes, author, settings)
 	}
 	if cmd.Flags().Changed("min-similarity") {
 		return fail(exitcode.Usage, "--min-similarity applies to --semantic only")
 	}
-	p := rpc.SearchParams{Query: args[0], Scopes: scopes, Author: author}
+	p := rpc.SearchParams{Query: args[0], Scopes: scopes, Author: author, Media: media}
 	p.Chat, _ = cmd.Flags().GetString("chat")
 	p.Limit, _ = cmd.Flags().GetInt("limit")
 	p.Prefix, _ = cmd.Flags().GetBool("prefix")

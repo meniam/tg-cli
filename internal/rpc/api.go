@@ -364,6 +364,9 @@ type Message struct {
 type ExportMessage struct {
 	Message
 	Deleted bool `json:"deleted,omitempty"`
+	// Transcription is the finished text of a voice message, video note or video
+	// the database holds for the message; absent when it has none.
+	Transcription *MessageTranscription `json:"transcription,omitempty"`
 }
 
 // ExportParams selects one page of messages from the local database.
@@ -551,6 +554,10 @@ type SearchParams struct {
 	Limit          int      `json:"limit,omitempty"`
 	Prefix         bool     `json:"prefix,omitempty"`
 	IncludeDeleted bool     `json:"include_deleted,omitempty"`
+	// Media keeps only messages with this attachment type: voice, video_note,
+	// video, photo, document, gif or audio. It applies to the messages scope
+	// only, so a request that names another scope with it is invalid.
+	Media string `json:"media,omitempty"`
 }
 
 // SearchHit is one ranked result. Date is RFC 3339 UTC when present.
@@ -578,6 +585,10 @@ type SearchHit struct {
 	// absent for the other scopes.
 	ChatTitle    string  `json:"chat_title,omitempty" untrusted:"true"`
 	ChatUsername *string `json:"chat_username,omitempty" untrusted:"true"`
+	// MediaType is the attachment type of a message hit (voice, video_note,
+	// video, photo, document, gif, audio, sticker, poll and so on). Absent for a
+	// message without an attachment and for the other scopes.
+	MediaType string `json:"media_type,omitempty"`
 }
 
 // MarshalJSON writes "link": null, "chat_title" and "chat_username": null for

@@ -56,5 +56,22 @@ func convertSpec(ffmpegPath, in, out string, timeout time.Duration) spec {
 		timeout:   timeout,
 		maxStdout: convertStdoutLimit,
 		scrub:     []string{in, out},
+		classify:  classifyConvert,
 	}
+}
+
+// noAudioMarker is the part of the ffmpeg error for a file with no audio stream:
+// with -vn nothing is left to write, and ffmpeg ends with "Output file does not
+// contain any stream" (older versions write "Output file #0 does not contain
+// any stream"). ffprobe is not used: the text is the only signal this program
+// run gives.
+const noAudioMarker = "does not contain any stream"
+
+// classifyConvert finds the one failure of ffmpeg that is not a fault: a file
+// with no audio. Any other stderr stays a plain failure.
+func classifyConvert(stderr string) error {
+	if strings.Contains(strings.ToLower(stderr), noAudioMarker) {
+		return ErrNoAudio
+	}
+	return nil
 }

@@ -12,6 +12,7 @@ import (
 
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
+	"tg-cli/internal/voice/exec"
 )
 
 // TestVoiceWorkerCleansUpOnEveryOutcome: whatever ends a job, the working
@@ -276,6 +277,73 @@ func TestVoiceWorkerNoSpeech(t *testing.T) {
 	}
 	if raw := string(f.rawTranscription(1001, 7)); !strings.Contains(raw, `"segments":[]`) {
 		t.Fatalf("raw = %s", raw)
+	}
+}
+
+// TestVoiceWorkerVideoWithoutAudio: a video or a round video with no sound is a
+// finished job with the reason no_audio, not a failure: the engine never runs,
+// an empty text without an engine is stored, nothing stays on the disk, the
+// download counts in the budget, and other conversion failures stay failures.
+func TestVoiceWorkerVideoWithoutAudio(t *testing.T) {
+	noAudio := fmt.Errorf("ffmpeg: %w: %w: exit status 1: Output file does not contain any stream", exec.ErrExit, exec.ErrNoAudio)
+	for _, kind := range []string{store.VoiceKindVideo, store.VoiceKindVideoNote} {
+		t.Run(kind, func(t *testing.T) {
+			f := newVoiceFixture(t, voiceTestConfig())
+			f.eng.convertErr = noAudio
+			f.seed(1001, 7, kind, 4096, 12)
+			f.queue(1001, 7, kind, store.VoiceSourceSync, store.VoicePrioritySync)
+			f.w.recover(f.root)
+			f.drain()
+			j := f.job(1001, 7)
+			if j.State != store.VoiceStateDone || j.Reason != "no_audio" || j.Attempts != 0 || j.Bytes != 1000 {
+				t.Fatalf("job = %+v, want done/no_audio with the download counted", j)
+			}
+			if got := strings.Join(f.eng.callList(), ","); got != "convert" {
+				t.Fatalf("programs = %q: the speech engine must not run for a file without audio", got)
+			}
+			got, err := f.db.GetTranscription(context.Background(), 1001, 7)
+			if err != nil || got.Text != "" || got.Pending || got.Source != store.TranscriptionSourceLocal || got.Engine != "" {
+				t.Fatalf("transcription = %+v %v", got, err)
+			}
+			if raw := string(f.rawTranscription(1001, 7)); !strings.Contains(raw, `"no_audio":true`) {
+				t.Fatalf("raw = %s", raw)
+			}
+			if failure := f.status().LastFailure; failure != "" {
+				t.Fatalf("a video without sound is not a failure: %q", failure)
+			}
+			if usage, err := f.db.VoiceUsage(context.Background(), localDay(f.clock.Now())); err != nil || usage.Files != 1 {
+				t.Fatalf("usage = %+v %v", usage, err)
+			}
+			f.noFiles()
+			if f.tg.transcribed() != 0 {
+				t.Fatal("messages.transcribeAudio was called")
+			}
+		})
+	}
+	// A conversion that fails for another reason is still a failure.
+	f := newVoiceFixture(t, voiceTestConfig())
+	f.eng.convertErr = fmt.Errorf("ffmpeg: %w: exit status 1: Invalid data found", exec.ErrExit)
+	f.seed(1001, 8, store.VoiceKindVideo, 4096, 12)
+	f.queue(1001, 8, store.VoiceKindVideo, store.VoiceSourceSync, store.VoicePrioritySync)
+	f.w.recover(f.root)
+	f.drain()
+	if j := f.job(1001, 8); j.State != store.VoiceStateFailed || j.Reason != "convert" {
+		t.Fatalf("broken file: job = %+v", j)
+	}
+}
+
+// TestVoiceWorkerNoAudioIsAnAnswerForMessageTranscribe: the manual command gets
+// an empty finished text for a silent video, not an error.
+func TestVoiceWorkerNoAudioIsAnAnswerForMessageTranscribe(t *testing.T) {
+	f := newVoiceFixture(t, voiceTestConfig())
+	f.eng.convertErr = fmt.Errorf("ffmpeg: %w: %w: exit status 1: x", exec.ErrExit, exec.ErrNoAudio)
+	f.seed(77, 1, store.VoiceKindVideo, 2048, 12)
+	got, err := f.transcribeLocal("77", 1, 60000)
+	if err != nil || got.Pending || got.Text != "" || got.Source != "local" || !got.Queued || got.ChatID != 77 || got.ID != 1 {
+		t.Fatalf("answer = %+v %v", got, err)
+	}
+	if j := f.job(77, 1); j.State != store.VoiceStateDone || j.Reason != "no_audio" {
+		t.Fatalf("job = %+v", j)
 	}
 }
 

@@ -99,7 +99,7 @@ No command flags.
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon and a login. Give `<chat> <id>` or one message link, see [Message links](#message-links).
+**Preconditions.** A running Daemon and a login. Give `<chat> <id>` or one message link, see [Message links](#message-links). The message comes from Telegram, so the answer has no stored transcription of a voice message: read it with [`tg message transcribe`](#tg-message-transcribe) or, from the database, with [`tg message context --local`](#tg-message-context) and [`tg message export --local`](#tg-message-export).
 
 **Example.**
 
@@ -251,7 +251,9 @@ tg message context https://t.me/release_team/4102 --local
 {"ok":true,"data":{"messages":[{"id":4101,"chat_id":-1001234567890,"date":"2026-11-14T09:12:00Z","text":"Build finished"},{"id":4102,"chat_id":-1001234567890,"date":"2026-11-14T09:12:40Z","text":"Deploy is green"}]}}
 ```
 
-**Answer fields** (`data`): `messages` array, `messages.id` integer, `messages.chat_id` integer, `messages.date` string, `messages.sender` object (optional), `messages.sender.id` integer (optional), `messages.sender.name` string (optional, untrusted), `messages.sender.username` string (optional, untrusted), `messages.text` string (untrusted), `messages.out` boolean (optional), `messages.reply_to` integer (optional), `messages.topic_id` integer (optional), `messages.media_type` string (optional), `messages.edited` boolean (optional), `messages.pinned` boolean (optional), `messages.service` string (optional), `next_cursor` string (optional).
+**Answer fields** (`data`): `messages` array, `messages.id` integer, `messages.chat_id` integer, `messages.date` string, `messages.sender` object (optional), `messages.sender.id` integer (optional), `messages.sender.name` string (optional, untrusted), `messages.sender.username` string (optional, untrusted), `messages.text` string (untrusted), `messages.out` boolean (optional), `messages.reply_to` integer (optional), `messages.topic_id` integer (optional), `messages.media_type` string (optional), `messages.edited` boolean (optional), `messages.pinned` boolean (optional), `messages.service` string (optional), `messages.transcription` object (optional, `--local` only), `messages.transcription.text` string (untrusted), `messages.transcription.source` string (`local` or `telegram`), `messages.transcription.engine` string (optional), `next_cursor` string (optional).
+
+**Transcription.** With `--local`, a voice message, video note or video that has a finished transcription in the database carries it as `transcription`: `text` is what was said (empty for a recording with no speech or, for a video, with no sound), `source` says who wrote it (`local` for the local engine, `telegram` for Telegram's) and `engine` names the local engine. The text is untrusted like the message text, and `--human` frames it. A message with no finished transcription, a pending one included, has no `transcription` key. The field is read from the database only: it costs no Telegram request and does not start a job (see [Voice transcription](voice.md)). Without `--local` the answer comes from Telegram and has no `transcription`; use [`tg message transcribe`](#tg-message-transcribe).
 
 **Exit codes.** 0; 2 `--before` or `--after` outside 0 to 50, a malformed reference or link; 3; 4 (not for `--local`); 6; 7 the chat or the message is unknown or closed.
 
@@ -361,7 +363,7 @@ tg message export <chat> [flags]
 
 **Preconditions.** A running Daemon (exit code 3 otherwise). No login or Telegram call is needed, but `auth_lost` or an unverified expected account returns code 4. `--local` is required: without it the command exits with code 2, because export straight from Telegram is not implemented.
 
-**Output.** The default and the main format is `jsonl`: one message per line, ascending by `id`, no envelope and no `next_cursor` line. A line has the fields of `message context --local`: `id`, `chat_id`, `date` (RFC 3339, UTC), `sender` (`id`, `name`), `text`, and, when set, `out`, `reply_to`, `topic_id`, `media_type`, `edited`, `pinned`, `service`. It is not the raw Telegram object. `sender.username` is in the schema, but the export does not fill it for messages whose sender id or name is saved. `--format json` and `--format toon` are exit code 2. `--human` works and frames other people's text. `--fields id,text` keeps only these paths of a line; keep `id` to resume by `--after` (when `--quiet` hides the resume hint, take the `id` of the last printed line).
+**Output.** The default and the main format is `jsonl`: one message per line, ascending by `id`, no envelope and no `next_cursor` line. A line has the fields of `message context --local`: `id`, `chat_id`, `date` (RFC 3339, UTC), `sender` (`id`, `name`), `text`, and, when set, `out`, `reply_to`, `topic_id`, `media_type`, `edited`, `pinned`, `service`, and `transcription` (`text`, `source` and, for the local engine, `engine`) for a voice message, video note or video that has a finished transcription. The `text` of a transcription is untrusted like the message text. It is not the raw Telegram object. `sender.username` is in the schema, but the export does not fill it for messages whose sender id or name is saved. `--format json` and `--format toon` are exit code 2. `--human` works and frames other people's text. `--fields id,text` keeps only these paths of a line; keep `id` to resume by `--after` (when `--quiet` hides the resume hint, take the `id` of the last printed line).
 
 **Behavior.**
 
@@ -386,7 +388,7 @@ tg message export --local --after 4102 -- -1001234567890
 {"id":4102,"chat_id":-1001234567890,"date":"2026-11-14T09:12:40Z","sender":{"id":987654321,"name":"Alice"},"text":"Deploy is green"}
 ```
 
-**Answer fields** (`data`): `messages` array, `messages.id` integer, `messages.chat_id` integer, `messages.date` string, `messages.sender` object (optional), `messages.sender.id` integer (optional), `messages.sender.name` string (optional, untrusted), `messages.sender.username` string (optional, untrusted), `messages.text` string (untrusted), `messages.out` boolean (optional), `messages.reply_to` integer (optional), `messages.topic_id` integer (optional), `messages.media_type` string (optional), `messages.edited` boolean (optional), `messages.pinned` boolean (optional), `messages.service` string (optional), `messages.deleted` boolean (optional), `next_after` integer (optional).
+**Answer fields** (`data`): `messages` array, `messages.id` integer, `messages.chat_id` integer, `messages.date` string, `messages.sender` object (optional), `messages.sender.id` integer (optional), `messages.sender.name` string (optional, untrusted), `messages.sender.username` string (optional, untrusted), `messages.text` string (untrusted), `messages.out` boolean (optional), `messages.reply_to` integer (optional), `messages.topic_id` integer (optional), `messages.media_type` string (optional), `messages.edited` boolean (optional), `messages.pinned` boolean (optional), `messages.service` string (optional), `messages.deleted` boolean (optional), `messages.transcription` object (optional), `messages.transcription.text` string (untrusted), `messages.transcription.source` string, `messages.transcription.engine` string (optional), `next_after` integer (optional).
 
 `deleted` is present only with `--include-deleted` on deleted messages. The schema also lists `next_after`, a field of the page that the Daemon answers; the printed lines do not carry it.
 
@@ -425,7 +427,8 @@ completed UTC month, such as `2026-10`; the current and future months and invali
 month strings are code 2. The selection is `[2026-10-01T00:00:00Z,
 2026-11-01T00:00:00Z)`. Every JSONL line has the same encoding as `message
 export --local` with those boundaries and the selected `--include-deleted`
-setting, ordered by message id. A line over 768 KiB or all JSONL files over 1
+setting, ordered by message id, except that a line has no `transcription`:
+the archive format stays as it was. A line over 768 KiB or all JSONL files over 1
 GiB stops the command with code 1.
 
 **Archive.** The Daemon creates `tg-export-<account_id>-<month>` below

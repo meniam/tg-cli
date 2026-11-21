@@ -130,6 +130,7 @@ tg message history @username --limit 50 --since 2026-11-01T00:00:00Z
 tg message history -- -1001234567890      # `--` before a negative chat id
 tg message get https://t.me/username/4102 # a message link instead of `<chat> <id>`
 tg search "invoice" --scope chats,messages --prefix   # local database, no login needed
+tg search "invoice" --media voice                     # only messages with a voice attachment (voice, video_note, video, photo, document, gif, audio)
 echo "Follow up on Monday" | tg note add --chat @username --author ai --tag followup -
 ```
 
@@ -160,6 +161,7 @@ brew install ffmpeg
 tg voice install                       # downloads about 190 MB to <home>/models/gigaam/, each archive checked by SHA-256 before it is unpacked
 tg message transcribe @alice 4711      # queues one message and waits up to 60 s
 tg voice status                        # the engine, the queue, today's downloads against the budget
+tg voice list --state failed           # the jobs of the queue with the reason of each, newest first
 ```
 
 `tg message transcribe` works with the setting off. To have the daemon transcribe by itself the voice messages of personal chats as they arrive and as chats are synced (and of the chats you mark with `tg chat voice on <chat>`), turn the setting on and restart the daemon:

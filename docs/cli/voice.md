@@ -4,7 +4,7 @@ The Daemon turns voice messages, video notes and (on request) videos into text w
 
 Two things are set once: the engine (`tg voice install`, about 190 MB under `<home>/models/gigaam`, one set for all profiles) and `ffmpeg` in `PATH`. The sources that queue jobs by themselves need `[voice_transcription] enabled = true` (the keys, the limits and the `TG_CLI_VOICE_TRANSCRIPTION_*` variables are in [overview.md](overview.md#request-throttle-and-flood_wait)); while it is off the Daemon queues nothing by itself and makes no new Telegram request for transcription. A manual command, `tg message transcribe` or `tg voice retry`, works in either case.
 
-What a job does, in order: it checks that `access.json` does not close the chat and that the message is saved with a matching media type; it skips a file above the limit of its kind (30 MB for a voice message, 50 MB for a video note, 500 MB and 120 minutes for a video; `skipped` with the reason `too_large` or `too_long`, nothing downloaded); it checks free disk space and pauses between downloads (`pause`); it downloads the file into a private temporary directory of the Daemon (`tmp-voice` next to the database, mode 0700) and deletes it whatever happens; it converts the file to WAV and recognises it; it stores the text with `source: "local"` and `engine: "gigaam-v3"`. The text is untrusted Telegram data like any message text. A speechless recording is stored as an empty text and the job ends `done` with the reason `no_speech`. A network failure of the download is retried three times after 10, 60 and 300 seconds; every other refusal ends the job `failed` with a short reason (`download`, `convert`, `engine`, `disk`, `no_media`, `no_message`, `store`, `internal`).
+What a job does, in order: it checks that `access.json` does not close the chat and that the message is saved with a matching media type; it skips a file above the limit of its kind (30 MB for a voice message, 50 MB for a video note, 500 MB and 120 minutes for a video; `skipped` with the reason `too_large` or `too_long`, nothing downloaded); it checks free disk space and pauses between downloads (`pause`); it downloads the file into a private temporary directory of the Daemon (`tmp-voice` next to the database, mode 0700) and deletes it whatever happens; it converts the file to WAV and recognises it; it stores the text with `source: "local"` and `engine: "gigaam-v3"`. The text is untrusted Telegram data like any message text. A speechless recording is stored as an empty text and the job ends `done` with the reason `no_speech`. A video or a video note recorded without a sound track is not a fault either: `ffmpeg` reports that the file has no stream to write, the Daemon recognises that, and the job ends `done` with the reason `no_audio`, an empty text and no run of the speech engine. A network failure of the download is retried three times after 10, 60 and 300 seconds; every other refusal ends the job `failed` with a short reason (`download`, `convert`, `engine`, `disk`, `no_media`, `no_message`, `store`, `internal`).
 
 The daily budget (`daily_download_mb`, `daily_files`, counted by the local date) pauses the queue until the next day when it is spent (`paused: budget`); a manual job ignores the budget but counts in it. A missing engine or `ffmpeg` pauses the queue (`paused: engine_missing`) without spending attempts, and an absent Telegram connection pauses it (`paused: offline`).
 
@@ -17,6 +17,7 @@ The reason is a machine word (no text, no path):
 | Reason | State | Meaning |
 | --- | --- | --- |
 | `no_speech` | `done` | the recording has no speech; an empty text is stored |
+| `no_audio` | `done` | the video or video note has no audio stream; an empty text is stored with no engine name, and the speech engine does not run |
 | `exists` | `done` | a finished text was there already (not for a manual job, which writes the text again) |
 | `too_large` | `skipped` | the file is above the limit of its kind; nothing was downloaded |
 | `too_long` | `skipped` | a video is longer than `max_video_minutes`; nothing was downloaded |
@@ -24,7 +25,7 @@ The reason is a machine word (no text, no path):
 | `no_media` | `skipped` or `failed` | `skipped`: the message is deleted or its media type is not the kind of the job; `failed`: Telegram has no such message or file any more |
 | `cancelled` | `skipped` | `tg voice cancel` stopped or skipped the job |
 | `download` | `failed` | the download failed (after three retries for a network failure) or Telegram refused the file |
-| `convert` | `failed` | `ffmpeg` could not convert the file |
+| `convert` | `failed` | `ffmpeg` could not convert the file for a reason other than a missing audio stream |
 | `engine` | `failed` | the speech engine failed or timed out |
 | `disk` | `failed` | the free disk space is below twice the file size |
 | `no_message`, `store`, `internal` | `failed` | the message is gone from the local database, a database error, an unexpected error |
@@ -101,6 +102,44 @@ tg voice status
 **Answer fields** (`data`): `enabled` boolean (the setting); `installed` boolean; `missing` array of `ffmpeg`, `runtime`, `model`, `vad` (optional); `state` string, `disabled` (the worker does not run: the setting is off and no manual job has started it), `idle`, `working` or `paused`; `paused` string (optional), `engine_missing`, `budget` or `offline`; `paused_until` integer (optional, Unix seconds, for `budget`); `queue` object with `queued`, `running`, `done`, `failed`, `skipped` integers; `current` object (optional) with `chat_id`, `message_id`, `kind`, `source` and `started_at`; `done_today` integer (jobs done since the Daemon started, on the local day); `files_today` and `bytes_today` (downloads of the local day); `daily_files` and `daily_bytes` (the budget); `last_failure` string (optional, the reason of the latest failed or skipped job since the Daemon started). Every string is a machine word: no message text and no path.
 
 **Exit codes.** 0; 3 no Daemon.
+
+### tg voice list
+
+Lists the jobs of the queue, newest enqueued first, with the state and the reason of each. Use it to find out which messages are done, failed or skipped and why: `tg voice status` only counts them. A row carries the chat, the message id and machine words, never the text of the message or its transcription: read the text with [`tg message transcribe`](messages-read.md#tg-message-transcribe) or [`tg message get`](messages-read.md#tg-message-get). It reads the database and never calls Telegram. Chats that `access.json` closes are not listed, and asking for one by `--chat` gives an empty page, the same answer as for a chat that does not exist.
+
+```text
+tg voice list [--state queued|running|done|failed|skipped] [--chat <chat>] [--kind voice|video_note|video] [--limit N] [--cursor C]
+```
+
+<!-- schema:flags tg voice list -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--chat` | string | `none` | keep jobs of this chat (a numeric id or a @username the database knows) |
+| `--cursor` | string | `none` | continue after a previous page, the value of next_cursor |
+| `--kind` | string | `none` | keep jobs of this kind: voice, video_note or video |
+| `--limit` | int | `50` | jobs per page, 1 to 200 |
+| `--state` | string | `none` | keep jobs in this state: queued, running, done, failed or skipped |
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
+
+**Preconditions.** A running Daemon. It needs no Telegram connection. `--chat` takes a numeric id or a `@username` the local database knows (put `--` before a negative id, or write `--chat=-100…`).
+
+**Example.**
+
+```sh
+tg voice list --state failed --limit 20
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"jobs":[{"chat_id":123456789,"chat_title":"Alice","message_id":4711,"kind":"voice","source":"incoming","state":"failed","reason":"convert","attempts":0,"bytes":48210,"enqueued_at":1795000000,"finished_at":1795000042}],"next_cursor":"MTc5NTAwMDAwMDoxMg"}}
+```
+
+**Answer fields** (`data`): `jobs` array of `chat_id` integer; `chat_title` string (untrusted Telegram data, omitted when the database does not know the chat); `message_id` integer; `kind` string (`voice`, `video_note` or `video`); `source` string (`manual`, `incoming`, `sync` or `backfill`); `state` string (`queued`, `running`, `done`, `failed` or `skipped`); `reason` string (the machine word of the last outcome or delay, omitted when none; see the table under [Jobs, sources and reasons](#jobs-sources-and-reasons)); `attempts` integer (download attempts spent); `bytes` integer (bytes downloaded); `enqueued_at` integer (Unix seconds of the latest queueing, the order key); `finished_at` integer (Unix seconds, omitted while the job has not ended). `next_cursor` string, present when more jobs follow: pass it back with `--cursor`. With `--format jsonl` each line is one job and the last line is `{"next_cursor":"…"}`. The page size is `--limit` (default 50, at most 200).
+
+**Exit codes.** 0 (an empty `jobs` is a valid answer); 2 an unknown `--state` or `--kind`, a `--limit` outside 1 to 200, or a `--cursor` that does not come from `next_cursor`; 3 no Daemon.
 
 ### tg voice cancel
 

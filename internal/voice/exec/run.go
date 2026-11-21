@@ -26,6 +26,10 @@ var (
 	ErrOutputTooLarge = errors.New("output too large")
 	// ErrExit means the program ended with a failure status.
 	ErrExit = errors.New("program failed")
+	// ErrNoAudio means the media file has no audio stream, so there is nothing
+	// to convert: a video recorded without sound. It is returned together with
+	// ErrExit by Convert, only when the stderr of ffmpeg says so.
+	ErrNoAudio = errors.New("the file has no audio stream")
 )
 
 const (
@@ -79,6 +83,10 @@ type spec struct {
 	// scrub lists strings (paths of files the program works on) removed from
 	// the stderr excerpt.
 	scrub []string
+	// classify names the cause of a failure status from the whole stderr of the
+	// program: it returns an error that the failure is reported together with,
+	// or nil when the stderr says nothing special. It may be nil.
+	classify func(stderr string) error
 }
 
 // run starts the program and returns its stdout. stdout and stderr are read
@@ -122,7 +130,13 @@ func run(ctx context.Context, s spec) ([]byte, error) {
 	}
 	var exitErr *osexec.ExitError
 	if errors.As(err, &exitErr) {
-		return nil, fmt.Errorf("%s: %w: %v: %s", s.label, ErrExit, err, scrubStderr(stderr.buf.String(), s.scrub))
+		excerpt := scrubStderr(stderr.buf.String(), s.scrub)
+		if s.classify != nil {
+			if cause := s.classify(stderr.buf.String()); cause != nil {
+				return nil, fmt.Errorf("%s: %w: %w: %v: %s", s.label, ErrExit, cause, err, excerpt)
+			}
+		}
+		return nil, fmt.Errorf("%s: %w: %v: %s", s.label, ErrExit, err, excerpt)
 	}
 	return nil, fmt.Errorf("%s: cannot run: %w", s.label, err)
 }

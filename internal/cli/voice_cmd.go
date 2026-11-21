@@ -3,6 +3,8 @@ package cli
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -31,7 +33,8 @@ func (a *app) voiceCommand() *cobra.Command {
 		Short: "Install the local speech engine and manage the transcription queue",
 		Long: "The Daemon transcribes voice messages, video notes and videos with a local speech\n" +
 			"engine (GigaAM, Russian only) through one persistent queue. `install` downloads\n" +
-			"the engine, `status` shows the queue, `cancel`, `retry` and `backfill` manage it.\n" +
+			"the engine, `status` counts the queue, `list` shows its jobs with their reasons,\n" +
+			"`cancel`, `retry` and `backfill` manage it.\n" +
 			"The sources that queue jobs by themselves need [voice_transcription] enabled = true.",
 	}
 	install := a.annotate(&cobra.Command{
@@ -54,6 +57,23 @@ func (a *app) voiceCommand() *cobra.Command {
 			"state in memory and the database and never calls Telegram.",
 		Args: cobra.NoArgs, RunE: a.voiceStatus,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.VoiceStatus]()})
+	list := a.annotate(&cobra.Command{
+		Use:   "list",
+		Short: "List the jobs of the voice queue (read only)",
+		Long: "List the jobs of the queue, newest enqueued first: the chat, the message id, the kind,\n" +
+			"the source, the state, the reason (a machine word such as no_speech, no_audio or\n" +
+			"convert), the attempts, the bytes downloaded and the times. It carries neither message\n" +
+			"text nor transcriptions: read a text with `message transcribe` or `message get`. Chats\n" +
+			"that access.json closes are not listed. --state, --chat and --kind narrow the list.\n" +
+			"Pass next_cursor back with --cursor to continue. It reads the database and never calls\n" +
+			"Telegram.",
+		Args: cobra.NoArgs, RunE: a.voiceList,
+	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.VoiceListResult](), Choices: voiceListChoices(), ItemPath: "jobs"})
+	list.Flags().String("state", "", "keep jobs in this state: queued, running, done, failed or skipped")
+	list.Flags().String("chat", "", "keep jobs of this chat (a numeric id or a @username the database knows)")
+	list.Flags().String("kind", "", "keep jobs of this kind: voice, video_note or video")
+	list.Flags().Int("limit", 50, "jobs per page, 1 to 200")
+	list.Flags().String("cursor", "", "continue after a previous page, the value of next_cursor")
 	cancel := a.annotate(&cobra.Command{
 		Use:   "cancel [<chat> <id> | <message-link>]",
 		Short: "Stop the running job and skip the queued ones",
@@ -80,8 +100,18 @@ func (a *app) voiceCommand() *cobra.Command {
 		Args: cobra.NoArgs, RunE: a.voiceBackfill,
 	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.VoiceBackfillResult]()})
 	backfill.Flags().Bool("dry-run", false, "count the messages and queue nothing")
-	cmd.AddCommand(install, status, cancel, retry, backfill)
+	cmd.AddCommand(install, status, list, cancel, retry, backfill)
 	return cmd
+}
+
+// voiceListChoices are the allowed values of the --state and --kind flags of
+// `voice list`. The daemon checks them, so the lists are repeated here for the
+// schema and the usage error.
+func voiceListChoices() []flagChoices {
+	return []flagChoices{
+		{Flag: "state", Values: []string{"queued", "running", "done", "failed", "skipped"}},
+		{Flag: "kind", Values: []string{"voice", "video_note", "video"}},
+	}
 }
 
 // voiceInstallProgress prints the steps of an installation on stderr: each step
@@ -149,6 +179,40 @@ func (a *app) voiceStatus(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	return a.success(cmd, res)
+}
+
+func (a *app) voiceList(cmd *cobra.Command, _ []string) error {
+	settings, err := a.outputSettingsFor(cmd)
+	if err != nil {
+		return err
+	}
+	var p rpc.VoiceListParams
+	p.State, _ = cmd.Flags().GetString("state")
+	p.Chat, _ = cmd.Flags().GetString("chat")
+	p.Kind, _ = cmd.Flags().GetString("kind")
+	p.Cursor, _ = cmd.Flags().GetString("cursor")
+	for _, choice := range voiceListChoices() {
+		value, _ := cmd.Flags().GetString(choice.Flag)
+		if value != "" && !slices.Contains(choice.Values, value) {
+			return fail(exitcode.Usage, "--%s must be %s", choice.Flag, joinChoices(choice.Values))
+		}
+	}
+	if p.Limit, err = chatListLimit(cmd, 200); err != nil {
+		return err
+	}
+	var res rpc.VoiceListResult
+	if err := a.callOne(cmd, rpc.MethodVoiceList, p, &res); err != nil {
+		return err
+	}
+	return emitList(a, cmd, settings, res, res.Jobs, res.NextCursor)
+}
+
+// joinChoices writes values as "a, b, or c" for a usage error.
+func joinChoices(values []string) string {
+	if len(values) < 2 {
+		return strings.Join(values, "")
+	}
+	return strings.Join(values[:len(values)-1], ", ") + ", or " + values[len(values)-1]
 }
 
 func (a *app) voiceCancel(cmd *cobra.Command, args []string) error {
