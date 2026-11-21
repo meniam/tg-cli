@@ -30,7 +30,7 @@ func TestVoiceSourceChatVoiceOn(t *testing.T) {
 	if err := json.Unmarshal(r.params, &p); err != nil || r.code != 0 || p != (rpc.ChatVoiceOnParams{Chat: "-1001234567890"}) {
 		t.Fatalf("on with an id: %+v %+v %v", r, p, err)
 	}
-	if !strings.Contains(r.stderr, "enabled = true") {
+	if !strings.Contains(r.stderr, "tg settings set voice_transcription.enabled true and restart the Daemon") {
 		t.Fatalf("no warning while the setting is off: %q", r.stderr)
 	}
 	// --backfill with the setting off is refused by the Daemon with code 2.

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"unicode/utf8"
 
+	"tg-cli/internal/access"
 	"tg-cli/internal/fileroot"
 	"tg-cli/internal/mediameta"
 	"tg-cli/internal/rpc"
@@ -69,6 +70,41 @@ func mediaFileError(err error) *rpc.Error {
 	}
 }
 
+// lockMediaWrite holds the access boundary through the Telegram dispatch.
+func (d *daemon) lockMediaWrite(chatID int64, paths []string, files []rpc.MediaFile) (func(), error) {
+	current := d.policy()
+	d.accessMu.RLock()
+	if d.accessSnapshot != nil {
+		current = *d.accessSnapshot
+	}
+	if d.legacyAccessPresent() || d.legacyConfigPresent() {
+		current = access.Denied()
+	}
+	if !current.Allowed(chatID) {
+		d.accessMu.RUnlock()
+		return nil, rpc.ErrChatNotFound()
+	}
+	if !current.WriteAllowed(chatID) || !current.FilesAllowed() {
+		d.accessMu.RUnlock()
+		return nil, rpc.ErrWriteDisabled()
+	}
+	for i, path := range paths {
+		checked, _, err := fileroot.Open(current.FileRoots(), path, fileroot.MaxFileSize)
+		if err != nil {
+			d.accessMu.RUnlock()
+			return nil, rpc.ErrWriteDisabled()
+		}
+		before, firstErr := files[i].File.Stat()
+		after, secondErr := checked.Stat()
+		_ = checked.Close()
+		if firstErr != nil || secondErr != nil || !os.SameFile(before, after) {
+			d.accessMu.RUnlock()
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "file changed while opening")
+		}
+	}
+	return d.accessMu.RUnlock, nil
+}
+
 func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any, error) {
 	var p rpc.SendMediaParams
 	if err := decodeParams(raw, &p); err != nil {
@@ -101,7 +137,7 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 		return nil, rpc.ErrWriteDisabled()
 	}
 	if !policy.FilesAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("sending files is disabled: ask the owner to add file roots to files in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "sending files is disabled: ask the owner to set access.files")
 	}
 	roots := policy.FileRoots()
 	openFile := d.openMediaFile
@@ -153,6 +189,11 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockMediaWrite(chatID, p.Files, files)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var replay rpc.SendMediaResult
 		if err := json.Unmarshal(saved, &replay); err != nil {
 			return nil, err
@@ -161,6 +202,11 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 		return replay, nil
 	}
 	if p.DryRun {
+		releaseAccess, err := d.lockMediaWrite(chatID, p.Files, files)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		types := make([]string, len(files))
 		sizes := make([]int64, len(files))
 		for i, file := range files {
@@ -172,7 +218,12 @@ func (d *daemon) messageSendMedia(ctx context.Context, raw json.RawMessage) (any
 		}
 		return result, nil
 	}
+	release, err := d.lockMediaWrite(chatID, p.Files, files)
+	if err != nil {
+		return nil, err
+	}
 	res, err := d.telegram(ctx).SendMedia(ctx, ref, p, files)
+	release()
 	if err != nil {
 		var rpcErr *rpc.Error
 		if errors.As(err, &rpcErr) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

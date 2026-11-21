@@ -189,7 +189,7 @@ func TestMessageWriteCLIExitCodesAndFormats(t *testing.T) {
 			if r.code != tc.code {
 				t.Fatalf("code: %+v", r)
 			}
-			if tc.code == 9 && !strings.Contains(r.stderr, "write list") {
+			if tc.code == 9 && !strings.Contains(r.stderr, "access.write") {
 				t.Fatalf("write hint: %+v", r)
 			}
 		})
@@ -199,7 +199,7 @@ func TestMessageWriteCLIExitCodesAndFormats(t *testing.T) {
 		t.Fatalf("missing daemon: %+v", absent)
 	}
 	quiet := runWriteCLI(t, []string{"message", "send", "42", "--text", "hello", "--quiet"}, "", func(string, json.RawMessage) (any, error) { return nil, rpc.ErrWriteDisabled() }, nil)
-	if quiet.code != exitcode.WriteDisabled || strings.Contains(quiet.stderr, "write list") || !strings.Contains(quiet.stdout, `"write_disabled"`) {
+	if quiet.code != exitcode.WriteDisabled || strings.Contains(quiet.stderr, "access.write") || !strings.Contains(quiet.stdout, `"write_disabled"`) {
 		t.Fatalf("quiet write error: %+v", quiet)
 	}
 	human := runWriteCLI(t, []string{"message", "send", "42", "--text", "hello", "--format", "human"}, "", nil, nil)

@@ -491,7 +491,7 @@ func TestVoiceWorkerBackfillNeedsTheSettingAndTheEngine(t *testing.T) {
 	cfg := voiceTestConfig()
 	cfg.Enabled = false
 	f := backfillFixture(t, cfg)
-	if _, err := f.d.voiceBackfill(context.Background(), params(t, rpc.VoiceBackfillParams{})); writeCode(t, err) != rpc.CodeInvalidParams || !strings.Contains(err.Error(), "enabled = true") {
+	if _, err := f.d.voiceBackfill(context.Background(), params(t, rpc.VoiceBackfillParams{})); writeCode(t, err) != rpc.CodeInvalidParams || !strings.Contains(err.Error(), "tg settings set voice_transcription.enabled true and restart the Daemon") {
 		t.Fatalf("off: %v", err)
 	}
 	if _, err := f.db.GetVoiceJob(context.Background(), 1001, 1); !errors.Is(err, store.ErrNotFound) {

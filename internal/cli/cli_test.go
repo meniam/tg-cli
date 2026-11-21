@@ -443,7 +443,7 @@ func newEnv(t *testing.T) *testEnv {
 	return &testEnv{
 		t:    t,
 		home: home,
-		env:  map[string]string{"TG_CLI_HOME": home, "TG_API_ID": "12345", "TG_API_HASH": "APIHASHVALUE"},
+		env:  map[string]string{"TG_CLI_HOME": home, "TG_API_ID": "12345", "TG_API_HASH": "APIHASHVALUE", "TG_CLI_BACKGROUND_SYNC_ENABLED": "false", "TG_CLI_SEMANTIC_SEARCH_ENABLED": "false", "TG_CLI_VOICE_TRANSCRIPTION_ENABLED": "false"},
 		tg: &fakeTelegram{
 			ready:    make(chan struct{}),
 			wantCode: "CODE777",
@@ -770,13 +770,61 @@ func (e *testEnv) stopDaemon(d *daemonRun) {
 	}
 }
 
-func (e *testEnv) savedProfile(name string) config.Profile {
+func (e *testEnv) setProfileSettings(name string, values map[string]json.RawMessage) {
 	e.t.Helper()
-	cfg, err := config.Load(filepath.Join(e.home, ".config", "tg-cli", "config.toml"))
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), name, daemon.DefaultFileNames())
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	return cfg.Profiles[name]
+	err = daemon.WithProfileDatabase(paths, func(db daemon.ProfileDatabase) error { return db.SetSettings(context.Background(), values) })
+	if err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+func (e *testEnv) setting(name string) json.RawMessage {
+	e.t.Helper()
+	params, err := json.Marshal(rpc.SettingsGetParams{Key: name})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	value, err := daemon.OfflineSettings(context.Background(), filepath.Join(e.home, ".config", "tg-cli", "config.toml"), e.home, "default", rpc.MethodSettingsGet, params, nil)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return value.(rpc.SettingValue).Value
+}
+
+func (e *testEnv) savedProfile(name string) config.Profile {
+	e.t.Helper()
+	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), name, daemon.DefaultFileNames())
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	if _, err := os.Stat(paths.Database); os.IsNotExist(err) {
+		return config.Profile{}
+	} else if err != nil {
+		e.t.Fatal(err)
+	}
+	var profile config.Profile
+	err = daemon.WithProfileDatabase(paths, func(db daemon.ProfileDatabase) error {
+		values, err := db.Settings(context.Background())
+		if err != nil {
+			return err
+		}
+		for key, dst := range map[string]*string{"profile.client": &profile.Client, "profile.device": &profile.Device, "profile.transport": &profile.Transport, "profile.proxy": &profile.Proxy} {
+			if raw, ok := values[key]; ok {
+				if err := json.Unmarshal(raw, dst); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return profile
 }
 
 func (e *testEnv) usePreset() {
@@ -806,9 +854,9 @@ func TestStartWithClientPresetAndRemembersIt(t *testing.T) {
 	if got := e.savedProfile("default").Client; got != "desktop" {
 		t.Fatalf("saved preset %q", got)
 	}
-	info, err := os.Stat(filepath.Join(e.home, ".config", "tg-cli", "config.toml"))
+	info, err := os.Stat(filepath.Join(e.dbRoot(), "default", "store.db"))
 	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("config permissions: %v, %v", info, err)
+		t.Fatalf("database permissions: %v, %v", info, err)
 	}
 	d = e.startDaemon()
 	e.mu.Lock()
@@ -891,11 +939,17 @@ func TestPresetDownloadFailure(t *testing.T) {
 func TestNoCredentialsExplainsBothWays(t *testing.T) {
 	e := newEnv(t)
 	e.usePreset()
+	e.setProfileSettings("default", map[string]json.RawMessage{"profile.client": []byte(`""`)})
+	previous := runDaemon
+	defer func() { runDaemon = previous }()
+	runDaemon = func(ctx context.Context, opts daemon.Options) error {
+		return daemon.WithProfileDatabase(opts.Paths, func(db daemon.ProfileDatabase) error { return opts.Prepare(ctx, db, &opts) })
+	}
 	r := e.run("daemon", "start", "--foreground")
 	wantFailure(t, r, exitcode.Usage)
 	for _, want := range []string{"TG_API_ID", "--client"} {
 		if !strings.Contains(r.stdout, want) {
-			t.Errorf("the message must mention %s: %q", want, r.stdout)
+			t.Errorf("missing %s: %q", want, r.stdout)
 		}
 	}
 }
@@ -1160,12 +1214,20 @@ func TestInvalidDeviceNames(t *testing.T) {
 // loggedInEnv starts a daemon with a logged-in account and a few messages.
 func loggedInEnv(t *testing.T) *testEnv {
 	t.Helper()
+	return loggedInEnvWithSetup(t, nil)
+}
+
+func loggedInEnvWithSetup(t *testing.T, setup func(*testEnv)) *testEnv {
+	t.Helper()
 	e := newEnv(t)
 	e.tg.user = &rpc.User{ID: 1, Username: "me"}
 	e.tg.messages = []rpc.Message{
 		{ID: 30, ChatID: 77, Date: "2026-01-03T10:00:00Z", Text: "third", Sender: &rpc.Sender{ID: 5, Name: "Ann"}},
 		{ID: 20, ChatID: 77, Date: "2026-01-02T10:00:00Z", Text: "second", MediaType: "photo"},
 		{ID: 10, ChatID: 77, Date: "2026-01-01T10:00:00Z", Text: "first"},
+	}
+	if setup != nil {
+		setup(e)
 	}
 	e.startDaemon()
 	return e

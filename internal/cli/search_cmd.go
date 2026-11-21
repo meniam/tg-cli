@@ -33,7 +33,7 @@ func (a *app) searchCommand() *cobra.Command {
 			"stemmed words and vector similarity; JSONL then prints one fragment per line.\n" +
 			"It works without Ollama: the fragments then come from words alone and\n" +
 			"vector_skipped says why. Vector hits with a cosine similarity below\n" +
-			"[semantic_search] min_similarity (default 0.5) are dropped before the merge and\n" +
+			"semantic_search.min_similarity (default 0.5) are dropped before the merge and\n" +
 			"counted in vector_dropped; --min-similarity X (0 to 1) overrides the setting\n" +
 			"for one query and 0 turns the threshold off.",
 		Args: cobra.ExactArgs(1), RunE: a.search,
@@ -49,7 +49,7 @@ func (a *app) searchCommand() *cobra.Command {
 	cmd.Flags().String("media", "", "keep only messages with this attachment: voice, video_note, video, photo, document, gif or audio (messages scope only)")
 	cmd.Flags().Bool("deleted", false, "include messages marked deleted")
 	cmd.Flags().Bool("semantic", false, "search conversation fragments by words and meaning (messages only; --limit counts fragments)")
-	cmd.Flags().Float64("min-similarity", 0, "with --semantic: lowest cosine similarity of a vector hit, 0 to 1 (0 turns the threshold off; default from [semantic_search] min_similarity)")
+	cmd.Flags().Float64("min-similarity", 0, "with --semantic: lowest cosine similarity of a vector hit, 0 to 1 (0 turns the threshold off; default from semantic_search.min_similarity)")
 	return cmd
 }
 

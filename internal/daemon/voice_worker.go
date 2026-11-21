@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"tg-cli/internal/chatref"
+	"tg-cli/internal/config"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
 )
@@ -51,7 +52,7 @@ func (c VoiceTranscriptionConfig) withDefaults() VoiceTranscriptionConfig {
 		def   int
 	}{
 		{&c.MaxVoiceMB, 30}, {&c.MaxVideoNoteMB, 50}, {&c.MaxVideoMB, 500}, {&c.MaxVideoMinutes, 120},
-		{&c.DailyDownloadMB, 2000}, {&c.DailyFiles, 200}, {&c.Threads, 4},
+		{&c.DailyDownloadMB, config.DefaultVoiceDailyDownloadMB}, {&c.DailyFiles, config.DefaultVoiceDailyFiles}, {&c.Threads, 4},
 	} {
 		if *f.value <= 0 {
 			*f.value = f.def
@@ -150,7 +151,7 @@ type voiceRun struct {
 
 // voiceWorker is the single worker of the voice queue. One goroutine takes the
 // queued jobs one at a time. It exists for every daemon, but its goroutine runs
-// only when [voice_transcription] enabled is on, or after the first manual job.
+// only when voice_transcription.enabled is on, or after the first manual job.
 type voiceWorker struct {
 	d      *daemon
 	cfg    VoiceTranscriptionConfig

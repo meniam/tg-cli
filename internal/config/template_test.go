@@ -23,10 +23,14 @@ func TestTemplateLoadsWithDefaults(t *testing.T) {
 	if got.DefaultProfile != "default" || got.Files.Database != "store.db" || got.Behavior.ThrottlePercent != 60 || got.Behavior.FloodAutoWait != "10s" {
 		t.Fatalf("the template does not give the defaults: %+v", got)
 	}
-	// The template keeps the table itself so an update has somewhere to write,
-	// but every key inside it is commented out and therefore empty.
-	if p, ok := got.Profiles["default"]; !ok || p != (Profile{}) {
-		t.Errorf("every profile key must be commented out: %+v", got.Profiles)
+	if !got.VoiceTranscription.Enabled || got.VoiceTranscription.DailyDownloadMB != 5000 || got.VoiceTranscription.DailyFiles != 500 {
+		t.Fatalf("voice template defaults: %+v", got.VoiceTranscription)
+	}
+	if strings.Contains(Template(), "voice_transcription") {
+		t.Error("template contains voice settings")
+	}
+	if len(got.Profiles) != 0 || got.Legacy.Profiles != nil {
+		t.Errorf("template must not contain profile settings: %+v", got.Profiles)
 	}
 }
 
@@ -47,9 +51,8 @@ func TestTemplateKeepsComments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The update inserts one line at the top of [profiles.default], next to the
-	// existing key lines; every other line, comments included, stays as it was.
-	want := strings.Replace(Template(), "[profiles.default]\n", "[profiles.default]\ndevice = \"X\"\n", 1)
+	// The update appends the missing legacy table and preserves every existing comment.
+	want := strings.TrimRight(Template(), "\n") + "\n\n[profiles.default]\ndevice = \"X\"\n"
 	if string(got) != want {
 		t.Fatalf("the update changed more than the device line:\n%s", diffLines(want, string(got)))
 	}

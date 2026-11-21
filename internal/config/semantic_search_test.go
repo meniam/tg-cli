@@ -25,9 +25,9 @@ func TestSemanticSearchDefaults(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := SemanticSearchValues{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute, MinSimilarity: 0.5}
+			want := SemanticSearchValues{Enabled: true, OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: 10 * time.Minute, MinSimilarity: 0.5}
 			if values != want {
-				t.Fatalf("values = %+v, want %+v (disabled)", values, want)
+				t.Fatalf("values = %+v, want %+v (enabled)", values, want)
 			}
 		})
 	}

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
@@ -26,6 +27,13 @@ func rpcTestDaemon(t *testing.T) (*rpc.Client, *store.DB, *fakeTelegram, *safeBu
 	logs := &safeBuffer{}
 	logger := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	d := &daemon{opts: Options{Telegram: tg, Store: db}, store: db, log: logger, srv: rpc.NewServer(logger)}
+	if err := db.SetSettings(context.Background(), map[string]json.RawMessage{"access.block": json.RawMessage(`[]`)}); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshAccess(context.Background())
+	if d.policy().Closed() {
+		t.Fatal("access snapshot is closed")
+	}
 	d.register()
 	serverSide, clientSide := net.Pipe()
 	done := make(chan struct{})
@@ -260,5 +268,32 @@ func TestNoteRPCValidationSearchAndSecrets(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), secretBody) || strings.Contains(logs.String(), secretQuery) {
 		t.Errorf("secret appeared in log: %s", logs.String())
+	}
+}
+
+func TestDeleteNotesByAuthorPreservesClosedChats(t *testing.T) {
+	d, _, db, path := accessTestDaemon(t)
+	ctx := context.Background()
+	hidden, visible := int64(42), int64(43)
+	for _, id := range []int64{hidden, visible} {
+		if _, err := db.AddNote(ctx, store.Note{Kind: "chat", ChatID: &id, Body: "fixture", Author: "ai"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeAccess(t, path, `{"block":[42]}`)
+	out, err := d.noteDeleteByAuthor(ctx, params(t, rpc.NoteDeleteByAuthorParams{Author: "ai"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := out.(rpc.NoteDeleteResult).Deleted; got != 1 {
+		t.Fatalf("deleted count=%d, want 1", got)
+	}
+	notes, err := db.ListNotes(ctx, store.NoteFilter{Author: "ai"})
+	if err != nil || len(notes) != 1 || notes[0].ChatID == nil || *notes[0].ChatID != hidden {
+		t.Fatalf("hidden note changed: %+v %v", notes, err)
+	}
+	out, err = d.noteDeleteByAuthor(ctx, params(t, rpc.NoteDeleteByAuthorParams{Author: "ai"}))
+	if err != nil || out.(rpc.NoteDeleteResult).Deleted != 0 {
+		t.Fatalf("hidden count leaked: %+v %v", out, err)
 	}
 }

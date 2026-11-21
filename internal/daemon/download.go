@@ -30,9 +30,12 @@ func (d *daemon) messageDownload(ctx context.Context, raw json.RawMessage) (any,
 			return nil, rpc.NewError(rpc.CodeInvalidParams, "message ids must be positive")
 		}
 	}
+	if err := d.requireAccount(ctx); err != nil {
+		return nil, err
+	}
 	policy := d.policy()
 	if !policy.DownloadsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("downloads are disabled: ask the owner to add downloads to access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "downloads are disabled: ask the owner to set access.downloads")
 	}
 	dir, err := fileroot.OpenDownloadDir(policy.DownloadRoots(), p.Output)
 	if err != nil {

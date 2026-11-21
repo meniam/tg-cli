@@ -3,12 +3,14 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 	"unicode/utf8"
 
+	"tg-cli/internal/access"
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
 )
@@ -90,14 +92,12 @@ func (d *daemon) adminReference(ctx context.Context, value string, write bool, a
 			return ref, chat, &rpc.Error{Code: rpc.CodeWriteDisabled, Message: "owner must join this chat first", Data: map[string]any{"list": "write"}}
 		}
 	} else {
-		if ref.Kind == chatref.ID && ((write && !policy.WriteAllowed(ref.ID)) || (!write && !policy.AdminAllowed(ref.ID))) {
-			if write {
-				return ref, chat, rpc.ErrWriteDisabled()
-			}
-			return ref, chat, rpc.ErrAdminDisabled()
-		}
 		chat, err = d.telegram(ctx).Resolve(ctx, ref)
 		if err != nil {
+			var rpcErr *rpc.Error
+			if ref.Kind == chatref.ID && errors.As(err, &rpcErr) && rpcErr.Code == rpc.CodeNotFound {
+				return ref, chat, rpc.ErrUnknownChatID()
+			}
 			return ref, chat, err
 		}
 	}
@@ -196,6 +196,43 @@ func adminTypeOK(action, kind string) bool {
 		return kind == "group" || kind == "supergroup" || kind == "channel"
 	}
 }
+func (d *daemon) lockAdminWrite(chatID, userID int64, requireWrite bool) (func(), error) {
+	policy := d.policy()
+	d.accessMu.RLock()
+	if d.accessSnapshot != nil {
+		policy = *d.accessSnapshot
+	}
+	if d.legacyAccessPresent() || d.legacyConfigPresent() {
+		policy = access.Denied()
+	}
+	if !policy.Allowed(chatID) {
+		d.accessMu.RUnlock()
+		return nil, rpc.ErrChatNotFound()
+	}
+	if requireWrite && !policy.WriteAllowed(chatID) {
+		d.accessMu.RUnlock()
+		return nil, rpc.ErrWriteDisabled()
+	}
+	if !requireWrite && !policy.AdminAllowed(chatID) {
+		d.accessMu.RUnlock()
+		return nil, rpc.ErrAdminDisabled()
+	}
+	if userID != 0 {
+		hide, _, blocked := policy.Filter()
+		if hide {
+			d.accessMu.RUnlock()
+			return nil, rpc.ErrChatNotFound()
+		}
+		for _, id := range blocked {
+			if id == userID {
+				d.accessMu.RUnlock()
+				return nil, rpc.ErrUnknownChatID()
+			}
+		}
+	}
+	return d.accessMu.RUnlock, nil
+}
+
 func (d *daemon) chatAdmin(ctx context.Context, action string, raw json.RawMessage) (any, error) {
 	var p adminParams
 	if err := decodeParams(raw, &p); err != nil {
@@ -207,7 +244,7 @@ func (d *daemon) chatAdmin(ctx context.Context, action string, raw json.RawMessa
 			return nil, err
 		}
 		if !d.policy().CreateAllowed() {
-			return nil, &rpc.Error{Code: rpc.CodeWriteDisabled, Message: d.accessMessage("creating chats is disabled in access.json"), Data: map[string]any{"list": "create"}}
+			return nil, &rpc.Error{Code: rpc.CodeWriteDisabled, Message: "creating chats requires access.create", Data: map[string]any{"list": "create"}}
 		}
 		if p.Title == nil {
 			return nil, rpc.NewError(rpc.CodeInvalidParams, "title is required")
@@ -344,6 +381,20 @@ func (d *daemon) chatAdmin(ctx context.Context, action string, raw json.RawMessa
 			return nil, fmt.Errorf("record moderation intent: %w", e)
 		}
 	}
+	var releaseAccess func()
+	if action != "join" {
+		releaseAccess, err = d.lockAdminWrite(chat.ID, uid, action == "leave")
+		if err != nil {
+			if journal {
+				record["phase"] = "result"
+				record["outcome"] = writeOutcome(err)
+				if e := d.moderation(record); e != nil {
+					d.log.Error("moderation result journal failed")
+				}
+			}
+			return nil, err
+		}
+	}
 	var result any
 	switch action {
 	case "join":
@@ -374,6 +425,9 @@ func (d *daemon) chatAdmin(ctx context.Context, action string, raw json.RawMessa
 		result, err = api.SetDefaultRights(ctx, ref, p.Deny, p.Clear)
 	case "slow-mode":
 		result, err = api.SetSlowMode(ctx, ref, p.Seconds)
+	}
+	if releaseAccess != nil {
+		releaseAccess()
 	}
 	if journal {
 		record["time"] = time.Now().UTC().Format(time.RFC3339)

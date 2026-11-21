@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 	"tg-cli/internal/config"
@@ -39,13 +43,13 @@ func (a *app) sessionCommand() *cobra.Command {
 	return group
 }
 func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
-	if err := a.migrateProfiles(); err != nil {
-		return err
-	}
 	yes, _ := cmd.Flags().GetBool("yes")
 	out, _ := cmd.Flags().GetString("out")
 	if !yes || out == "" || out == "-" {
 		return fail(exitcode.Usage, "--yes and --out are required")
+	}
+	if err := a.guardLegacyHomeSettings(); err != nil {
+		return err
 	}
 	profile, p, err := a.profile(cmd)
 	if err != nil {
@@ -54,6 +58,9 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 	absoluteOut, err := filepath.Abs(out)
 	if err != nil {
 		return fail(exitcode.Usage, "invalid output path")
+	}
+	if _, err := daemon.MigrateSettings(cmd.Context(), a.deps.ConfigPath, filepath.Dir(p.Dir), profile); err != nil {
+		return a.daemonStartError(err)
 	}
 	var export rpc.SessionExportResult
 	c, err := a.connect(cmd.Context(), cmd)
@@ -67,7 +74,30 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 		if !errors.As(err, &ce) || ce.exit != exitcode.DaemonNotRunning {
 			return err
 		}
-		err = daemon.WithProfileLock(p, func() error {
+		err = daemon.WithProfileDatabase(p, func(db daemon.ProfileDatabase) error {
+			stored, e := db.Settings(cmd.Context())
+			if e != nil {
+				return fail(exitcode.Failure, "cannot read profile settings")
+			}
+			migrated, e := db.SettingsMigrated(cmd.Context())
+			if e != nil {
+				return fail(exitcode.Failure, "cannot read profile settings")
+			}
+			client := ""
+			if !migrated {
+				client = a.config.Profiles[profile].Client
+			}
+			storedValue, storedClient := stored["profile.client"]
+			if storedClient {
+				if json.Unmarshal(storedValue, &client) != nil {
+					return fail(exitcode.Failure, "cannot read profile settings")
+				}
+			} else if client == "" && a.deps.Getenv("TG_API_ID") == "" && a.deps.Getenv("TG_API_HASH") == "" {
+				key, _ := config.LookupSetting("profile.client")
+				if json.Unmarshal(key.Default, &client) != nil {
+					return fail(exitcode.Failure, "invalid default client preset")
+				}
+			}
 			raw, e := os.ReadFile(p.Session)
 			if e != nil {
 				return fail(exitcode.NotAuthorized, "session is unavailable")
@@ -76,7 +106,7 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 			if e != nil || uid == 0 {
 				return fail(exitcode.NotAuthorized, "session is unavailable")
 			}
-			value, d, e := sessionstr.Encode(raw, a.config.Profiles[profile].Client, 0)
+			value, d, e := sessionstr.Encode(raw, client, 0)
 			if e != nil {
 				return fail(exitcode.NotAuthorized, "session is unavailable")
 			}
@@ -90,7 +120,7 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 			if errors.As(err, &ce) {
 				return err
 			}
-			return fail(exitcode.Usage, "cannot lock profile; stop the daemon and retry")
+			return fail(exitcode.Failure, "cannot lock profile; stop the daemon and retry")
 		}
 	}
 	result := sessionResult{Profile: profile, Format: export.Format, DC: export.DC, UserID: export.UserID, KeyID: export.KeyID, Client: export.Client}
@@ -99,9 +129,6 @@ func (a *app) sessionExport(cmd *cobra.Command, _ []string) error {
 	return a.success(cmd, result)
 }
 func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
-	if err := a.migrateProfiles(); err != nil {
-		return err
-	}
 	yes, _ := cmd.Flags().GetBool("yes")
 	from, _ := cmd.Flags().GetString("from")
 	force, _ := cmd.Flags().GetBool("force")
@@ -133,14 +160,11 @@ func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
 		return fail(exitcode.Usage, "invalid session string")
 	}
 	result := sessionResult{Profile: profile, Format: data.Format, UserID: data.UserID, DC: data.DC, KeyID: data.KeyID}
-	err = daemon.WithProfileLock(p, func() error {
-		old, e := os.ReadFile(p.Session)
-		if e != nil && !errors.Is(e, os.ErrNotExist) {
+	err = daemon.WithProfileDatabasePreflight(p, func() error {
+		old, readErr := os.ReadFile(p.Session)
+		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
 			return fail(exitcode.Failure, "cannot read profile session")
 		}
-		// A database of the old layout is not moved yet, and an import without
-		// --force must not pass over it either: the history it holds belongs to
-		// the account the user is about to replace.
 		_, dbErr := os.Stat(p.Database)
 		if dbErr != nil && !errors.Is(dbErr, os.ErrNotExist) {
 			return fail(exitcode.Failure, "cannot inspect profile")
@@ -149,19 +173,30 @@ func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
 		if legacyErr != nil && !errors.Is(legacyErr, os.ErrNotExist) {
 			return fail(exitcode.Failure, "cannot inspect profile")
 		}
-		result.Replaced = e == nil || dbErr == nil || legacyErr == nil
+		result.Replaced = readErr == nil || dbErr == nil || legacyErr == nil
 		if result.Replaced {
 			if !force {
 				return fail(exitcode.Usage, "profile is not empty; use --force for the same account")
 			}
-			_, oldID, _, e := sessionstr.Inspect(old)
-			if e != nil || oldID == 0 || data.UserID == 0 || oldID != data.UserID {
+			_, oldID, _, err := sessionstr.Inspect(old)
+			if err != nil || oldID == 0 || data.UserID == 0 || oldID != data.UserID {
 				return fail(exitcode.Usage, "account cannot be verified; use a new profile")
 			}
 		}
-		result.Duplicates, e = daemon.DuplicateProfiles(p, data.KeyID, false)
-		if e != nil {
+		var err error
+		result.Duplicates, err = daemon.DuplicateProfiles(p, data.KeyID, false)
+		if err != nil {
 			return fail(exitcode.Failure, "cannot inspect profiles")
+		}
+		return nil
+	}, func(db daemon.ProfileDatabase) error {
+		if err := daemon.CheckMigratedSettingsSources(cmd.Context(), db, p.Access, a.config.Legacy); err != nil {
+			var legacy *daemon.LegacySettingsError
+			var input *daemon.MigrationInputError
+			if errors.As(err, &legacy) || errors.As(err, &input) {
+				return fail(exitcode.Usage, "%v", err)
+			}
+			return fail(exitcode.Failure, "cannot inspect legacy settings")
 		}
 		writeSession := func() error {
 			if e := daemon.WriteSession(p, data.Session); e != nil {
@@ -172,20 +207,57 @@ func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
 		if data.Client == "" {
 			return writeSession()
 		}
-		updated, e := config.UpdateProfileWith(a.deps.ConfigPath, profile, map[string]string{"client": data.Client}, true, writeSession)
+		stored, e := db.Settings(cmd.Context())
 		if e != nil {
-			var ce *cmdError
-			if errors.As(e, &ce) {
-				return e
-			}
-			var configErr *config.Error
-			if errors.As(e, &configErr) {
-				return fail(exitcode.Usage, "%v", e)
-			}
-			return fail(exitcode.Failure, "cannot save client preset")
+			return fail(exitcode.Failure, "cannot read profile settings")
 		}
-		a.config = updated
-		if a.config.Profiles[profile].Client != data.Client {
+		client := ""
+		var journal *daemon.Journal
+		value, exists := stored["profile.client"]
+		if exists {
+			if json.Unmarshal(value, &client) != nil {
+				return fail(exitcode.Failure, "cannot read profile settings")
+			}
+		} else {
+			migrated, err := db.SettingsMigrated(cmd.Context())
+			if err != nil {
+				return fail(exitcode.Failure, "cannot read profile settings")
+			}
+			client = data.Client
+			if !migrated {
+				legacy, found, err := config.LegacyProfileClient(a.deps.ConfigPath, profile)
+				if err != nil {
+					return fail(exitcode.Failure, "cannot read client preset")
+				}
+				if found {
+					client = legacy
+				}
+			}
+			journal, e = daemon.OpenJournal(p.Log)
+			if e != nil {
+				return fail(exitcode.Failure, "cannot open daemon journal")
+			}
+			defer journal.Close()
+			encoded, _ := json.Marshal(client)
+			if e := db.SetSettings(cmd.Context(), map[string]json.RawMessage{"profile.client": encoded}); e != nil {
+				return fail(exitcode.Failure, "cannot save client preset")
+			}
+		}
+		if e := writeSession(); e != nil {
+			if !exists {
+				rollbackCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				rollbackErr := db.DeleteSetting(rollbackCtx, "profile.client")
+				cancel()
+				if rollbackErr != nil {
+					return fail(exitcode.Failure, "cannot restore profile settings")
+				}
+			}
+			return e
+		}
+		if journal != nil {
+			slog.New(slog.NewTextHandler(journal, nil)).Info("setting updated", "key", "profile.client", "source", "offline")
+		}
+		if client != data.Client {
 			a.warn(cmd, "Imported client preset differs from this profile.")
 		}
 		return nil
@@ -195,7 +267,7 @@ func (a *app) sessionImport(cmd *cobra.Command, _ []string) error {
 		if errors.As(err, &ce) {
 			return err
 		}
-		return fail(exitcode.Usage, "cannot lock profile; run `tg daemon stop` first")
+		return fail(exitcode.Failure, "cannot lock profile; run `tg daemon stop` first")
 	}
 	if result.Replaced {
 		a.warn(cmd, "The old key remains active on Telegram; terminate it in the device list.")

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -17,6 +18,8 @@ import (
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
 )
+
+var updateStatusGolden = flag.Bool("update-status-golden", false, "rewrite the status dashboard golden files")
 
 // statusZone is not the zone of the machine running the test.
 var statusZone = time.FixedZone("msk", 3*3600)
@@ -133,11 +136,18 @@ func TestRenderDashboardMatchesGolden(t *testing.T) {
 		{"status_job_and_flood_wait.golden", busy},
 	} {
 		t.Run(tc.golden, func(t *testing.T) {
-			want, err := os.ReadFile(filepath.Join("testdata", tc.golden))
+			path := filepath.Join("testdata", tc.golden)
+			got := renderDashboard(tc.dash, statusNow())
+			if *updateStatusGolden {
+				if err := os.WriteFile(path, []byte(got), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			want, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := renderDashboard(tc.dash, statusNow()); got != string(want) {
+			if got != string(want) {
 				t.Errorf("text differs from %s\n--- got\n%s--- want\n%s", tc.golden, got, want)
 			}
 		})
@@ -349,7 +359,7 @@ func TestRenderDashboardSemanticStates(t *testing.T) {
 		{"model missing", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexModelMissing, Reason: "Ollama does not have the model bge-m3"}, "VECTOR INDEX     Model missing · Ollama does not have the model bge-m3\n"},
 		{"error with control characters", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexError, Reason: "open: \x1b[31mfailed"}, "VECTOR INDEX     Error · open:  [31mfailed\n"},
 		{"failed after coverage measured", rpc.SemanticIndexStatus{Enabled: true, State: rpc.SemanticIndexError, Indexed: 10, Total: 40, CoverageMeasured: true}, "Last measured  10 / 40 fragments · 30 remaining\n"},
-		{"enabled flag off wins", rpc.SemanticIndexStatus{State: rpc.SemanticIndexIdle, Indexed: 5}, "VECTOR INDEX     Off\n"},
+		{"enabled flag off wins", rpc.SemanticIndexStatus{State: rpc.SemanticIndexIdle, Indexed: 5}, "VECTOR INDEX     Off\n  Enable         tg settings set semantic_search.enabled true · restart_required\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dash := statusBase()
@@ -377,8 +387,8 @@ func TestRenderDashboardVoiceStates(t *testing.T) {
 		st   rpc.VoiceStatus
 		want string
 	}{
-		{"off", rpc.VoiceStatus{State: rpc.VoiceStateDisabled}, "TRANSCRIPTION    Off\n"},
-		{"off wins over a stale queue", rpc.VoiceStatus{Installed: true, Queue: rpc.VoiceQueueCounts{Queued: 4}}, "TRANSCRIPTION    Off\n"},
+		{"off", rpc.VoiceStatus{State: rpc.VoiceStateDisabled}, "TRANSCRIPTION    Off\n  Enable         tg settings set voice_transcription.enabled true · restart_required\n"},
+		{"off wins over a stale queue", rpc.VoiceStatus{Installed: true, Queue: rpc.VoiceQueueCounts{Queued: 4}}, "TRANSCRIPTION    Off\n  Enable         tg settings set voice_transcription.enabled true · restart_required\n"},
 		{"engine missing", rpc.VoiceStatus{Enabled: true, Missing: []string{"ffmpeg", "model"}}, "TRANSCRIPTION    Engine unavailable · missing ffmpeg, model\n"},
 		{"engine missing without a list", rpc.VoiceStatus{Enabled: true}, "TRANSCRIPTION    Engine unavailable\n"},
 		{"idle", ready, "TRANSCRIPTION    Idle · GigaAM v3 ready\n"},

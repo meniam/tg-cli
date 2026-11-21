@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/schema"
+	"tg-cli/internal/store"
 )
 
 // schemaCommands runs `schema` once and returns its commands by path.
@@ -129,7 +131,32 @@ var realResponseCases = map[string][]string{
 // and keeps the JSON of data.
 func realResponses(t *testing.T) map[string][]byte {
 	t.Helper()
-	e := loggedInEnv(t)
+	e := loggedInEnvWithSetup(t, func(e *testEnv) {
+		paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(paths.DatabaseDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		db, err := store.Open(paths.Database)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		roots, err := json.Marshal([]string{e.home})
+		if err != nil {
+			t.Fatal(err)
+		}
+		settings := map[string]json.RawMessage{
+			"access.write": []byte(`[1,5,42]`), "access.admin": []byte(`[77]`),
+			"access.profile": []byte(`true`), "access.dialogs": []byte(`true`),
+			"access.sessions": []byte(`true`), "access.files": roots, "access.downloads": roots,
+		}
+		if err := db.SetSettings(context.Background(), settings); err != nil {
+			t.Fatal(err)
+		}
+	})
 	paths, err := daemon.ResolvePaths(e.home, e.dbRoot(), daemon.DefaultProfile, daemon.DefaultFileNames())
 	if err != nil {
 		t.Fatal(err)
@@ -145,10 +172,6 @@ func realResponses(t *testing.T) map[string][]byte {
 	e.tg.mu.Unlock()
 	mediaPath := filepath.Join(e.home, "fixture.dat")
 	if err := os.WriteFile(mediaPath, []byte("fixture"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	accessData, _ := json.Marshal(map[string]any{"write": []int{1, 5, 42}, "admin": []int{77}, "profile": true, "dialogs": true, "sessions": true, "files": []string{e.home}, "downloads": []string{e.home}})
-	if err := os.WriteFile(paths.Access, accessData, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if r := e.run("message", "inline-query", "5", "--bot", "@fixturebot", "--query", "test"); r.code != exitcode.OK {
@@ -342,11 +365,55 @@ var fixtureResponseCases = map[string]bool{
 	"config init":           true,
 	"config show":           true,
 	"config migrate":        true,
+	"settings list":         true, "settings get": true, "settings set": true, "settings unset": true,
+	"settings add": true, "settings remove": true, "settings token init": true, "settings token change": true, "settings token reset": true,
 }
 
 // TestEveryCommandResponseIsCompared makes sure the comparison covers the whole
 // command tree: a command that is neither exercised nor explained fails here.
 func TestEveryCommandResponseIsCompared(t *testing.T) {
+	t.Run("settings", func(t *testing.T) {
+		e := newEnv(t)
+		commands := schemaCommands(t)
+		phrase := "test-passphrase-one"
+		next := "test-passphrase-two"
+		cases := []struct {
+			path    string
+			args    []string
+			secrets []string
+		}{
+			{"settings list", []string{"settings", "list"}, nil}, {"settings get", []string{"settings", "get", "profile.transport"}, nil},
+			{"settings set", []string{"settings", "set", "behavior.throttle_percent", "50"}, nil}, {"settings unset", []string{"settings", "unset", "behavior.throttle_percent"}, nil},
+			{"settings token init", []string{"settings", "token", "init"}, []string{phrase, phrase}},
+			{"settings add", []string{"settings", "add", "access.files", e.home}, []string{phrase}}, {"settings remove", []string{"settings", "remove", "access.files", e.home}, []string{phrase}},
+			{"settings token change", []string{"settings", "token", "change"}, []string{phrase, next, next}}, {"settings token reset", []string{"settings", "token", "reset"}, []string{"yes"}},
+		}
+		for _, tc := range cases {
+			t.Run(tc.path, func(t *testing.T) {
+				e.secrets = append([]string(nil), tc.secrets...)
+				var out, stderr safeBuffer
+				deps := e.deps(&out, &stderr)
+				deps.DialRPC = func(context.Context, string, string) (*rpc.Client, error) { return nil, os.ErrNotExist }
+				code := Execute(context.Background(), tc.args, deps)
+				if code != exitcode.OK {
+					t.Fatalf("exit %d: %s %s", code, out.String(), stderr.String())
+				}
+				var envelope struct {
+					Data json.RawMessage `json:"data"`
+				}
+				if err := json.Unmarshal([]byte(out.String()), &envelope); err != nil {
+					t.Fatal(err)
+				}
+				paths, err := schema.Paths(envelope.Data)
+				if err != nil || len(paths) == 0 {
+					t.Fatalf("invalid response: %v", err)
+				}
+				if missing := schema.Missing(paths, commands[tc.path].Fields); len(missing) > 0 {
+					t.Fatalf("missing schema fields: %v", missing)
+				}
+			})
+		}
+	})
 	t.Run("message download", TestDownloadResponseFixture)
 	for _, name := range []string{"config path", "config init", "config show", "config migrate"} {
 		t.Run(name, func(t *testing.T) { compareConfigResponse(t, name) })

@@ -338,7 +338,7 @@ func (d *daemon) folderOrder(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, err
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("folder management requires dialogs: true in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "folder management requires access.dialogs")
 	}
 	if err := d.telegram(ctx).OrderFolders(ctx, p.IDs, p.DryRun); err != nil {
 		return nil, err
@@ -390,9 +390,18 @@ func (d *daemon) folderWrite(ctx context.Context, raw json.RawMessage, action st
 	}
 	for _, list := range []*[]string{&p.Include, &p.Add, &p.Remove, &p.Exclude, &p.Unexclude, &p.Pin, &p.Unpin} {
 		for i, name := range *list {
-			_, id, err := d.writeReference(ctx, name, false)
+			ref, id, err := d.writeReference(ctx, name, false)
 			if err != nil {
 				return nil, err
+			}
+			if ref.Kind == chatref.ID {
+				if _, err := d.telegram(ctx).Resolve(ctx, ref); err != nil {
+					var re *rpc.Error
+					if errors.As(err, &re) && re.Code == rpc.CodeNotFound {
+						return nil, rpc.ErrUnknownChatID()
+					}
+					return nil, err
+				}
 			}
 			(*list)[i] = strconv.FormatInt(id, 10)
 		}
@@ -401,7 +410,7 @@ func (d *daemon) folderWrite(ctx context.Context, raw json.RawMessage, action st
 		return nil, err
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("folder management requires dialogs: true in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "folder management requires access.dialogs")
 	}
 	var existing rpc.Folder
 	hidden := 0
@@ -440,7 +449,7 @@ func (d *daemon) folderWrite(ctx context.Context, raw json.RawMessage, action st
 		}
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("folder management requires dialogs: true in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "folder management requires access.dialogs")
 	}
 	if action == "delete" && !p.DryRun {
 		self, err := d.telegram(ctx).Self(ctx)

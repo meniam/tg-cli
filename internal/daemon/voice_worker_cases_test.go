@@ -874,7 +874,7 @@ func TestVoiceText(t *testing.T) {
 
 func TestVoiceWorkerConfigDefaults(t *testing.T) {
 	got := (VoiceTranscriptionConfig{}).withDefaults()
-	want := VoiceTranscriptionConfig{FFmpeg: "ffmpeg", MaxVoiceMB: 30, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120, DailyDownloadMB: 2000, DailyFiles: 200, Threads: 4}
+	want := VoiceTranscriptionConfig{FFmpeg: "ffmpeg", MaxVoiceMB: 30, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120, DailyDownloadMB: 5000, DailyFiles: 500, Threads: 4}
 	if got != want {
 		t.Fatalf("withDefaults = %+v, want %+v", got, want)
 	}

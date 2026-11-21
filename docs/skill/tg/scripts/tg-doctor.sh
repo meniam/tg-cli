@@ -161,7 +161,7 @@ case "$result" in
         ;;
     stopped)
         note "start the Daemon: tg${profile_flag} daemon start"
-        note 'first setup: it needs credentials (--client desktop, or TG_API_ID and TG_API_HASH); then the human logs in:'
+        note 'first setup uses the desktop preset by default (or TG_API_ID and TG_API_HASH); then the human logs in:'
         note "  ! tg${profile_flag} auth login   (in Claude Code)"
         exit 1
         ;;

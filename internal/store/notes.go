@@ -275,6 +275,11 @@ func (db *DB) DeleteNote(ctx context.Context, id int64) error {
 
 // DeleteNotesByAuthor removes all notes from one author and returns their count.
 func (db *DB) DeleteNotesByAuthor(ctx context.Context, author string) (int, error) {
+	return db.DeleteVisibleNotesByAuthor(ctx, author, ChatFilter{})
+}
+
+// DeleteVisibleNotesByAuthor deletes only notes visible under the supplied policy.
+func (db *DB) DeleteVisibleNotesByAuthor(ctx context.Context, author string, filter ChatFilter) (int, error) {
 	if !validNoteAuthor(author) {
 		return 0, fmt.Errorf("%w: unknown author", ErrInvalidNote)
 	}
@@ -283,7 +288,9 @@ func (db *DB) DeleteNotesByAuthor(ctx context.Context, author string) (int, erro
 		return 0, fmt.Errorf("begin author note deletion: %w", err)
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `DELETE FROM notes WHERE author=?`, author)
+	condition, filterArgs := filter.condition("chat_id", true)
+	args := append([]any{author}, filterArgs...)
+	result, err := tx.ExecContext(ctx, `DELETE FROM notes WHERE author=?`+condition, args...)
 	if err != nil {
 		return 0, fmt.Errorf("delete notes by author: %w", err)
 	}

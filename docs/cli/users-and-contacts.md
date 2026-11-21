@@ -4,7 +4,7 @@ Commands that read a user profile, manage the account's block list, and read or 
 
 ## Rules shared by these commands
 
-`<user>` accepts a username, a positive user id, a phone number, or a public `t.me` link. Groups, channels, negative ids and private invite links are exit code 2. A user hidden by `access.json` is treated as unknown: exit code 7. A visible target for `user block`, `user unblock`, `contact add` or `contact delete` must also be in `write`; otherwise the command exits with code 9 before Telegram receives a write request. The owner alone changes `access.json`.
+`<user>` accepts a username, a positive user id, a phone number, or a public `t.me` link. Groups, channels, negative ids and private invite links are exit code 2. A user hidden by access settings is treated as unknown: exit code 7. A visible target for `user block`, `user unblock`, `contact add` or `contact delete` must also be in `write`; otherwise the command exits with code 9 before Telegram receives a write request. The owner alone changes access settings.
 
 `--dry-run` checks the reference, visibility and write permission, then calls no Telegram write method. Contact and profile reads save returned people locally. A non-local contact search or list needs a running Daemon and a login; `--local` reads the local database and needs no login.
 

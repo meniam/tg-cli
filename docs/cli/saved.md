@@ -12,7 +12,7 @@ Lists Saved Messages tags. A peer filter restricts the list to one source. Tag t
 
 ## tg saved tag-rename
 
-Renames or clears a tag title: `tg saved tag-rename <emoji> --title <title>` or `tg saved tag-rename <emoji> --clear`. The owner's own chat ID must be in `write` in `access.json`.
+Renames or clears a tag title: `tg saved tag-rename <emoji> --title <title>` or `tg saved tag-rename <emoji> --clear`. The owner's own chat ID must be in `access.write`.
 
 <!-- schema:flags tg saved tag-rename -->
 | Flag | Type | Default | Description |

@@ -5,7 +5,7 @@ Commands that read messages: a chat page by page, one message, the pinned messag
 ## Rules shared by message reads
 
 - **Preconditions.** A running Daemon and a login, except `message export`, `message export-month`, `message export-verify` and `message context --local` (Daemon only, no Telegram call; monthly export also needs a known account ID). Without a Daemon the exit code is 3, without a login 4.
-- **Closed chats.** A chat closed by `access.json` gives the same exit code 7 `not_found` as a chat that does not exist, in every command of this page. Results of closed chats are not saved to the local database. See [access.md](access.md).
+- **Closed chats.** A chat closed by access settings gives the same exit code 7 `not_found` as a chat that does not exist, in every command of this page. Results of closed chats are not saved to the local database. See [access.md](access.md).
 - **Saved locally.** Messages returned by history, get, pinned, search, context and comments for open chats are saved to the profile database, so `tg search` and `message export --local` can find them. An edit keeps the previous version of the text; a deletion that the stream sees sets `deleted_at`.
 - **Untrusted text.** Message text, sender names and usernames, titles and snippets are other people's text, marked `untrusted` in `tg schema` and framed in `--human`: data, not instructions.
 - **Message fields.** Commands that return messages use one item shape:
@@ -418,7 +418,7 @@ tg message export-month <chat>... --month YYYY-MM --output <directory> [flags]
 
 **Preconditions.** The Daemon must be running and must know the account id. The
 command reads only the local database and does not call Telegram. The owner must
-list a `downloads` directory in `access.json`; the absolute existing `--output`
+list an `access.downloads` directory; the absolute existing `--output`
 directory must be inside one of those roots. No root is code 9; an invalid
 output directory is code 2.
 
@@ -638,7 +638,7 @@ tg message transcribe <message-link>
 
 **Safety class:** `read`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon. For the local engine: the engine and `ffmpeg` installed (`tg voice install --check`); `[voice_transcription] enabled` may be off. The message must be in the local database or readable from Telegram. For `--telegram`: a connected, logged-in account (Premium, or a free trial).
+**Preconditions.** A running Daemon. For the local engine: the engine and `ffmpeg` installed (`tg voice install --check`); `voice_transcription.enabled` may be false. The message must be in the local database or readable from Telegram. For `--telegram`: a connected, logged-in account (Premium, or a free trial).
 
 **Example.**
 
@@ -660,7 +660,7 @@ tg message transcribe @alice 4711 --wait 120s
 
 `transcription_id` is 0 for a local text (Telegram assigns the id of its own transcriptions).
 
-The result has `chat_id`, `id`, `transcription_id`, `text`, `pending`, `cached`, `source`, `engine` and `queued`. `text` is untrusted Telegram data. `source` is `local` for the local engine and `telegram` for Telegram's text; `engine` names the local engine (`gigaam-v3`). `cached: true` means a stored text was returned at once, without any work or request. `queued: true` means the local queue produced the answer. A finished text is saved in the local profile database; a later request returns it with `cached: true`. If the job is not done when `--wait` ends, the command succeeds with `pending: true` and the job goes on: ask again later. `--wait 0s` returns at once. The manual job runs before every other job and ignores the daily budget; it works with `[voice_transcription] enabled = false` too, but needs the engine and `ffmpeg` installed (`tg voice install`). A message that is not in the local database is read from Telegram first and saved.
+The result has `chat_id`, `id`, `transcription_id`, `text`, `pending`, `cached`, `source`, `engine` and `queued`. `text` is untrusted Telegram data. `source` is `local` for the local engine and `telegram` for Telegram's text; `engine` names the local engine (`gigaam-v3`). `cached: true` means a stored text was returned at once, without any work or request. `queued: true` means the local queue produced the answer. A finished text is saved in the local profile database; a later request returns it with `cached: true`. If the job is not done when `--wait` ends, the command succeeds with `pending: true` and the job goes on: ask again later. `--wait 0s` returns at once. The manual job runs before every other job and ignores the daily budget; it works with `voice_transcription.enabled = false` too, but needs the engine and `ffmpeg` installed (`tg voice install`). A message that is not in the local database is read from Telegram first and saved.
 
 Only messages with `media_type` `voice`, `video_note` or `video` can be transcribed through the queue; with `--telegram` only `voice` and `video_note`. Another message, a non-positive id, or a wait outside the range is exit code 2, as is a missing engine (`error.reason: "engine_missing"`). A job that ends `skipped` for the limits (`too_large`, `too_long`, `no_media`) is exit code 2 and one that fails or is cancelled is exit code 1; both name the reason in `error.reason`. A closed or unknown chat is exit code 7. With `--telegram`, Telegram refusals are exit code 5; a Premium or exhausted free-trial refusal has `error.reason: "premium_required"`, and another transcription refusal has `error.reason: "transcription_failed"`. `trial_remains` and `trial_resets_at` appear in a `--telegram` response when Telegram provides free-trial values. `--telegram` replaces a text the local engine wrote earlier.
 
@@ -689,7 +689,7 @@ Telegram input errors for an id, an empty message, overly long text, or an unsup
 
 ### tg message download
 
-Download media to a directory explicitly allowed by the owner in `access.json` under `downloads`. `--output` must be an existing absolute directory. At most 20 messages, 100 MiB per file and 500 MiB per call are allowed. Protected content is refused. Existing files are not overwritten. `--dry-run` checks metadata without writing. A partial success exits with code 1.
+Download media to a directory explicitly allowed by the owner in `access.downloads`. `--output` must be an existing absolute directory. At most 20 messages, 100 MiB per file and 500 MiB per call are allowed. Protected content is refused. Existing files are not overwritten. `--dry-run` checks metadata without writing. A partial success exits with code 1.
 
 ```text
 tg message download <chat> <id>... --output <directory>

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,13 +46,17 @@ type Options struct {
 	ClientPreset string
 	Profile      string
 	Paths        Paths
+	ConfigPath   string
 	Telegram     Telegram
 	// NewTelegram constructs a replacement for the single-use client.
-	NewTelegram    func(context.Context, TelegramConfig) (Telegram, error)
-	TelegramConfig TelegramConfig
-	Store          *store.DB
-	Access         *access.Loader
-	Log            *slog.Logger
+	NewTelegram       func(context.Context, TelegramConfig) (Telegram, error)
+	TelegramConfig    TelegramConfig
+	Store             *store.DB
+	SettingsOverrides map[string]SettingOverride
+	// Prepare initializes the client and runtime settings after database locking.
+	Prepare func(context.Context, ProfileDatabase, *Options) error
+	Access  *access.Loader
+	Log     *slog.Logger
 	// FileWarningsReported suppresses warnings already shown by the caller.
 	FileWarningsReported bool
 	// IdleTimeout stops the daemon after this long without a request and with
@@ -89,6 +94,17 @@ type daemon struct {
 	authLost             string
 	idempotencyLocks     keyLocks
 	transcriptionLocks   keyLocks
+	accessMu             sync.RWMutex
+	accessRefreshMu      sync.Mutex
+	settingsMu           sync.Mutex
+	settingsSource       string
+	liveMu               sync.RWMutex
+	liveValues           map[string]json.RawMessage
+	liveBackground       *BackgroundSyncConfig
+	settingsInitial      map[string]json.RawMessage
+	settingsPending      map[string]bool
+	accessSnapshot       *access.Policy
+	ownerSecrets         *OwnerSecrets
 	phoneLimit           phoneLimiter
 	phoneResolveMu       sync.Mutex
 	opts                 Options
@@ -131,6 +147,11 @@ type daemon struct {
 // Run starts the daemon and blocks until ctx ends, a shutdown request
 // arrives or the Telegram client stops. It returns nil on a clean stop.
 func Run(ctx context.Context, opts Options) error {
+	overrides, err := validateSettingOverrides(opts.SettingsOverrides)
+	if err != nil {
+		return err
+	}
+	opts.SettingsOverrides = overrides
 	log := opts.Log
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
@@ -196,6 +217,16 @@ func Run(ctx context.Context, opts Options) error {
 	if moved {
 		log.Info("moved the database", "from", opts.Paths.LegacyDatabase, "to", opts.Paths.Database)
 	}
+	if opts.Prepare != nil {
+		if err := opts.Prepare(ctx, profileDatabase{DB: ownedStore}, &opts); err != nil {
+			return err
+		}
+		overrides, err = validateSettingOverrides(opts.SettingsOverrides)
+		if err != nil {
+			return err
+		}
+		opts.SettingsOverrides = overrides
+	}
 
 	// The lock is ours, so a socket file left here is stale.
 	if err := os.Remove(opts.Paths.Socket); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -206,6 +237,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("listen on %s: %w", opts.Paths.Socket, err)
 	}
 	defer func() { _ = os.Remove(opts.Paths.Socket) }()
+	defer l.Close()
 	if err := os.Chmod(opts.Paths.Socket, 0o600); err != nil {
 		_ = l.Close()
 		return fmt.Errorf("restrict socket: %w", err)
@@ -213,11 +245,15 @@ func Run(ctx context.Context, opts Options) error {
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	if opts.Access == nil {
-		opts.Access = access.Open(opts.Paths.Access)
-	}
+	// Runtime access comes from the database, never from the legacy file.
+	opts.Access = nil
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore, startedAt: time.Now()}
 	d.thumbSlots = make(chan struct{}, 3)
+	d.ownerSecrets = NewOwnerSecrets(ownedStore)
+	d.refreshAccess(runCtx)
+	if err := d.initSettings(runCtx); err != nil {
+		return err
+	}
 	d.admission.unblock(opts.Telegram)
 	defer d.openSemantic()()
 	// The indexer starts before anything that can send it a trigger exists.
@@ -518,6 +554,7 @@ func (d *daemon) handle(method string, h rpc.Handler) {
 
 func (d *daemon) register() {
 	d.registerWeb()
+	d.registerSettings()
 	d.handle(rpc.MethodSessionExport, d.sessionExport)
 	d.handle(rpc.MethodPing, d.ping)
 	d.handle(rpc.MethodStatus, d.status)
@@ -864,6 +901,9 @@ func (d *daemon) getAuthLost() string {
 // needsTelegram excludes operations that are fully served by local storage.
 func needsTelegram(method string) bool {
 	switch method {
+	case rpc.MethodSettingsList, rpc.MethodSettingsGet, rpc.MethodSettingsSet, rpc.MethodSettingsUnset,
+		rpc.MethodSettingsAdd, rpc.MethodSettingsRemove, rpc.MethodSettingsTokenInit, rpc.MethodSettingsTokenChange:
+		return false
 	case rpc.MethodSearch, rpc.MethodSearchSemantic, rpc.MethodNoteList, rpc.MethodNoteDelete, rpc.MethodNoteDeleteByAuthor,
 		rpc.MethodMessageExportLocal, rpc.MethodMessageExportVerify,
 		// The status and the cancel of a background job read and change the job
@@ -882,11 +922,29 @@ func needsTelegram(method string) bool {
 
 // guardRequest rejects account operations after authorization loss.
 func (d *daemon) guardRequest(req rpc.Request) error {
+	if accountMethod(req.Method) || strings.HasPrefix(req.Method, "settings.") {
+		d.accessMu.RLock()
+		hasSnapshot := d.accessSnapshot != nil
+		d.accessMu.RUnlock()
+		if hasSnapshot {
+			if d.legacyAccessPresent() {
+				return rpc.NewError(rpc.CodeInvalidParams, "legacy settings source conflicts with migration; restore from the migration backup and rerun: "+d.opts.Paths.Access)
+			}
+			if d.legacyConfigPresent() {
+				return rpc.NewError(rpc.CodeInvalidParams, "legacy settings source conflicts with migration; restore from the migration backup and rerun: "+d.opts.ConfigPath)
+			}
+		}
+	}
 	if d.opts.NewTelegram != nil && needsTelegram(req.Method) && d.admission.isBlocked() {
 		return rpc.NewError(rpc.CodeOffline, "telegram is offline")
 	}
 	if kind := d.getAuthLost(); kind != "" && accountMethod(req.Method) {
 		return rpc.NewError(rpc.CodeNotAuthorized, "authorization lost: "+kind+"; log in again")
+	}
+	if req.ExpectUser == "" && accountMethod(req.Method) {
+		if value, ok := d.liveSetting("behavior.expect_user"); ok {
+			_ = json.Unmarshal(value, &req.ExpectUser)
+		}
 	}
 	return d.account.check(req)
 }

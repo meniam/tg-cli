@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
 	"time"
@@ -29,12 +30,16 @@ func (d *daemon) changeDialog(ctx context.Context, raw json.RawMessage, action s
 	refs := make([]chatref.Ref, 0, len(p.Chats))
 	ids := make([]int64, 0, len(p.Chats))
 	for _, name := range p.Chats {
-		_, id, err := d.writeReference(ctx, name, false)
+		original, id, err := d.writeReference(ctx, name, false)
 		if err != nil {
 			return nil, err
 		}
 		chat, err := d.telegram(ctx).Resolve(ctx, chatref.Ref{Kind: chatref.ID, ID: id})
 		if err != nil {
+			var re *rpc.Error
+			if original.Kind == chatref.ID && errors.As(err, &re) && re.Code == rpc.CodeNotFound {
+				return nil, rpc.ErrUnknownChatID()
+			}
 			return nil, err
 		}
 		if chat.ID != id || !d.policy().Allowed(id) {
@@ -44,7 +49,7 @@ func (d *daemon) changeDialog(ctx context.Context, raw json.RawMessage, action s
 		ids = append(ids, id)
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("dialog management requires dialogs: true in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "dialog management requires access.dialogs")
 	}
 	result := rpc.DialogArchiveResult{Chats: make([]rpc.DialogItem, 0, len(ids)), DryRun: p.DryRun}
 	for _, id := range ids {
@@ -63,7 +68,7 @@ func (d *daemon) changeDialog(ctx context.Context, raw json.RawMessage, action s
 		}
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("dialog management requires dialogs: true in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "dialog management requires access.dialogs")
 	}
 	var err error
 	if archive {
@@ -99,12 +104,22 @@ func (d *daemon) changeNotify(ctx context.Context, raw json.RawMessage) (any, er
 	if p.MuteUntil != nil && (*p.MuteUntil < 0 || int64(*p.MuteUntil) > 2147483647 || (*p.MuteUntil != 0 && int64(*p.MuteUntil) <= time.Now().Unix())) {
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "mute time must be in the future")
 	}
-	_, id, err := d.writeReference(ctx, p.Chat, false)
+	target, id, err := d.writeReference(ctx, p.Chat, false)
 	if err != nil {
 		return nil, err
 	}
 	if !d.policy().DialogsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("dialog management requires dialogs: true in access.json"))
+		if target.Kind == chatref.ID {
+			_, lookupErr := d.telegram(ctx).Resolve(ctx, target)
+			if lookupErr != nil {
+				var rpcErr *rpc.Error
+				if errors.As(lookupErr, &rpcErr) && rpcErr.Code == rpc.CodeNotFound {
+					return nil, rpc.ErrUnknownChatID()
+				}
+				return nil, lookupErr
+			}
+		}
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "dialog management requires access.dialogs")
 	}
 	ref := chatref.Ref{Kind: chatref.ID, ID: id}
 	out, err := d.telegram(ctx).ChangeNotify(ctx, ref, p)

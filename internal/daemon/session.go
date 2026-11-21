@@ -48,7 +48,18 @@ func (d *daemon) sessionExport(ctx context.Context, params json.RawMessage) (any
 			return nil, rpc.NewError(rpc.CodeNotAuthorized, "session is unavailable")
 		}
 	}
-	encoded, data, err := sessionstr.Encode(raw, d.opts.ClientPreset, 0)
+	d.settingsMu.Lock()
+	client := d.opts.ClientPreset
+	if d.settingsInitial != nil {
+		if value, ok := d.settingsInitial["profile.client"]; ok {
+			_ = json.Unmarshal(value, &client)
+		}
+		if override, ok := d.opts.SettingsOverrides["profile.client"]; ok {
+			_ = json.Unmarshal(override.Value, &client)
+		}
+	}
+	d.settingsMu.Unlock()
+	encoded, data, err := sessionstr.Encode(raw, client, 0)
 	if err != nil {
 		return nil, rpc.NewError(rpc.CodeNotAuthorized, "session is unavailable")
 	}

@@ -114,8 +114,8 @@ func TestSendMediaCLIDryRunAndHints(t *testing.T) {
 		code int
 		hint string
 	}{
-		{"files disabled", rpc.NewError(rpc.CodeWriteDisabled, "sending files is disabled: ask the owner to add file roots to files in access.json"), 9, "ask the owner"},
-		{"chat disabled", rpc.ErrWriteDisabled(), 9, "write list"},
+		{"files disabled", rpc.NewError(rpc.CodeWriteDisabled, "sending files is disabled: ask the owner to set access.files"), 9, "ask the owner"},
+		{"chat disabled", rpc.ErrWriteDisabled(), 9, "access.write"},
 		{"not found", rpc.NewError(rpc.CodeNotFound, "file not found"), 7, ""},
 		{"telegram", rpc.NewError(rpc.CodeTelegram, "MEDIA_INVALID"), 5, ""},
 		{"flood", &rpc.Error{Code: rpc.CodeFloodWait, Message: "FLOOD_WAIT", Data: map[string]any{"retry_after_seconds": 2}}, 6, ""},
@@ -125,10 +125,13 @@ func TestSendMediaCLIDryRunAndHints(t *testing.T) {
 			if r.code != tc.code || (tc.hint != "" && !strings.Contains(r.stderr, tc.hint)) {
 				t.Fatalf("error mapping: %+v", r)
 			}
+			if tc.name == "files disabled" && !strings.Contains(r.stderr, "access.files") {
+				t.Fatalf("file access hint: %+v", r)
+			}
 		})
 	}
 	filesQuiet := runWriteCLI(t, append(append([]string{}, base...), "--quiet"), "", func(string, json.RawMessage) (any, error) {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, "sending files is disabled: ask the owner to add file roots to files in access.json")
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "sending files is disabled: ask the owner to set access.files")
 	}, nil)
 	if filesQuiet.code != 9 || strings.Contains(filesQuiet.stderr, "ask the owner") {
 		t.Fatalf("quiet files hint: %+v", filesQuiet)

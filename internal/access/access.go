@@ -148,7 +148,7 @@ func (l *Loader) Policy() (Policy, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	info, err := os.Stat(l.path)
+	info, err := os.Lstat(l.path)
 	if errors.Is(err, os.ErrNotExist) {
 		l.cached = false
 		return Policy{}, nil
@@ -161,6 +161,11 @@ func (l *Loader) Policy() (Policy, error) {
 	}
 	l.cached = true
 	l.modified, l.size, l.mode = info.ModTime(), info.Size(), info.Mode()
+	if info.Mode()&os.ModeSymlink != 0 {
+		l.policy = denyAll
+		l.err = fmt.Errorf("access file %q is a symbolic link", l.path)
+		return l.policy, l.err
+	}
 	if info.Mode().Perm()&0o022 != 0 {
 		l.policy = denyAll
 		l.err = fmt.Errorf("access file %q is writable by group or others", l.path)
@@ -314,4 +319,10 @@ func parseIDs(data json.RawMessage) (map[int64]struct{}, error) {
 		seen[id] = struct{}{}
 	}
 	return seen, nil
+}
+
+// ValidateJSON checks an access policy with the same rules used by Loader.
+func ValidateJSON(data []byte) error {
+	_, err := parse(data)
+	return err
 }

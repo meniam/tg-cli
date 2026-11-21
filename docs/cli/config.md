@@ -1,9 +1,14 @@
 # Configuration
 
-`tg` reads its configuration from `~/.config/tg-cli/config.toml`. The file
-holds the profile data directory, file names, behaviour settings, and named
-profile settings. `tg config init` writes a template with every key; `tg schema`
-lists every key, its default, and its command-line or environment override.
+`tg` reads its configuration from `~/.config/tg-cli/config.toml`. The file holds `home`, `default_profile`, and `[files]`. Profile settings live
+in the selected profile database and are managed with `tg settings`.
+Legacy `behavior`, `background_sync`, `semantic_search`, `voice_transcription`,
+and `profiles` sections are transferred to profile databases during migration. Automatic sources default to enabled,
+with a daily budget of 5000 MB and 500 files; set
+`voice_transcription.enabled` to `false` and restart the Daemon to disable
+them.
+`tg config init` writes the compact template; `tg schema` lists configuration
+and profile-setting keys separately.
 
 The configuration directory holds the database of every profile as well, in
 `db/<profile>/`: `~/.config/tg-cli/db/default/store.db` for the default profile.
@@ -87,13 +92,10 @@ write error.
 
 ### tg config show
 
-Migrates legacy profile setting files first, then prints configuration-file
-values with their defaults. It does not show the final values after environment
-variables or flags override them. Proxy addresses are redacted: usernames,
-passwords, and MTProxy secrets are never included in the answer. It validates
-socket paths for the default profile and every named profile before returning a
-result. `TG_CLI_HOME`, when set, selects the home used for migration and socket
-path validation.
+Prints the configuration that remains outside the profile database. Profile
+settings, including network settings and access policy, are managed with
+[`tg settings`](settings.md). It validates profile paths before returning a
+result. `TG_CLI_HOME`, when set, selects the home used for this validation.
 
 `home` is the base directory of the profile data: session, socket, lock, journal
 and access list. It defaults to `~/.config/tg-cli`; the data of the previous
@@ -115,8 +117,7 @@ No command flags.
 <!-- /schema:flags -->
 
 **Safety class:** `local_write`. Not dangerous. **Preconditions.** A valid
-configuration. The command may create a migration backup, update
-`config.toml`, and remove migrated legacy setting files.
+configuration. The command does not change the file.
 
 **Example.**
 
@@ -127,43 +128,22 @@ tg config show
 **Answer.**
 
 ```json
-{"ok":true,"data":{"home":"/Users/alice/.config/tg-cli","db_dir":"/Users/alice/.config/tg-cli/db","default_profile":"default","files":{"database":"store.db","session":"session.json","log":"daemon.log","deletions":"deletions.jsonl","access":"access.json"},"behavior":{"throttle_percent":60,"flood_autowait":"10s","expect_user":""},"background_sync":{"enabled":false,"window_start":"08:00","window_end":"20:00","interval_min":"40m","interval_max":"3h","page_pause_min":"2s","page_pause_max":"8s"},"semantic_search":{"enabled":false,"ollama_url":"http://127.0.0.1:11434","model":"bge-m3","batch":16,"interval":"10m","min_similarity":0.5},"voice_transcription":{"enabled":false,"ffmpeg":"ffmpeg","max_voice_mb":30,"max_video_note_mb":50,"max_video_mb":500,"max_video_minutes":120,"daily_download_mb":2000,"daily_files":200,"pause":"3s","threads":4},"profiles":{"default":{"client":"desktop","device":"MacBook","transport":"tcp","proxy":"socks5://127.0.0.1:1080"}}}}
+{"ok":true,"data":{"home":"/Users/alice/.config/tg-cli","db_dir":"/Users/alice/.config/tg-cli/db","default_profile":"default","files":{"database":"store.db","session":"session.json","log":"daemon.log","deletions":"deletions.jsonl","access":"access.json"}}}
 ```
 
 **Answer fields** (`data`): `home` and `db_dir` strings, `default_profile`
-string, `files` object (`database`, `session`, `log`, `deletions`, `access`
-strings), `behavior` object (`throttle_percent` number, `flood_autowait` and
-`expect_user` strings), `background_sync` object (`enabled` boolean;
-`window_start`, `window_end`, `interval_min`, `interval_max`, `page_pause_min`
-and `page_pause_max` strings, as written in the file or the defaults; the
-environment variables are not applied, see
-[Request throttle](overview.md#request-throttle-and-flood_wait)),
-`semantic_search` object (`enabled` boolean; `ollama_url`, `model` and
-`interval` strings and `batch` and `min_similarity` numbers, as written in the
-file or the defaults;
-the environment variables are not applied; the keys and the rules are in
-[overview.md](overview.md#request-throttle-and-flood_wait)),
-`voice_transcription` object (`enabled` boolean; `ffmpeg` and `pause` strings;
-`max_voice_mb`, `max_video_note_mb`, `max_video_mb`, `max_video_minutes`,
-`daily_download_mb`, `daily_files` and `threads` numbers, as written in the file
-or the defaults; the environment variables `TG_CLI_VOICE_TRANSCRIPTION_*` are not
-applied; the keys and the rules are in
-[overview.md](overview.md#request-throttle-and-flood_wait) and the queue is in
-[voice.md](voice.md)), and `profiles`
-object keyed by profile name. Each profile contains `client`, `device`,
-`transport`, and redacted `proxy` strings.
+string, and a `files` object with `database`, `session`, `log`, `deletions`,
+and `access` strings. `access` is the legacy file name retained only for migration; access policy itself is in the profile database.
 
-**Exit codes.** 0 success, 2 invalid configuration (including a wrong `[background_sync]`, `[semantic_search]` or `[voice_transcription]` value) or an invalid socket path,
-1 a local migration error.
+**Exit codes.** 0 success; 2 invalid configuration or an invalid profile path.
 
 ### tg config migrate
 
-Explicitly migrates legacy `client`, `device`, `transport`, and `proxy` files
-from every profile under the current home directory. The `db` directory under
-that home is not a profile and is skipped. Before changing the configuration, it
-copies the migrated files and the prior configuration into a
-`.config-migration-<time>` directory under that home. It never migrates a
-session, database, access list, or journal file.
+Explicitly migrates legacy configuration sections and the legacy access policy
+into each affected profile database. Before changing sources, it copies the
+configuration file and any legacy access file into a
+`.config-migration-<time>` directory under the selected home. It does not
+migrate a session, database, or journal file.
 
 ```text
 tg config migrate [flags]

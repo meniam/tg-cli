@@ -26,7 +26,7 @@ var voiceTranscriptionEnv = struct {
 }
 
 // voiceTranscriptionSettings is the only parser for the settings of the local
-// voice transcription: config.toml first, then the TG_CLI_VOICE_TRANSCRIPTION_*
+// voice transcription: profile settings first, then the TG_CLI_VOICE_TRANSCRIPTION_*
 // environment over it. The background parent validates the result; the
 // foreground process parses the inherited environment again, as it does for the
 // background sync.

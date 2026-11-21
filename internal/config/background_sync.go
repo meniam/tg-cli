@@ -10,8 +10,7 @@ import (
 // BackgroundSync holds the settings of the scheduled history load. The values
 // are kept as the owner wrote them; Resolve checks and converts them.
 type BackgroundSync struct {
-	// Enabled turns the scheduler on. Off by default: the daemon then makes no
-	// new request to Telegram.
+	// Enabled turns the scheduler on by default.
 	Enabled bool `toml:"enabled"`
 	// WindowStart is the local time of day, "HH:MM", when loading may begin.
 	WindowStart string `toml:"window_start"`
@@ -40,6 +39,7 @@ const MinBackgroundPagePause = time.Second
 
 func defaultBackgroundSync() BackgroundSync {
 	return BackgroundSync{
+		Enabled:     true,
 		WindowStart: "08:00", WindowEnd: "20:00",
 		IntervalMin: "40m", IntervalMax: "3h",
 		PagePauseMin: "2s", PagePauseMax: "8s",

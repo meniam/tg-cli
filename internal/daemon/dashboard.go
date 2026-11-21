@@ -72,7 +72,7 @@ func (d *daemon) dashboard(ctx context.Context, _ json.RawMessage) (any, error) 
 }
 
 func (d *daemon) dashboardSettings() *rpc.DashboardSettings {
-	b, s := d.opts.BackgroundSync, d.opts.SemanticSearch
+	b, s := d.backgroundConfig(), d.opts.SemanticSearch
 	v := d.opts.VoiceTranscription.withDefaults()
 	out := &rpc.DashboardSettings{
 		ClientPreset: d.opts.TelegramConfig.ClientPreset,
@@ -84,7 +84,7 @@ func (d *daemon) dashboardSettings() *rpc.DashboardSettings {
 			PagePauseMin: b.PagePauseMin.String(), PagePauseMax: b.PagePauseMax.String(),
 		},
 		Semantic: rpc.DashboardSemanticSettings{
-			Model: s.Model, Batch: s.Batch, Interval: s.Interval.String(), MinSimilarity: s.MinSimilarity,
+			Model: s.Model, Batch: s.Batch, Interval: s.Interval.String(), MinSimilarity: d.semanticMinSimilarity(),
 		},
 		Voice: rpc.DashboardVoiceSettings{
 			Engine: voiceEngineName, MaxVoiceMiB: v.MaxVoiceMB, MaxVideoNoteMiB: v.MaxVideoNoteMB,

@@ -16,7 +16,7 @@ The user directly asks to deliver text to Telegram (to a chat the user names). T
 
 ## Prepare
 
-- The chat is found ([find-chat](find-chat.md)) and added by the human to `write` in `access.json`.
+- The chat is found ([find-chat](find-chat.md)) and enabled by the owner in `access.write`.
 - The user confirmed the recipient and the text in the current task. Permission for one send does not extend to the next.
 
 ## Commands
@@ -55,7 +55,7 @@ tg message send @release_team --parse markdown --text '**Deploy** _is green_' --
 
 ## Pitfalls
 
-- Exit code 9: the chat is not in `write`. Tell the user, do not edit `access.json`.
+- Exit code 9: the chat is not in `access.write`. Tell the user to ask the owner; do not ask for the passphrase.
 - Exit code 6: `FLOOD_WAIT`, the tool does not retry writes, do not spin retries.
 - Timeout or network error: the message may have gone out. Read `message history <chat> --limit 3`, then decide about a retry (or retry with the same key).
 - Put a negative id after `--`.

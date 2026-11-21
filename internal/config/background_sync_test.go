@@ -32,12 +32,13 @@ func TestBackgroundSyncDefaults(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := BackgroundSyncValues{
+				Enabled:     true,
 				WindowStart: 8 * time.Hour, WindowEnd: 20 * time.Hour,
 				IntervalMin: 40 * time.Minute, IntervalMax: 3 * time.Hour,
 				PagePauseMin: 2 * time.Second, PagePauseMax: 8 * time.Second,
 			}
 			if values != want {
-				t.Fatalf("values = %+v, want %+v (disabled)", values, want)
+				t.Fatalf("values = %+v, want %+v (enabled)", values, want)
 			}
 		})
 	}

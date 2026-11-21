@@ -16,7 +16,7 @@ The user wants the words of a voice message, a video note or a video in a chat, 
 
 ## Prepare
 
-The Daemon is running and logged in, and the chat is found (`find-chat`). The message id is known (`message history`, `message search`). The engine and `ffmpeg` are installed: `tg voice install --check` says `installed: true`. If something is missing, tell the user and ask before `tg voice install` (it downloads about 190 MB). The owner does not need to turn on `[voice_transcription]` for a single message.
+The Daemon is running and logged in, and the chat is found (`find-chat`). The message id is known (`message history`, `message search`). The engine and `ffmpeg` are installed: `tg voice install --check` says `installed: true`. If something is missing, tell the user and ask before `tg voice install` (it downloads about 190 MB). The owner does not need to turn on `voice_transcription.enabled` for a single message.
 
 ## Commands
 
@@ -40,7 +40,7 @@ tg voice retry @release_team 4711              # only after a failed job, with t
 - `pending: true` is not an error: the job goes on, ask again later with the same command. Do not start another job for the same message by hand.
 - `error.reason: engine_missing` (exit code 2): the engine or `ffmpeg` is missing. `too_large` and `too_long` (exit code 2): the file is above the limit, nothing was downloaded. `download`, `convert`, `engine`, `disk` (exit code 1): read `tg voice status` and tell the user the reason word; do not loop retries.
 - The engine knows Russian only: another language gives noise. A recording without speech gives an empty text and the job ends `done` with the reason `no_speech`; a video or a video note without a sound track gives an empty text and `done` with `no_audio`, which is not a failure. To see why jobs failed or were skipped, read `tg voice list --state failed` (or `skipped`): the `reason` of each job, newest first.
-- A chat closed by `access.json` is `not_found`, as for every command.
+- A chat closed by access policy is `not_found`, as for every command.
 
 ## Verify
 

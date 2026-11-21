@@ -130,7 +130,7 @@ tg note delete <id> | --author owner|ai --yes [flags]
 **Safety class:** `local_write`. Dangerous. **Output formats:** `json`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon. The command is dangerous: a deleted note cannot be restored. A single note by id needs no `--yes`. All notes of an author need `--author owner|ai --yes`; without `--yes` the command is exit code 2 (`would delete all ai notes; confirm with ...`) and deletes nothing. Giving no id and no author, or both, is exit code 2. Note that `--author` also deletes the notes of closed chats and is not filtered by the access lists.
+**Preconditions.** A running Daemon. The command is dangerous: a deleted note cannot be restored. A single note by id needs no `--yes`. All visible notes of an author need `--author owner|ai --yes`; without `--yes` the command is exit code 2 (`would delete all ai notes; confirm with ...`) and deletes nothing. Giving no id and no author, or both, is exit code 2. Notes of closed chats are neither deleted nor included in `deleted`.
 
 **Example.**
 
@@ -169,7 +169,7 @@ tg search [flags] <query>
 | `--deleted` | bool | `false` | include messages marked deleted |
 | `--limit` | int | `20` | hits per scope, 1 to 100 |
 | `--media` | string | `none` | keep only messages with this attachment: voice, video_note, video, photo, document, gif or audio (messages scope only) |
-| `--min-similarity` | float64 | `0` | with --semantic: lowest cosine similarity of a vector hit, 0 to 1 (0 turns the threshold off; default from [semantic_search] min_similarity) |
+| `--min-similarity` | float64 | `0` | with --semantic: lowest cosine similarity of a vector hit, 0 to 1 (0 turns the threshold off; default from semantic_search.min_similarity) |
 | `--prefix` | bool | `false` | match the last query term as a prefix |
 | `--scope` | stringSlice | `[]` | scopes: chats, people, messages, notes; repeat or separate with commas |
 | `--semantic` | bool | `false` | search conversation fragments by words and meaning (messages only; --limit counts fragments) |
@@ -212,9 +212,9 @@ Every message hit carries `link`, the `t.me` link of the message, built from the
 
 `--semantic` searches conversation fragments instead of single messages. A fragment is a stretch of one chat (and one forum topic) cut by pauses in the talk; see [contracts.md](../contracts.md#semantic-search). Three legs find fragments, and RRF fuses them (constant 60): the exact words and the stemmed words of the query over the messages, and the vector similarity of the query to the stored fragment vectors. A fragment found by several legs ranks higher. The rank of a fragment on a word leg is the best rank of its messages; a message that no stored fragment covers (a short one) is returned as a fragment of its own with `indexed` false.
 
-The vector leg runs only when `[semantic_search] enabled = true`, Ollama answers within 10 seconds and `vectors.db` holds fragments of the current model (see [`tg search index`](#tg-search-index-start) and [`[semantic_search]`](overview.md#request-throttle-and-flood_wait)). The Daemon embeds the query through Ollama at the moment of the call and sends it nothing else. When the leg cannot run, the answer is built from the word legs and `vector_skipped` says why. The search never fails because of the vector side.
+The vector leg runs only when `semantic_search.enabled` is true, Ollama answers within 10 seconds and `vectors.db` holds fragments of the current model (see [`tg search index`](#tg-search-index-start) and [`semantic_search.*`](overview.md#request-throttle-and-flood_wait)). The Daemon embeds the query through Ollama at the moment of the call and sends it nothing else. When the leg cannot run, the answer is built from the word legs and `vector_skipped` says why. The search never fails because of the vector side.
 
-**Similarity threshold.** The vector leg drops a hit whose cosine similarity to the query (`bge-m3`, a number from 0 to 1) is below `[semantic_search] min_similarity` (default `0.5`), after the top hits are found and before the fusion; the word legs are not filtered. The number of dropped hits is `vector_dropped`. `--min-similarity X` overrides the setting for one query and `--min-similarity 0` keeps every vector hit. If the leg found hits but all of them are below the threshold, `vector_skipped` stays absent (the vector leg ran) and the fragments come from the word legs alone. How to choose the value: for unrelated fragments of real chats the cosine of `bge-m3` has a median of 0.40 to 0.42 and a 99th percentile near 0.5; a good question reaches 0.6 to 0.7 at the top, a short vague one only about 0.55. So `0.5` removes most of the noise and keeps the good hits, `0.55` is stricter (a short vague query may then lose its vector hits), `0.45` is softer (more noise). Raise `--min-similarity` when the answer holds fragments that have nothing to do with the question, lower it when a fragment you expect is missing and `vector_dropped` is above 0. These numbers come from one measurement on one index; they are a starting point, not a guarantee (see [FEATURES.md](../../FEATURES.md), item 13.1).
+**Similarity threshold.** The vector leg drops a hit whose cosine similarity to the query (`bge-m3`, a number from 0 to 1) is below `semantic_search.min_similarity` (default `0.5`), after the top hits are found and before the fusion; the word legs are not filtered. The number of dropped hits is `vector_dropped`. `--min-similarity X` overrides the setting for one query and `--min-similarity 0` keeps every vector hit. If the leg found hits but all of them are below the threshold, `vector_skipped` stays absent (the vector leg ran) and the fragments come from the word legs alone. How to choose the value: for unrelated fragments of real chats the cosine of `bge-m3` has a median of 0.40 to 0.42 and a 99th percentile near 0.5; a good question reaches 0.6 to 0.7 at the top, a short vague one only about 0.55. So `0.5` removes most of the noise and keeps the good hits, `0.55` is stricter (a short vague query may then lose its vector hits), `0.45` is softer (more noise). Raise `--min-similarity` when the answer holds fragments that have nothing to do with the question, lower it when a fragment you expect is missing and `vector_dropped` is above 0. These numbers come from one measurement on one index; they are a starting point, not a guarantee (see [FEATURES.md](../../FEATURES.md), item 13.1).
 
 `--semantic` accepts `--chat`, `--limit` (fragments, 1 to 100, default 20), `--prefix` and `--min-similarity` (0 to 1; a value outside the range, or the flag without `--semantic`, is exit code 2). It refuses `--scope` with any scope but `messages`, `--author`, `--media` and `--deleted` with exit code 2 and a message that names the flag; deleted messages are not searched. Hits of closed chats are hidden, and a closed chat is never indexed.
 
@@ -246,7 +246,7 @@ No command flags.
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon and `[semantic_search] enabled = true` in the configuration (restart the Daemon after the change). Without the setting the command fails with exit code 2 and the message `semantic search is off: set [semantic_search] enabled = true`. It needs no Telegram connection and works after the login is lost. Besides this command a run starts by itself one `interval` after the Daemon starts, then one `interval` after the end of each run, and when a history load or a background sync run ends. A fragment is embedded again when its text changed and it is closed (the last message is 30 minutes old) or has grown by 300 characters; fragments of closed chats are removed from `vectors.db`.
+**Preconditions.** A running Daemon with `semantic_search.enabled` set to true in the profile settings (restart the Daemon after the change). Without the setting the command fails with exit code 2 and the message `semantic search is off: set semantic_search.enabled is true`. It needs no Telegram connection and works after the login is lost. Besides this command a run starts by itself one `interval` after the Daemon starts, then one `interval` after the end of each run, and when a history load or a background sync run ends. A fragment is embedded again when its text changed and it is closed (the last message is 30 minutes old) or has grown by 300 characters; fragments of closed chats are removed from `vectors.db`.
 
 **Example.**
 
@@ -314,7 +314,7 @@ No command flags.
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
-**Preconditions.** A running Daemon and `[semantic_search] enabled = true`. The answer carries the state at the moment of the call; the run ends a moment later, so check `tg search index status` for `idle` with the reason `cancelled`.
+**Preconditions.** A running Daemon and `semantic_search.enabled` is true. The answer carries the state at the moment of the call; the run ends a moment later, so check `tg search index status` for `idle` with the reason `cancelled`.
 
 **Example.**
 

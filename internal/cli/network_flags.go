@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -56,12 +57,11 @@ func (a *app) networkSettings(cmd *cobra.Command, paths daemon.Paths, save bool)
 	return s, nil
 }
 func (a *app) checkRunningNetwork(cmd *cobra.Command, paths daemon.Paths) error {
-	if !cmd.Flags().Changed("transport") && !cmd.Flags().Changed("proxy") && a.deps.Getenv("TG_CLI_PROXY") == "" {
+	proxyFlag := cmd.Flags().Changed("proxy")
+	transportFlag := cmd.Flags().Changed("transport")
+	proxyEnv := a.deps.Getenv("TG_CLI_PROXY")
+	if !transportFlag && !proxyFlag && proxyEnv == "" {
 		return nil
-	}
-	requested, err := a.networkSettings(cmd, paths, false)
-	if err != nil {
-		return err
 	}
 	c, err := a.connect(cmd.Context(), cmd)
 	if err != nil {
@@ -69,22 +69,50 @@ func (a *app) checkRunningNetwork(cmd *cobra.Command, paths daemon.Paths) error 
 	}
 	defer c.Close()
 	var status rpc.StatusResult
-	if err = a.call(cmd.Context(), cmd, c, rpc.MethodStatus, nil, &status); err != nil {
+	if err := a.call(cmd.Context(), cmd, c, rpc.MethodStatus, nil, &status); err != nil {
 		return err
 	}
 	if status.ConnectionInfo == nil {
 		return fail(exitcode.Usage, "the daemon is already running; stop it first")
 	}
-	transport := string(requested.Transport)
-	if requested.Proxy != nil && requested.Proxy.Kind == netconf.MTProxy {
-		transport = "mtproxy"
+	var transport, proxy rpc.SettingValue
+	if err := a.call(cmd.Context(), cmd, c, rpc.MethodSettingsGet, rpc.SettingsGetParams{Key: "profile.transport"}, &transport); err != nil {
+		return err
 	}
-	saved := a.config.Profiles[filepath.Base(paths.Dir)].Proxy
-	if saved == "" {
-		saved = "none"
+	if err := a.call(cmd.Context(), cmd, c, rpc.MethodSettingsGet, rpc.SettingsGetParams{Key: "profile.proxy"}, &proxy); err != nil {
+		return err
 	}
-	if status.Transport != transport || status.Proxy != requested.Proxy.Redacted() || saved != requested.Proxy.Encode() {
-		return fail(exitcode.Usage, "the daemon is already running with transport %s; stop it first", status.Transport)
+	if transportFlag {
+		requested, _ := cmd.Flags().GetString("transport")
+		parsed, err := netconf.ParseTransport(requested)
+		if err != nil {
+			return fail(exitcode.Usage, "%v", err)
+		}
+		var actual string
+		if json.Unmarshal(transport.Value, &actual) != nil {
+			return fail(exitcode.Failure, "daemon network settings are unavailable")
+		}
+		if actual == "" {
+			actual = "tcp"
+		}
+		if string(parsed) != actual {
+			return fail(exitcode.Usage, "the daemon is already running; stop it first")
+		}
+	}
+	if proxyFlag || proxyEnv != "" {
+		requested := proxyEnv
+		if proxyFlag {
+			requested, _ = cmd.Flags().GetString("proxy")
+		}
+		parsed, err := netconf.ParseProxy(requested)
+		if err != nil {
+			return fail(exitcode.Usage, "invalid proxy address")
+		}
+		// The RPC deliberately hides proxy credentials, so a nonempty proxy
+		// cannot be proven equal to the running one.
+		if parsed != nil || status.Proxy != "" {
+			return fail(exitcode.Usage, "the daemon is already running; stop it first")
+		}
 	}
 	return nil
 }

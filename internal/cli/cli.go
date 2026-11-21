@@ -82,9 +82,10 @@ func fail(exit int, format string, args ...any) *cmdError {
 }
 
 type app struct {
-	deps        Deps
-	config      config.Config
-	throttledMS int64
+	deps         Deps
+	config       config.Config
+	throttledMS  int64
+	storedClient bool
 	// homeChecked is set once the move of the previous data directory has been
 	// looked at in this process.
 	homeChecked bool
@@ -122,6 +123,9 @@ func Execute(ctx context.Context, args []string, deps Deps) int {
 	// The command that failed may be a subcommand, an unknown name or nothing at
 	// all: the format is read from wherever cobra stopped.
 	message := withIDHint(err.Error(), args)
+	if ce == nil && command != nil && (command.CommandPath() == "tg settings" || strings.HasPrefix(command.CommandPath(), "tg settings ")) {
+		message = "invalid settings command arguments"
+	}
 	if exit == exitcode.Usage && command != nil && command.Runnable() && !strings.Contains(message, "choose a subcommand:") {
 		message += "\nusage: " + command.UseLine()
 	}
@@ -182,9 +186,9 @@ func (a *app) rootCommand() *cobra.Command {
 		if err != nil {
 			var configErr *config.Error
 			if errors.As(err, &configErr) {
-				return fail(exitcode.Usage, "%v", err)
+				return fail(exitcode.Usage, "invalid config %s: %v", path, configErr)
 			}
-			return fail(exitcode.Failure, "%v", err)
+			return fail(exitcode.Failure, "cannot read config %s", path)
 		}
 		a.config = cfg
 		seen := make(map[string]bool)
@@ -201,6 +205,7 @@ func (a *app) rootCommand() *cobra.Command {
 	addOutputFlags(root)
 	root.AddCommand(
 		a.configCommand(),
+		a.settingsCommand(),
 		a.daemonCommand(),
 		a.authCommand(),
 		a.sessionCommand(),

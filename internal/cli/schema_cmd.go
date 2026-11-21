@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"reflect"
 	"sort"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"tg-cli/internal/buildinfo"
+	"tg-cli/internal/config"
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/output"
 	"tg-cli/internal/rpc"
@@ -17,12 +19,13 @@ import (
 
 // schemaVersion is the version of the document `tg schema` prints. It grows
 // when a field changes meaning, so an agent tells an old schema from a new one.
-const schemaVersion = 1
+const schemaVersion = 4
 
 // schemaDoc is the machine description of the command line.
 type schemaDoc struct {
 	SchemaVersion int             `json:"schema_version"`
 	Config        []configKeyDoc  `json:"config"`
+	Settings      []settingKeyDoc `json:"settings"`
 	Tool          toolInfo        `json:"tool"`
 	Output        outputDoc       `json:"output"`
 	ExitCodes     []exitCodeDoc   `json:"exit_codes"`
@@ -52,37 +55,27 @@ func configKeyDocs() []configKeyDoc {
 		{"files.log", "string", "daemon.log", "", "", ""},
 		{"files.deletions", "string", "deletions.jsonl", "", "", ""},
 		{"files.access", "string", "access.json", "", "", ""},
-		{"behavior.throttle_percent", "number", "60", "TG_CLI_THROTTLE_PERCENT", "", ""},
-		{"behavior.flood_autowait", "string", "10s", "TG_CLI_FLOOD_AUTOWAIT", "", ""},
-		{"behavior.expect_user", "string", "", "TG_CLI_EXPECT_USER", "--expect-user", ""},
-		{"background_sync.enabled", "boolean", "false", "TG_CLI_BACKGROUND_SYNC_ENABLED", "", "scheduled history load; while false the daemon makes no new Telegram request for it"},
-		{"background_sync.window_start", "string", "08:00", "TG_CLI_BACKGROUND_SYNC_WINDOW_START", "", "local time of the daemon machine, HH:MM, earlier than window_end"},
-		{"background_sync.window_end", "string", "20:00", "TG_CLI_BACKGROUND_SYNC_WINDOW_END", "", "local time of the daemon machine, HH:MM; a running load stops then"},
-		{"background_sync.interval_min", "string", "40m", "TG_CLI_BACKGROUND_SYNC_INTERVAL_MIN", "", "shortest random wait between two loads, a positive duration"},
-		{"background_sync.interval_max", "string", "3h", "TG_CLI_BACKGROUND_SYNC_INTERVAL_MAX", "", "longest random wait between two loads, at least interval_min"},
-		{"background_sync.page_pause_min", "string", "2s", "TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MIN", "", "shortest random pause between pages of a scheduled load, at least 1s"},
-		{"background_sync.page_pause_max", "string", "8s", "TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MAX", "", "longest random pause between pages, at least page_pause_min"},
-		{"semantic_search.enabled", "boolean", "false", "TG_CLI_SEMANTIC_SEARCH_ENABLED", "", "local semantic index; while false the daemon makes no request to Ollama and creates no vectors.db"},
-		{"semantic_search.ollama_url", "string", "http://127.0.0.1:11434", "TG_CLI_SEMANTIC_SEARCH_OLLAMA_URL", "", "http or https address of Ollama; the host must be 127.0.0.1, ::1 or localhost"},
-		{"semantic_search.model", "string", "bge-m3", "TG_CLI_SEMANTIC_SEARCH_MODEL", "", "Ollama embedding model, 1 to 128 characters without control characters"},
-		{"semantic_search.batch", "number", "16", "TG_CLI_SEMANTIC_SEARCH_BATCH", "", "texts per Ollama request, a whole number from 1 to 128"},
-		{"semantic_search.interval", "string", "10m", "TG_CLI_SEMANTIC_SEARCH_INTERVAL", "", "wait between two indexing runs, a duration from 1m to 24h"},
-		{"semantic_search.min_similarity", "number", "0.5", "TG_CLI_SEMANTIC_SEARCH_MIN_SIMILARITY", "", "lowest cosine similarity of a vector hit of search --semantic, a number from 0 to 1; 0 turns the threshold off; hits below it are counted in vector_dropped"},
-		{"voice_transcription.enabled", "boolean", "false", "TG_CLI_VOICE_TRANSCRIPTION_ENABLED", "", "local transcription of voice messages, video notes and videos through a queue; while false the daemon queues no job by itself and makes no new Telegram request for it (the manual message transcribe still works)"},
-		{"voice_transcription.ffmpeg", "string", "ffmpeg", "TG_CLI_VOICE_TRANSCRIPTION_FFMPEG", "", "program that converts media to WAV: a name looked up in PATH or a path"},
-		{"voice_transcription.max_voice_mb", "number", "30", "TG_CLI_VOICE_TRANSCRIPTION_MAX_VOICE_MB", "", "largest voice message file the worker downloads, a whole number of megabytes from 1 to 1000000"},
-		{"voice_transcription.max_video_note_mb", "number", "50", "TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_NOTE_MB", "", "largest video note file, a whole number of megabytes from 1 to 1000000"},
-		{"voice_transcription.max_video_mb", "number", "500", "TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_MB", "", "largest video file, a whole number of megabytes from 1 to 1000000"},
-		{"voice_transcription.max_video_minutes", "number", "120", "TG_CLI_VOICE_TRANSCRIPTION_MAX_VIDEO_MINUTES", "", "longest video the worker accepts, a whole number of minutes from 1 to 1000000"},
-		{"voice_transcription.daily_download_mb", "number", "2000", "TG_CLI_VOICE_TRANSCRIPTION_DAILY_DOWNLOAD_MB", "", "download budget of one local day in megabytes, from 1 to 1000000; when spent the queue pauses until the next day, a manual job ignores it but counts in it"},
-		{"voice_transcription.daily_files", "number", "200", "TG_CLI_VOICE_TRANSCRIPTION_DAILY_FILES", "", "download budget of one local day in files, from 1 to 1000000"},
-		{"voice_transcription.pause", "string", "3s", "TG_CLI_VOICE_TRANSCRIPTION_PAUSE", "", "wait between two downloads, a duration from 0s to 1h"},
-		{"voice_transcription.threads", "number", "4", "TG_CLI_VOICE_TRANSCRIPTION_THREADS", "", "threads of the speech engine, a whole number from 1 to 16"},
-		{"profiles.<profile>.client", "string", "", "", "daemon start --client", ""},
-		{"profiles.<profile>.device", "string", "", "", "daemon start --device", ""},
-		{"profiles.<profile>.transport", "string", "tcp", "", "daemon start --transport", ""},
-		{"profiles.<profile>.proxy", "string", "none", "TG_CLI_PROXY", "daemon start --proxy", ""},
 	}
+}
+
+type settingKeyDoc struct {
+	Key         string          `json:"key"`
+	Type        string          `json:"type"`
+	Default     json.RawMessage `json:"default"`
+	Environment string          `json:"environment"`
+	Flag        string          `json:"flag"`
+	Apply       string          `json:"apply"`
+	Protected   bool            `json:"protected"`
+	Secret      bool            `json:"secret"`
+}
+
+func settingKeyDocs() []settingKeyDoc {
+	keys := config.SettingKeys()
+	out := make([]settingKeyDoc, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, settingKeyDoc{k.Name, k.Type, k.Default, k.Env, k.Flag, k.Apply, k.Protected, k.Secret})
+	}
+	return out
 }
 
 // subscriptionDoc describes the raw RPC stream before a CLI watch command is
@@ -192,6 +185,7 @@ func schemaDocFor(root *cobra.Command, specs map[*cobra.Command]commandSpec) sch
 	doc := schemaDoc{
 		SchemaVersion: schemaVersion,
 		Config:        configKeyDocs(),
+		Settings:      settingKeyDocs(),
 		Tool:          toolInfo{Name: root.Name(), Version: info.Version, Revision: info.Revision},
 		Output: outputDoc{
 			Formats: formatNames(output.Formats()),

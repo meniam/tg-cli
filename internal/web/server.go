@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"tg-cli/internal/config"
 	"tg-cli/internal/rpc"
 )
 
@@ -73,20 +74,7 @@ func Run(ctx context.Context, opts Options) error {
 // ValidateListen permits literal IPs and localhost so host validation never
 // depends on a DNS lookup or a name that resolves differently in the browser.
 func ValidateListen(address string, explicit bool) (bool, error) {
-	if address == "" {
-		return false, nil
-	}
-	host, port, err := net.SplitHostPort(address)
-	n, parseErr := strconv.Atoi(port)
-	ip := net.ParseIP(host)
-	if err != nil || parseErr != nil || n < 1 || n > 65535 || (host != "localhost" && (ip == nil || ip.IsUnspecified())) {
-		return false, errors.New("listen must be a literal IP address or localhost with a port")
-	}
-	remote := host != "localhost" && !ip.IsLoopback()
-	if remote && !explicit {
-		return false, errors.New("a non-loopback address requires an explicit --listen flag")
-	}
-	return remote, nil
+	return config.ValidateWebListen(address, explicit)
 }
 
 func listen(address string, explicit bool) (net.Listener, error) {

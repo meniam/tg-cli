@@ -422,3 +422,83 @@ func TestPausedFor(t *testing.T) {
 		t.Fatalf("expired pause = %s", got)
 	}
 }
+
+func TestLiveRateChangeKeepsElapsedTokensAndWakesQueue(t *testing.T) {
+	audit10Test(t, func(t *testing.T) {
+		clock := newFakeClock()
+		l := limiterForTest(t, clock, func(c *Config) { c.GeneralPerSecond = 1; c.GeneralBurst = 1; c.Percent = 50 })
+		p, err := l.Acquire(context.Background(), General, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.Release()
+		result := acquireAsync(l, context.Background(), General, "", nil)
+		awaitQueue(t, l, 1)
+		clock.Advance(time.Second)
+		if err := l.SetPercent(100); err != nil {
+			t.Fatal(err)
+		}
+		awaitQueue(t, l, 1)
+		clock.Advance(time.Millisecond * 499)
+		awaitQueue(t, l, 1)
+		clock.Advance(time.Millisecond)
+		receive(t, result).Release()
+		if err := l.SetPercent(0); err == nil {
+			t.Fatal("invalid rate accepted")
+		}
+		if err := l.SetFloodAutoWait(3 * time.Second); err != nil || l.FloodAutoWait() != 3*time.Second {
+			t.Fatalf("flood wait: %v", err)
+		}
+		if err := l.SetFloodAutoWait(-time.Second); err == nil || l.FloodAutoWait() != 3*time.Second {
+			t.Fatal("invalid flood wait accepted")
+		}
+	})
+}
+
+func TestLiveRateChangeKeepsFileBucketElapsedTokens(t *testing.T) {
+	audit10Test(t, func(t *testing.T) {
+		clock := newFakeClock()
+		l := limiterForTest(t, clock, func(c *Config) { c.Percent = 10 })
+		for range fileBurst {
+			p, err := l.Acquire(context.Background(), File, "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p.Release()
+		}
+		queued := acquireAsync(l, context.Background(), File, "", nil)
+		awaitFileQueue(t, l, 1)
+		clock.Advance(100 * time.Millisecond)
+		if err := l.SetPercent(100); err != nil {
+			t.Fatal(err)
+		}
+		awaitFileQueue(t, l, 1)
+		clock.Advance(20 * time.Millisecond)
+		awaitFileQueue(t, l, 1)
+		clock.Advance(4 * time.Millisecond)
+		receive(t, queued).Release()
+	})
+}
+
+func TestLiveFloodWaitChangeWakesQueuedRequests(t *testing.T) {
+	audit10Test(t, func(t *testing.T) {
+		clock := newFakeClock()
+		l := limiterForTest(t, clock, nil)
+		l.PauseBackground(10 * time.Second)
+		result := acquireAsync(l, context.Background(), General, "", nil)
+		awaitQueue(t, l, 1)
+		if err := l.SetFloodAutoWait(3 * time.Second); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		select {
+		case r := <-result:
+			var flood *FloodWaitError
+			if !errors.As(r.err, &flood) || flood.RetryAfterSeconds != 10 {
+				t.Fatalf("result = %+v", r)
+			}
+		default:
+			t.Fatal("queued request was not woken")
+		}
+	})
+}

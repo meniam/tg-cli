@@ -172,13 +172,6 @@ func (d *daemon) chatVoiceOn(ctx context.Context, params json.RawMessage) (any, 
 	if err != nil {
 		return nil, err
 	}
-	known, err := d.store.ChatKnown(ctx, chatID)
-	if err != nil {
-		return nil, err
-	}
-	if !known {
-		return nil, rpc.ErrUnknownChatID()
-	}
 	w, err := d.voiceQueue()
 	if err != nil {
 		return nil, err
@@ -196,7 +189,7 @@ func (d *daemon) chatVoiceOn(ctx context.Context, params json.RawMessage) (any, 
 	}
 	// The mark stays when the backfill is refused: it does not depend on it.
 	if !w.cfg.Enabled {
-		return nil, &rpc.Error{Code: rpc.CodeInvalidParams, Message: "the chat is marked, but voice transcription is off: set [voice_transcription] enabled = true, then repeat with --backfill", Data: map[string]any{"reason": "disabled"}}
+		return nil, &rpc.Error{Code: rpc.CodeInvalidParams, Message: "the chat is marked, but voice transcription is off: run tg settings set voice_transcription.enabled true, restart the Daemon, then repeat with --backfill", Data: map[string]any{"reason": "disabled"}}
 	}
 	if err := w.voiceInstallError(); err != nil {
 		return nil, err

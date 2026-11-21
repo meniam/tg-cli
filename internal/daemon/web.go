@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 
-	"strconv"
-	"tg-cli/internal/store"
-
+	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
+	"tg-cli/internal/store"
 )
 
 func (d *daemon) registerWeb() {
@@ -118,12 +118,15 @@ func (d *daemon) webHistory(ctx context.Context, raw json.RawMessage) (any, erro
 }
 
 func (d *daemon) webStoredChat(ctx context.Context, ref string) (store.Chat, error) {
-	id, _, err := d.localChatID(ctx, ref)
+	id, kind, err := d.localChatID(ctx, ref)
 	if err != nil {
 		return store.Chat{}, err
 	}
 	chat, err := d.store.GetChat(ctx, id)
 	if errors.Is(err, store.ErrNotFound) {
+		if kind == chatref.ID {
+			return store.Chat{}, rpc.ErrUnknownChatID()
+		}
 		return store.Chat{}, rpc.ErrChatNotFound()
 	}
 	return chat, err

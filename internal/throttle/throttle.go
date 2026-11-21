@@ -165,10 +165,57 @@ func New(cfg Config, clock Clock) (*Limiter, error) {
 func validRate(v float64) bool { return v > 0 && !math.IsInf(v, 0) && !math.IsNaN(v) }
 
 // FloodAutoWait is the configured maximum automatic flood wait.
-func (l *Limiter) FloodAutoWait() time.Duration { return l.cfg.FloodAutoWait }
+func (l *Limiter) FloodAutoWait() time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.cfg.FloodAutoWait
+}
+
+// SetPercent changes the rate without retroactively applying it to elapsed time.
+func (l *Limiter) SetPercent(percent float64) error {
+	if math.IsNaN(percent) || math.IsInf(percent, 0) || percent < 1 || percent > 100 {
+		return errors.New("invalid throttle percent")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.clock.Now()
+	general, private, group := l.rates()
+	l.general.tokens = refill(&l.general, now, general, l.cfg.GeneralBurst)
+	l.general.last = now
+	fileRate := BaseGeneralPerSecond * l.cfg.Percent / 100
+	l.fileBucket.tokens = refill(&l.fileBucket, now, fileRate, fileBurst)
+	l.fileBucket.last = now
+	for _, b := range l.private {
+		b.tokens = refill(b, now, private, l.cfg.PrivateBurst)
+		b.last = now
+	}
+	for _, b := range l.group {
+		b.tokens = refill(b, now, group, l.cfg.GroupBurst)
+		b.last = now
+	}
+	l.cfg.Percent = percent
+	l.signal()
+	return nil
+}
+
+// SetFloodAutoWait changes the maximum automatic flood wait.
+func (l *Limiter) SetFloodAutoWait(wait time.Duration) error {
+	if wait < 0 {
+		return errors.New("invalid flood auto wait")
+	}
+	l.mu.Lock()
+	l.cfg.FloodAutoWait = wait
+	l.signal()
+	l.mu.Unlock()
+	return nil
+}
 
 // Percent is the configured percentage of the base request rates.
-func (l *Limiter) Percent() float64 { return l.cfg.Percent }
+func (l *Limiter) Percent() float64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.cfg.Percent
+}
 
 // PausedFor returns the remaining account-wide flood pause.
 func (l *Limiter) PausedFor() time.Duration {

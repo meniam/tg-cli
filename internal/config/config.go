@@ -41,8 +41,20 @@ type Config struct {
 	VoiceTranscription VoiceTranscription `toml:"voice_transcription"`
 	// Profiles holds settings for each named profile.
 	Profiles map[string]Profile `toml:"profiles"`
+	// Legacy holds the old sections separately for migration.
+	Legacy Legacy `toml:"-" json:"-"`
 	// Warnings contains diagnostics that do not reveal proxy credentials.
 	Warnings []string `toml:"-"`
+}
+
+// Legacy records the old sections and their explicitly set values.
+type Legacy struct {
+	Web                map[string]any
+	Behavior           map[string]any
+	BackgroundSync     map[string]any
+	SemanticSearch     map[string]any
+	VoiceTranscription map[string]any
+	Profiles           map[string]map[string]any
 }
 
 // Files holds the file names within a profile directory.
@@ -125,10 +137,17 @@ func Load(path string) (Config, error) {
 		return Config{}, err
 	}
 	c := defaults(home)
-	f, err := os.Open(path)
+	entry, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return c, nil
 	}
+	if err != nil {
+		return Config{}, fmt.Errorf("inspect config: %w", err)
+	}
+	if !entry.Mode().IsRegular() {
+		return Config{}, invalid("config must be a regular file")
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("open config: %w", err)
 	}
@@ -136,6 +155,9 @@ func Load(path string) (Config, error) {
 	info, err := f.Stat()
 	if err != nil {
 		return Config{}, fmt.Errorf("stat config: %w", err)
+	}
+	if !os.SameFile(entry, info) || !info.Mode().IsRegular() {
+		return Config{}, invalid("config file changed during inspection")
 	}
 	if info.Mode().Perm()&0o022 != 0 {
 		return Config{}, invalid("config file is writable by group or others")
@@ -158,12 +180,21 @@ func Load(path string) (Config, error) {
 		}
 		return Config{}, invalid("invalid TOML configuration")
 	}
-	// The decode above succeeded, so this one cannot fail on the same text.
+	// Decode explicitly set legacy values separately for migration.
 	var probe struct {
-		Home *string `toml:"home"`
+		Web                map[string]any            `toml:"web"`
+		Home               *string                   `toml:"home"`
+		Behavior           map[string]any            `toml:"behavior"`
+		BackgroundSync     map[string]any            `toml:"background_sync"`
+		SemanticSearch     map[string]any            `toml:"semantic_search"`
+		VoiceTranscription map[string]any            `toml:"voice_transcription"`
+		Profiles           map[string]map[string]any `toml:"profiles"`
 	}
-	_ = toml.Unmarshal(content, &probe)
+	if err := toml.Unmarshal(content, &probe); err != nil {
+		return Config{}, invalid("invalid legacy configuration")
+	}
 	c.HomeSet = probe.Home != nil
+	c.Legacy = Legacy{Web: probe.Web, Behavior: probe.Behavior, BackgroundSync: probe.BackgroundSync, SemanticSearch: probe.SemanticSearch, VoiceTranscription: probe.VoiceTranscription, Profiles: probe.Profiles}
 	c.Home, err = validateHome(c.Home)
 	if err != nil {
 		return Config{}, err
@@ -174,12 +205,8 @@ func Load(path string) (Config, error) {
 	if err := c.Files.validate(); err != nil {
 		return Config{}, err
 	}
-	if math.IsNaN(c.Behavior.ThrottlePercent) || c.Behavior.ThrottlePercent < 1 || c.Behavior.ThrottlePercent > 100 {
-		return Config{}, invalid("behavior.throttle_percent must be between 1 and 100")
-	}
-	duration, err := time.ParseDuration(c.Behavior.FloodAutoWait)
-	if err != nil || duration < 0 {
-		return Config{}, invalid("behavior.flood_autowait must be a non-negative duration")
+	if err := validateBehavior(c.Behavior); err != nil {
+		return Config{}, err
 	}
 	if _, err := c.Web.TTL(); err != nil {
 		return Config{}, err
@@ -193,6 +220,8 @@ func Load(path string) (Config, error) {
 	if _, err := c.VoiceTranscription.Resolve(); err != nil {
 		return Config{}, err
 	}
+	c.Web = defaultWeb()
+	c.VoiceTranscription = defaultVoiceTranscription()
 	for name, p := range c.Profiles {
 		proxy, err := validateProfile(name, p)
 		if err != nil {
@@ -203,6 +232,17 @@ func Load(path string) (Config, error) {
 		}
 	}
 	return c, nil
+}
+
+func validateBehavior(b Behavior) error {
+	if math.IsNaN(b.ThrottlePercent) || b.ThrottlePercent < 1 || b.ThrottlePercent > 100 {
+		return invalid("behavior.throttle_percent must be between 1 and 100")
+	}
+	duration, err := time.ParseDuration(b.FloodAutoWait)
+	if err != nil || duration < 0 {
+		return invalid("behavior.flood_autowait must be a non-negative duration")
+	}
+	return nil
 }
 
 func defaults(home string) Config {

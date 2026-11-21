@@ -13,6 +13,7 @@ import (
 // audit03NoChatMethods take no chat reference, so the closed-chat rule does not apply.
 var audit03NoChatMethods = map[string]bool{
 	rpc.MethodWebFolders: true, rpc.MethodWebThumbEnabled: true, rpc.MethodWebAccess: true,
+	rpc.MethodSettingsList: true, rpc.MethodSettingsGet: true, rpc.MethodSettingsSet: true, rpc.MethodSettingsUnset: true, rpc.MethodSettingsAdd: true, rpc.MethodSettingsRemove: true, rpc.MethodSettingsTokenInit: true, rpc.MethodSettingsTokenChange: true,
 	rpc.MethodAccountBlocked: true, rpc.MethodAccountEmojiStatuses: true, rpc.MethodAccountNotify: true,
 	rpc.MethodAccountPrivacyGet: true, rpc.MethodAccountPrivacySet: true, rpc.MethodAccountProfile: true,
 	rpc.MethodAccountSessions: true, rpc.MethodAccountSet: true, rpc.MethodAccountTerminate: true,

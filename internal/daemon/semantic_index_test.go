@@ -618,7 +618,7 @@ func TestSemanticIndexOffDoesNothing(t *testing.T) {
 	} {
 		_, err := call(context.Background(), nil)
 		var re *rpc.Error
-		if !errors.As(err, &re) || re.Code != rpc.CodeInvalidParams || re.Message != "semantic search is off: set [semantic_search] enabled = true" {
+		if !errors.As(err, &re) || re.Code != rpc.CodeInvalidParams || re.Message != "semantic search is off: set semantic_search.enabled to true and restart the daemon" {
 			t.Errorf("a command with the feature off answered %v", err)
 		}
 	}

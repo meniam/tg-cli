@@ -191,7 +191,7 @@ func TestVoiceBackfillCommand(t *testing.T) {
 		return rpc.VoiceBackfillResult{Enabled: false, DryRun: true, Chats: 2, Candidates: 40}, nil
 	})
 	var p rpc.VoiceBackfillParams
-	if err := json.Unmarshal(r.params, &p); err != nil || r.code != 0 || !p.DryRun || !strings.Contains(r.stdout, `"candidates":40`) || !strings.Contains(r.stderr, "enabled = true") {
+	if err := json.Unmarshal(r.params, &p); err != nil || r.code != 0 || !p.DryRun || !strings.Contains(r.stdout, `"candidates":40`) || !strings.Contains(r.stderr, "tg settings set voice_transcription.enabled true and restart the Daemon") {
 		t.Fatalf("dry run while off: %+v %+v %v", r, p, err)
 	}
 	r = runVoiceCLI(t, []string{"voice", "backfill"}, nil, func(string, json.RawMessage) (any, error) {
@@ -202,9 +202,9 @@ func TestVoiceBackfillCommand(t *testing.T) {
 		t.Fatalf("backfill: %+v %+v %v", r, p, err)
 	}
 	r = runVoiceCLI(t, []string{"voice", "backfill"}, nil, func(string, json.RawMessage) (any, error) {
-		return nil, rpc.NewError(rpc.CodeInvalidParams, "voice transcription is off: set [voice_transcription] enabled = true")
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "voice transcription is off: run tg settings set voice_transcription.enabled true and restart the Daemon")
 	})
-	if r.code != exitcode.Usage || !strings.Contains(r.stdout, "enabled = true") {
+	if r.code != exitcode.Usage || !strings.Contains(r.stdout, "tg settings set voice_transcription.enabled true and restart the Daemon") {
 		t.Fatalf("backfill while off: %+v", r)
 	}
 }
@@ -312,11 +312,11 @@ func TestDaemonVoiceTranscriptionDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := daemon.VoiceTranscriptionConfig{
-		Home: "/data/tg", FFmpeg: "ffmpeg", MaxVoiceMB: 30, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120,
-		DailyDownloadMB: 2000, DailyFiles: 200, Pause: 3 * time.Second, Threads: 4,
+		Enabled: true, Home: "/data/tg", FFmpeg: "ffmpeg", MaxVoiceMB: 30, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120,
+		DailyDownloadMB: 5000, DailyFiles: 500, Pause: 3 * time.Second, Threads: 4,
 	}
 	if got != want {
-		t.Fatalf("got %+v, want %+v (disabled)", got, want)
+		t.Fatalf("got %+v, want %+v (enabled)", got, want)
 	}
 }
 
@@ -324,7 +324,7 @@ func TestDaemonVoiceTranscriptionEnvironmentOverridesFile(t *testing.T) {
 	file := "[voice_transcription]\nenabled = false\nffmpeg = \"/opt/ffmpeg\"\nmax_voice_mb = 10\nthreads = 2\npause = \"1s\"\n"
 	fromFile := daemon.VoiceTranscriptionConfig{
 		Home: "/data/tg", FFmpeg: "/opt/ffmpeg", MaxVoiceMB: 10, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120,
-		DailyDownloadMB: 2000, DailyFiles: 200, Pause: time.Second, Threads: 2,
+		DailyDownloadMB: 5000, DailyFiles: 500, Pause: time.Second, Threads: 2,
 	}
 	for _, tc := range []struct {
 		name string
@@ -348,11 +348,18 @@ func TestDaemonVoiceTranscriptionEnvironmentOverridesFile(t *testing.T) {
 			DailyDownloadMB: 55, DailyFiles: 66, Pause: 0, Threads: 16,
 		}},
 		{"one variable keeps the rest of the file", map[string]string{"TG_CLI_VOICE_TRANSCRIPTION_THREADS": "8"},
-			daemon.VoiceTranscriptionConfig{Home: "/data/tg", FFmpeg: "/opt/ffmpeg", MaxVoiceMB: 10, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120, DailyDownloadMB: 2000, DailyFiles: 200, Pause: time.Second, Threads: 8}},
+			daemon.VoiceTranscriptionConfig{Home: "/data/tg", FFmpeg: "/opt/ffmpeg", MaxVoiceMB: 10, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120, DailyDownloadMB: 5000, DailyFiles: 500, Pause: time.Second, Threads: 8}},
 		{"blank variable is ignored", map[string]string{"TG_CLI_VOICE_TRANSCRIPTION_ENABLED": "  ", "TG_CLI_VOICE_TRANSCRIPTION_PAUSE": " "}, fromFile},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := backgroundSyncApp(t, file, tc.env)
+			stored, err := a.config.Legacy.SettingsForProfile("default")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := a.applyDatabaseSettings(daemon.Paths{Dir: "/data/tg/default"}, stored); err != nil {
+				t.Fatal(err)
+			}
 			a.config.Home = "/data/tg"
 			got, err := a.daemonVoiceTranscription()
 			if err != nil {
@@ -389,5 +396,36 @@ func TestDaemonVoiceTranscriptionRejectsBadEnvironment(t *testing.T) {
 				t.Fatalf("got %v, want a usage error naming %s", err, tc.variable)
 			}
 		})
+	}
+}
+
+func TestDaemonVoiceTranscriptionDatabaseAndEnvironment(t *testing.T) {
+	e := newEnv(t)
+	e.setProfileSettings("default", map[string]json.RawMessage{
+		"voice_transcription.enabled": []byte(`false`),
+		"voice_transcription.ffmpeg":  []byte(`"/database/ffmpeg"`),
+		"voice_transcription.threads": []byte(`6`),
+		"voice_transcription.pause":   []byte(`"5s"`),
+	})
+	e.env["TG_CLI_VOICE_TRANSCRIPTION_THREADS"] = "9"
+	previous := runDaemon
+	t.Cleanup(func() { runDaemon = previous })
+	var got daemon.Options
+	runDaemon = func(ctx context.Context, opts daemon.Options) error {
+		err := daemon.WithProfileDatabase(opts.Paths, func(db daemon.ProfileDatabase) error { return opts.Prepare(ctx, db, &opts) })
+		got = opts
+		return err
+	}
+	var stdout, stderr safeBuffer
+	deps := e.deps(&stdout, &stderr)
+	deps.NewTelegram = func(daemon.TelegramConfig) (daemon.Telegram, error) { return e.tg, nil }
+	if code := Execute(context.Background(), []string{"daemon", "start", "--foreground"}, deps); code != exitcode.OK {
+		t.Fatalf("exit %d: %s %s", code, stdout.String(), stderr.String())
+	}
+	if got.VoiceTranscription.Enabled || got.VoiceTranscription.FFmpeg != "/database/ffmpeg" || got.VoiceTranscription.Threads != 9 || got.VoiceTranscription.Pause != 5*time.Second {
+		t.Fatalf("voice options: %+v", got.VoiceTranscription)
+	}
+	if override, ok := got.SettingsOverrides["voice_transcription.threads"]; !ok || override.Source != "env" || string(override.Value) != "9" {
+		t.Fatalf("environment source: %+v", got.SettingsOverrides)
 	}
 }

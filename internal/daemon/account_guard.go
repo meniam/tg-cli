@@ -69,6 +69,9 @@ func (c *accountCache) check(req rpc.Request) error {
 // A method whose name has no dot after its group ("chat_full.") needs its own
 // prefix, or those checks would silently skip it.
 func accountMethod(method string) bool {
+	if strings.HasPrefix(method, "settings.") {
+		return false
+	}
 	return method == rpc.MethodMediaThumb || method == rpc.MethodSearch || method == rpc.MethodSearchSemantic || method == rpc.MethodSubscribe || method == rpc.MethodUnsubscribe ||
 		strings.HasPrefix(method, "chat.") || strings.HasPrefix(method, "chat_full.") ||
 		strings.HasPrefix(method, "message.") || strings.HasPrefix(method, "sticker.") ||

@@ -107,6 +107,11 @@ func (d *daemon) messageSendSticker(ctx context.Context, raw json.RawMessage) (a
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockChatWrite(id)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var result rpc.SendStickerResult
 		if err := json.Unmarshal(saved, &result); err != nil {
 			return nil, err
@@ -114,7 +119,12 @@ func (d *daemon) messageSendSticker(ctx context.Context, raw json.RawMessage) (a
 		result.Replayed = true
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(id)
+	if err != nil {
+		return nil, err
+	}
 	result, err := d.telegram(ctx).SendSticker(ctx, ref, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +169,7 @@ func (d *daemon) messageEditMedia(ctx context.Context, raw json.RawMessage) (any
 	}
 	policy := d.policy()
 	if !policy.FilesAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, d.accessMessage("sending files is disabled: ask the owner to add file roots to files in access.json"))
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "sending files is disabled: ask the owner to set access.files")
 	}
 	open := d.openMediaFile
 	if open == nil {
@@ -181,9 +191,19 @@ func (d *daemon) messageEditMedia(ctx context.Context, raw json.RawMessage) (any
 		result.CaptionLength = &length
 	}
 	if p.DryRun {
+		releaseAccess, err := d.lockMediaWrite(id, []string{p.File}, []rpc.MediaFile{checked})
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		return result, nil
 	}
+	release, err := d.lockMediaWrite(id, []string{p.File}, []rpc.MediaFile{checked})
+	if err != nil {
+		return nil, err
+	}
 	response, err := d.telegram(ctx).EditMedia(ctx, ref, p, checked)
+	release()
 	if err != nil {
 		return nil, err
 	}
@@ -228,6 +248,11 @@ func (d *daemon) messageSendInline(ctx context.Context, raw json.RawMessage) (an
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockChatWrite(chatID)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var result rpc.SendResult
 		if err := json.Unmarshal(saved, &result); err != nil {
 			return nil, err
@@ -242,7 +267,12 @@ func (d *daemon) messageSendInline(ctx context.Context, raw json.RawMessage) (an
 		}
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(chatID)
+	if err != nil {
+		return nil, err
+	}
 	result, message, err := d.telegram(ctx).SendInline(ctx, ref, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}

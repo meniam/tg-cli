@@ -228,7 +228,7 @@ func TestDiscoveryCLIValidationAndCodes(t *testing.T) {
 		}
 	}
 	denied := runDiscoveryCLI(t, []string{"chat", "mark-read", "42"}, func(string, json.RawMessage) (any, error) { return nil, rpc.ErrWriteDisabled() }, nil)
-	if denied.code != exitcode.WriteDisabled || !strings.Contains(denied.stderr, "write list") {
+	if denied.code != exitcode.WriteDisabled || !strings.Contains(denied.stderr, "access.write") {
 		t.Fatalf("mark-read denied: %+v", denied)
 	}
 	absent := runDiscoveryCLI(t, []string{"message", "search", "42", "needle"}, nil, os.ErrNotExist)

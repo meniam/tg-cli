@@ -1,19 +1,43 @@
 package cli
 
 import (
-	"github.com/spf13/cobra"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
+
 	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
 )
 
+func reloadNetworkFixture(t *testing.T, a *app, paths daemon.Paths) {
+	t.Helper()
+	a.config.Profiles = nil
+	err := daemon.WithProfileDatabase(paths, func(db daemon.ProfileDatabase) error {
+		values, err := db.Settings(context.Background())
+		if err != nil {
+			return err
+		}
+		return a.applyDatabaseSettings(paths, values)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNetworkSettingsPersistence(t *testing.T) {
-	dir := t.TempDir()
-	paths := daemon.Paths{Dir: filepath.Join(dir, "default")}
-	var err error
+	dir, err := os.MkdirTemp("/tmp", "tgn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	paths, err := daemon.ResolvePaths(dir, filepath.Join(dir, "db"), "default", daemon.DefaultFileNames())
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("HOME", t.TempDir())
 	path := filepath.Join(t.TempDir(), "config.toml")
 	cfg, err := config.Load(path)
@@ -33,10 +57,11 @@ func TestNetworkSettingsPersistence(t *testing.T) {
 	if s.Proxy.Redacted() != "socks5://localhost:1080" {
 		t.Fatal(s)
 	}
-	st, err := os.Stat(path)
+	st, err := os.Stat(paths.Database)
 	if err != nil || st.Mode().Perm() != 0600 {
 		t.Fatalf("wrong permissions: %v %v", st, err)
 	}
+	reloadNetworkFixture(t, a, paths)
 	cmd2 := &cobra.Command{}
 	cmd2.Flags().String("transport", "", "")
 	cmd2.Flags().String("proxy", "", "")
@@ -48,15 +73,30 @@ func TestNetworkSettingsPersistence(t *testing.T) {
 	if _, err = a.networkSettings(cmd2, paths, true); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err = config.Load(path)
-	if err != nil || cfg.Profiles["default"].Proxy != "none" {
-		t.Fatalf("proxy was not cleared: %v", err)
+	err = daemon.WithProfileDatabase(paths, func(db daemon.ProfileDatabase) error {
+		values, err := db.Settings(context.Background())
+		if err != nil {
+			return err
+		}
+		if string(values["profile.proxy"]) != `"none"` {
+			t.Fatalf("proxy was not cleared: %s", values["profile.proxy"])
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 func TestNetworkBadProxyDoesNotExposeSecret(t *testing.T) {
-	dir := t.TempDir()
-	paths := daemon.Paths{Dir: filepath.Join(dir, "default")}
-	var err error
+	dir, err := os.MkdirTemp("/tmp", "tgn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	paths, err := daemon.ResolvePaths(dir, filepath.Join(dir, "db"), "default", daemon.DefaultFileNames())
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("HOME", t.TempDir())
 	path := filepath.Join(t.TempDir(), "config.toml")
 	cfg, err := config.Load(path)
@@ -78,7 +118,15 @@ func TestNetworkBadProxyDoesNotExposeSecret(t *testing.T) {
 }
 
 func TestNetworkAutoSettings(t *testing.T) {
-	paths := daemon.Paths{Dir: filepath.Join(t.TempDir(), "default")}
+	dir, err := os.MkdirTemp("/tmp", "tgn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	paths, err := daemon.ResolvePaths(dir, filepath.Join(dir, "db"), "default", daemon.DefaultFileNames())
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("HOME", t.TempDir())
 	path := filepath.Join(t.TempDir(), "config.toml")
 	cfg, err := config.Load(path)
@@ -95,6 +143,7 @@ func TestNetworkAutoSettings(t *testing.T) {
 	if err != nil || s.Transport != "auto" || s.Proxy.Redacted() != "http://proxy.test:8080" {
 		t.Fatalf("settings: %v %v", s, err)
 	}
+	reloadNetworkFixture(t, a, paths)
 	cmd2 := &cobra.Command{}
 	cmd2.Flags().String("transport", "", "")
 	cmd2.Flags().String("proxy", "", "")

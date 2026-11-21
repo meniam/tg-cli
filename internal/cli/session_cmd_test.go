@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/sessionstr"
@@ -31,9 +30,7 @@ func TestSessionTransferOffline(t *testing.T) {
 	if err = daemon.WithProfileLock(p, func() error { return daemon.WriteSession(p, raw) }); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := config.UpdateProfile(filepath.Join(e.home, ".config", "tg-cli", "config.toml"), "default", map[string]string{"client": "desktop"}, false); err != nil {
-		t.Fatal(err)
-	}
+	e.setProfileSettings("default", map[string]json.RawMessage{"profile.client": []byte(`"desktop"`)})
 	out := filepath.Join(t.TempDir(), "export")
 	if r := e.run("session", "export", "--out", out); !audit02Refused(r, "--yes and --out are required") {
 		t.Fatalf("export confirmation: %d", r.code)
@@ -166,7 +163,7 @@ func TestConcurrentSessionImports(t *testing.T) {
 		a, b = b, a
 	}
 	// The loser meets either the profile lock or the profile the winner filled.
-	refused := audit02Refused(result{code: b.code, stdout: b.out}, "cannot lock profile") ||
+	refused := (b.code == exitcode.Failure && strings.Contains(b.out, "cannot lock profile")) ||
 		audit02Refused(result{code: b.code, stdout: b.out}, "profile is not empty")
 	if a.code != exitcode.OK || !refused {
 		t.Fatalf("expected one success and one refusal, got %d %s and %d %s", a.code, a.out, b.code, b.out)
@@ -190,7 +187,7 @@ func TestSessionImportRejectsLockedAndCorruptProfile(t *testing.T) {
 	}
 	if err = daemon.WithProfileLock(p, func() error {
 		r := e.run("session", "import", "--from", input, "--yes")
-		if !audit02Refused(r, "cannot lock profile") {
+		if r.code != exitcode.Failure || !strings.Contains(r.stdout, "cannot lock profile") {
 			t.Errorf("locked profile: exit %d %s", r.code, r.stdout)
 		}
 		return nil

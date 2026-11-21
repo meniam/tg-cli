@@ -110,7 +110,7 @@ Exit codes: 0; 2 invalid arguments; 3 no Daemon; 4 no login for a Telegram read;
 
 ## tg account terminate
 
-Terminates one other session. The owner must enable `sessions` in `access.json`. The current session cannot be terminated. Preview with `--dry-run`; an actual termination requires `--yes` and is recorded in `account.jsonl`.
+Terminates one other session. The owner must enable `access.sessions`. The current session cannot be terminated. Preview with `--dry-run`; an actual termination requires `--yes` and is recorded in `account.jsonl`.
 
 ```sh
 tg account terminate <id> [--yes] [--dry-run]
@@ -135,7 +135,7 @@ No command flags.
 
 ## tg folder order
 
-Sets the folder order. Supply every existing folder ID exactly once. The owner must enable `dialogs` in `access.json`.
+Sets the folder order. Supply every existing folder ID exactly once. The owner must enable `access.dialogs`.
 
 <!-- schema:flags tg folder order -->
 | Flag | Type | Default | Description |
@@ -145,7 +145,7 @@ Sets the folder order. Supply every existing folder ID exactly once. The owner m
 
 ## tg folder create
 
-Creates a folder with `tg folder create <title>`. Include at least one chat with `--include` or `--pin`, or select an inclusion rule with `--rules`. The owner must enable `dialogs` in `access.json`.
+Creates a folder with `tg folder create <title>`. Include at least one chat with `--include` or `--pin`, or select an inclusion rule with `--rules`. The owner must enable `access.dialogs`.
 
 <!-- schema:flags tg folder create -->
 | Flag | Type | Default | Description |
@@ -161,7 +161,7 @@ Creates a folder with `tg folder create <title>`. Include at least one chat with
 
 ## tg folder edit
 
-Edits a folder with `tg folder edit <id>`. The owner must enable `dialogs` in `access.json`. Existing hidden chats are preserved; concurrent edits can overwrite each other.
+Edits a folder with `tg folder edit <id>`. The owner must enable `access.dialogs`. Existing hidden chats are preserved; concurrent edits can overwrite each other.
 
 <!-- schema:flags tg folder edit -->
 | Flag | Type | Default | Description |
@@ -181,7 +181,7 @@ Edits a folder with `tg folder edit <id>`. The owner must enable `dialogs` in `a
 
 ## tg folder delete
 
-Deletes a folder with `tg folder delete <id>`. The owner must enable `dialogs` in `access.json`. Deletion requires `--yes` or `--dry-run` and is journaled.
+Deletes a folder with `tg folder delete <id>`. The owner must enable `access.dialogs`. Deletion requires `--yes` or `--dry-run` and is journaled.
 
 <!-- schema:flags tg folder delete -->
 | Flag | Type | Default | Description |
@@ -218,7 +218,7 @@ tg account emoji-statuses [--recent]
 
 ### tg account set
 
-Change the birthday, personal channel or emoji status. The owner must enable `profile` in `access.json`. Multiple settings are applied in order and may partially succeed. `--dry-run` checks without writing.
+Change the birthday, personal channel or emoji status. The owner must enable `access.profile`. Multiple settings are applied in order and may partially succeed. `--dry-run` checks without writing.
 
 ```text
 tg account set [flags]

@@ -142,6 +142,20 @@ func (d *daemon) noteAdd(ctx context.Context, params json.RawMessage) (any, erro
 	default:
 		return nil, rpc.NewError(rpc.CodeInvalidParams, "kind must be chat, person, or message")
 	}
+	// Numeric notes work offline. Under a visibility filter accept only
+	// locally known chats, so note creation cannot identify blocked IDs.
+	if note.ChatID != nil && policy.Enabled() {
+		ref, _ := chatref.Parse(p.Chat)
+		if ref.Kind == chatref.ID {
+			known, err := d.store.ChatKnown(ctx, *note.ChatID)
+			if err != nil {
+				return nil, err
+			}
+			if !known {
+				return nil, rpc.ErrChatNotFound()
+			}
+		}
+	}
 	stored, err := d.store.AddNote(ctx, note)
 	if err != nil {
 		return nil, storeError(err)
@@ -243,7 +257,16 @@ func (d *daemon) noteDeleteByAuthor(ctx context.Context, params json.RawMessage)
 	if err := decodeParams(params, &p); err != nil {
 		return nil, err
 	}
-	count, err := d.store.DeleteNotesByAuthor(ctx, p.Author)
+	policy := d.policy()
+	d.accessMu.RLock()
+	if d.accessSnapshot != nil {
+		policy = *d.accessSnapshot
+	}
+	if d.legacyAccessPresent() || d.legacyConfigPresent() {
+		policy = access.Denied()
+	}
+	count, err := d.store.DeleteVisibleNotesByAuthor(ctx, p.Author, chatFilter(policy))
+	d.accessMu.RUnlock()
 	if err != nil {
 		return nil, storeError(err)
 	}

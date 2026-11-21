@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"runtime"
@@ -25,8 +26,32 @@ func (a *app) webCommand() *cobra.Command {
 }
 
 func (a *app) runWeb(cmd *cobra.Command, _ []string) error {
-	address := a.config.Web.Listen
-	open := a.config.Web.Open
+	profile, paths, err := a.profile(cmd)
+	if err != nil {
+		return err
+	}
+	client, err := a.connect(cmd.Context(), cmd)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	var settings rpc.SettingsListResult
+	if err := a.call(cmd.Context(), cmd, client, rpc.MethodSettingsList, rpc.SettingsListParams{Prefix: "web."}, &settings); err != nil {
+		return err
+	}
+	var address string
+	var open bool
+	for _, setting := range settings.Settings {
+		switch setting.Key {
+		case "web.listen":
+			err = json.Unmarshal(setting.Value, &address)
+		case "web.open":
+			err = json.Unmarshal(setting.Value, &open)
+		}
+		if err != nil {
+			return fail(exitcode.Failure, "invalid web setting %s", setting.Key)
+		}
+	}
 	if a.deps.Getenv != nil {
 		if value := a.deps.Getenv("TG_CLI_WEB_LISTEN"); value != "" {
 			address = value
@@ -50,17 +75,8 @@ func (a *app) runWeb(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fail(exitcode.Usage, "%v", err)
 	}
-	profile, paths, err := a.profile(cmd)
-	if err != nil {
-		return err
-	}
-	client, err := a.connect(cmd.Context(), cmd)
-	if err != nil {
-		return err
-	}
 	var status rpc.StatusResult
 	err = a.call(cmd.Context(), cmd, client, rpc.MethodStatus, nil, &status)
-	defer client.Close()
 	if err != nil {
 		return err
 	}

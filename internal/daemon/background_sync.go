@@ -37,6 +37,7 @@ func realBackgroundSyncRandom(lo, hi time.Duration) time.Duration {
 type backgroundSync struct {
 	d      *daemon
 	cfg    BackgroundSyncConfig
+	cfgMu  sync.RWMutex
 	clock  historySyncClock
 	random backgroundSyncRandom
 	done   chan struct{}
@@ -66,14 +67,27 @@ func newBackgroundSync(d *daemon, cfg BackgroundSyncConfig, clock historySyncClo
 	return &backgroundSync{d: d, cfg: cfg, clock: clock, random: random, done: make(chan struct{}), failed: make(map[int64]struct{})}
 }
 
+func (s *backgroundSync) config() BackgroundSyncConfig {
+	s.cfgMu.RLock()
+	defer s.cfgMu.RUnlock()
+	return s.cfg
+}
+
+func (s *backgroundSync) setConfig(cfg BackgroundSyncConfig) {
+	s.cfgMu.Lock()
+	s.cfg = cfg
+	s.cfgMu.Unlock()
+}
+
 // startBackgroundSync launches the scheduler when the setting is on. Without it
 // there is no scheduler and no goroutine: the daemon makes no new Telegram
 // request for the background history load.
 func (d *daemon) startBackgroundSync(ctx context.Context, clock historySyncClock, random backgroundSyncRandom) {
-	if !d.opts.BackgroundSync.Enabled {
+	cfg := d.backgroundConfig()
+	if !cfg.Enabled {
 		return
 	}
-	d.background = newBackgroundSync(d, d.opts.BackgroundSync, clock, random)
+	d.background = newBackgroundSync(d, cfg, clock, random)
 	d.background.start(ctx)
 }
 
@@ -91,7 +105,11 @@ func (s *backgroundSync) wait() { <-s.done }
 // of midnight: on a day with a clock change an offset of 8h still means 08:00
 // on the wall clock, where Add(8h) would give 07:00 or 09:00.
 func (s *backgroundSync) windowOf(t time.Time) (start, end time.Time) {
-	return s.localOffset(t, s.cfg.WindowStart), s.localOffset(t, s.cfg.WindowEnd)
+	return s.windowOfConfig(t, s.config())
+}
+
+func (s *backgroundSync) windowOfConfig(t time.Time, cfg BackgroundSyncConfig) (start, end time.Time) {
+	return s.localOffset(t, cfg.WindowStart), s.localOffset(t, cfg.WindowEnd)
 }
 
 func (s *backgroundSync) localOffset(day time.Time, offset time.Duration) time.Time {
@@ -107,12 +125,16 @@ func (s *backgroundSync) inWindow(t time.Time) bool {
 // before the start it goes to the start of the same day, from the end on to
 // the start of the next day.
 func (s *backgroundSync) intoWindow(t time.Time) time.Time {
-	start, end := s.windowOf(t)
+	return s.intoWindowConfig(t, s.config())
+}
+
+func (s *backgroundSync) intoWindowConfig(t time.Time, cfg BackgroundSyncConfig) time.Time {
+	start, end := s.windowOfConfig(t, cfg)
 	switch {
 	case t.Before(start):
 		return start
 	case !t.Before(end):
-		return s.localOffset(time.Date(t.Year(), t.Month(), t.Day()+1, 12, 0, 0, 0, t.Location()), s.cfg.WindowStart)
+		return s.localOffset(time.Date(t.Year(), t.Month(), t.Day()+1, 12, 0, 0, 0, t.Location()), cfg.WindowStart)
 	default:
 		return t
 	}
@@ -121,7 +143,8 @@ func (s *backgroundSync) intoWindow(t time.Time) time.Time {
 // scheduleFrom is the next run after from: a random interval later, moved into
 // the window.
 func (s *backgroundSync) scheduleFrom(from time.Time) time.Time {
-	return s.intoWindow(from.Add(s.random(s.cfg.IntervalMin, s.cfg.IntervalMax)))
+	cfg := s.config()
+	return s.intoWindowConfig(from.Add(s.random(cfg.IntervalMin, cfg.IntervalMax)), cfg)
 }
 
 func (s *backgroundSync) loop(ctx context.Context) {
@@ -242,7 +265,7 @@ func (s *backgroundSync) runOnce(ctx context.Context, now time.Time) (string, bo
 		d.log.Warn("background sync could not read the progress", "err", redact.Text(err.Error()))
 		return rpc.BackgroundSyncSkipped, true
 	}
-	pause := func() time.Duration { return s.random(s.cfg.PagePauseMin, s.cfg.PagePauseMax) }
+	pause := s.pagePause
 	// The ref is the Bot API id of a chat the database knows from a dialog list,
 	// the same ref a manual `chat sync start -- <id>` builds for it.
 	ref := chatref.Ref{Kind: chatref.ID, ID: chat.ID}
@@ -256,6 +279,11 @@ func (s *backgroundSync) runOnce(ctx context.Context, now time.Time) (string, bo
 	s.mu.Unlock()
 	d.log.Info("background sync started", "chat", chat.ID, "group", chat.Group)
 	return s.awaitJob(ctx, chat.ID, now, endTimer.C())
+}
+
+func (s *backgroundSync) pagePause() time.Duration {
+	cfg := s.config()
+	return s.random(cfg.PagePauseMin, cfg.PagePauseMax)
 }
 
 // foldersStale reports whether the folder snapshot is missing or older than
@@ -395,7 +423,7 @@ func (s *backgroundSync) status() rpc.BackgroundSyncStatus {
 	now := s.clock.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st := rpc.BackgroundSyncStatus{Enabled: true, Window: backgroundWindow(s.cfg), LastResult: s.lastResult, LastRunAt: s.lastRunAt, LastChatID: s.lastChat}
+	st := rpc.BackgroundSyncStatus{Enabled: true, Window: backgroundWindow(s.config()), LastResult: s.lastResult, LastRunAt: s.lastRunAt, LastChatID: s.lastChat}
 	switch {
 	case s.running:
 		st.State = rpc.BackgroundSyncRunning
@@ -426,7 +454,7 @@ func clockOffset(offset time.Duration) string {
 // the scheduler is off.
 func (d *daemon) backgroundSyncStatus() rpc.BackgroundSyncStatus {
 	if d.background == nil {
-		return rpc.BackgroundSyncStatus{Window: backgroundWindow(d.opts.BackgroundSync), State: rpc.BackgroundSyncDisabled}
+		return rpc.BackgroundSyncStatus{Window: backgroundWindow(d.backgroundConfig()), State: rpc.BackgroundSyncDisabled}
 	}
 	return d.background.status()
 }

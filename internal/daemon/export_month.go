@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"tg-cli/internal/buildinfo"
+	"tg-cli/internal/chatref"
 	"tg-cli/internal/fileroot"
 	"tg-cli/internal/rpc"
 	"tg-cli/internal/store"
@@ -26,7 +27,7 @@ var exportMonthLimit int64 = 1 << 30
 func (d *daemon) exportDir(path string) (*fileroot.DownloadDir, error) {
 	policy := d.policy()
 	if !policy.DownloadsAllowed() {
-		return nil, rpc.NewError(rpc.CodeWriteDisabled, "downloads are disabled: ask the owner to add downloads to access.json")
+		return nil, rpc.NewError(rpc.CodeWriteDisabled, "downloads are disabled: ask the owner to set access.downloads")
 	}
 	dir, err := fileroot.OpenArchiveDownloadDir(policy.DownloadRoots(), path)
 	if err != nil {
@@ -54,7 +55,7 @@ func (d *daemon) messageExportMonth(ctx context.Context, raw json.RawMessage) (r
 	ids := make([]int64, 0, len(p.Chats))
 	seen := map[int64]bool{}
 	for _, chat := range p.Chats {
-		id, _, e := d.localChatID(ctx, chat)
+		id, kind, e := d.localChatID(ctx, chat)
 		if e != nil {
 			return nil, e
 		}
@@ -63,6 +64,9 @@ func (d *daemon) messageExportMonth(ctx context.Context, raw json.RawMessage) (r
 			return nil, e
 		}
 		if !known {
+			if kind == chatref.ID {
+				return nil, rpc.ErrUnknownChatID()
+			}
 			return nil, rpc.ErrChatNotFound()
 		}
 		if seen[id] {

@@ -2,12 +2,14 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"tg-cli/internal/config"
 	"tg-cli/internal/daemon"
 	"tg-cli/internal/exitcode"
 	"tg-cli/internal/rpc"
@@ -35,7 +37,7 @@ func (a *app) voiceCommand() *cobra.Command {
 			"engine (GigaAM, Russian only) through one persistent queue. `install` downloads\n" +
 			"the engine, `status` counts the queue, `list` shows its jobs with their reasons,\n" +
 			"`cancel`, `retry` and `backfill` manage it.\n" +
-			"The sources that queue jobs by themselves need [voice_transcription] enabled = true.",
+			"The sources that queue jobs by themselves need voice_transcription.enabled = true.",
 	}
 	install := a.annotate(&cobra.Command{
 		Use:   "install",
@@ -64,7 +66,7 @@ func (a *app) voiceCommand() *cobra.Command {
 			"the source, the state, the reason (a machine word such as no_speech, no_audio or\n" +
 			"convert), the attempts, the bytes downloaded and the times. It carries neither message\n" +
 			"text nor transcriptions: read a text with `message transcribe` or `message get`. Chats\n" +
-			"that access.json closes are not listed. --state, --chat and --kind narrow the list.\n" +
+			"closed by the access policy are not listed. --state, --chat and --kind narrow the list.\n" +
 			"Pass next_cursor back with --cursor to continue. It reads the database and never calls\n" +
 			"Telegram.",
 		Args: cobra.NoArgs, RunE: a.voiceList,
@@ -94,9 +96,9 @@ func (a *app) voiceCommand() *cobra.Command {
 		Use:   "backfill",
 		Short: "Queue the saved voice messages of the personal chats",
 		Long: "Queue the saved voice messages and video notes of the personal chats that have no\n" +
-			"text yet, at the lowest priority. Chats that access.json closes and your own\n" +
+			"text yet, at the lowest priority. Chats closed by the access policy and your own\n" +
 			"messages are left out. --dry-run counts them and queues nothing. Without\n" +
-			"[voice_transcription] enabled = true the command fails (the dry run still counts).",
+			"voice_transcription.enabled = true the command fails (the dry run still counts).",
 		Args: cobra.NoArgs, RunE: a.voiceBackfill,
 	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.VoiceBackfillResult]()})
 	backfill.Flags().Bool("dry-run", false, "count the messages and queue nothing")
@@ -133,9 +135,19 @@ func (a *app) voiceInstallProgress(cmd *cobra.Command) gigaam.ProgressFunc {
 }
 
 func (a *app) voiceInstall(cmd *cobra.Command, _ []string) error {
-	_, values, err := a.voiceTranscriptionSettings()
-	if err != nil {
-		return err
+	ffmpeg := strings.TrimSpace(a.deps.Getenv(voiceTranscriptionEnv.ffmpeg))
+	if ffmpeg != "" {
+		if err := config.CheckVoiceFFmpeg(ffmpeg); err != nil {
+			return fail(exitcode.Usage, "%s %v", voiceTranscriptionEnv.ffmpeg, err)
+		}
+	} else {
+		var setting rpc.SettingValue
+		if err := a.settingsCall(cmd, rpc.MethodSettingsGet, rpc.SettingsGetParams{Key: "voice_transcription.ffmpeg"}, &setting); err != nil {
+			return err
+		}
+		if err := json.Unmarshal(setting.Value, &ffmpeg); err != nil {
+			return fail(exitcode.Failure, "invalid voice transcription setting")
+		}
 	}
 	home := a.voiceHome()
 	check, _ := cmd.Flags().GetBool("check")
@@ -145,7 +157,7 @@ func (a *app) voiceInstall(cmd *cobra.Command, _ []string) error {
 			return voiceInstallFailure(err)
 		}
 	}
-	missing := daemon.VoiceEngineMissing(home, values.FFmpeg)
+	missing := daemon.VoiceEngineMissing(home, ffmpeg)
 	if missing == nil {
 		missing = []string{}
 	}
@@ -250,7 +262,7 @@ func (a *app) voiceBackfill(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if dry && !res.Enabled {
-		a.warn(cmd, "voice transcription is off: set [voice_transcription] enabled = true to queue these")
+		a.warn(cmd, "voice transcription is off: run tg settings set voice_transcription.enabled true and restart the Daemon to queue these")
 	}
 	return a.success(cmd, res)
 }

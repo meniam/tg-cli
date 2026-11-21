@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -19,11 +20,12 @@ func TestVoiceTranscriptionDefaults(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := VoiceTranscriptionValues{
-				FFmpeg: "ffmpeg", MaxVoiceMB: 30, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120,
-				DailyDownloadMB: 2000, DailyFiles: 200, Pause: 3 * time.Second, Threads: 4,
+				Enabled: true,
+				FFmpeg:  "ffmpeg", MaxVoiceMB: 30, MaxVideoNoteMB: 50, MaxVideoMB: 500, MaxVideoMinutes: 120,
+				DailyDownloadMB: 5000, DailyFiles: 500, Pause: 3 * time.Second, Threads: 4,
 			}
 			if values != want {
-				t.Fatalf("values = %+v, want %+v (disabled)", values, want)
+				t.Fatalf("values = %+v, want %+v (enabled)", values, want)
 			}
 		})
 	}
@@ -45,17 +47,21 @@ threads = 16
 	if err != nil {
 		t.Fatal(err)
 	}
-	values, err := cfg.VoiceTranscription.Resolve()
+	values, err := cfg.Legacy.SettingsForProfile("default")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := VoiceTranscriptionValues{
-		Enabled: true, FFmpeg: "/opt/homebrew/bin/ffmpeg", MaxVoiceMB: 10, MaxVideoNoteMB: 20, MaxVideoMB: 1000, MaxVideoMinutes: 60,
-		DailyDownloadMB: 500, DailyFiles: 50, Pause: 0, Threads: 16,
+	want := map[string]any{
+		"enabled": true, "ffmpeg": "/opt/homebrew/bin/ffmpeg", "max_voice_mb": 10, "max_video_note_mb": 20, "max_video_mb": 1000, "max_video_minutes": 60,
+		"daily_download_mb": 500, "daily_files": 50, "pause": "0s", "threads": 16,
 	}
-	if values != want {
-		t.Fatalf("values = %+v, want %+v", values, want)
+	for key, expected := range want {
+		raw, _ := json.Marshal(expected)
+		if string(values["voice_transcription."+key]) != string(raw) {
+			t.Errorf("%s = %s, want %s", key, values["voice_transcription."+key], raw)
+		}
 	}
+
 }
 
 func TestVoiceTranscriptionAcceptsTheBounds(t *testing.T) {

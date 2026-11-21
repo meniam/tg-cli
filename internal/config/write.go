@@ -318,3 +318,32 @@ func hasProfileKey(data []byte, profile, key string) bool {
 	}
 	return false
 }
+
+// LegacyProfileClient reads the old profile key and reports whether it was set.
+func LegacyProfileClient(path, name string) (string, bool, error) {
+	if !validProfileName(name) {
+		return "", false, invalid("invalid profile name")
+	}
+	var value string
+	var found bool
+	err := withConfigLock(path, func() error {
+		data, err := os.ReadFile(path)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read config: %w", err)
+		}
+		found = hasProfileKey(data, name, "client")
+		if !found {
+			return nil
+		}
+		cfg, err := Load(path)
+		if err != nil {
+			return err
+		}
+		value = cfg.Profiles[name].Client
+		return nil
+	})
+	return value, found, err
+}

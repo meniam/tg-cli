@@ -98,3 +98,15 @@ func TestAudit01_ClosedAndDownloadRoots(t *testing.T) {
 		t.Fatalf("denied policy keeps download roots: %+v %v", bad, err)
 	}
 }
+
+func TestAccessLoaderDanglingSymlinkDenies(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "access.json")
+	if err := os.Symlink(filepath.Join(dir, "missing"), path); err != nil {
+		t.Fatal(err)
+	}
+	p, err := Open(path).Policy()
+	if err == nil || !p.Closed() || p.Allowed(42) {
+		t.Fatalf("policy = %+v, error = %v", p, err)
+	}
+}

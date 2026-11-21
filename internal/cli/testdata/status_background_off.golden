@@ -2,16 +2,19 @@ TG STATUS · default
 Telegram online · signed in as @name · PID 80307 · up 1m 30s
 
 VECTOR INDEX     Off
+  Enable         tg settings set semantic_search.enabled true · restart_required
   Settings       bge-m3 via Ollama · batch 16 · every 10m
                  Minimum similarity 0.50
 
 TRANSCRIPTION    Off
+  Enable         tg settings set voice_transcription.enabled true · restart_required
   Limits         Voice 30 MiB · video note 50 MiB · video 500 MiB / 120 min
   Settings       4 threads · 3s between downloads
 
 HISTORY          0 / 1 chats loaded to the first message
   Coverage       People 0/1 · folders 0/0 · other 0/0
   Schedule       Off · window 08:00–20:00
+  Enable         tg settings set background_sync.enabled true · restart_required
   Settings       40m–3h between runs · 2s–8s between pages
   Jobs           History sync idle · chat details idle
 

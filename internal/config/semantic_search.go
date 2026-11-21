@@ -14,8 +14,7 @@ import (
 // SemanticSearch holds the settings of the local semantic index. The values are
 // kept as the owner wrote them; Resolve checks and converts them.
 type SemanticSearch struct {
-	// Enabled turns the indexer on. Off by default: the daemon then makes no
-	// request to Ollama and creates no vectors.db.
+	// Enabled turns the indexer on by default.
 	Enabled bool `toml:"enabled"`
 	// OllamaURL is the address of the local Ollama service.
 	OllamaURL string `toml:"ollama_url"`
@@ -52,7 +51,7 @@ const (
 )
 
 func defaultSemanticSearch() SemanticSearch {
-	return SemanticSearch{OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: "10m", MinSimilarity: DefaultSemanticMinSimilarity}
+	return SemanticSearch{Enabled: true, OllamaURL: "http://127.0.0.1:11434", Model: "bge-m3", Batch: 16, Interval: "10m", MinSimilarity: DefaultSemanticMinSimilarity}
 }
 
 // DefaultSemanticMinSimilarity is the threshold when the owner sets none. The

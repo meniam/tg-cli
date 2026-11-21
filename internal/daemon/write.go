@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"tg-cli/internal/access"
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
 )
@@ -70,8 +71,17 @@ func validWriteIDs(ids []int) error {
 	return nil
 }
 
-// writeReference checks visibility before permission to write. Numeric IDs need
-// no Telegram lookup, while other references use the same resolution as reads.
+// checkNumericPeer makes a missing numeric peer indistinguishable from a closed one.
+func (d *daemon) checkNumericPeer(ctx context.Context, ref chatref.Ref) error {
+	_, err := d.telegram(ctx).Resolve(ctx, ref)
+	var rpcErr *rpc.Error
+	if errors.As(err, &rpcErr) && rpcErr.Code == rpc.CodeNotFound {
+		return rpc.ErrUnknownChatID()
+	}
+	return err
+}
+
+// writeReference checks visibility before permission to write.
 func (d *daemon) writeReference(ctx context.Context, value string, writing bool) (chatref.Ref, int64, error) {
 	ref, err := parseChatNoInvite(value)
 	if err != nil {
@@ -101,9 +111,41 @@ func (d *daemon) writeReference(ctx context.Context, value string, writing bool)
 		return ref, 0, rpc.ErrChatNotFound()
 	}
 	if writing && !policy.WriteAllowed(id) {
+		if ref.Kind == chatref.ID {
+			if err := d.checkNumericPeer(ctx, ref); err != nil {
+				return ref, 0, err
+			}
+		}
 		return ref, 0, rpc.ErrWriteDisabled()
 	}
 	return ref, id, nil
+}
+
+// lockChatWrite keeps revocations ordered with the Telegram write.
+func (d *daemon) lockChatWrite(id int64, readIDs ...int64) (func(), error) {
+	policy := d.policy()
+	d.accessMu.RLock()
+	if d.accessSnapshot != nil {
+		policy = *d.accessSnapshot
+	}
+	if d.legacyAccessPresent() || d.legacyConfigPresent() {
+		policy = access.Denied()
+	}
+	if !policy.Allowed(id) {
+		d.accessMu.RUnlock()
+		return nil, rpc.ErrChatNotFound()
+	}
+	for _, readID := range readIDs {
+		if !policy.Allowed(readID) {
+			d.accessMu.RUnlock()
+			return nil, rpc.ErrChatNotFound()
+		}
+	}
+	if !policy.WriteAllowed(id) {
+		d.accessMu.RUnlock()
+		return nil, rpc.ErrWriteDisabled()
+	}
+	return d.accessMu.RUnlock, nil
 }
 
 func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -154,6 +196,11 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockChatWrite(id)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var replay rpc.SendResult
 		if err := json.Unmarshal(saved, &replay); err != nil {
 			return nil, err
@@ -194,7 +241,12 @@ func (d *daemon) messageSend(ctx context.Context, raw json.RawMessage) (any, err
 		}
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(id)
+	if err != nil {
+		return nil, err
+	}
 	res, err := d.telegram(ctx).Send(ctx, ref, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +295,12 @@ func (d *daemon) messageEdit(ctx context.Context, raw json.RawMessage) (any, err
 		}
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(id)
+	if err != nil {
+		return nil, err
+	}
 	res, err := d.telegram(ctx).Edit(ctx, ref, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}
@@ -305,9 +362,14 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 	if err := validWriteIDs(p.IDs); err != nil {
 		return nil, err
 	}
-	from, _, err := d.writeReference(ctx, p.From, false)
+	from, fromID, err := d.writeReference(ctx, p.From, false)
 	if err != nil {
 		return nil, err
+	}
+	if from.Kind == chatref.ID && d.policy().Enabled() {
+		if err := d.checkNumericPeer(ctx, from); err != nil {
+			return nil, err
+		}
 	}
 	to, id, err := d.writeReference(ctx, p.To, true)
 	if err != nil {
@@ -321,6 +383,11 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockChatWrite(id, fromID)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var replay rpc.ForwardResult
 		if err := json.Unmarshal(saved, &replay); err != nil {
 			return nil, err
@@ -335,7 +402,12 @@ func (d *daemon) messageForward(ctx context.Context, raw json.RawMessage) (any, 
 		}
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(id, fromID)
+	if err != nil {
+		return nil, err
+	}
 	res, err := d.telegram(ctx).Forward(ctx, from, to, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}
@@ -445,6 +517,11 @@ func (d *daemon) messagePoll(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	defer session.unlock()
 	if saved != nil {
+		releaseAccess, err := d.lockChatWrite(id)
+		if err != nil {
+			return nil, err
+		}
+		defer releaseAccess()
 		var replay rpc.SendResult
 		if err := json.Unmarshal(saved, &replay); err != nil {
 			return nil, err
@@ -459,7 +536,12 @@ func (d *daemon) messagePoll(ctx context.Context, raw json.RawMessage) (any, err
 		}
 		return result, nil
 	}
+	releaseAccess, err := d.lockChatWrite(id)
+	if err != nil {
+		return nil, err
+	}
 	res, err := d.telegram(ctx).SendPoll(ctx, ref, p)
+	releaseAccess()
 	if err != nil {
 		return nil, err
 	}

@@ -223,7 +223,7 @@ func (a *app) writeCall(cmd *cobra.Command, method string, p, result any) error 
 	}
 	if err := a.callOne(cmd, method, p, result); err != nil {
 		if ce, ok := err.(*cmdError); ok && ce.exit == exitcode.WriteDisabled {
-			a.warn(cmd, "add the chat to the write list in this profile's %s", a.config.Files.Access)
+			a.warn(cmd, "ask the owner to add the chat to access.write")
 		}
 		return err
 	}

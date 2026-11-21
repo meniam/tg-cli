@@ -91,6 +91,9 @@ func renderDashboard(d rpc.Dashboard, now time.Time) string {
 	index := d.SemanticSearch
 	coverage := dashboardHasCoverage(index, d.Settings == nil)
 	section("VECTOR INDEX", dashboardSemantic(index, coverage))
+	if !index.Enabled || index.State == rpc.SemanticIndexDisabled {
+		row("Enable", "tg settings set semantic_search.enabled true · restart_required")
+	}
 	if coverage {
 		label := "Coverage"
 		if !dashboardIndexHealthy(index.State) {
@@ -128,6 +131,9 @@ func renderDashboard(d rpc.Dashboard, now time.Time) string {
 		engine = plainText(d.Settings.Voice.Engine)
 	}
 	section("TRANSCRIPTION", dashboardVoice(voice, engine, now))
+	if !voice.Enabled {
+		row("Enable", "tg settings set voice_transcription.enabled true · restart_required")
+	}
 	if voice.State != rpc.VoiceStateUnavailable && (voice.Enabled || voice.DailyFiles > 0) {
 		q := voice.Queue
 		row("Queue", dashboardNumbers.Sprintf("%d waiting · %d running", q.Queued, q.Running))
@@ -163,6 +169,9 @@ func renderDashboard(d rpc.Dashboard, now time.Time) string {
 	row("Coverage", dashboardNumbers.Sprintf("People %d/%d · folders %d/%d · other %d/%d",
 		h.People.Complete, h.People.Total, h.Folders.Complete, h.Folders.Total, h.Others.Complete, h.Others.Total))
 	row("Schedule", dashboardBackground(d.Background, now))
+	if !d.Background.Enabled || d.Background.State == rpc.BackgroundSyncDisabled {
+		row("Enable", "tg settings set background_sync.enabled true · restart_required")
+	}
 	if d.Settings != nil {
 		cfg := d.Settings.Background
 		row("Settings", fmt.Sprintf("%s–%s between runs · %s–%s between pages",

@@ -21,8 +21,11 @@ func TestMigrationAutomaticBeforeSessionImport(t *testing.T) {
 	if result.code != exitcode.Usage {
 		t.Fatalf("exit = %d", result.code)
 	}
-	if got := e.savedProfile("default").Client; got != "desktop" {
-		t.Fatalf("client = %q", got)
+	if _, err := os.Stat(filepath.Join(dir, "client")); err != nil {
+		t.Fatalf("invalid import changed legacy file: %v", err)
+	}
+	if got := string(e.setting("profile.client")); got != `"desktop"` {
+		t.Fatalf("client = %s", got)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "client")); !os.IsNotExist(err) {
 		t.Fatalf("legacy client remains: %v", err)

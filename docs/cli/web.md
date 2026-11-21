@@ -30,10 +30,11 @@ By default the server looks for a free port from 1313 to 1412 on
 `127.0.0.1`. An explicit port must be free. An explicit non-loopback address
 exposes the interface over plaintext HTTP and prints a warning.
 
-The `[web]` keys `listen` and `open` have environment overrides
+The profile settings `web.listen` and `web.open` have environment overrides
 `TG_CLI_WEB_LISTEN` and `TG_CLI_WEB_OPEN`. Command-line flags take precedence.
-The daemon reads `cache_bytes` (default 33554432) and `cache_ttl` (default
-`168h`) from the same section on startup.
+Each viewer reads these settings at launch. Set them with `tg settings set`.
+The daemon reads `web.cache_bytes` (default 33554432) and `web.cache_ttl`
+(default `168h`) from the profile database on startup.
 
 The browser shows only the history the daemon has saved. Use
 [`tg chat sync`](chats.md#tg-chat-sync) to load more history. Folder rules are applied to the local snapshot. If the folder list has not
