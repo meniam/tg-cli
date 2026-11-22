@@ -527,6 +527,23 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 				m.finishDepth(task)
 				return
 			}
+		} else if limit := m.d.historyLimitFor(ctx, task.ChatID); limit.Messages > 0 || limit.Since > 0 {
+			// A full load: a limit of the settings ends it like the first message does.
+			count, oldest, err := m.d.store.MessageBounds(ctx, task.ChatID)
+			if err != nil {
+				fail(err)
+				return
+			}
+			if limit.reached(count, oldest) {
+				progress, err := m.d.store.MarkHistoryLimitReached(ctx, task.ChatID)
+				if err != nil {
+					fail(err)
+					return
+				}
+				m.recordProgress(task, progress)
+				m.finish(task, rpc.HistorySyncDone, 0, "")
+				return
+			}
 		}
 		offset = page.RawNextOffsetID
 		timer := m.clock.NewTimer(task.pause())
@@ -673,4 +690,16 @@ func (d *daemon) idleHistorySyncJob(ctx context.Context, chat string) (rpc.Histo
 		OldestID: progress.OldestID, NewestID: progress.NewestID, Complete: progress.Complete,
 		FirstMessageDate: progress.FirstMessageDate,
 	}, nil
+}
+
+// recordProgress copies the saved progress of a chat into the job without
+// counting a page: a limit ended the load, no page was read.
+func (m *historySyncManager) recordProgress(task *historySyncTask, progress store.SyncProgress) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	task.OldestID = progress.OldestID
+	task.NewestID = progress.NewestID
+	task.Complete = progress.Complete
+	task.FirstMessageDate = progress.FirstMessageDate
+	task.UpdatedAt = m.now()
 }

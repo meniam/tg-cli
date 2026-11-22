@@ -26,7 +26,7 @@ Details and reasons: [references/safety.md](references/safety.md).
 5. **Only the human enters the login code and the 2FA password.** Suggest `! tg auth login`. Do not print or log keys, hashes, session strings or phone numbers.
 6. **One client per session.** Do not start a second process on the session and do not touch the profile files.
 7. **After a failed write, do not retry blindly.** Read the history first. A retry is safe only with `--idempotency-key`. After `flood_wait` (code 6), do not loop retries.
-8. **Background jobs and bulk operations only on request.** `chat sync` (`chat sync queue` queues many chats at once, so show its `--dry-run` first), `chat full` and exports grow the database and the request count, `search index start` loads the machine with embeddings, and `voice backfill` and `chat voice on --backfill` queue downloads and local recognition of saved voice messages. Do not run mass mailings or bulk member collection (see the section "What not to do" in `safety.md`).
+8. **Background jobs and bulk operations only on request.** `chat sync` (`chat sync queue` queues many chats at once, so show its `--dry-run` first), `chat full` and exports grow the database and the request count, `search index start` loads the machine with embeddings, and `voice backfill` and `chat voice on --backfill` queue downloads and local recognition of saved voice messages, and `chat limit set` makes the Daemon delete the oldest saved messages of a chat for good: set a limit only when the owner asked for it, and never add `--yes` without that request. Do not run mass mailings or bulk member collection (see the section "What not to do" in `safety.md`).
 
 ## First run
 

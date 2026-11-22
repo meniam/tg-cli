@@ -571,7 +571,7 @@ With `--dry-run` the answer adds `"dry_run":true`.
 
 ## Loading a whole chat
 
-`message history` stores the pages you read. To pull a whole chat into the local database, ask the Daemon to load it in the background. It loads one chat at a time and keeps the others in a queue. A page is 100 messages going back from the `oldest_id` saved by earlier loads (from the newest message on the first run), with a pause of 2 seconds between pages. A page and its progress (`oldest_id`, `newest_id`, `complete`) are written in one transaction, so an interrupted load never moves `oldest_id` past a message that was not saved. Only an empty answer from Telegram marks the chat `complete`.
+`message history` stores the pages you read. To pull a whole chat into the local database, ask the Daemon to load it in the background. It loads one chat at a time and keeps the others in a queue. A page is 100 messages going back from the `oldest_id` saved by earlier loads (from the newest message on the first run), with a pause of 2 seconds between pages. A page and its progress (`oldest_id`, `newest_id`, `complete`) are written in one transaction, so an interrupted load never moves `oldest_id` past a message that was not saved. An empty answer from Telegram marks the chat `complete`; so does a history limit of the settings (see below).
 
 A job has `chat_id`, `state`, `pages` and `loaded` (messages saved by this run), `oldest_id`, `newest_id`, `complete`, `wait_seconds`, `error_code`, `error`, `started_at` and `updated_at`. `oldest_id`, `newest_id` and `complete` describe what the database holds for the chat, not just this run. `state` is one of:
 
@@ -581,11 +581,13 @@ A job has `chat_id`, `state`, `pages` and `loaded` (messages saved by this run),
 | `queued` | waits until the Daemon is free |
 | `running` | loads pages |
 | `waiting_flood` | Telegram asked the account to wait; `wait_seconds` is what is left, and the load goes on by itself |
-| `done` | an empty Telegram answer arrived, `complete` is `true` |
+| `done` | an empty Telegram answer arrived, or the history limit of the settings was met: `complete` is `true`; a load with `--messages` or `--since` that met its own limit is `done` with `complete` false |
 | `failed` | stopped by an error; `error_code` is the JSON-RPC code of the cause (`-32006` the chat was closed during the load, `-32002` a Telegram error, `-32603` an internal error such as a page that could not be saved, `-32001` a lost login) and `error` is a short text |
 | `cancelled` | stopped by `chat sync cancel` |
 
 A failed job is still a successful `status` call (exit code 0): read `state`. A load is finished when `state` is `done` and `complete` is `true`; `idle` with `complete: true` after a Daemon restart also means the chat is loaded to its beginning. A repeated `start` on a loaded chat does not fetch messages newer than `newest_id`.
+
+A full load, the scheduled one included, also ends when it meets a history limit: the oldest saved message is not newer than `history_limit.since` (default `2022-02-02`) or the chat holds `history_limit.messages` saved messages (default `200000`). The chat is then `complete` and `done`, and later loads skip it, but `first_message_date` stays null, because the oldest saved message is not the first one of the chat. The load stops at the end of the page that met the limit. The keys are in [overview.md](overview.md#request-throttle-and-flood_wait); an empty `since` and `messages` 0 turn the limits off. A load with `--messages` or `--since` ignores them.
 
 Rules that hold for all three commands:
 
@@ -925,6 +927,108 @@ tg chat state --local --limit 20
 ```
 
 The result contains `states` and the Unix timestamp `synced_at`, or null when no snapshot exists. Each state has read markers, unread counts, pin and archive flags, notification settings and its own timestamp. An absent optional notification value is null. Exit codes: 0; 2 invalid arguments; 3 no Daemon; 4 no login for a Telegram read; 6 flood wait; 7 unknown or closed chat.
+## Capping the saved messages of a chat
+
+A chat has no message limit by default. With a limit the Daemon keeps the local database from growing past it: once the chat holds more saved messages than the limit, a cleanup deletes the oldest ones (by date, then id, together with their versions, transcriptions and finished voice jobs; notes stay) and leaves 95% of the limit, so it does not run after every new message. The cleanup runs once when the Daemon starts, about once an hour, and right after a limit is set. Closed chats (access lists) are skipped. The chat is then marked `complete`, so a history load does not fetch the deleted messages again, and for a chat with a limit the full history load stops at the limit instead of the global `history_limit.messages` (see [overview.md](overview.md#request-throttle-and-flood_wait)). Messages already deleted do not come back, even when the limit is removed: the chat stays `complete`. Telegram is never changed. The semantic index drops the vectors of deleted messages on its next run.
+
+### tg chat limit set
+
+Sets the limit of a chat. The limit is a whole number from 100 to 100000000. When the chat already holds more messages than the limit, the cleanup would delete saved messages for good: the command then exits with code 2, reports `saved` and `will_delete` in the error data, and changes nothing until it is repeated with `--yes`. A chat that holds no more than the limit needs no `--yes`.
+
+```text
+tg chat limit set <chat> <messages> [--yes]
+```
+
+<!-- schema:flags tg chat limit set -->
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--yes` | bool | `false` | confirm the deletion when the chat holds more messages than the limit |
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon. The chat is known to the local database (a numeric id or a `@username` it holds; put `--` before a negative id) and is open in the access lists. No Telegram connection is needed.
+
+**Example.**
+
+```sh
+tg chat limit set @team 50000 --yes
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"messages":50000,"keep":47500,"saved":61000,"will_delete":13500}}
+```
+
+**Answer fields** (`data`): `chat_id` integer; `messages` integer (the limit); `keep` integer (what a cleanup leaves, 95% of the limit); `saved` integer (message rows the chat holds now, messages marked deleted included); `will_delete` integer (what the cleanup removes right after the command; 0 while `saved` does not exceed `messages`).
+
+**Exit codes.** 0; 2 a limit outside 100 to 100000000, no chat, a chat reference that cannot be resolved locally, or a cleanup that would delete messages and has no `--yes`; 3 no Daemon; 7 a closed or unknown chat.
+
+### tg chat limit off
+
+Removes the limit of a chat. Messages the cleanup already deleted do not come back, and the chat stays `complete`.
+
+```text
+tg chat limit off <chat>
+```
+
+<!-- schema:flags tg chat limit off -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
+
+**Preconditions.** A running Daemon.
+
+**Example.**
+
+```sh
+tg chat limit off @team
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"chat_id":-1001234567890,"removed":true}}
+```
+
+**Answer fields** (`data`): `chat_id` integer; `removed` boolean (false when the chat had no limit).
+
+**Exit codes.** 0; 2 no chat or a chat reference that cannot be resolved locally; 3 no Daemon; 7 a closed or unknown chat.
+
+### tg chat limit list
+
+Lists the chats with a limit that the access lists leave open, ordered by chat id. It reads the local database and calls no Telegram method.
+
+```text
+tg chat limit list
+```
+
+<!-- schema:flags tg chat limit list -->
+No command flags.
+<!-- /schema:flags -->
+
+**Safety class:** `read`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
+
+**Preconditions.** A running Daemon.
+
+**Example.**
+
+```sh
+tg chat limit list
+```
+
+**Answer.**
+
+```json
+{"ok":true,"data":{"chats":[{"chat_id":-1001234567890,"title":"Release team","username":"release_team","messages":50000,"saved":47500}]}}
+```
+
+**Answer fields** (`data`): `chats` array; `chats.chat_id` integer; `chats.title` string (optional, `untrusted`); `chats.username` string (optional, `untrusted`); `chats.messages` integer (the limit); `chats.saved` integer (message rows saved now).
+
+**Exit codes.** 0; 3 no Daemon.
+
 ## Chat administration
 
 These commands require a running Daemon and a logged-in account. The owner must grant `access.write` for join and leave, `access.admin` for moderation and editing, and `access.create` for creation. See [access.md](access.md). Closed chats return not found. Use `--dry-run` to check an action without changing Telegram. The Daemon reads administrator rights for moderation previews. Leave, kick and ban require `--yes` unless `--dry-run` is used. Moderation intent is recorded before the Telegram request.

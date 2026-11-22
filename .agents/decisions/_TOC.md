@@ -74,3 +74,5 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-21 — [Панель Access показывает правила, запись защищает решение о парольной фразе](20261121_0146_web_access_panel_reads_current_policy.md)
 - 2026-11-21 — [HTTP-шлюз tg web разрешает только чтение](20261121_0316_web_gateway_reads_only.md)
 - 2026-11-21 — [Фоновая загрузка, векторный поиск и расшифровка голоса включены по умолчанию, пресет desktop выбран по умолчанию](20261121_1436_enabled_features_and_desktop_are_defaults.md)
+- 2026-11-22 — [Полная загрузка истории останавливается на дате 2022-02-02 или на 200 000 сообщений чата](20261122_1410_full_history_load_stops_at_a_date_or_a_message_count.md)
+- 2026-11-22 — [Лимит сообщений чата: подчистка удаляет самые старые и оставляет 95% лимита](20261122_1545_chat_message_limit_trims_the_oldest_messages_to_95_percent.md)

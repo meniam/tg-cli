@@ -195,3 +195,25 @@ func TestSyncStateReadsDuringWrite(t *testing.T) {
 		t.Fatalf("read during write: state=%+v found=%v err=%v", state, found, err)
 	}
 }
+
+func TestMarkHistoryLimitReachedCompletesWithoutFirstMessageDate(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	setClock(db, 200)
+	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(9, "a"), historyMessage(8, "b")}, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	setClock(db, 300)
+	state, err := db.MarkHistoryLimitReached(ctx, 42)
+	if err != nil || !state.Complete || state.FirstMessageDate != nil || state.OldestID == nil || *state.OldestID != 8 || state.SyncedAt == nil || *state.SyncedAt != 300 {
+		t.Fatalf("state: %+v err=%v", state, err)
+	}
+	if _, err := db.MarkHistoryLimitReached(ctx, 0); err == nil {
+		t.Fatal("zero chat id accepted")
+	}
+	// A chat without a row gets one.
+	other, err := db.MarkHistoryLimitReached(ctx, 43)
+	if err != nil || !other.Complete || other.OldestID != nil {
+		t.Fatalf("new row: %+v err=%v", other, err)
+	}
+}

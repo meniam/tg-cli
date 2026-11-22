@@ -1,8 +1,10 @@
 package daemon
 
 import (
+	"encoding/json"
 	"time"
 
+	"tg-cli/internal/config"
 	"tg-cli/internal/rpc"
 )
 
@@ -62,4 +64,49 @@ func parseHistoryDepth(messages int, since string, now time.Time) (historyDepth,
 		depth.Since = t.Unix()
 	}
 	return depth, nil
+}
+
+// historyLimit is the pair of settings that ends a full history load: the load
+// of a chat stops, and the chat counts as completely loaded, once the oldest
+// saved message is not newer than Since or the chat holds Messages saved
+// messages. A zero field is off. It does not apply to a depth-limited load.
+type historyLimit struct {
+	Messages int
+	Since    int64
+}
+
+// reached reports whether count saved messages, the oldest of them dated at
+// oldest, meet either limit.
+func (l historyLimit) reached(count int, oldest int64) bool {
+	if l.Messages > 0 && count >= l.Messages {
+		return true
+	}
+	return l.Since > 0 && count > 0 && oldest <= l.Since
+}
+
+// historyLimit returns the limits in force. A value overridden or stored
+// through the settings wins over the default.
+func (d *daemon) historyLimit() historyLimit {
+	limit := historyLimit{Messages: config.DefaultHistoryLimitMessages}
+	if since, err := config.ParseHistoryLimitSince(config.DefaultHistoryLimitSince); err == nil {
+		limit.Since = since.Unix()
+	}
+	if value, ok := d.liveSetting("history_limit.messages"); ok {
+		var n int
+		if json.Unmarshal(value, &n) == nil {
+			limit.Messages = n
+		}
+	}
+	if value, ok := d.liveSetting("history_limit.since"); ok {
+		var text string
+		if json.Unmarshal(value, &text) == nil {
+			if since, err := config.ParseHistoryLimitSince(text); err == nil {
+				limit.Since = 0
+				if !since.IsZero() {
+					limit.Since = since.Unix()
+				}
+			}
+		}
+	}
+	return limit
 }

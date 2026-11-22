@@ -44,6 +44,8 @@ var settingSpecs = []settingSpec{
 	{"background_sync.interval_max", "duration", `"3h"`, "TG_CLI_BACKGROUND_SYNC_INTERVAL_MAX", "", "live", false, false},
 	{"background_sync.page_pause_min", "duration", `"2s"`, "TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MIN", "", "live", false, false},
 	{"background_sync.page_pause_max", "duration", `"8s"`, "TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MAX", "", "live", false, false},
+	{"history_limit.since", "date", `"2022-02-02"`, "TG_CLI_HISTORY_LIMIT_SINCE", "", "live", false, false},
+	{"history_limit.messages", "int", `200000`, "TG_CLI_HISTORY_LIMIT_MESSAGES", "", "live", false, false},
 	{"semantic_search.enabled", "bool", `true`, "TG_CLI_SEMANTIC_SEARCH_ENABLED", "", "restart", false, false},
 	{"semantic_search.ollama_url", "string", `"http://127.0.0.1:11434"`, "TG_CLI_SEMANTIC_SEARCH_OLLAMA_URL", "", "restart", false, false},
 	{"semantic_search.model", "string", `"bge-m3"`, "TG_CLI_SEMANTIC_SEARCH_MODEL", "", "restart", false, false},
@@ -104,7 +106,7 @@ func ParseSettingString(name, value string) (json.RawMessage, error) {
 	}
 	var raw []byte
 	switch key.Type {
-	case "string", "duration", "clock":
+	case "string", "duration", "clock", "date":
 		raw, _ = json.Marshal(value)
 	case "ids", "paths":
 		if strings.HasPrefix(strings.TrimSpace(value), "[") {
@@ -151,7 +153,7 @@ func ParseSettingJSON(name string, raw json.RawMessage) (json.RawMessage, error)
 			return fail()
 		}
 		value = v
-	case "string", "clock", "duration":
+	case "string", "clock", "duration", "date":
 		var v string
 		if json.Unmarshal(raw, &v) != nil {
 			return fail()
@@ -234,6 +236,11 @@ func validateSettingValue(name string, value any, raw []byte) error {
 			return fmt.Errorf("must be at least %s", MinBackgroundPagePause)
 		}
 		return err
+	case "history_limit.since":
+		_, err := ParseHistoryLimitSince(value.(string))
+		return err
+	case "history_limit.messages":
+		return CheckHistoryLimitMessages(value.(int))
 	case "semantic_search.ollama_url":
 		return CheckOllamaURL(value.(string))
 	case "semantic_search.model":
