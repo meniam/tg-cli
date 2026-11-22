@@ -48,6 +48,7 @@ tg message unread @forum_chat --topic 7
 
 - `chat unread` and `message unread` are not verified on a live account (`FEATURES.md`, 4.6, 10.5): compare the result with what the user sees.
 - First show the user a summary (chat, unread count), and only then read the content of the chosen chats.
+- Read the chosen chats one at a time, one page each. Do not loop `message unread` over every chat with unread messages: for a long backlog of one chat queue a depth-limited load ([sync-recent-history](sync-recent-history.md)) and read it locally ([channel-digest](channel-digest.md)).
 
 ## Verify
 

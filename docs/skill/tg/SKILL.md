@@ -5,7 +5,7 @@ description: >
   summarize, export, transcribe voice messages or watch chats, send messages or files, or manage tg login
   or the daemon, even if they don't say CLI or MTProto. Common phrases include «телеграм», «тг», «что пишут
   в канале», «найди в переписке», «выгрузи переписку», «скинь в телегу», «расшифруй голосовое» and «что
-  сказано в кружке», «синхронизируй последний месяц», «подгрузи последние 100 сообщений», «синхронизируй чаты», «загрузи историю чатов», «поставь чаты в очередь», «ограничь чат N сообщениями» and «автозапуск демона». Not for Bot API bots or the Telegram Desktop UI.
+  сказано в кружке», «синхронизируй последний месяц», «подгрузи последние 100 сообщений», «синхронизируй все чаты за месяц», «синхронизируй 20 человек, с кем я общаюсь чаще всего», «синхронизируй чаты», «загрузи историю чатов», «поставь чаты в очередь», «о чём мы говорили с Иваном», «напиши Ивану и пообщайся», «узнай у Ивана», «спроси у бота», «ограничь чат N сообщениями» and «автозапуск демона». Not for Bot API bots or the Telegram Desktop UI.
 ---
 
 # tg: Telegram from the terminal
@@ -27,7 +27,14 @@ Details and reasons: [references/safety.md](references/safety.md).
 6. **One client per session.** Do not start a second process on the session and do not touch the profile files.
 7. **After a failed write, do not retry blindly.** Read the history first. A retry is safe only with `--idempotency-key`. After `flood_wait` (code 6), do not loop retries.
 8. **Background jobs and bulk operations only on request.** `chat sync` (`chat sync queue` queues many chats at once, so show its `--dry-run` first), `chat full` and exports grow the database and the request count, `search index start` loads the machine with embeddings, and `voice backfill` and `chat voice on --backfill` queue downloads and local recognition of saved voice messages, and `chat limit set` makes the Daemon delete the oldest saved messages of a chat for good: set a limit only when the owner asked for it, and never add `--yes` without that request. Do not run mass mailings or bulk member collection (see the section "What not to do" in `safety.md`).
-9. **History is loaded only through the Daemon queue.** Never write your own script, shell loop, `xargs` or Python for loading chats, and never page `message history` or `message search` to collect old messages. The Daemon loads one chat at a time with a pause between pages, through the account throttle; a script of yours has neither the single worker nor the pauses and ends in `FLOOD_WAIT`. Two or more chats go in one `tg chat sync queue`: the chats the user named as arguments (`tg chat sync queue @anna @boris --months 1`, up to 100, closed or unknown chats fail the call before anything is queued), or a filter for "all active chats" (`--type`, `--active-days`, `--unsynced`, `--max-chats`; not together with named chats). Add a depth flag unless the user wants the whole history, and run `--dry-run` first ([recipes/sync-active-chats.md](recipes/sync-active-chats.md)). `tg chat sync start <chat>` is for exactly one chat. Then watch the queue with `tg chat sync status` and a pause of tens of seconds. If a task looks like batch work, run `tg schema` and look for a native command before writing any script.
+9. **Queue first, then read locally. Never poll Telegram.** The Daemon throttles every request, but only its queues add the single worker and the pauses between pages. A script, a shell loop, `xargs` or Python of yours has neither and ends in `FLOOD_WAIT` (code 6). Pick the way by the size of the task:
+   - **One page of one chat** (at most 100 messages, a fresh question): `tg message history <chat> --limit N` directly.
+   - **More than one page, a period of a chat, or any search over old messages:** load it through the queue, then read from the database (`tg message export <chat> --local`, `tg search`, `tg message context --local`). One chat: `tg chat sync start <chat>` with a depth flag. Two or more chats: one `tg chat sync queue`, either the chats the user named (`tg chat sync queue @anna @boris --months 1`, up to 100; a closed or unknown chat fails the call before anything is queued) or a filter (`--type`, `--active-days`, `--unsynced`, `--max-chats`; not together with named chats). Add a depth flag unless the user wants the whole history, and run `--dry-run` first ([recipes/sync-active-chats.md](recipes/sync-active-chats.md)).
+   - **Never** page `message history` or `message search` with `--cursor` or `--offset` to collect old messages, and never loop a read over several chats.
+   - **Waiting is not polling.** Do not repeat `message history` or `chat sync status` in a `while` or `for` loop to wait for a reply or a load. A reply comes through one `tg message watch --max-events 1` under a deadline ([recipes/talk-to-contact.md](recipes/talk-to-contact.md)); the queue is checked with one `tg chat sync status` call per tens of seconds.
+   - Voice goes through its own queue (`message transcribe`, `voice backfill`), not through a loop of downloads.
+
+   If a task looks like batch work, run `tg schema` and look for a native command before writing any script.
 
 ## First run
 
@@ -111,8 +118,8 @@ A chat is given as `@username`, a numeric id (Bot API: a user is positive, a gro
 
 One scenario per file in [recipes/](recipes/): when to use, prepare, commands, notes, pitfalls, verify. Open only the recipe for your task. Template: [recipes/_template.md](recipes/_template.md). In recipes, `@release_team`, `@forum_chat`, `/path/to/...`, `<fresh-key>`, `<cursor>`, `<chat_id>` and `ARCHIVE_DIR` are placeholders: replace them with the real chat, path, key, cursor and directory before you run anything.
 
-- [find-chat](recipes/find-chat.md): turn a chat name into an id before any other work.
-- [channel-digest](recipes/channel-digest.md): a digest of a channel or chat for a period.
+- [find-chat](recipes/find-chat.md): turn a chat or a person name into an id before any other work: local lookup first, the dialog list last.
+- [channel-digest](recipes/channel-digest.md): a digest of a channel, a chat or a conversation with a person for a period; a long period is queued and read from the database.
 - [unread-triage](recipes/unread-triage.md): what unread messages have accumulated and where.
 - [search-across-chats](recipes/search-across-chats.md): search in one chat, in the local database and in Telegram's global search.
 - [load-full-history](recipes/load-full-history.md): load the whole chat history into the database and wait for the end.
@@ -125,6 +132,7 @@ One scenario per file in [recipes/](recipes/): when to use, prepare, commands, n
 - [send-report](recipes/send-report.md): send text from a script safely and without duplicates.
 - [send-media](recipes/send-media.md): send a file, photo or album.
 - [watch-chat](recipes/watch-chat.md): watch a chat and resume from a cursor.
+- [talk-to-contact](recipes/talk-to-contact.md): write to a person or a bot for the user, wait for the answer with `message watch` (no polling), keep the conversation within the agreed goal.
 - [forum-topics](recipes/forum-topics.md): forum topics and reading one topic.
 - [limit-chat-size](recipes/limit-chat-size.md): cap how many messages the database keeps for one chat; deletes the oldest ones, only on the owner request.
 - [transcribe-voice](recipes/transcribe-voice.md): the text of a voice message, a video note or a video with the local engine, and the state of the queue.

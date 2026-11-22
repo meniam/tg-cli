@@ -4,6 +4,8 @@
 
 `tg message watch` prints events as they arrive and works only through the Daemon. Safety class: "read".
 
+Use it to wait for an answer or a new message instead of a polling loop: repeating `message history` every few seconds is a request each time and ends in `FLOOD_WAIT`. Writing to someone and waiting for the reply: [recipes/talk-to-contact.md](../recipes/talk-to-contact.md).
+
 ```bash
 tg message watch                                        # all visible chats, jsonl
 tg message watch --chat @name --topic 7                 # one chat, one forum topic

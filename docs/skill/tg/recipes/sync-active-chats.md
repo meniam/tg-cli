@@ -1,9 +1,9 @@
 ---
 title: Queue the history load of several chats
-task: «синхронизируй эти чаты», «загрузи историю этих чатов», «синхронизируй чаты людей, с кем я общался», «подгрузи последние сообщения всех активных чатов», «поставь в очередь 50 чатов», «загрузи чаты за последние 60 дней»
+task: «синхронизируй эти чаты», «загрузи историю этих чатов», «синхронизируй все чаты за последний месяц», «синхронизируй 20 людей, с кем я общаюсь чаще всего», «синхронизируй чаты людей, с кем я общался», «подгрузи последние сообщения всех активных чатов», «поставь в очередь 50 чатов», «загрузи чаты за последние 60 дней»
 writes: true
 access: [none]
-commands: [chat sync queue, chat sync status, chat sync cancel, chat list, status]
+commands: [chat sync queue, chat sync status, chat sync cancel, chat list, chat overview, status]
 live_checked: no
 tags: [history, loading, batch, queue]
 ---
@@ -21,7 +21,8 @@ The Daemon is running and the login exists. This is a bulk operation: run it onl
 Choose how the chats are given. They exclude each other (exit code 2):
 
 - **Named chats:** the chats the user listed, as arguments, up to 100. A negative id goes after `--`.
-- **A filter:** `--type`, `--active-days`, `--unsynced`, `--max-chats`, for "all active people", "all unsynced groups".
+- **A filter:** `--type`, `--active-days`, `--unsynced`, `--max-chats`, for "all active people", "all unsynced groups", "all chats of the last month".
+- **A ranking you compute:** "the 20 people I write to most" has no filter of its own. Rank the people from the local database, show the list, then queue exactly those chats as named chats (below).
 
 Add a depth flag (`--messages`, `--days`, `--months`, `--since`) unless the user wants the whole history of each chat.
 
@@ -47,6 +48,26 @@ A filter instead of names, the same way (dry run first):
 tg chat sync queue --type user --active-days 60 --unsynced --messages 100 --dry-run
 tg chat sync queue --type user --active-days 60 --unsynced --messages 100
 ```
+
+All chats of the last month: a month of messages for every chat whose last message is not older than 30 days. Dry run first, it shows how many chats match:
+
+```bash
+tg chat sync queue --active-days 30 --months 1 --max-chats 500 --dry-run
+tg chat sync queue --active-days 30 --months 1 --max-chats 500
+```
+
+The call takes at most 500 chats. When the dry run shows 500 `would_queue`, run the same command again once the first batch is queued: chats with a job count as `skipped_active`, loaded ones as `skipped_loaded`, and the next ones are picked.
+
+The people the user writes to most. Rank them from the local database (no Telegram), show the user the list, and only then queue them:
+
+```bash
+tg chat overview --type user --limit 500 --fields chats.chat_id,chats.title,chats.my_messages,chats.history_complete \
+  | jq -r '.data.chats | sort_by(-.my_messages) | .[:20][] | "\(.chat_id)\t\(.my_messages)\t\(.history_complete)\t\(.title)"'
+tg chat sync queue <id1> <id2> <id3> --dry-run     # the 20 ids from the list; add --months 3 or another depth flag if the user wants less than everything
+tg chat sync queue <id1> <id2> <id3>
+```
+
+The `jq` line only ranks; the load itself still goes through the queue. `my_messages` counts the messages the user wrote that are saved in the database, so the ranking leans on what is loaded already: say so, and name the basis ("by messages you wrote, as saved"). If the user means the latest dialogs instead, use the filter `tg chat sync queue --type user --max-chats 20 --dry-run`. Chats that are loaded already come back as `skipped_loaded`: report "N of 20 were loaded already, M queued". Without a depth flag every chat loads to its first message (or to the history limit), which can be tens of thousands of messages for a frequent contact: tell the user the size before the real run.
 
 See which people the account lists and when each last wrote (`last_message_date`), with no load:
 

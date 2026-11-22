@@ -15,7 +15,7 @@ tg message get https://t.me/name/123   # a link instead of the <chat> <id> pair
 tg message translate <chat> <id>... --to en
 ```
 
-Paged reading: the `message history` response contains `next_cursor`. Pass it as `--cursor` and keep reading while a cursor arrives. In `--format jsonl` each item is on its own line, and the last line `{"next_cursor":...}` is present while pages remain. The Daemon saves all chats, people and messages you read to the local database by itself.
+Paged reading is for the question at hand: a page or two of one chat. A long period, old messages or several chats go through the queue and a local read ([history.md](history.md#deep-history-load)), not through a cursor loop. The `message history` response contains `next_cursor`. Pass it as `--cursor` and keep reading while a cursor arrives. In `--format jsonl` each item is on its own line, and the last line `{"next_cursor":...}` is present while pages remain. The Daemon saves all chats, people and messages you read to the local database by itself.
 
 Unread chats: `tg chat unread`, archive: `tg chat unread --archived`. Incoming messages after the marker: `tg message unread <chat>`; for a forum, pass `--topic ID` after `chat topics`. These commands do not mark messages as read. `chat unread` has no `--cursor`: it returns `scanned` (examined dialogs) and `complete`, and it stops at 1000 examined dialogs, so when `complete` is false report the list as partial. `message unread` continues a page through `--cursor`. `chat info` returns the settings, and `chat changes <chat>` shows the local earlier versions of a chat.
 
