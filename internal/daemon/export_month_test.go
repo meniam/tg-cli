@@ -298,3 +298,39 @@ func TestExportMonthChatCount(t *testing.T) {
 		}
 	}
 }
+
+// A chat that a history limit marked complete stopped inside its history: it
+// covers the start of a month only when a message older than the month is saved.
+func TestExportMonthLimitCompleteChatCoversTheMonthStartOnlyWithOlderMessages(t *testing.T) {
+	d, db, _, p := monthFixture(t)
+	ctx := context.Background()
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 11, 1, 0, 0, 0, 0, time.UTC).Unix(), Text: "first saved", Raw: []byte(`{}`)}}, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.MarkHistoryLimitReached(ctx, 42); err != nil {
+		t.Fatal(err)
+	}
+	export := func() rpc.ExportMonthFile {
+		t.Helper()
+		got, err := d.messageExportMonth(ctx, params(t, p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.(rpc.ExportMonthResult).Files[0]
+	}
+	// The oldest saved message is the first second of the month: nothing older is saved.
+	if file := export(); file.MonthStartCovered {
+		t.Fatalf("a limit-complete chat claimed the month start: %+v", file)
+	}
+	// Message 1, the oldest by id, now dates from before the month: the start is covered.
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 10, 31, 23, 59, 59, 0, time.UTC).Unix(), Text: "older", Raw: []byte(`{}`)}}, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	p.Output = filepath.Join(p.Output, "second")
+	if err := os.Mkdir(p.Output, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if file := export(); !file.MonthStartCovered {
+		t.Fatalf("an older saved message must cover the month start: %+v", file)
+	}
+}

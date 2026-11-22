@@ -217,3 +217,16 @@ func TestMarkHistoryLimitReachedCompletesWithoutFirstMessageDate(t *testing.T) {
 		t.Fatalf("new row: %+v err=%v", other, err)
 	}
 }
+
+func TestMarkHistoryLimitReachedTakesBoundsFromSavedMessagesForANewRow(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	// Messages that live events saved: no sync_state row yet.
+	if err := db.UpsertMessages(ctx, []Message{historyMessage(7, "a"), historyMessage(9, "b")}); err != nil {
+		t.Fatal(err)
+	}
+	state, err := db.MarkHistoryLimitReached(ctx, 42)
+	if err != nil || !state.Complete || state.OldestID == nil || *state.OldestID != 7 || state.NewestID == nil || *state.NewestID != 9 || state.FirstMessageDate != nil {
+		t.Fatalf("state: %+v err=%v", state, err)
+	}
+}

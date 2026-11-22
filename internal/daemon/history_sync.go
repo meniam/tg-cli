@@ -703,3 +703,21 @@ func (m *historySyncManager) recordProgress(task *historySyncTask, progress stor
 	task.FirstMessageDate = progress.FirstMessageDate
 	task.UpdatedAt = m.now()
 }
+
+// startAuto queues a depth-limited load of a chat behind whatever is queued. It
+// cancels nothing and never waits for an idle manager: the load of a new chat is
+// short, and it must not push out a running load. A chat that has a job already
+// is left alone. The job is a background one, so a manual start of the same
+// chat replaces it. It reports whether it queued the job.
+func (m *historySyncManager) startAuto(chatID int64, ref chatref.Ref, pause func() time.Duration, depth historyDepth) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ctx.Err() != nil {
+		return false
+	}
+	if existing := m.jobs[chatID]; existing != nil && existing.active() {
+		return false
+	}
+	m.enqueueLocked(chatID, ref, store.SyncProgress{}, rpc.HistorySyncBackground, pause, depth, false)
+	return true
+}

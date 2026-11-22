@@ -10,6 +10,7 @@ tg --profile <name> daemon status  # profile, connection, login, active requests
 tg status                          # text dashboard: vectors, transcription, history, Telegram, storage, settings
 tg daemon logs --tail 50           # log of Daemon requests and errors for debugging (--follow tails it)
 tg auth login                      # the human runs this (! tg auth login): number, code, 2FA (or --qr)
+tg auth resend                     # ask Telegram to send the login code another way (SMS); only when the human asks
 tg auth status                     # whether the account is logged in and who it is
 ```
 

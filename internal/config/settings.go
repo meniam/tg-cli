@@ -44,6 +44,7 @@ var settingSpecs = []settingSpec{
 	{"background_sync.interval_max", "duration", `"3h"`, "TG_CLI_BACKGROUND_SYNC_INTERVAL_MAX", "", "live", false, false},
 	{"background_sync.page_pause_min", "duration", `"2s"`, "TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MIN", "", "live", false, false},
 	{"background_sync.page_pause_max", "duration", `"8s"`, "TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MAX", "", "live", false, false},
+	{"new_chat_sync.messages", "int", `100`, "TG_CLI_NEW_CHAT_SYNC_MESSAGES", "", "live", false, false},
 	{"history_limit.since", "date", `"2022-02-02"`, "TG_CLI_HISTORY_LIMIT_SINCE", "", "live", false, false},
 	{"history_limit.messages", "int", `200000`, "TG_CLI_HISTORY_LIMIT_MESSAGES", "", "live", false, false},
 	{"semantic_search.enabled", "bool", `true`, "TG_CLI_SEMANTIC_SEARCH_ENABLED", "", "restart", false, false},
@@ -236,6 +237,8 @@ func validateSettingValue(name string, value any, raw []byte) error {
 			return fmt.Errorf("must be at least %s", MinBackgroundPagePause)
 		}
 		return err
+	case "new_chat_sync.messages":
+		return CheckNewChatMessages(value.(int))
 	case "history_limit.since":
 		_, err := ParseHistoryLimitSince(value.(string))
 		return err

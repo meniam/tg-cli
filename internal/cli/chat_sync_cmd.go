@@ -38,15 +38,18 @@ func (a *app) chatSyncCommand() *cobra.Command {
 	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.HistorySyncCancelAllResult](), ChatResult: typeOf[rpc.HistorySyncJob](), Args: []argSpec{{Name: "chat", Required: false}}})
 	cancel.Flags().Bool("all", false, "cancel every queued and the running history load")
 	queue := a.annotate(&cobra.Command{
-		Use: "queue", Short: "Queue the history load of a batch of chats",
-		Long: "Pick chats from the dialog list, newest first, and queue a load for each. The daemon\n" +
-			"loads one chat at a time; the rest wait in its queue. A chat that is loaded already, or\n" +
-			"has a job, is skipped. Closed chats are never picked. --active-days keeps the chats with\n" +
-			"a message newer than N days. --unsynced keeps only the chats that were never loaded, not\n" +
-			"the partly loaded ones. The depth flags work as in chat sync start. --dry-run lists the\n" +
-			"chats and starts nothing.",
-		Args: cobra.NoArgs, RunE: a.chatSyncQueue,
-	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.HistorySyncQueueResult](), ItemPath: "chats"})
+		Use: "queue [<chat>...]", Short: "Queue the history load of several chats",
+		Long: "Queue a load for each chat. Give the chats as arguments (up to 100), or pick them from\n" +
+			"the dialog list, newest first, with the filters, not both. The daemon loads one chat at\n" +
+			"a time; the rest wait in its queue. A chat that is loaded already, or has a job, is\n" +
+			"skipped; with named chats the answer lists it with a skip action. Closed chats are\n" +
+			"never picked, and a closed or unknown named chat fails the whole call before anything\n" +
+			"is queued. --active-days keeps the chats with a message newer than N days. --unsynced\n" +
+			"keeps only the chats that were never loaded, not the partly loaded ones. The depth\n" +
+			"flags work as in chat sync start. --dry-run lists the chats and starts nothing.\n" +
+			"Put -- before a negative chat id.",
+		Args: cobra.ArbitraryArgs, RunE: a.chatSyncQueue,
+	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.HistorySyncQueueResult](), ItemPath: "chats", Args: []argSpec{{Name: "chat", Variadic: true}}})
 	queue.Flags().String("type", "", "chat type: user, bot, group, supergroup or channel")
 	queue.Flags().Int("active-days", 0, "only chats with a message in the last N days")
 	queue.Flags().Bool("unsynced", false, "only chats that were never loaded")
@@ -174,7 +177,7 @@ func (a *app) chatSyncCancel(cmd *cobra.Command, args []string) error {
 	return a.success(cmd, job)
 }
 
-func (a *app) chatSyncQueue(cmd *cobra.Command, _ []string) error {
+func (a *app) chatSyncQueue(cmd *cobra.Command, args []string) error {
 	settings, err := a.outputSettingsFor(cmd)
 	if err != nil {
 		return err
@@ -190,6 +193,17 @@ func (a *app) chatSyncQueue(cmd *cobra.Command, _ []string) error {
 	p.MaxChats, _ = cmd.Flags().GetInt("max-chats")
 	p.DryRun, _ = cmd.Flags().GetBool("dry-run")
 	p.Messages, p.Since = messages, since
+	p.Chats = args
+	if len(args) > 0 {
+		if len(args) > 100 {
+			return fail(exitcode.Usage, "name at most 100 chats")
+		}
+		for _, name := range []string{"type", "active-days", "unsynced", "max-chats"} {
+			if cmd.Flags().Changed(name) {
+				return fail(exitcode.Usage, "name chats or filter the dialog list, not both: --%s cannot go with chat arguments", name)
+			}
+		}
+	}
 	if cmd.Flags().Changed("active-days") && (p.ActiveDays < 1 || p.ActiveDays > 36500) {
 		return fail(exitcode.Usage, "--active-days must be between 1 and 36500")
 	}

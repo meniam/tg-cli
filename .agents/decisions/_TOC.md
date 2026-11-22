@@ -76,3 +76,4 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-21 — [Фоновая загрузка, векторный поиск и расшифровка голоса включены по умолчанию, пресет desktop выбран по умолчанию](20261121_1436_enabled_features_and_desktop_are_defaults.md)
 - 2026-11-22 — [Полная загрузка истории останавливается на дате 2022-02-02 или на 200 000 сообщений чата](20261122_1410_full_history_load_stops_at_a_date_or_a_message_count.md)
 - 2026-11-22 — [Лимит сообщений чата: подчистка удаляет самые старые и оставляет 95% лимита](20261122_1545_chat_message_limit_trims_the_oldest_messages_to_95_percent.md)
+- 2026-11-22 — [Новый чат получает в очередь загрузку 100 последних сообщений сам, а очередь принимает чаты списком](20261122_1639_new_chat_gets_its_latest_100_messages_queued_automatically.md)

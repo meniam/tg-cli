@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/rpc"
@@ -30,6 +31,22 @@ func (d *daemon) historySyncQueue(ctx context.Context, params json.RawMessage) (
 	var p rpc.HistorySyncQueueParams
 	if err := decodeParams(params, &p); err != nil {
 		return nil, err
+	}
+	if len(p.Chats) > 0 {
+		if p.Type != "" || p.ActiveDays != 0 || p.Unsynced || p.MaxChats != 0 {
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "name chats or filter the dialog list, not both: chats cannot be combined with type, active_days, unsynced or max_chats")
+		}
+		if len(p.Chats) > maxQueueNamed {
+			return nil, rpc.NewError(rpc.CodeInvalidParams, "chats must hold at most 100 chats")
+		}
+		depth, err := parseHistoryDepth(p.Messages, p.Since, d.sync.clock.Now())
+		if err != nil {
+			return nil, err
+		}
+		if err := d.requireAccount(ctx); err != nil {
+			return nil, err
+		}
+		return d.queueNamedChats(ctx, p, depth)
 	}
 	switch p.Type {
 	case "", "user", "bot", "group", "supergroup", "channel":
@@ -140,4 +157,83 @@ func (d *daemon) pickQueueChats(ctx context.Context, p rpc.HistorySyncQueueParam
 		}
 		after = *next
 	}
+}
+
+// maxQueueNamed bounds the chats of a request that names them.
+const maxQueueNamed = 100
+
+// queueNamedChats queues the chats a request names. Every chat is resolved and
+// checked before anything is queued, so a closed or unknown chat fails the
+// whole call with its own error and leaves the queue as it was. A chat that is
+// loaded enough already, or has a job, is reported with a skip action.
+func (d *daemon) queueNamedChats(ctx context.Context, p rpc.HistorySyncQueueParams, depth historyDepth) (rpc.HistorySyncQueueResult, error) {
+	type named struct {
+		ref      chatref.Ref
+		id       int64
+		progress store.SyncProgress
+	}
+	var items []named
+	seen := make(map[int64]bool, len(p.Chats))
+	for _, name := range p.Chats {
+		if name == "" {
+			return rpc.HistorySyncQueueResult{}, rpc.NewError(rpc.CodeInvalidParams, "give a chat")
+		}
+		ref, id, err := d.resolveHistorySyncChat(ctx, name)
+		if err != nil {
+			return rpc.HistorySyncQueueResult{}, err
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		progress, _, err := d.store.SyncState(ctx, id)
+		if err != nil {
+			return rpc.HistorySyncQueueResult{}, err
+		}
+		items = append(items, named{ref: ref, id: id, progress: progress})
+	}
+	result := rpc.HistorySyncQueueResult{DryRun: p.DryRun, Chats: []rpc.HistorySyncQueueChat{}}
+	for _, item := range items {
+		entry := rpc.HistorySyncQueueChat{ChatID: item.id}
+		switch chat, err := d.store.GetChat(ctx, item.id); {
+		case err == nil:
+			entry.Title = chat.Title
+		case !errors.Is(err, store.ErrNotFound):
+			return rpc.HistorySyncQueueResult{}, err
+		}
+		skip := ""
+		switch {
+		case item.progress.Complete:
+			skip, entry.Action = "loaded", rpc.HistorySyncActionSkippedLoaded
+		case d.sync.activeJob(item.id):
+			skip, entry.Action = "active", rpc.HistorySyncActionSkippedActive
+		case depth.active():
+			count, oldest, err := d.store.MessageBounds(ctx, item.id)
+			if err != nil {
+				return rpc.HistorySyncQueueResult{}, err
+			}
+			if depth.satisfied(count, oldest) {
+				skip, entry.Action = "loaded", rpc.HistorySyncActionSkippedLoaded
+			}
+		}
+		switch skip {
+		case "loaded":
+			result.SkippedLoaded++
+		case "active":
+			result.SkippedActive++
+		default:
+			if p.DryRun {
+				entry.Action = rpc.HistorySyncActionWouldQueue
+				result.WouldQueue++
+			} else {
+				if _, err := d.sync.startDepth(item.id, item.ref, item.progress, depth, false); err != nil {
+					return rpc.HistorySyncQueueResult{}, err
+				}
+				entry.Action = rpc.HistorySyncActionQueued
+				result.Queued++
+			}
+		}
+		result.Chats = append(result.Chats, entry)
+	}
+	return result, nil
 }

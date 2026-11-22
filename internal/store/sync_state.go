@@ -173,9 +173,12 @@ func (db *DB) MarkHistoryLimitReached(ctx context.Context, chatID int64) (SyncPr
 	if chatID == 0 {
 		return SyncProgress{}, fmt.Errorf("history limit chat id must be nonzero")
 	}
-	const upsert = `INSERT INTO sync_state(chat_id,complete,synced_at) VALUES(?,1,?)
+	// A new row takes its bounds from the saved messages: a row without them would
+	// read as a chat with no message at all.
+	const upsert = `INSERT INTO sync_state(chat_id,oldest_id,newest_id,complete,synced_at)
+		SELECT ?, MIN(id), MAX(id), 1, ? FROM messages WHERE chat_id=? AND true
 		ON CONFLICT(chat_id) DO UPDATE SET complete=1,synced_at=excluded.synced_at`
-	if _, err := db.write.ExecContext(ctx, upsert, chatID, db.now().Unix()); err != nil {
+	if _, err := db.write.ExecContext(ctx, upsert, chatID, db.now().Unix(), chatID); err != nil {
 		return SyncProgress{}, fmt.Errorf("save history limit %d: %w", chatID, err)
 	}
 	state, err := scanSyncProgress(db.write.QueryRowContext(ctx,

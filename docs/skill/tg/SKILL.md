@@ -5,7 +5,7 @@ description: >
   summarize, export, transcribe voice messages or watch chats, send messages or files, or manage tg login
   or the daemon, even if they don't say CLI or MTProto. Common phrases include «телеграм», «тг», «что пишут
   в канале», «найди в переписке», «выгрузи переписку», «скинь в телегу», «расшифруй голосовое» and «что
-  сказано в кружке», «синхронизируй последний месяц», «подгрузи последние 100 сообщений» and «поставь чаты в очередь» and «автозапуск демона». Not for Bot API bots or the Telegram Desktop UI.
+  сказано в кружке», «синхронизируй последний месяц», «подгрузи последние 100 сообщений», «синхронизируй чаты», «загрузи историю чатов», «поставь чаты в очередь», «ограничь чат N сообщениями» and «автозапуск демона». Not for Bot API bots or the Telegram Desktop UI.
 ---
 
 # tg: Telegram from the terminal
@@ -18,7 +18,7 @@ Details and reasons: [references/safety.md](references/safety.md).
 
 1. **Read freely, write on request.** `tg schema` gives each command a `safety` class (`read`, `local_write`, `account_write`) and a separate flag `dangerous`.
    - `read`: run freely, unless `dangerous: true`. `session export` is both: get the user's approval of the profile and the output path first.
-   - Writes: run them only when the user explicitly asked in the current task. Preview with `--dry-run` where the command has it (`auth login`, `chat sync start` and `message export-month` have none; `chat sync queue` has one). For `message inline-query`, get the user's approval of the bot and the query first: the call itself discloses them.
+   - Writes: run them only when the user explicitly asked in the current task. Preview with `--dry-run` where the command has it (`auth login`, `chat sync start`, `chat limit set` and `message export-month` have none; `chat limit set` refuses without `--yes` and shows the numbers instead; `chat sync queue` has one). For `message inline-query`, get the user's approval of the bot and the query first: the call itself discloses them.
    - `dangerous`: get the user's confirmation of the exact target first, even when the CLI would not stop you (`note delete <id>` deletes at once). Add `--yes` only after that confirmation.
 2. **The owner grants access permission.** The owner changes protected `access.*` settings with the owner passphrase. Sending needs the chat in `access.write`. Other operations may need `access.files`, `access.downloads`, `access.admin`, `access.create`, `access.dialogs`, `access.sessions` or `access.profile`. You may read `tg settings list` and non-sensitive settings with `tg settings get`; change a non-`access.*` key only on request. For any `access.*` change, ask the owner to run the command. Never ask for the passphrase or for ids in `access.allow` or `access.block`.
 3. **Closed chats do not exist for you.** They do not appear in lists and return `not_found` (code 7). Do not work around this with another link and do not read `store.db`.
@@ -27,6 +27,7 @@ Details and reasons: [references/safety.md](references/safety.md).
 6. **One client per session.** Do not start a second process on the session and do not touch the profile files.
 7. **After a failed write, do not retry blindly.** Read the history first. A retry is safe only with `--idempotency-key`. After `flood_wait` (code 6), do not loop retries.
 8. **Background jobs and bulk operations only on request.** `chat sync` (`chat sync queue` queues many chats at once, so show its `--dry-run` first), `chat full` and exports grow the database and the request count, `search index start` loads the machine with embeddings, and `voice backfill` and `chat voice on --backfill` queue downloads and local recognition of saved voice messages, and `chat limit set` makes the Daemon delete the oldest saved messages of a chat for good: set a limit only when the owner asked for it, and never add `--yes` without that request. Do not run mass mailings or bulk member collection (see the section "What not to do" in `safety.md`).
+9. **History is loaded only through the Daemon queue.** Never write your own script, shell loop, `xargs` or Python for loading chats, and never page `message history` or `message search` to collect old messages. The Daemon loads one chat at a time with a pause between pages, through the account throttle; a script of yours has neither the single worker nor the pauses and ends in `FLOOD_WAIT`. Two or more chats go in one `tg chat sync queue`: the chats the user named as arguments (`tg chat sync queue @anna @boris --months 1`, up to 100, closed or unknown chats fail the call before anything is queued), or a filter for "all active chats" (`--type`, `--active-days`, `--unsynced`, `--max-chats`; not together with named chats). Add a depth flag unless the user wants the whole history, and run `--dry-run` first ([recipes/sync-active-chats.md](recipes/sync-active-chats.md)). `tg chat sync start <chat>` is for exactly one chat. Then watch the queue with `tg chat sync status` and a pause of tens of seconds. If a task looks like batch work, run `tg schema` and look for a native command before writing any script.
 
 ## First run
 
@@ -125,6 +126,7 @@ One scenario per file in [recipes/](recipes/): when to use, prepare, commands, n
 - [send-media](recipes/send-media.md): send a file, photo or album.
 - [watch-chat](recipes/watch-chat.md): watch a chat and resume from a cursor.
 - [forum-topics](recipes/forum-topics.md): forum topics and reading one topic.
+- [limit-chat-size](recipes/limit-chat-size.md): cap how many messages the database keeps for one chat; deletes the oldest ones, only on the owner request.
 - [transcribe-voice](recipes/transcribe-voice.md): the text of a voice message, a video note or a video with the local engine, and the state of the queue.
 
 ## Boundaries

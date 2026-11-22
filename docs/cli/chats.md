@@ -848,10 +848,10 @@ tg chat sync cancel --all
 
 ### tg chat sync queue
 
-Queues the history load of a batch of chats. The Daemon reads the dialog list from the newest dialog to the oldest, keeps the chats that match the filters, and starts a load for each. It loads one chat at a time and the rest wait in its queue (`chat sync status` shows them as `queued`).
+Queues the history load of several chats. Name the chats as arguments (up to 100), or let the Daemon pick them from the dialog list with filters; the two ways exclude each other. With the filters the Daemon reads the dialog list from the newest dialog to the oldest, keeps the chats that match, and starts a load for each. Either way it loads one chat at a time and the rest wait in its queue (`chat sync status` shows them as `queued`). This is the command for any batch: do not loop `chat sync start` in a script.
 
 ```text
-tg chat sync queue [--type T] [--active-days N] [--unsynced] [--max-chats N] [--messages N | --days N | --months N | --since DATE] [--dry-run] [flags]
+tg chat sync queue [<chat>... | --type T --active-days N --unsynced --max-chats N] [--messages N | --days N | --months N | --since DATE] [--dry-run] [flags]
 ```
 
 <!-- schema:flags tg chat sync queue -->
@@ -870,7 +870,7 @@ tg chat sync queue [--type T] [--active-days N] [--unsynced] [--max-chats N] [--
 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `jsonl`, `toon`, `human`.
 
-**Preconditions.** A running Daemon and a login. The batch is picked in this order of rules:
+**Preconditions.** A running Daemon and a login. Put `--` before a negative chat id. **Named chats:** every chat is resolved and checked first, a closed or unknown chat fails the whole call with its own error (exit 7) and nothing is queued, a repeated chat counts once, and the answer lists a chat that is loaded enough already as `skipped_loaded` and a chat that has a job as `skipped_active`. The filters `--type`, `--active-days`, `--unsynced` and `--max-chats` cannot go with named chats (exit 2); the depth flags and `--dry-run` can. **Filters:** the batch is picked in this order of rules:
 
 - Chats closed by the access lists are never picked, counted or shown, in a dry run too.
 - `--type` keeps one chat type; `--active-days N` keeps the chats whose last message is not older than N days. Dialogs come newest first, so the walk ends at the first dialog that is too old; a pinned dialog leads the list whatever its date, and an old pinned dialog is skipped, not a reason to stop.
@@ -887,6 +887,7 @@ Reading the dialog list goes through the account throttle. An error, `FLOOD_WAIT
 tg chat sync queue --type user --active-days 60 --unsynced --messages 100 --dry-run
 tg chat sync queue --type user --active-days 60 --unsynced --messages 100
 tg chat sync queue --months 1 --max-chats 200
+tg chat sync queue @anna @boris --months 1 --dry-run
 ```
 
 **Answer.**
@@ -895,9 +896,9 @@ tg chat sync queue --months 1 --max-chats 200
 {"ok":true,"data":{"dry_run":false,"queued":2,"would_queue":0,"skipped_loaded":1,"skipped_active":0,"chats":[{"chat_id":987654321,"title":"Alice","last_message_date":1795200000,"action":"queued"},{"chat_id":123456789,"title":"Bob","last_message_date":1795100000,"action":"queued"}]}}
 ```
 
-**Answer fields** (`data`): `dry_run` boolean, `queued` integer, `would_queue` integer (only a dry run), `skipped_loaded` integer, `skipped_active` integer, `chats` array, `chats.chat_id` integer, `chats.title` string (untrusted), `chats.last_message_date` integer (optional), `chats.action` string (`queued` or `would_queue`). `--format jsonl` prints one chat per line.
+**Answer fields** (`data`): `dry_run` boolean, `queued` integer, `would_queue` integer (only a dry run), `skipped_loaded` integer, `skipped_active` integer, `chats` array, `chats.chat_id` integer, `chats.title` string (untrusted), `chats.last_message_date` integer (optional), `chats.action` string (`queued` or `would_queue`; with named chats also `skipped_loaded` and `skipped_active`). `--format jsonl` prints one chat per line.
 
-**Exit codes.** 0; 2 an unknown `--type`, `--active-days` outside 1 to 36500, `--max-chats` outside 1 to 500, two depth flags together or a depth value out of range; 3; 4; 6 `FLOOD_WAIT` longer than the auto-wait.
+**Exit codes.** 0; 2 an unknown `--type`, `--active-days` outside 1 to 36500, `--max-chats` outside 1 to 500, two depth flags together or a depth value out of range, named chats together with a filter flag, or more than 100 named chats; 3; 4; 6 `FLOOD_WAIT` longer than the auto-wait; 7 a named chat that is closed or unknown.
 
 **Verification.** See [FEATURES.md](../../FEATURES.md), item 10.12.
 

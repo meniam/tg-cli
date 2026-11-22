@@ -42,3 +42,18 @@ func CheckHistoryLimitMessages(n int) error {
 	}
 	return nil
 }
+
+// DefaultNewChatMessages is how many latest messages the Daemon loads for a
+// chat that appears. MaxNewChatMessages bounds new_chat_sync.messages.
+const (
+	DefaultNewChatMessages = 100
+	MaxNewChatMessages     = 1000
+)
+
+// CheckNewChatMessages checks new_chat_sync.messages: 0 turns the load off.
+func CheckNewChatMessages(n int) error {
+	if n < 0 || n > MaxNewChatMessages {
+		return fmt.Errorf("must be a whole number from 0 to %d; 0 turns the load off", MaxNewChatMessages)
+	}
+	return nil
+}

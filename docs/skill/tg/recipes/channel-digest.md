@@ -38,7 +38,7 @@ tg message history @channelname --limit 100 --since 2026-11-13T00:00:00Z --until
 
 ## Pitfalls
 
-- A long period in a big chat is dozens of pages. Tell the user roughly how many pages to expect, or suggest [load-full-history](load-full-history.md) and an export.
+- A long period in a big chat is dozens of pages. Do not loop over them: tell the user roughly how many pages to expect, or load the period through the queue ([sync-recent-history](sync-recent-history.md) with `--since`) and read it locally ([export-history](export-history.md)).
 - Exit code 6 (`flood_wait`): stop, do not retry in a loop. `tg search` and `message context --local` work locally.
 - Read a forum chat by topic: `message history <chat> --topic ID` ([forum-topics](forum-topics.md)).
 

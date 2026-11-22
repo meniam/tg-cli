@@ -125,8 +125,14 @@ func (d *daemon) messageExportMonth(ctx context.Context, raw json.RawMessage) (r
 			return nil, e
 		}
 		if found {
-			mf.Sync = rpc.ExportSync{Complete: state.Complete, OldestID: state.OldestID, NewestID: state.NewestID, MonthStartCovered: state.Complete}
-			if !state.Complete && state.OldestID != nil {
+			// A complete chat covers the month start only when the load reached the
+			// first message of the chat (first_message_date is saved) or the chat
+			// has no message at all. A chat that a history limit marked complete
+			// stopped somewhere inside its history: it covers the month start only
+			// when a message older than the month is saved.
+			covered := state.Complete && (state.FirstMessageDate != nil || state.OldestID == nil)
+			mf.Sync = rpc.ExportSync{Complete: state.Complete, OldestID: state.OldestID, NewestID: state.NewestID, MonthStartCovered: covered}
+			if !covered && state.OldestID != nil {
 				old, e := d.store.GetMessage(ctx, id, *state.OldestID)
 				if e != nil && !errors.Is(e, store.ErrNotFound) {
 					return nil, e

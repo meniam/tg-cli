@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -550,5 +552,82 @@ func TestHistorySyncDepthLimitedLoadIgnoresTheFullLimit(t *testing.T) {
 	state, _, err := db.SyncState(context.Background(), 42)
 	if err != nil || state.Complete {
 		t.Fatalf("state: %+v err=%v", state, err)
+	}
+}
+
+func TestHistorySyncQueueNamedChatsQueuesThemWithoutTheDialogList(t *testing.T) {
+	d, tg, db, _ := queueFixture(t)
+	ctx := context.Background()
+	if err := db.UpsertChats(ctx, []store.Chat{{ID: 1, Type: "user", Title: "Anna"}, {ID: 2, Type: "user", Title: "Boris"}, {ID: 3, Type: "user", Title: "Carol"}, {ID: 4, Type: "group", Title: "Team"}}); err != nil {
+		t.Fatal(err)
+	}
+	// Chat 3 is loaded, chat 4 already has a job.
+	if _, err := db.SaveHistoryPage(ctx, 3, nil, nil, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.sync.startDepth(4, chatref.Ref{Kind: chatref.ID, ID: 4}, store.SyncProgress{}, historyDepth{}, false); err != nil {
+		t.Fatal(err)
+	}
+	tg.mu.Lock()
+	tg.lastType = "untouched"
+	tg.mu.Unlock()
+	result, err := runQueue(t, d, rpc.HistorySyncQueueParams{Chats: []string{"1", "2", "3", "4", "1"}, Messages: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []rpc.HistorySyncQueueChat{
+		{ChatID: 1, Title: "Anna", Action: rpc.HistorySyncActionQueued},
+		{ChatID: 2, Title: "Boris", Action: rpc.HistorySyncActionQueued},
+		{ChatID: 3, Title: "Carol", Action: rpc.HistorySyncActionSkippedLoaded},
+		{ChatID: 4, Title: "Team", Action: rpc.HistorySyncActionSkippedActive},
+	}
+	if !reflect.DeepEqual(result.Chats, want) || result.Queued != 2 || result.SkippedLoaded != 1 || result.SkippedActive != 1 {
+		t.Fatalf("result: %+v", result)
+	}
+	for _, id := range []int64{1, 2} {
+		if job := d.sync.snapshot(id); job == nil || job.Messages != 100 || job.Source != rpc.HistorySyncManual {
+			t.Fatalf("job %d: %+v", id, job)
+		}
+	}
+	tg.mu.Lock()
+	untouched := tg.lastType == "untouched"
+	tg.mu.Unlock()
+	if !untouched {
+		t.Fatal("a request with named chats read the dialog list")
+	}
+	// A dry run queues nothing.
+	dry, err := runQueue(t, d, rpc.HistorySyncQueueParams{Chats: []string{"6"}, DryRun: true})
+	if err == nil && (dry.WouldQueue != 1 || dry.Chats[0].Action != rpc.HistorySyncActionWouldQueue || d.sync.snapshot(6) != nil) {
+		t.Fatalf("dry run: %+v", dry)
+	}
+}
+
+func TestHistorySyncQueueNamedChatsFailAsAWholeAndRejectFilters(t *testing.T) {
+	d, _, db, _, accessPath := syncFixture(t)
+	ctx := context.Background()
+	if err := db.UpsertChats(ctx, []store.Chat{{ID: 1, Type: "user", Title: "Anna"}}); err != nil {
+		t.Fatal(err)
+	}
+	// A closed chat after a good one: nothing is queued.
+	writeAccess(t, accessPath, `{"block":[99999]}`)
+	if _, err := runQueue(t, d, rpc.HistorySyncQueueParams{Chats: []string{"1", "99999"}}); err == nil {
+		t.Fatal("a closed chat was accepted")
+	}
+	if d.sync.snapshot(1) != nil {
+		t.Fatal("the good chat was queued although the call failed")
+	}
+	var re *rpc.Error
+	for name, p := range map[string]rpc.HistorySyncQueueParams{
+		"type":     {Chats: []string{"1"}, Type: "user"},
+		"active":   {Chats: []string{"1"}, ActiveDays: 3},
+		"unsynced": {Chats: []string{"1"}, Unsynced: true},
+		"max":      {Chats: []string{"1"}, MaxChats: 5},
+		"empty":    {Chats: []string{""}},
+		"limit":    {Chats: make([]string, 101)},
+		"two":      {Chats: []string{"1"}, Messages: 5, Since: "2020-01-01T00:00:00Z"},
+	} {
+		if _, err := runQueue(t, d, p); !errors.As(err, &re) || re.Code != rpc.CodeInvalidParams {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }

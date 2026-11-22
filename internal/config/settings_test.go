@@ -19,7 +19,8 @@ func TestSettingDefaults(t *testing.T) {
 		"semantic_search.enabled": c.SemanticSearch.Enabled, "semantic_search.ollama_url": c.SemanticSearch.OllamaURL, "semantic_search.model": c.SemanticSearch.Model, "semantic_search.batch": c.SemanticSearch.Batch, "semantic_search.interval": c.SemanticSearch.Interval, "semantic_search.min_similarity": c.SemanticSearch.MinSimilarity,
 		"voice_transcription.enabled": c.VoiceTranscription.Enabled, "voice_transcription.ffmpeg": c.VoiceTranscription.FFmpeg, "voice_transcription.max_voice_mb": c.VoiceTranscription.MaxVoiceMB, "voice_transcription.max_video_note_mb": c.VoiceTranscription.MaxVideoNoteMB, "voice_transcription.max_video_mb": c.VoiceTranscription.MaxVideoMB, "voice_transcription.max_video_minutes": c.VoiceTranscription.MaxVideoMinutes, "voice_transcription.daily_download_mb": c.VoiceTranscription.DailyDownloadMB, "voice_transcription.daily_files": c.VoiceTranscription.DailyFiles, "voice_transcription.pause": c.VoiceTranscription.Pause, "voice_transcription.threads": c.VoiceTranscription.Threads,
 		"history_limit.since": "2022-02-02", "history_limit.messages": 200000,
-		"profile.client": "desktop", "profile.device": "", "profile.transport": "tcp", "profile.proxy": "none",
+		"new_chat_sync.messages": 100,
+		"profile.client":         "desktop", "profile.device": "", "profile.transport": "tcp", "profile.proxy": "none",
 		"access.allow": []int64{}, "access.block": []int64{}, "access.write": []int64{}, "access.admin": []int64{}, "access.files": []string{}, "access.downloads": []string{}, "access.dialogs": false, "access.sessions": false, "access.create": false, "access.profile": false,
 	}
 	keys := SettingKeys()
@@ -84,6 +85,7 @@ func TestSettingValues(t *testing.T) {
 		{"background_sync.interval_max", "2s", `"2s"`, []string{"-1s"}},
 		{"background_sync.page_pause_min", "1s", `"1s"`, []string{"0s", "500ms"}},
 		{"background_sync.page_pause_max", "2s", `"2s"`, []string{"0s", "500ms"}},
+		{"new_chat_sync.messages", "1000", "1000", []string{"-1", "1001", "1.5"}},
 		{"history_limit.since", "2021-12-31", `"2021-12-31"`, []string{"31-12-2021", "2021-13-01", "2022-2-2", "yesterday"}},
 		{"history_limit.messages", "0", "0", []string{"-1", "100000001", "1.5"}},
 		{"semantic_search.enabled", "false", "false", []string{"yes"}},
@@ -177,6 +179,7 @@ func TestTemplateDocumentedSettingDefaults(t *testing.T) {
 		"behavior.throttle_percent": `60`, "behavior.flood_autowait": `"10s"`, "behavior.expect_user": `""`,
 		"background_sync.enabled": `true`, "background_sync.window_start": `"08:00"`, "background_sync.window_end": `"20:00"`, "background_sync.interval_min": `"40m"`, "background_sync.interval_max": `"3h"`, "background_sync.page_pause_min": `"2s"`, "background_sync.page_pause_max": `"8s"`,
 		"history_limit.since": `"2022-02-02"`, "history_limit.messages": `200000`,
+		"new_chat_sync.messages":  `100`,
 		"semantic_search.enabled": `true`, "semantic_search.ollama_url": `"http://127.0.0.1:11434"`, "semantic_search.model": `"bge-m3"`, "semantic_search.batch": `16`, "semantic_search.interval": `"10m"`, "semantic_search.min_similarity": `0.5`,
 		"voice_transcription.enabled": `true`, "voice_transcription.ffmpeg": `"ffmpeg"`, "voice_transcription.max_voice_mb": `30`, "voice_transcription.max_video_note_mb": `50`, "voice_transcription.max_video_mb": `500`, "voice_transcription.max_video_minutes": `120`, "voice_transcription.daily_download_mb": `5000`, "voice_transcription.daily_files": `500`, "voice_transcription.pause": `"3s"`, "voice_transcription.threads": `4`,
 		"profile.client": `"desktop"`, "profile.device": `""`, "profile.transport": `"tcp"`, "profile.proxy": `"none"`,

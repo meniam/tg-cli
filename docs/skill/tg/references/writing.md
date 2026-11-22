@@ -111,3 +111,11 @@ List the buttons with `message buttons`, preview the press with `message press -
 tg message buttons <chat> <id>
 tg message press <chat> <id> --dry-run
 ```
+
+## Stickers
+
+`message send-sticker <chat> --set NAME (--index N | --emoji EMOJI)` sends a sticker from a set. The chat must be in `write`; run `--dry-run` first: it picks the sticker without sending. Find sets with `sticker search` and `sticker installed`.
+
+```bash
+tg message send-sticker <chat> --set fixture --index 0 --dry-run
+```

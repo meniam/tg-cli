@@ -160,8 +160,13 @@ func (d *daemon) handleEvent(event rpc.Event) {
 			if json.Unmarshal(event.Raw, &update) == nil {
 				message.Raw = update.Message
 			}
+			// Ask before the save: afterwards the chat always holds a message.
+			freshChat := event.Type == rpc.EventMessageNew && message.ChatID != 0 && d.chatIsNew(ctx, message.ChatID)
 			if !d.retryEventWrite(ctx, func() error { return d.persistMessages(ctx, event.Type, []rpc.Message{message}) }) {
 				return
+			}
+			if freshChat {
+				d.autoSyncNewChat(message.ChatID)
 			}
 			// A new voice message goes to the transcription queue once it is saved.
 			if event.Type == rpc.EventMessageNew {
