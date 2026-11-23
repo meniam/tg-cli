@@ -126,7 +126,7 @@ type DashboardSyncJob struct {
 	ChatID    int64  `json:"chat_id"`
 	ChatTitle string `json:"chat_title,omitempty" untrusted:"true"`
 	State     string `json:"state"`
-	// Source is HistorySyncManual or HistorySyncBackground.
+	// Source is HistorySyncManual, HistorySyncBackground or HistorySyncCatchup.
 	Source string `json:"source"`
 	Pages  int    `json:"pages"`
 	Loaded int    `json:"loaded"`

@@ -517,6 +517,7 @@ const (
 const (
 	HistorySyncManual     = "manual"
 	HistorySyncBackground = "background"
+	HistorySyncCatchup    = "catchup"
 )
 
 // HistorySyncJob is the in-memory state of one background history load.
@@ -525,7 +526,7 @@ const (
 type HistorySyncJob struct {
 	ChatID           int64  `json:"chat_id"`
 	State            string `json:"state"`
-	Source           string `json:"source,omitempty"` // HistorySyncManual or HistorySyncBackground; empty when idle
+	Source           string `json:"source,omitempty"` // manual, background or catchup; empty when idle
 	Pages            int    `json:"pages"`
 	Loaded           int    `json:"loaded"`
 	OldestID         *int   `json:"oldest_id"`

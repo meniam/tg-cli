@@ -31,6 +31,14 @@ type historySyncClock interface {
 type realHistorySyncClock struct{}
 type realHistorySyncTimer struct{ *time.Timer }
 
+type historySyncLane int
+
+const (
+	laneManual historySyncLane = iota
+	laneCatchup
+	laneBackground
+)
+
 func (realHistorySyncClock) Now() time.Time { return time.Now() }
 func (realHistorySyncClock) NewTimer(d time.Duration) historySyncTimer {
 	return realHistorySyncTimer{time.NewTimer(d)}
@@ -46,7 +54,10 @@ type historySyncTask struct {
 	// pause returns the wait before the next page; it is called once per page.
 	pause func() time.Duration
 	// depth is the limit of a depth-limited load; the zero value is no limit.
-	depth historyDepth
+	depth   historyDepth
+	lane    historySyncLane
+	since   time.Time
+	aliveAt int64
 	// final is closed, under the manager mutex, when the job reaches done,
 	// failed or cancelled.
 	final chan struct{}
@@ -65,10 +76,11 @@ type historySyncManager struct {
 	done   chan struct{}
 	wake   chan struct{}
 
-	mu      sync.Mutex
-	jobs    map[int64]*historySyncTask
-	queue   []*historySyncTask
-	current *historySyncTask
+	mu       sync.Mutex
+	jobs     map[int64]*historySyncTask
+	catchups map[int64]*historySyncTask
+	queue    []*historySyncTask
+	current  *historySyncTask
 }
 
 func newHistorySyncManager(ctx context.Context, d *daemon, clock historySyncClock) *historySyncManager {
@@ -79,7 +91,7 @@ func newHistorySyncManager(ctx context.Context, d *daemon, clock historySyncCloc
 	m := &historySyncManager{
 		d: d, clock: clock, ctx: ctx, cancel: cancel,
 		done: make(chan struct{}), wake: make(chan struct{}, 1),
-		jobs: make(map[int64]*historySyncTask),
+		jobs: make(map[int64]*historySyncTask), catchups: make(map[int64]*historySyncTask),
 	}
 	go m.run()
 	return m
@@ -88,7 +100,7 @@ func newHistorySyncManager(ctx context.Context, d *daemon, clock historySyncCloc
 func (m *historySyncManager) close() {
 	m.cancel()
 	m.mu.Lock()
-	for _, task := range m.queue {
+	for _, task := range append([]*historySyncTask(nil), m.queue...) {
 		m.cancelTaskLocked(task)
 	}
 	m.queue = nil
@@ -153,7 +165,7 @@ func (m *historySyncManager) startBackground(chatID int64, ref chatref.Ref, stat
 	return m.enqueueLocked(chatID, ref, state, rpc.HistorySyncBackground, pause, historyDepth{}, false), nil
 }
 
-func (m *historySyncManager) enqueueLocked(chatID int64, ref chatref.Ref, state store.SyncProgress, source string, pause func() time.Duration, depth historyDepth, depthMet bool) rpc.HistorySyncJob {
+func (m *historySyncManager) enqueueLocked(chatID int64, ref chatref.Ref, state store.SyncProgress, source string, pause func() time.Duration, depth historyDepth, depthMet bool, lanes ...historySyncLane) rpc.HistorySyncJob {
 	if pause == nil {
 		pause = defaultHistorySyncPause
 	}
@@ -169,18 +181,38 @@ func (m *historySyncManager) enqueueLocked(chatID int64, ref chatref.Ref, state 
 		ref: ref, ctx: jobCtx, cancel: cancel, pause: pause, depth: depth, final: make(chan struct{}),
 	}
 	task.Messages, task.Since = depth.Messages, depth.sinceText()
+	task.lane = laneManual
+	if source == rpc.HistorySyncBackground {
+		task.lane = laneBackground
+	}
+	if source == rpc.HistorySyncCatchup {
+		task.lane = laneCatchup
+	}
+	if len(lanes) > 0 {
+		task.lane = lanes[0]
+	}
 	if state.OldestID != nil {
 		task.offset = *state.OldestID
 	}
-	if state.Complete || depthMet {
+	if source != rpc.HistorySyncCatchup && (state.Complete || depthMet) {
 		task.DepthReached = depthMet && !state.Complete
 		m.setStateLocked(task, rpc.HistorySyncDone, 0, "")
 		cancel()
 	} else {
-		m.queue = append(m.queue, task)
+		i := 0
+		for i < len(m.queue) && m.queue[i].lane <= task.lane {
+			i++
+		}
+		m.queue = append(m.queue, nil)
+		copy(m.queue[i+1:], m.queue[i:])
+		m.queue[i] = task
 		m.signal()
 	}
-	m.jobs[chatID] = task
+	if source == rpc.HistorySyncCatchup {
+		m.catchups[chatID] = task
+	} else {
+		m.jobs[chatID] = task
+	}
 	return task.HistorySyncJob
 }
 
@@ -261,8 +293,8 @@ func (m *historySyncManager) cancelAll() int {
 func (m *historySyncManager) activeJob(chatID int64) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	task := m.jobs[chatID]
-	return task != nil && task.active()
+	task, catchup := m.jobs[chatID], m.catchups[chatID]
+	return task != nil && task.active() || catchup != nil && catchup.active()
 }
 
 // waitJob blocks while the job of the chat is queued or running and returns
@@ -270,6 +302,9 @@ func (m *historySyncManager) activeJob(chatID int64) bool {
 func (m *historySyncManager) waitJob(ctx context.Context, chatID int64) (rpc.HistorySyncJob, error) {
 	m.mu.Lock()
 	task := m.jobs[chatID]
+	if task == nil || !task.active() && m.catchups[chatID] != nil && m.catchups[chatID].active() {
+		task = m.catchups[chatID]
+	}
 	if task == nil {
 		m.mu.Unlock()
 		return rpc.HistorySyncJob{ChatID: chatID, State: rpc.HistorySyncIdle}, nil
@@ -291,10 +326,16 @@ func (m *historySyncManager) cancelJob(chatID int64) *rpc.HistorySyncJob {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	task := m.jobs[chatID]
+	if task == nil || !task.active() && m.catchups[chatID] != nil && m.catchups[chatID].active() {
+		task = m.catchups[chatID]
+	}
 	if task == nil {
 		return nil
 	}
 	m.cancelTaskLocked(task)
+	if other := m.catchups[chatID]; other != nil && other != task {
+		m.cancelTaskLocked(other)
+	}
 	result := task.HistorySyncJob
 	return &result
 }
@@ -302,10 +343,19 @@ func (m *historySyncManager) cancelJob(chatID int64) *rpc.HistorySyncJob {
 func (m *historySyncManager) snapshot(chatID int64) *rpc.HistorySyncJob {
 	m.mu.Lock()
 	task := m.jobs[chatID]
+	if task == nil || !task.active() && m.catchups[chatID] != nil && m.catchups[chatID].active() {
+		task = m.catchups[chatID]
+	}
 	if task == nil {
 		m.mu.Unlock()
 		return nil
 	}
+	m.mu.Unlock()
+	return m.snapshotTask(task)
+}
+
+func (m *historySyncManager) snapshotTask(task *historySyncTask) *rpc.HistorySyncJob {
+	m.mu.Lock()
 	result := task.HistorySyncJob
 	running := task == m.current && task.State == rpc.HistorySyncRunning
 	m.mu.Unlock()
@@ -339,26 +389,37 @@ func (m *historySyncManager) chatIDForRef(ref chatref.Ref) (int64, bool) {
 			return id, true
 		}
 	}
+	for id, task := range m.catchups {
+		if task.ref == ref {
+			return id, true
+		}
+	}
 	return 0, false
 }
 
 func (m *historySyncManager) snapshots() []rpc.HistorySyncJob {
 	m.mu.Lock()
-	ids := make([]int64, 0, len(m.jobs))
-	for id := range m.jobs {
-		ids = append(ids, id)
+	tasks := make([]*historySyncTask, 0, len(m.jobs)+len(m.catchups))
+	for _, task := range m.jobs {
+		tasks = append(tasks, task)
+	}
+	for _, task := range m.catchups {
+		tasks = append(tasks, task)
 	}
 	m.mu.Unlock()
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	sort.Slice(tasks, func(i, j int) bool {
+		if tasks[i].ChatID == tasks[j].ChatID {
+			return tasks[i].Source != rpc.HistorySyncCatchup
+		}
+		return tasks[i].ChatID < tasks[j].ChatID
+	})
 	policy := m.d.policy()
-	jobs := make([]rpc.HistorySyncJob, 0, len(ids))
-	for _, id := range ids {
-		if !policy.Allowed(id) {
+	jobs := make([]rpc.HistorySyncJob, 0, len(tasks))
+	for _, task := range tasks {
+		if !policy.Allowed(task.ChatID) {
 			continue
 		}
-		if job := m.snapshot(id); job != nil {
-			jobs = append(jobs, *job)
-		}
+		jobs = append(jobs, *m.snapshotTask(task))
 	}
 	return jobs
 }
@@ -387,7 +448,11 @@ func (m *historySyncManager) run() {
 		task.UpdatedAt = m.now()
 		m.mu.Unlock()
 
-		m.runTask(task)
+		if task.Source == rpc.HistorySyncCatchup {
+			m.runCatchupTask(task)
+		} else {
+			m.runTask(task)
+		}
 		task.cancel()
 		m.mu.Lock()
 		m.current = nil
@@ -718,6 +783,9 @@ func (m *historySyncManager) startAuto(chatID int64, ref chatref.Ref, pause func
 	if existing := m.jobs[chatID]; existing != nil && existing.active() {
 		return false
 	}
-	m.enqueueLocked(chatID, ref, store.SyncProgress{}, rpc.HistorySyncBackground, pause, depth, false)
+	if existing := m.catchups[chatID]; existing != nil && existing.active() {
+		return false
+	}
+	m.enqueueLocked(chatID, ref, store.SyncProgress{}, rpc.HistorySyncBackground, pause, depth, false, laneCatchup)
 	return true
 }

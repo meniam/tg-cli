@@ -36,6 +36,10 @@ const (
 	maxChatLimit     = 500
 	stopGrace        = 5 * time.Second
 	statusTimeout    = 10 * time.Second
+	catchupDowntime  = 10 * time.Minute
+	catchupOverlap   = 10 * time.Minute
+	catchupLimit     = 1000
+	aliveInterval    = time.Minute
 )
 
 // Options configure Run.
@@ -306,6 +310,8 @@ func Run(ctx context.Context, opts Options) error {
 	pruneDone := make(chan struct{})
 	go func() { defer close(pruneDone); d.pruneEvents(runCtx, eventPruneEvery, eventRetention, eventKeep) }()
 	d.startBackgroundSync(runCtx, nil, nil)
+	catchupDone := make(chan struct{})
+	go func() { defer close(catchupDone); d.autoCatchup(runCtx) }()
 	aliveCtx, cancelAlive := context.WithCancel(runCtx)
 	aliveDone := make(chan struct{})
 	go func() { defer close(aliveDone); d.runAlive(aliveCtx, realHistorySyncClock{}) }()
@@ -476,6 +482,7 @@ func Run(ctx context.Context, opts Options) error {
 		d.writeAlive(stopCtx, time.Now())
 	}
 	cancel()
+	<-catchupDone
 	d.sync.close()
 	if d.full != nil {
 		d.full.close()
@@ -998,15 +1005,18 @@ func (d *daemon) waitForShutdown(ctx context.Context, tgDone, serveDone <-chan e
 }
 
 func (d *daemon) loadLastAlive(ctx context.Context, now time.Time) error {
+	d.catchupSince = nil
+	d.downtime = 0
 	lastAlive, found, err := d.store.LastAliveAt(ctx)
 	if err != nil {
-		return fmt.Errorf("read last alive: %w", err)
+		d.log.Warn("read last alive failed", "err", err)
+		return nil
 	}
 	if found {
 		alive := time.Unix(lastAlive, 0)
 		d.downtime = now.Sub(alive)
-		if d.downtime > 10*time.Minute {
-			since := alive.Add(-10 * time.Minute)
+		if d.downtime > catchupDowntime {
+			since := alive.Add(-catchupOverlap)
 			d.catchupSince = &since
 		}
 	}
@@ -1025,7 +1035,7 @@ func (d *daemon) writeAlive(ctx context.Context, now time.Time) {
 func (d *daemon) runAlive(ctx context.Context, clock historySyncClock) {
 	d.writeAlive(ctx, clock.Now())
 	for {
-		timer := clock.NewTimer(time.Minute)
+		timer := clock.NewTimer(aliveInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
