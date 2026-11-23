@@ -12,7 +12,7 @@ PR: —
 
 - Current status: in_progress
 - Last update: 2026-11-23
-- Next safe step: шаг 1 (базовая линия `just check` в worktree), затем шаги 2-4 исполнителем. Владелец утвердил план и сказал «Делай» 2026-11-23; ответы на Q1-Q11 и подтверждение D-A1-D-A8 внесены; открытых вопросов нет.
+- Next safe step: волна B (шаги 5-7: очередь с приоритетами, задача догонки, выбор чатов и автозапуск); шаги 1-4 готовы, коммит `d44cc85`. Владелец утвердил план и сказал «Делай» 2026-11-23; ответы на Q1-Q11 и подтверждение D-A1-D-A8 внесены; открытых вопросов нет.
 
 ## Зависимость
 
@@ -216,10 +216,10 @@ Go-типы:
 
 ## Step 1. Audit and baseline
 
-- [ ] `just check` на свежем `main` зелёный; результат и время записаны в Run log. Это базовая линия: после плана падать может только то, что план менял намеренно.
-- [ ] `go test -count=1 ./internal/daemon -run 'HistorySync|NewChat|Background'`, `go test -count=1 ./internal/store -run 'Sync|Overview|Migration'` и `go test -count=1 ./internal/config ./internal/cli` зелёные; список тестов сохранён в `var/agents/plans/20261122_2245_chat_catchup_after_downtime/baseline-tests.txt`.
-- [ ] `bin/atlas incoming SaveHistoryPage`, `bin/atlas incoming SyncState`, `bin/atlas incoming enqueueLocked` и `bin/atlas incoming cancelBackgroundLocked` сверены со списками вызовов из Known facts; новые вызовы, если есть, добавлены в план.
-- [ ] `rg -n 'new_chat_sync.messages' internal docs` перечисляет все места, где перечислены ключи настроек; список сохранён в `var/agents/plans/20261122_2245_chat_catchup_after_downtime/settings-keys.txt` и сверен со списком шага 4.
+- [x] (2026-11-23, на `feat/history-limits`: 28 пакетов `ok`, exit 0, вывод в `var/agents/plans/20261122_2245_chat_catchup_after_downtime/baseline-check.txt`) `just check` на свежем `main` зелёный; результат и время записаны в Run log. Это базовая линия: после плана падать может только то, что план менял намеренно.
+- [-] (заменено полным `just check` базовой линии, решение менеджера 2026-11-23, список тестов не нужен) `go test -count=1 ./internal/daemon -run 'HistorySync|NewChat|Background'`, `go test -count=1 ./internal/store -run 'Sync|Overview|Migration'` и `go test -count=1 ./internal/config ./internal/cli` зелёные; список тестов сохранён в `var/agents/plans/20261122_2245_chat_catchup_after_downtime/baseline-tests.txt`.
+- [x] (2026-11-23, вместо Atlas `rg`, он недоступен в песочнице Codex; расхождение: вызов `history_sync.go:538` относится к `MarkHistoryLimitReached`, не к `SaveHistoryPage`) `bin/atlas incoming SaveHistoryPage`, `bin/atlas incoming SyncState`, `bin/atlas incoming enqueueLocked` и `bin/atlas incoming cancelBackgroundLocked` сверены со списками вызовов из Known facts; новые вызовы, если есть, добавлены в план.
+- [x] `rg -n 'new_chat_sync.messages' internal docs` перечисляет все места, где перечислены ключи настроек; список сохранён в `var/agents/plans/20261122_2245_chat_catchup_after_downtime/settings-keys.txt` и сверен со списком шага 4.
 
 ## Implementation steps
 
@@ -227,28 +227,28 @@ Go-типы:
 
 ### Шаг 2. Схема и хранилище
 
-- [ ] Миграция `0014`: колонки `gap_from`, `gap_to`, пересозданное `chats_state`. Тест миграции по образцу `buildDatabaseAt` (`internal/store/overview_test.go:11`): база версии 13 с данными мигрирует, старые столбцы представления те же, новые пустые. Проверка: `go test -count=1 ./internal/store -run 'Migration|Overview|Schema'`, ожидание: зелёные.
-- [ ] `SyncProgress` с `GapFrom`, `GapTo`; `scanSyncProgress` и `syncProgressColumns`. Проверка: `go test -count=1 ./internal/store`, зелёные.
-- [ ] `SaveCatchupPage` (D-A2): тест, что `oldest_id`, `newest_id`, `complete`, `first_message_date` не меняются, строка не создаётся, сообщения и люди записаны. Проверка: `go test -count=1 ./internal/store -run Catchup`, зелёные.
-- [ ] `MarkCatchupGap(chatID, gapTo, aliveAt)` (D-A3): вычисление `gap_from`, расширение второй дырой, создание строки с пустыми id. Тесты на все три случая.
-- [ ] `SaveHistoryPage`: потолок `newest_id` при дыре и закрытие по D-A4 (новый параметр верха прохода). Тесты: дыра остаётся при странице внутри интервала; закрывается при проходе от `gap_to` до `gap_from`; при `complete = 1` закрытие не сбрасывает `complete` и `first_message_date`; без дыры поведение прежнее (существующие тесты `sync_state_test.go` без правок ожиданий).
-- [ ] Чтение и запись `last_alive_at` (обёртка над `GetAccountState`/`SetAccountState`). Тест: отсутствие ключа, запись, чтение.
+- [x] Миграция `0014`: колонки `gap_from`, `gap_to`, пересозданное `chats_state`. Тест миграции по образцу `buildDatabaseAt` (`internal/store/overview_test.go:11`): база версии 13 с данными мигрирует, старые столбцы представления те же, новые пустые. Проверка: `go test -count=1 ./internal/store -run 'Migration|Overview|Schema'`, ожидание: зелёные.
+- [x] `SyncProgress` с `GapFrom`, `GapTo`; `scanSyncProgress` и `syncProgressColumns`. Проверка: `go test -count=1 ./internal/store`, зелёные.
+- [x] `SaveCatchupPage` (D-A2): тест, что `oldest_id`, `newest_id`, `complete`, `first_message_date` не меняются, строка не создаётся, сообщения и люди записаны. Проверка: `go test -count=1 ./internal/store -run Catchup`, зелёные.
+- [x] `MarkCatchupGap(chatID, gapTo, aliveAt)` (D-A3): вычисление `gap_from`, расширение второй дырой, создание строки с пустыми id. Тесты на все три случая.
+- [x] `SaveHistoryPage`: потолок `newest_id` при дыре и закрытие по D-A4 (новый параметр верха прохода). Тесты: дыра остаётся при странице внутри интервала; закрывается при проходе от `gap_to` до `gap_from`; при `complete = 1` закрытие не сбрасывает `complete` и `first_message_date`; без дыры поведение прежнее (существующие тесты `sync_state_test.go` без правок ожиданий).
+- [x] Чтение и запись `last_alive_at` (обёртка над `GetAccountState`/`SetAccountState`). Тест: отсутствие ключа, запись, чтение.
 
 ### Шаг 3. Метка жизни Daemon и её условия (Q4)
 
-- [ ] В `Run` прежняя метка читается до пульса; пульс раз в минуту на часах, которые тест подменяет; финальная запись в последовательности остановки до закрытия базы.
-- [ ] Условие записи: функция без запроса к Telegram, `getAuthLost() == ""` и `backgroundSyncReady()`; её зовут и пульс, и финальная запись.
-- [ ] Тесты: первый старт без метки не ставит догонку и пишет метку после входа; остановка через отмену контекста (путь `daemon stop`, idle и сигнала) пишет метку; простой 9 минут не ставит догонку, 11 минут ставит; клиент не готов: метки нет; нет входа (`account.user == nil`): метки нет, ни пульсом, ни при выходе, прежняя метка не меняется; `auth_lost` выставлен: метка не двигается; вход появился позже старта: пульс начинает писать. Проверка: `go test -count=1 ./internal/daemon -run 'Alive|Catchup'`, зелёные.
+- [x] В `Run` прежняя метка читается до пульса; пульс раз в минуту на часах, которые тест подменяет; финальная запись в последовательности остановки до закрытия базы.
+- [x] Условие записи: функция без запроса к Telegram, `getAuthLost() == ""` и `backgroundSyncReady()`; её зовут и пульс, и финальная запись.
+- [0] (написаны тесты условий записи и пульса; «простой 9 и 11 минут» ждёт волны B, интеграционный тест остановки через `Run` не написан: в песочнице Codex нет сокетов, проверить в `just check`) Тесты: первый старт без метки не ставит догонку и пишет метку после входа; остановка через отмену контекста (путь `daemon stop`, idle и сигнала) пишет метку; простой 9 минут не ставит догонку, 11 минут ставит; клиент не готов: метки нет; нет входа (`account.user == nil`): метки нет, ни пульсом, ни при выходе, прежняя метка не меняется; `auth_lost` выставлен: метка не двигается; вход появился позже старта: пульс начинает писать. Проверка: `go test -count=1 ./internal/daemon -run 'Alive|Catchup'`, зелёные.
 
 ### Шаг 4. Настройка `catchup.enabled` (Q5)
 
-- [ ] `internal/config/settings.go`: строка в `settingSpecs` рядом с `background_sync.enabled` (`:40`): имя `catchup.enabled`, тип `bool`, умолчание `true`, переменная `TG_CLI_CATCHUP_ENABLED`, без флага, режим `restart`, не `protected`, не `secret`.
-- [ ] Поле конфигурации и умолчание: `internal/config/config.go` (структура `Config`, `:36-37`, умолчания `defaults`, `:249`), сборка из настроек рядом с `settings.go:302`.
-- [ ] Значение из базы: карта ключей `internal/cli/daemon_profile_database.go:26-45`.
-- [ ] Переменная окружения: разбор в `internal/cli` по образцу `backgroundSyncEnv.enabled` (`background_sync_config.go:56-64`): `true` или `false`, иное значение даёт код 2 до старта Daemon.
-- [ ] Передача в Daemon: поле `daemon.Options`; Daemon читает его один раз при старте. Ключ не добавляется в список живых ключей `internal/daemon/settings.go:158`: режим `restart`.
-- [ ] Каждое место из `settings-keys.txt` (шаг 1), где перечислены все ключи, получает `catchup.enabled`.
-- [ ] Тесты: `internal/config/settings_test.go`: `TestSettingDefaults` (карта умолчаний, `:13-22`), `TestTemplateDocumentedSettingDefaults` (`:176`), таблица разбора значений (`true`, `false` верны; `1`, `yes` ошибка); CLI: переменная окружения перекрывает базу, неверное значение даёт код 2; Daemon: `catchup.enabled = false` при включённом расписании даёт ноль вызовов `Chats` и `HistoryPage` и ни одной задачи. Проверка: `go test -count=1 ./internal/config ./internal/cli ./internal/daemon -run 'Setting|Catchup|Template|Background'`, зелёные.
+- [x] `internal/config/settings.go`: строка в `settingSpecs` рядом с `background_sync.enabled` (`:40`): имя `catchup.enabled`, тип `bool`, умолчание `true`, переменная `TG_CLI_CATCHUP_ENABLED`, без флага, режим `restart`, не `protected`, не `secret`.
+- [x] Поле конфигурации и умолчание: `internal/config/config.go` (структура `Config`, `:36-37`, умолчания `defaults`, `:249`), сборка из настроек рядом с `settings.go:302`.
+- [x] Значение из базы: карта ключей `internal/cli/daemon_profile_database.go:26-45`.
+- [x] Переменная окружения: разбор в `internal/cli` по образцу `backgroundSyncEnv.enabled` (`background_sync_config.go:56-64`): `true` или `false`, иное значение даёт код 2 до старта Daemon.
+- [x] Передача в Daemon: поле `daemon.Options`; Daemon читает его один раз при старте. Ключ не добавляется в список живых ключей `internal/daemon/settings.go:158`: режим `restart`.
+- [x] Каждое место из `settings-keys.txt` (шаг 1), где перечислены все ключи, получает `catchup.enabled`.
+- [0] (config и CLI зелёные; тест Daemon «ноль вызовов при `catchup.enabled = false`» ждёт волны B) Тесты: `internal/config/settings_test.go`: `TestSettingDefaults` (карта умолчаний, `:13-22`), `TestTemplateDocumentedSettingDefaults` (`:176`), таблица разбора значений (`true`, `false` верны; `1`, `yes` ошибка); CLI: переменная окружения перекрывает базу, неверное значение даёт код 2; Daemon: `catchup.enabled = false` при включённом расписании даёт ноль вызовов `Chats` и `HistoryPage` и ни одной задачи. Проверка: `go test -count=1 ./internal/config ./internal/cli ./internal/daemon -run 'Setting|Catchup|Template|Background'`, зелёные.
 
 ### Шаг 5. Очередь с приоритетами (Q2)
 
@@ -356,7 +356,7 @@ Go-типы:
 
 Снимок на 2026-11-23, ветка `feat/history-limits` (`bd457af`; код как в `7f811a0`).
 
-- `sync_state` пишут только `SaveHistoryPage` (`internal/store/sync_state.go:68-140`) и `MarkHistoryLimitReached` (`:172-190`); `ResetSyncState` (`:143`) удаляет строку. Вызовы: `history_sync.go:490, 509, 538`, `chat_limit.go:76`. Живые события `sync_state` не трогают. `SaveHistoryPage` двигает `oldest_id` через `MIN`, `newest_id` через `MAX` (`:111-120`).
+- `sync_state` пишут только `SaveHistoryPage` (`internal/store/sync_state.go:68-140`) и `MarkHistoryLimitReached` (`:172-190`); `ResetSyncState` (`:143`) удаляет строку. Вызовы `SaveHistoryPage`: `history_sync.go:490, 509`; вызов `MarkHistoryLimitReached`: `history_sync.go:538`, `chat_limit.go:76`. Живые события `sync_state` не трогают. `SaveHistoryPage` двигает `oldest_id` через `MIN`, `newest_id` через `MAX` (`:111-120`).
 - `SyncState` читают: `export_month.go:123`, `history_sync.go:618, 684`, `new_chat_sync.go:32`, `history_sync_queue.go:123, 189`, `background_sync.go:260`; SQL-чтения `sync_state`: `store/dashboard.go:39`, `store/background_sync.go:63`, представление `chats_state` (`0010_first_message_date.sql:40`).
 - Состояние загрузки чата отдаёт `chat overview` (поля `history_complete`, `history_first_message_date` через `chats_state`, `internal/store/overview.go:39-43`), не `chat info`: в коде `chat info` вызова `SyncState` нет.
 - Даты верхнего сообщения диалога в таблицах нет. `dialog_state.data` хранит `top_message` (id, без даты, `internal/tgclient/owner_state.go`), только после `chat state` с Telegram, это снимок. Свежий список диалогов даёт `client.Chats`: у `rpc.Chat` есть `LastMessageDate` из `e.Last.GetDate()` (`internal/tgclient/convert.go:21-23`) и `Pinned`. Новой выборки в `tgclient` не нужно.
@@ -408,6 +408,8 @@ Go-типы:
 - 2026-11-23: по `var/agents/plans/20261122_2245_chat_catchup_after_downtime/revision2.md` внесены ответы владельца на Q9 и Q10, D-A1-D-A8 подтверждены владельцем; D-A4 дополнено сужением дыры, добавлен Q11; код не менялся.
 - 2026-11-23: по `var/agents/plans/20261122_2245_chat_catchup_after_downtime/revision3.md` внесён ответ владельца на Q11; открытых вопросов нет; код не менялся.
 - 2026-11-23: владелец сказал «Делай»; план `in_progress`; ветка `feature/20261122_2245_chat_catchup_after_downtime` в worktree `../tg-cli-catchup` от `feat/history-limits` (слияние в `main` не делалось); исполнитель Codex `gpt-6.1-terra`.
+- 2026-11-23: шаг 1 выполнен: `just check` базовой линии зелёный (28 пакетов `ok`, exit 0). Atlas недоступен в песочнице Codex (кэш `uv`), менеджер разрешил замену на `rg`; в Known facts исправлено: вызов `history_sync.go:538` относится к `MarkHistoryLimitReached`.
+- 2026-11-23: волна A (шаги 2-4) принята: `just check` зелёный (28 пакетов `ok`, exit 0), коммит `d44cc85`. Три теста ждут волны B (простой 9 и 11 минут, ноль вызовов при `catchup.enabled = false`, остановка через `Run`); замечания ревью к волне B: битая метка `last_alive_at` не должна останавливать старт Daemon (предупреждение в лог), числа 10 минут, 1000 и 1 минута вынести в константы `internal/daemon`.
 
 ## Open questions
 
