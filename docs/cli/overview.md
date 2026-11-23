@@ -334,7 +334,7 @@ A `FLOOD_WAIT_X` from Telegram pauses the whole account for X seconds. A request
 | `behavior.throttle_percent` | `TG_CLI_THROTTLE_PERCENT` | a decimal number from 1 to 100: the share of the reference limits | 60 |
 | `behavior.flood_autowait` | `TG_CLI_FLOOD_AUTOWAIT` | a Go duration such as `10s`; `0` turns the auto-wait off, and commands then queue during a pause | `10s` |
 
-`background_sync.*` settings tune the scheduled history load: the Daemon loads older history of chats that are not loaded to their first message, one chat per run, inside a daily window. It is enabled by default. Set `background_sync.enabled` to `false` and restart the Daemon to stop its extra Telegram requests; `chat sync` is unchanged. The pauses and the window below apply to scheduled loads only. The priority is environment, database, then default because this group has no flag. A bad value is exit code 2 before the Daemon starts, and a value that breaks a rule between two keys (the pair order, the minimum pause) is exit code 2 as well. `background_sync.enabled` requires a restart; the other keys take effect in the running Daemon.
+`background_sync.*` settings tune the scheduled history load: the Daemon loads older history of chats that are not loaded to their first message, one chat per run, inside a daily window. It is enabled by default. Set `background_sync.enabled` to `false` and restart the Daemon to stop its extra Telegram requests; manual deep history loads remain available, but catchup is disabled. The window applies to scheduled loads; catchup and new-chat loads also use the page-pause settings. The priority is environment, database, then default because this group has no flag. A bad value is exit code 2 before the Daemon starts, and a value that breaks a rule between two keys (the pair order, the minimum pause) is exit code 2 as well. `background_sync.enabled` requires a restart; the other keys take effect in the running Daemon.
 
 | Config key | Environment variable | Values | Default |
 | --- | --- | --- | --- |
@@ -345,6 +345,12 @@ A `FLOOD_WAIT_X` from Telegram pauses the whole account for X seconds. A request
 | `background_sync.interval_max` | `TG_CLI_BACKGROUND_SYNC_INTERVAL_MAX` | a positive Go duration, not below `interval_min` | `3h` |
 | `background_sync.page_pause_min` | `TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MIN` | a Go duration of at least `1s`; the shortest random pause between pages | `2s` |
 | `background_sync.page_pause_max` | `TG_CLI_BACKGROUND_SYNC_PAGE_PAUSE_MAX` | a Go duration, not below `page_pause_min` | `8s` |
+
+`catchup.enabled` controls catchup after Daemon downtime. It is `true` by default and requires a restart after a change. Catchup also requires `background_sync.enabled` to be `true`; changing `catchup.enabled` does not override it. The environment variable overrides the database.
+
+| Config key | Environment variable | Values | Default |
+| --- | --- | --- | --- |
+| `catchup.enabled` | `TG_CLI_CATCHUP_ENABLED` | `true` or `false`; restart required | `true` |
 
 `history_limit.*` settings end a full history load: the manual one (`chat sync start`, `chat sync queue` without `--messages` and `--since`) and the scheduled one. After each saved page the Daemon checks the chat. When the oldest saved message is not newer than `history_limit.since`, or the chat holds `history_limit.messages` saved messages (deleted ones do not count), the chat is marked `complete` and the job is `done`. `first_message_date` stays null in this case. Both keys take effect at once in the running Daemon, and a limit that is turned off does not reopen a chat that is already complete. The priority is environment, database, then default; a bad value is exit code 2.
 

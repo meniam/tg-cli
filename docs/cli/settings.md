@@ -12,9 +12,9 @@ The result for a setting has `key`, effective `value`, `source` (`default`,
 environment variable, command-line flag, application timing, protection and
 secret status.
 
-The default `profile.client` is `desktop`. `background_sync.enabled` and
-`semantic_search.enabled` also default to `true`; set either one to `false`
-and restart the Daemon to disable it. `voice_transcription.enabled` defaults to
+The default `profile.client` is `desktop`. `background_sync.enabled`, `catchup.enabled` and
+`semantic_search.enabled` also default to `true`; set any one to `false`
+and restart the Daemon to disable it. Catchup needs both `catchup.enabled` and `background_sync.enabled` enabled. `voice_transcription.enabled` defaults to
 `true`; its ten voice settings, including the 5000 MB and 500-file daily
 budget, are also restart settings. Use `tg schema` for the authoritative
 defaults of every setting.

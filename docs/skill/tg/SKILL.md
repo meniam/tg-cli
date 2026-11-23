@@ -5,7 +5,7 @@ description: >
   summarize, export, transcribe voice messages or watch chats, send messages or files, or manage tg login
   or the daemon, even if they don't say CLI or MTProto. Common phrases include «телеграм», «тг», «что пишут
   в канале», «найди в переписке», «выгрузи переписку», «скинь в телегу», «расшифруй голосовое» and «что
-  сказано в кружке», «синхронизируй последний месяц», «подгрузи последние 100 сообщений», «синхронизируй все чаты за месяц», «синхронизируй 20 человек, с кем я общаюсь чаще всего», «синхронизируй чаты», «загрузи историю чатов», «поставь чаты в очередь», «о чём мы говорили с Иваном», «напиши Ивану и пообщайся», «узнай у Ивана», «спроси у бота», «ограничь чат N сообщениями» and «автозапуск демона». Not for Bot API bots or the Telegram Desktop UI.
+  сказано в кружке», «синхронизируй последний месяц», «подгрузи последние 100 сообщений», «синхронизируй все чаты за месяц», «синхронизируй 20 человек, с кем я общаюсь чаще всего», «синхронизируй чаты», «загрузи историю чатов», «поставь чаты в очередь», «о чём мы говорили с Иваном», «напиши Ивану и пообщайся», «узнай у Ивана», «спроси у бота», «ограничь чат N сообщениями» and «автозапуск демона», «что догнать после простоя», «догонка после простоя». Not for Bot API bots or the Telegram Desktop UI.
 ---
 
 # tg: Telegram from the terminal
@@ -125,6 +125,7 @@ One scenario per file in [recipes/](recipes/): when to use, prepare, commands, n
 - [load-full-history](recipes/load-full-history.md): load the whole chat history into the database and wait for the end.
 - [sync-recent-history](recipes/sync-recent-history.md): load only the last N messages, days or months of one chat, or everything since a date.
 - [sync-active-chats](recipes/sync-active-chats.md): queue the history load of a batch of chats, for example the people written to in the last 60 days.
+- [after-downtime](recipes/after-downtime.md): inspect automatic catchup after Daemon downtime and repeat it on request.
 - [sync-queue-control](recipes/sync-queue-control.md): what is loading now, how far it is, and stopping one chat or the whole queue.
 - [autostart-daemon](recipes/autostart-daemon.md): start the Daemon at login on macOS and turn it off.
 - [export-history](recipes/export-history.md): export saved history to JSONL.

@@ -581,18 +581,20 @@ A job has `chat_id`, `state`, `pages` and `loaded` (messages saved by this run),
 | `queued` | waits until the Daemon is free |
 | `running` | loads pages |
 | `waiting_flood` | Telegram asked the account to wait; `wait_seconds` is what is left, and the load goes on by itself |
-| `done` | an empty Telegram answer arrived, or the history limit of the settings was met: `complete` is `true`; a load with `--messages` or `--since` that met its own limit is `done` with `complete` false |
+| `done` | an empty Telegram answer arrived, or the history limit of the settings was met: `complete` is `true`; a load with `--messages` or `--since` that met its own limit is `done` with `depth_reached: true`; an existing `complete` value is preserved during a gap pass |
 | `failed` | stopped by an error; `error_code` is the JSON-RPC code of the cause (`-32006` the chat was closed during the load, `-32002` a Telegram error, `-32603` an internal error such as a page that could not be saved, `-32001` a lost login) and `error` is a short text |
 | `cancelled` | stopped by `chat sync cancel` |
 
-A failed job is still a successful `status` call (exit code 0): read `state`. A load is finished when `state` is `done` and `complete` is `true`; `idle` with `complete: true` after a Daemon restart also means the chat is loaded to its beginning. A repeated `start` on a loaded chat does not fetch messages newer than `newest_id`.
+A failed job is still a successful `status` call (exit code 0): read `state`. A `complete` chat may still have a gap, and a history limit may leave `first_message_date` null; inspect both before claiming full coverage. A repeated `start` on a loaded chat without a gap does not fetch messages newer than `newest_id`.
 
-A full load, the scheduled one included, also ends when it meets a history limit: the oldest saved message is not newer than `history_limit.since` (default `2022-02-02`) or the chat holds `history_limit.messages` saved messages (default `200000`). The chat is then `complete` and `done`, and later loads skip it, but `first_message_date` stays null, because the oldest saved message is not the first one of the chat. The load stops at the end of the page that met the limit. The keys are in [overview.md](overview.md#request-throttle-and-flood_wait); an empty `since` and `messages` 0 turn the limits off. A load with `--messages` or `--since` ignores them.
+After a Daemon downtime longer than 10 minutes, catchup starts automatically when both `catchup.enabled` and `background_sync.enabled` are true. It selects visible chats with saved messages and a newer dialog message, then loads from the top to the previous `last_alive_at` minus 10 minutes, or until it reaches 1000 loaded messages at a page boundary. It pauses before every page, including the first. If the limit is reached first, the chat gets a gap (`gap_from`, `gap_to`). An open gap remains even when `complete` is true; use `chat sync status` or `chat overview` to inspect it. See FEATURES.md item 10.21.
+
+A full load, the scheduled one included, also ends when it meets a history limit: the oldest saved message is not newer than `history_limit.since` (default `2022-02-02`) or the chat holds `history_limit.messages` saved messages (default `200000`). The chat is then `complete` and `done`, and later loads skip it unless it has a gap, but `first_message_date` stays null, because the oldest saved message is not the first one of the chat. The load stops at the end of the page that met the limit. The keys are in [overview.md](overview.md#request-throttle-and-flood_wait); an empty `since` and `messages` 0 turn the limits off. A load with `--messages` or `--since` ignores them.
 
 Rules that hold for all three commands:
 
 - **`FLOOD_WAIT`.** The load waits out any `FLOOD_WAIT`, however long, and repeats the page. While the rest of such a pause is longer than the auto-wait threshold (10 seconds by default), any other command that needs Telegram exits with code 6 at once with the seconds left in `error.message`, instead of waiting; with `TG_CLI_FLOOD_AUTOWAIT=0` in the environment of `tg daemon start` the commands queue instead. Do not retry in a loop: wait for `wait_seconds` or work locally (`tg search`, `note list`, `message context --local`). Cancelling the load does not shorten Telegram's pause.
-- **After a restart.** Jobs live in the memory of the Daemon. After `daemon stop` and a new `daemon start` nothing resumes by itself and `status` without a chat does not show the old job. An explicit `start` continues from the saved `oldest_id`.
+- **After a restart.** Jobs live in the memory of the Daemon. After `daemon stop` and a new `daemon start` the previous jobs do not resume and `status` without a chat does not show them. Catchup may be queued separately after downtime. An explicit `start` passes any gap first, or continues from the saved `oldest_id` when there is no gap.
 - **Closed chats.** A closed chat is `not_found`. If a chat is closed while it loads, the job stops as `failed` and what was saved stays.
 - **Size.** The database grows with the chat, and there is no size limit. Tell the user before loading a chat of thousands of messages and more; 10 000 messages are 100 pages and at least 200 seconds of pauses, the waits of the throttle are added. For fresh messages `message history` with a cursor is enough.
 - **Idle stop.** A running load keeps `--idle-timeout` from stopping the Daemon.
@@ -725,17 +727,21 @@ tg chat sync start <chat> [--messages N | --days N | --months N | --since DATE] 
 **Safety class:** `local_write`. Not dangerous. **Output formats:** `json`, `toon`, `human`.
 
 
-**Preconditions.** A running Daemon and a login. Put `--` before a negative chat id. `start` on a chat that is already queued or running changes nothing and returns the job; on a `complete` chat it answers `done` with no pages and no Telegram call; after `failed` or `cancelled` it continues from `oldest_id`.
+**Preconditions.** A running Daemon and a login. Put `--` before a negative chat id. `start` returns an existing active manual job for the chat; on a `complete` chat without a gap it answers `done` with no pages and no Telegram call; after `failed` or `cancelled` it continues from the saved progress.
 
-A manual start has priority over the scheduled load (see [background_sync in `daemon status`](daemon-and-auth.md#tg-daemon-status)): when the chat is not `complete`, the Daemon cancels any scheduled job, queued or running, and the manual job waits only for the manual jobs ahead of it. The pages the scheduled job saved stay, and the scheduler does not start a new run while any job is active. A manual job pauses 2 seconds between pages; a scheduled job pauses a random 2 to 8 seconds by default.
+When a chat has `gap_from` and `gap_to`, `start` first passes the gap down from `gap_to`, even when `complete` is true or a depth limit is already met. It returns `queued`; during the pass the two fields show the gap, and they become null when it closes. Without a depth flag the pass goes to `gap_from`. After it closes, a complete chat ends; otherwise the same job continues from `oldest_id`, or from the end of the pass when `oldest_id` is absent.
+
+A depth flag limits the pass itself. `--since`, `--days` and `--months` stop at the requested date; `--messages N` stops after N messages loaded by this job, at a page boundary. If it stops before closing the gap, the gap narrows and the job is `done` with `depth_reached: true`. The three meanings of `--messages N` are: without a gap, N messages saved in the chat in total; during a gap pass, N messages loaded by this job; after that pass, N messages loaded by the same job, including the pass. A page may take the count past N. If the pass closes first, the job continues until its limit unless the chat was already complete.
+
+A manual start has priority over the scheduled load (see [background_sync in `daemon status`](daemon-and-auth.md#tg-daemon-status)): when it queues a job for an incomplete chat or a gap, the Daemon cancels background jobs, queued or running. A running catchup continues before the manual job. The pages the scheduled job saved stay, catchup jobs are not cancelled, and the scheduler does not start a new run while any job is active. A manual job pauses 2 seconds between pages; a scheduled job pauses a random 2 to 8 seconds by default.
 
 **Depth.** Without a depth flag the load goes back to the first message. One of `--messages`, `--days`, `--months` and `--since` stops it earlier, at a page boundary (a page is 100 messages):
 
-- `--messages N` stops once the chat holds at least N saved messages, counting the ones saved already.
+- Without a gap, `--messages N` stops once the chat holds at least N saved messages, counting the ones saved already. For a chat with a gap, it counts messages loaded by this job as described above.
 - `--days N` and `--months N` stop once the oldest saved message is older than N days or N calendar months. The command turns them into a time at the moment of the call.
 - `--since DATE` stops once the oldest saved message is not newer than DATE, which is RFC 3339 or `YYYY-MM-DD` (local midnight).
 
-The flags exclude each other (exit code 2), and a date in the future is exit code 2. A load that stopped on its limit ends `done` with `depth_reached` true and `complete` false, and the job echoes the limit in `messages` or `since`. It never marks the chat `complete`: a later `start`, with or without a limit, goes on from the saved `oldest_id`. When the chat holds enough messages already, the job is `done` at once with no pages and no Telegram call, and it leaves a scheduled load alone.
+The flags exclude each other (exit code 2), and a date in the future is exit code 2. A load that stops on its limit ends `done` with `depth_reached` true and echoes the limit in `messages` or `since`. For a chat without a gap, `complete` remains false and a later `start` continues from `oldest_id`; if the chat already holds enough messages, the job ends without a page and leaves a scheduled load alone. For a chat with a gap, the rules above apply and an existing `complete` value is preserved.
 
 **Example.**
 
@@ -749,7 +755,7 @@ tg chat sync start @release_team --months 1
 **Answer.**
 
 ```json
-{"ok":true,"data":{"chat_id":-1001234567890,"state":"queued","source":"manual","pages":0,"loaded":0,"oldest_id":null,"newest_id":null,"complete":false,"first_message_date":null,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:00Z"}}
+{"ok":true,"data":{"chat_id":-1001234567890,"state":"queued","source":"manual","pages":0,"loaded":0,"oldest_id":null,"newest_id":null,"complete":false,"first_message_date":null,"gap_from":null,"gap_to":null,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:00Z"}}
 ```
 
 **Answer fields** (`data`): `chat_id` integer, `state` string, `source` string (optional), `pages` integer, `loaded` integer, `oldest_id` integer (optional), `newest_id` integer (optional), `complete` boolean, `messages` integer (optional), `since` string (optional), `depth_reached` boolean (optional), `first_message_date` integer or null, `gap_from` and `gap_to` integer or null, `wait_seconds` integer (optional), `error_code` integer (optional), `error` string (optional), `started_at` string, `updated_at` string.
@@ -787,7 +793,7 @@ tg chat sync status @release_team --fields state,pages,loaded,complete
 **Answer.** One job:
 
 ```json
-{"ok":true,"data":{"chat_id":-1001234567890,"state":"running","source":"background","pages":3,"loaded":300,"oldest_id":3801,"newest_id":4102,"complete":false,"first_message_date":null,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:07Z"}}
+{"ok":true,"data":{"chat_id":-1001234567890,"state":"running","source":"background","pages":3,"loaded":300,"oldest_id":3801,"newest_id":4102,"complete":false,"first_message_date":null,"gap_from":null,"gap_to":null,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:07Z"}}
 ```
 
 All jobs of the Daemon run (empty when nothing was started):
@@ -798,6 +804,8 @@ All jobs of the Daemon run (empty when nothing was started):
 
 **Answer fields** (`data`): `jobs` array, `jobs.chat_id` integer, `jobs.state` string, `jobs.source` string (optional), `jobs.pages` integer, `jobs.loaded` integer, `jobs.oldest_id` integer (optional), `jobs.newest_id` integer (optional), `jobs.complete` boolean, `jobs.first_message_date` integer or null, `jobs.gap_from` and `jobs.gap_to` integer or null, `jobs.wait_seconds` integer (optional), `jobs.error_code` integer (optional), `jobs.error` string (optional), `jobs.started_at` string, `jobs.updated_at` string.
 
+The queue has three lanes: manual jobs first, catchup and new-chat loads together in arrival order, then scheduled loads. An already running job continues unless cancelled. A manual `start` can cancel background jobs, including new-chat loads, but does not cancel catchup jobs. A new chat waits for catchup jobs ahead of it.
+
 With a chat the job fields are at the top level of `data`; without a chat they are inside `jobs`. The list shows manual, background and catchup jobs; `source` tells them apart. For a chat without a job in this Daemon run (`idle`) `source` is absent, and `first_message_date` comes from the saved progress. `source`, `pages` and `loaded` describe the job of this run; `oldest_id`, `newest_id`, `complete` and `first_message_date` describe the chat.
 
 **Exit codes.** 0 (also for a `failed` job); 2 `--format jsonl` with a chat; 3; 4 a chat reference that needs Telegram without a login; 7 an unknown or closed chat.
@@ -806,7 +814,7 @@ With a chat the job fields are at the top level of `data`; without a chat they a
 
 ### tg chat sync cancel
 
-Cancels a queued or running history load. Messages that are already saved remain.
+Cancels a queued or running history load. If the chat has both a manual job and a catchup job, it cancels both. Messages that are already saved remain.
 
 ```text
 tg chat sync cancel [<chat>] [--all] [flags]
@@ -835,7 +843,7 @@ tg chat sync cancel --all
 **Answer.**
 
 ```json
-{"ok":true,"data":{"chat_id":-1001234567890,"state":"cancelled","source":"manual","pages":2,"loaded":200,"oldest_id":3901,"newest_id":4102,"complete":false,"first_message_date":null,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:05Z"}}
+{"ok":true,"data":{"chat_id":-1001234567890,"state":"cancelled","source":"manual","pages":2,"loaded":200,"oldest_id":3901,"newest_id":4102,"complete":false,"first_message_date":null,"gap_from":null,"gap_to":null,"started_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:05Z"}}
 ```
 
 **Answer fields** (`data`): `chat_id` integer, `state` string, `source` string (optional), `pages` integer, `loaded` integer, `oldest_id` integer (optional), `newest_id` integer (optional), `complete` boolean, `messages` integer (optional), `since` string (optional), `depth_reached` boolean (optional), `first_message_date` integer or null, `gap_from` and `gap_to` integer or null, `wait_seconds` integer (optional), `error_code` integer (optional), `error` string (optional), `started_at` string, `updated_at` string.
@@ -904,7 +912,7 @@ tg chat sync queue @anna @boris --months 1 --dry-run
 
 ### tg chat sync catchup
 
-Queues catchup for chats with messages missed during daemon downtime. `--dry-run` lists chats without queuing jobs.
+Queues catchup for chats with messages missed during Daemon downtime. Catchup normally starts automatically after downtime longer than 10 minutes. It needs a saved startup heartbeat and both `catchup.enabled` and `background_sync.enabled` set to `true`. The boundary is the heartbeat read at this Daemon start minus 10 minutes; it is not changed by later heartbeats. The Daemon picks visible chats with saved messages and a newer dialog message, and loads until 1000 messages have been loaded per chat, at a page boundary. `--dry-run` reads the dialog list and reports candidates without queuing jobs or loading history. An already active chat is `skipped_active`.
 
 ```text
 tg chat sync catchup [--dry-run]
@@ -920,7 +928,11 @@ tg chat sync catchup [--dry-run]
 
 **Answer fields** (`data`): `dry_run` boolean, `since` integer or null, `queued`, `would_queue`, and `skipped_active` integers, `chats` array, `chats.chat_id` integer, `chats.title` string (untrusted), `chats.last_message_date` integer, `chats.action` string (`queued`, `would_queue`, or `skipped_active`).
 
-**Exit codes.** 0; 2 a required setting is disabled; 3; 4; 6 `FLOOD_WAIT` longer than the auto-wait.
+**Preconditions.** A running Daemon and a login. Both switches must be enabled; a change requires a Daemon restart. If there was no qualifying downtime or no startup heartbeat, `since` is null and nothing is queued.
+
+**Exit codes.** 0; 2 a required setting is disabled (the error names it); 3 no Daemon; 4 no login; 6 `FLOOD_WAIT` longer than the auto-wait.
+
+See FEATURES.md item 10.21.
 
 ### tg chat state
 
