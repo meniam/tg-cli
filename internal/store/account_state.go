@@ -32,3 +32,25 @@ func (db *DB) SetAccountState(ctx context.Context, key string, value json.RawMes
 	}
 	return nil
 }
+
+// LastAliveAt returns the last saved daemon heartbeat.
+func (db *DB) LastAliveAt(ctx context.Context) (int64, bool, error) {
+	raw, found, err := db.GetAccountState(ctx, "last_alive_at")
+	if err != nil || !found {
+		return 0, found, err
+	}
+	var value int64
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return 0, false, fmt.Errorf("decode last alive: %w", err)
+	}
+	return value, true, nil
+}
+
+// SetLastAliveAt saves a daemon heartbeat as a Unix timestamp.
+func (db *DB) SetLastAliveAt(ctx context.Context, value int64) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return db.SetAccountState(ctx, "last_alive_at", raw)
+}

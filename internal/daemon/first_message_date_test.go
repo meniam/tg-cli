@@ -65,3 +65,30 @@ func TestHistorySyncFirstMessageDate(t *testing.T) {
 	}
 	t.Fatal("chat 42 is missing from the overview")
 }
+
+func TestChatOverviewGapFields(t *testing.T) {
+	d, _, db, _, _ := syncFixture(t)
+	ctx := context.Background()
+	if err := db.UpsertChats(ctx, []store.Chat{{ID: 42, Type: "group", Title: "Team"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 10, Date: 10, Raw: []byte(`{}`)}}, nil, false, store.GapPass{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MarkCatchupGap(ctx, 42, 50, 10); err != nil {
+		t.Fatal(err)
+	}
+	v, err := d.chatOverview(ctx, params(t, rpc.ChatOverviewParams{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range v.(rpc.ChatOverviewResult).Chats {
+		if c.ChatID == 42 {
+			if c.HistoryGapFrom == nil || *c.HistoryGapFrom != 10 || c.HistoryGapTo == nil || *c.HistoryGapTo != 50 {
+				t.Fatalf("gap: %+v", c)
+			}
+			return
+		}
+	}
+	t.Fatal("chat missing")
+}

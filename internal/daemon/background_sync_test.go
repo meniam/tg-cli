@@ -310,7 +310,7 @@ func (e *schedEnv) chat(id int64, chatType string, lastMessage int) {
 	}
 	if lastMessage > 0 {
 		message := store.Message{ChatID: id, ID: lastMessage, Date: int64(lastMessage), Raw: []byte(`{}`)}
-		if _, err := e.db.SaveHistoryPage(ctx, id, []store.Message{message}, nil, false); err != nil {
+		if _, err := e.db.SaveHistoryPage(ctx, id, []store.Message{message}, nil, false, store.GapPass{}); err != nil {
 			e.t.Fatal(err)
 		}
 	}

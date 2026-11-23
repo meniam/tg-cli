@@ -112,7 +112,7 @@ func TestHistorySyncIdleStatusAndCancel(t *testing.T) {
 			d, _, db, _, _ := syncFixture(t)
 			if tc.stored {
 				message := store.Message{ChatID: 42, ID: 7, Date: 7, Raw: []byte(`{}`)}
-				if _, err := db.SaveHistoryPage(context.Background(), 42, []store.Message{message}, nil, tc.complete); err != nil {
+				if _, err := db.SaveHistoryPage(context.Background(), 42, []store.Message{message}, nil, tc.complete, store.GapPass{}); err != nil {
 					t.Fatal(err)
 				}
 			}

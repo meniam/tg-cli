@@ -125,7 +125,7 @@ func TestHistorySyncDepthAlreadyMetAtStartMakesNoRequest(t *testing.T) {
 	messages := []store.Message{
 		{ChatID: 42, ID: 7, Date: 1007, Raw: []byte(`{}`)}, {ChatID: 42, ID: 8, Date: 1008, Raw: []byte(`{}`)}, {ChatID: 42, ID: 9, Date: 1009, Raw: []byte(`{}`)},
 	}
-	if _, err := db.SaveHistoryPage(context.Background(), 42, messages, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(context.Background(), 42, messages, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	job, err := startDepthSync(t, d, 42, 3, "")
@@ -148,11 +148,11 @@ func TestHistorySyncDepthMetStartLeavesTheBackgroundLoadAlone(t *testing.T) {
 		return rpc.HistoryPage{}, ctx.Err()
 	}
 	message := store.Message{ChatID: 42, ID: 7, Date: 1007, Raw: []byte(`{}`)}
-	if _, err := db.SaveHistoryPage(context.Background(), 42, []store.Message{message}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(context.Background(), 42, []store.Message{message}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	d.sync.mu.Lock()
-	d.sync.enqueueLocked(20, syncRef(20), store.SyncProgress{}, rpc.HistorySyncBackground, nil, historyDepth{}, false)
+	d.sync.enqueueLocked(20, syncRef(20), store.SyncProgress{}, rpc.HistorySyncBackground, nil, historyDepth{}, false, laneBackground)
 	d.sync.mu.Unlock()
 	if job, err := startDepthSync(t, d, 42, 1, ""); err != nil || !job.DepthReached {
 		t.Fatalf("start: %+v err=%v", job, err)
@@ -339,10 +339,10 @@ func TestHistorySyncQueueSkipsLoadedActiveAndPartlyLoadedChats(t *testing.T) {
 	d, _, db, _ := queueFixture(t)
 	ctx := context.Background()
 	// Chat 1 is loaded completely, chat 2 partly, chat 4 has a job already.
-	if _, err := db.SaveHistoryPage(ctx, 1, []store.Message{{ChatID: 1, ID: 9, Date: 1009, Raw: []byte(`{}`)}}, nil, true); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 1, []store.Message{{ChatID: 1, ID: 9, Date: 1009, Raw: []byte(`{}`)}}, nil, true, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.SaveHistoryPage(ctx, 2, []store.Message{{ChatID: 2, ID: 9, Date: 1009, Raw: []byte(`{}`)}}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 2, []store.Message{{ChatID: 2, ID: 9, Date: 1009, Raw: []byte(`{}`)}}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	startSync(t, d, 4)
@@ -371,7 +371,7 @@ func TestHistorySyncQueueDepthMetChatsAreSkipped(t *testing.T) {
 	for id := 1; id <= 3; id++ {
 		saved = append(saved, store.Message{ChatID: 1, ID: id, Date: int64(1000 + id), Raw: []byte(`{}`)})
 	}
-	if _, err := db.SaveHistoryPage(ctx, 1, saved, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 1, saved, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	result, err := runQueue(t, d, rpc.HistorySyncQueueParams{Type: "user", ActiveDays: 30, Messages: 3, DryRun: true})
@@ -562,7 +562,7 @@ func TestHistorySyncQueueNamedChatsQueuesThemWithoutTheDialogList(t *testing.T) 
 		t.Fatal(err)
 	}
 	// Chat 3 is loaded, chat 4 already has a job.
-	if _, err := db.SaveHistoryPage(ctx, 3, nil, nil, true); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 3, nil, nil, true, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.sync.startDepth(4, chatref.Ref{Kind: chatref.ID, ID: 4}, store.SyncProgress{}, historyDepth{}, false); err != nil {

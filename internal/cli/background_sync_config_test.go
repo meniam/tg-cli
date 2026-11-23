@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -286,5 +287,27 @@ func TestConfigShowListsBackgroundSync(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCatchupSettingEnvironment(t *testing.T) {
+	for _, tc := range []struct {
+		env          string
+		stored, want bool
+		invalid      bool
+	}{{"", false, false, false}, {"true", false, true, false}, {"false", true, false, false}, {"yes", true, false, true}, {"1", true, false, true}} {
+		a := backgroundSyncApp(t, "", map[string]string{"TG_CLI_CATCHUP_ENABLED": tc.env})
+		if err := a.applyDatabaseSettings(daemon.Paths{Dir: "default"}, map[string]json.RawMessage{"catchup.enabled": json.RawMessage(strconv.FormatBool(tc.stored))}); err != nil {
+			t.Fatal(err)
+		}
+		got, err := a.daemonCatchup()
+		if (err != nil) != tc.invalid || !tc.invalid && got != tc.want {
+			t.Fatalf("%+v: %v %v", tc, got, err)
+		}
+		if tc.invalid {
+			if e, ok := err.(*cmdError); !ok || e.exit != exitcode.Usage {
+				t.Fatalf("wrong exit: %v", err)
+			}
+		}
 	}
 }

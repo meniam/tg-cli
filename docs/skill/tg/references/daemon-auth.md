@@ -24,7 +24,7 @@ tg auth status                     # whether the account is logged in and who it
 
 **`tg status`.** Shows the daemon’s state and active settings in five sections: vector index, transcription, history, Telegram and storage. It makes no Telegram request and works after login is lost. Use `tg daemon status` for machine-readable daemon state. Explicit `--format json|jsonl|toon` returns exit code 2.
 
-**Background load block.** `daemon status` has a `background_sync` block: `state` (`disabled`, `waiting_window`, `waiting_interval`, `running`), `next_run_at`, `last_run_at`, `last_result` and `last_chat_id`. The scheduled load is on by default; `background_sync.enabled` controls it and requires a Daemon restart. Do not change it unless the owner asks. With `--idle-timeout` the Daemon may stop before a run, because waiting for the schedule does not count as activity.
+**Background load block.** `daemon status` has a `background_sync` block: `state` (`disabled`, `waiting_window`, `waiting_interval`, `running`), `next_run_at`, `last_run_at`, `last_result` and `last_chat_id`. The scheduled load is on by default; `background_sync.enabled` controls it and requires a Daemon restart. `catchup.enabled` also defaults to true and requires a restart. Change either key only on the owner's request. Catchup needs both enabled. With `--idle-timeout` the Daemon may stop before a run, because waiting for the schedule does not count as activity.
 
 **Semantic search block.** `daemon status` has a `semantic_search` block (always present) and `tg status` a `VECTOR INDEX` section: `disabled` while `semantic_search.enabled` is off, otherwise the indexer state (`idle`, `indexing`, `unavailable`, `model_missing`, `error`), the model and `indexed` of `total` fragments. `unavailable` means Ollama does not answer and `model_missing` that it lacks the model (`ollama pull bge-m3`); `tg search` keeps working by words in every state. The feature is on by default and a change requires a Daemon restart.
 
@@ -50,7 +50,7 @@ tg autostart on --profile work   # another profile: its own job dev.tg-cli.daemo
 - **Secrets.** Own application credentials (`TG_API_ID`, `TG_API_HASH`) are never written to the job file; `on` refuses with exit code 2 while they are set. The job file has no secret otherwise.
 - **Stop.** The job restarts the Daemon only after a failure. `tg daemon stop` ends it with exit code 0 and launchd leaves it stopped until the next login; a stop from `off` also stops the Daemon launchd ran.
 - **A Daemon started by hand** is not under launchd. `on` then writes the job file but does not load it (`loaded: false`, a `note`): launchd loads it at the next login. To put the daemon under launchd now, `tg daemon stop` and then `tg autostart on` again. Starting a profile that already has a Daemon is not an error and creates no second one.
-- **After a reboot** the history sync queue is empty (it lives in the memory of the Daemon): see [sync-active-chats](../recipes/sync-active-chats.md). Only macOS: on another system all three commands give exit code 2.
+- **After a reboot** the previous history sync queue is empty (it lives in Daemon memory). Catchup may be queued after downtime; see [after-downtime](../recipes/after-downtime.md). Only macOS: on another system all three commands give exit code 2.
 - **Not verified on a live account:** the real `launchctl bootstrap`, the start after a reboot and the restart after a crash (`FEATURES.md`, item 2.13); tests use a stub `launchctl`.
 
 ## Config

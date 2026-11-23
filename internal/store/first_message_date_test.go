@@ -21,16 +21,16 @@ func TestFirstMessageDateSavedWithComplete(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
 
-	state, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(50, "a"), historyMessage(40, "b")}, nil, false)
+	state, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(50, "a"), historyMessage(40, "b")}, nil, false, GapPass{})
 	if err != nil || state.Complete || state.FirstMessageDate != nil {
 		t.Fatalf("first page: %+v err=%v", state, err)
 	}
-	state, err = db.SaveHistoryPage(ctx, 42, []Message{historyMessage(20, "c"), historyMessage(10, "d")}, nil, false)
+	state, err = db.SaveHistoryPage(ctx, 42, []Message{historyMessage(20, "c"), historyMessage(10, "d")}, nil, false, GapPass{})
 	if err != nil || state.Complete || state.FirstMessageDate != nil {
 		t.Fatalf("an incomplete chat must keep the date empty: %+v err=%v", state, err)
 	}
 
-	state, err = db.SaveHistoryPage(ctx, 42, nil, nil, true)
+	state, err = db.SaveHistoryPage(ctx, 42, nil, nil, true, GapPass{})
 	if err != nil || !state.Complete {
 		t.Fatalf("complete page: %+v err=%v", state, err)
 	}
@@ -42,7 +42,7 @@ func TestFirstMessageDateSavedWithComplete(t *testing.T) {
 	requireFirstMessageDate(t, stored.FirstMessageDate, 10)
 
 	// A later write of an older message and another completion keep the saved date.
-	state, err = db.SaveHistoryPage(ctx, 42, []Message{historyMessage(5, "e")}, nil, true)
+	state, err = db.SaveHistoryPage(ctx, 42, []Message{historyMessage(5, "e")}, nil, true, GapPass{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestFirstMessageDateSavedWithComplete(t *testing.T) {
 // the transaction stored.
 func TestFirstMessageDateOfCompletingPage(t *testing.T) {
 	db := openTestDB(t)
-	state, err := db.SaveHistoryPage(context.Background(), 42, []Message{historyMessage(9, "a"), historyMessage(3, "b")}, nil, true)
+	state, err := db.SaveHistoryPage(context.Background(), 42, []Message{historyMessage(9, "a"), historyMessage(3, "b")}, nil, true, GapPass{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestFirstMessageDateOfCompletingPage(t *testing.T) {
 // message has nothing to date.
 func TestFirstMessageDateEmptyChat(t *testing.T) {
 	db := openTestDB(t)
-	state, err := db.SaveHistoryPage(context.Background(), 42, nil, nil, true)
+	state, err := db.SaveHistoryPage(context.Background(), 42, nil, nil, true, GapPass{})
 	if err != nil || !state.Complete || state.FirstMessageDate != nil {
 		t.Fatalf("empty complete chat: %+v err=%v", state, err)
 	}
@@ -79,10 +79,10 @@ func TestFirstMessageDateSurvivesLocalDelete(t *testing.T) {
 	if err := db.UpsertChats(ctx, []Chat{{ID: 42, Type: "group", Title: "Team"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(10, "a"), historyMessage(20, "b")}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(10, "a"), historyMessage(20, "b")}, nil, false, GapPass{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.SaveHistoryPage(ctx, 42, nil, nil, true); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, nil, nil, true, GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	if changed, err := db.MarkMessagesDeleted(ctx, 42, []int{10}); err != nil || changed != 1 {
@@ -112,10 +112,10 @@ func TestFirstMessageDateInOverview(t *testing.T) {
 	if err := db.UpsertChats(ctx, []Chat{{ID: 42, Type: "group", Title: "Done"}, {ID: 43, Type: "group", Title: "Partial"}, {ID: 44, Type: "group", Title: "New"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(7, "a")}, nil, true); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(7, "a")}, nil, true, GapPass{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.SaveHistoryPage(ctx, 43, []Message{{ChatID: 43, ID: 1, Date: 1, Text: "a", Raw: raw(`{}`)}}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 43, []Message{{ChatID: 43, ID: 1, Date: 1, Text: "a", Raw: raw(`{}`)}}, nil, false, GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := db.ChatsOverview(ctx, ChatFilter{}, 10, "")

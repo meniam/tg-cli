@@ -11,7 +11,7 @@ func seedChatMessages(t *testing.T, db *DB, chatID int64, n int) {
 	for id := 1; id <= n; id++ {
 		messages = append(messages, Message{ChatID: chatID, ID: id, Date: int64(id), Text: "m", Raw: raw(`{}`)})
 	}
-	if _, err := db.SaveHistoryPage(context.Background(), chatID, messages, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(context.Background(), chatID, messages, nil, false, GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 }

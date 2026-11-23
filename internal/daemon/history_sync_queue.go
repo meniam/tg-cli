@@ -99,64 +99,71 @@ func (d *daemon) historySyncQueue(ctx context.Context, params json.RawMessage) (
 	return result, nil
 }
 
-// pickQueueChats walks the dialogs and returns up to MaxChats chats to load.
-// Dialogs come newest first, except the pinned ones that lead the list whatever
-// their date: a pinned dialog older than the cutoff is skipped, the first
-// other old dialog ends the walk.
-func (d *daemon) pickQueueChats(ctx context.Context, p rpc.HistorySyncQueueParams, depth historyDepth, cutoff int64, result *rpc.HistorySyncQueueResult) ([]queueCandidate, error) {
-	client := d.telegram(ctx)
-	policy := d.policy()
-	var picked []queueCandidate
+// walkQueueDialogs shares the paginated, access-filtered dialog walk.
+func (d *daemon) walkQueueDialogs(ctx context.Context, chatType string, visit func(rpc.Chat) (bool, error)) error {
+	client, policy := d.telegram(ctx), d.policy()
 	after := rpc.DialogOffset{}
 	for {
-		chats, next, err := client.Chats(ctx, queueDialogPage, p.Type, after, policy.Allowed)
+		chats, next, err := client.Chats(ctx, queueDialogPage, chatType, after, policy.Allowed)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, chat := range chats {
-			if cutoff > 0 && chat.LastMessageDate < cutoff {
-				if chat.Pinned {
-					continue
-				}
-				return picked, nil
-			}
-			progress, found, err := d.store.SyncState(ctx, chat.ID)
+			stop, err := visit(chat)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			switch {
-			case progress.Complete:
-				result.SkippedLoaded++
-				continue
-			case p.Unsynced && found:
-				// A partly loaded chat is for the next load of its own, not for a
-				// batch of chats that were never loaded.
-				result.SkippedLoaded++
-				continue
-			case d.sync.activeJob(chat.ID):
-				result.SkippedActive++
-				continue
-			}
-			if depth.active() {
-				count, oldest, err := d.store.MessageBounds(ctx, chat.ID)
-				if err != nil {
-					return nil, err
-				}
-				if depth.satisfied(count, oldest) {
-					result.SkippedLoaded++
-					continue
-				}
-			}
-			picked = append(picked, queueCandidate{chat: chat, progress: progress})
-			if len(picked) == p.MaxChats {
-				return picked, nil
+			if stop {
+				return nil
 			}
 		}
 		if next == nil {
-			return picked, nil
+			return nil
 		}
 		after = *next
 	}
+}
+
+// pickQueueChats selects up to MaxChats, skipping old pinned dialogs and stopping
+// at the first old unpinned one.
+func (d *daemon) pickQueueChats(ctx context.Context, p rpc.HistorySyncQueueParams, depth historyDepth, cutoff int64, result *rpc.HistorySyncQueueResult) ([]queueCandidate, error) {
+	var picked []queueCandidate
+	err := d.walkQueueDialogs(ctx, p.Type, func(chat rpc.Chat) (bool, error) {
+		if cutoff > 0 && chat.LastMessageDate < cutoff {
+			return !chat.Pinned, nil
+		}
+		progress, found, err := d.store.SyncState(ctx, chat.ID)
+		if err != nil {
+			return false, err
+		}
+		switch {
+		case progress.Complete:
+			result.SkippedLoaded++
+			return false, nil
+		case p.Unsynced && found:
+			result.SkippedLoaded++
+			return false, nil
+		case d.sync.activeJob(chat.ID):
+			result.SkippedActive++
+			return false, nil
+		}
+		if depth.active() {
+			count, oldest, err := d.store.MessageBounds(ctx, chat.ID)
+			if err != nil {
+				return false, err
+			}
+			if depth.satisfied(count, oldest) {
+				result.SkippedLoaded++
+				return false, nil
+			}
+		}
+		picked = append(picked, queueCandidate{chat: chat, progress: progress})
+		return len(picked) == p.MaxChats, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return picked, nil
 }
 
 // maxQueueNamed bounds the chats of a request that names them.

@@ -361,6 +361,7 @@ var uncoveredCommands = map[string]string{
 	"autostart off":              "the job file and launchctl are covered by stub-launchctl CLI tests in autostart_cmd_test.go",
 	"autostart status":           "the job file and launchctl are covered by stub-launchctl CLI tests in autostart_cmd_test.go",
 	"chat sync queue":            "the batch of chats is covered by net.Pipe CLI tests and by daemon tests on a fake Telegram",
+	"chat sync catchup":          "catchup is covered by net.Pipe CLI tests and daemon tests on a fake Telegram",
 }
 
 // fixtureResponseCases cover commands exercised by independent response fixtures.
@@ -564,4 +565,60 @@ func audit02ListHasItems(data []byte, path string) bool {
 	}
 	list, ok := node.([]any)
 	return ok && len(list) > 0
+}
+
+func TestCatchupSchemaFields(t *testing.T) {
+	commands := schemaCommands(t)
+	for _, tc := range []struct {
+		command string
+		fields  []string
+	}{
+		{"chat sync start", []string{"gap_from", "gap_to"}},
+		{"chat overview", []string{"chats.history_gap_from", "chats.history_gap_to"}},
+		{"chat sync catchup", []string{"dry_run", "since", "queued", "would_queue", "skipped_active", "chats", "chats.chat_id", "chats.title", "chats.last_message_date", "chats.action"}},
+	} {
+		cmd := commands[tc.command]
+		for _, name := range tc.fields {
+			found := false
+			for _, f := range cmd.Fields {
+				if f.Path == name {
+					found = true
+					if name == "chats.title" && !f.Untrusted {
+						t.Fatal("title must be untrusted")
+					}
+				}
+			}
+			if !found {
+				t.Errorf("%s missing %s", tc.command, name)
+			}
+		}
+	}
+	c := commands["chat sync catchup"]
+	if c.Safety != "local_write" || c.Item == nil || c.Item.Path != "chats" {
+		t.Fatalf("catchup schema: %+v", c)
+	}
+	status := commands["chat sync status"]
+	if !strings.Contains(status.Description, "catchup") {
+		t.Fatalf("source description: %q", status.Description)
+	}
+	for _, name := range []string{"gap_from", "gap_to"} {
+		found := false
+		for _, f := range status.ChatFields {
+			if f.Path == name {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("status missing %s", name)
+		}
+		found = false
+		for _, f := range commands["chat sync cancel"].ChatFields {
+			if f.Path == name {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("cancel missing %s", name)
+		}
+	}
 }

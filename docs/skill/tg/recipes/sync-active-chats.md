@@ -12,7 +12,7 @@ tags: [history, loading, batch, queue]
 
 ## When to use
 
-The user wants two or more chats loaded: the chats they named, people they wrote to in the last two months, all unsynced chats, the last 100 messages of everything. `tg chat sync queue` is the only way to load several chats, in one call. Do not write a script, a shell loop or a Python snippet that runs `chat sync start` or `message history` per chat: the Daemon queue loads one chat at a time with pauses between pages, and a loop of yours has neither. Exactly one chat is [sync-recent-history](sync-recent-history.md) or [load-full-history](load-full-history.md).
+The user wants two or more chats loaded: the chats they named, people they wrote to in the last two months, all unsynced chats, the last 100 messages of everything. For a requested batch, `tg chat sync queue` loads several chats in one call. Catchup after Daemon downtime is automatic; see [after-downtime](after-downtime.md). Do not write a script, a shell loop or a Python snippet that runs `chat sync start` or `message history` per chat: the Daemon queue loads one chat at a time with pauses between pages, and a loop of yours has neither. Exactly one chat is [sync-recent-history](sync-recent-history.md) or [load-full-history](load-full-history.md).
 
 ## Prepare
 

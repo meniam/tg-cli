@@ -100,7 +100,7 @@ func dashboardFixture(t *testing.T) (*daemon, *dashboardTelegram, *store.DB, str
 		for _, id := range p.ids {
 			messages = append(messages, store.Message{ChatID: p.chat, ID: id, Date: int64(1000 + id), Raw: []byte(`{}`)})
 		}
-		if _, err := db.SaveHistoryPage(ctx, p.chat, messages, nil, p.complete); err != nil {
+		if _, err := db.SaveHistoryPage(ctx, p.chat, messages, nil, p.complete, store.GapPass{}); err != nil {
 			t.Fatal(err)
 		}
 	}

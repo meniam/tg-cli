@@ -226,7 +226,7 @@ func TestBackgroundSyncManualStartCancelsQueuedBackground(t *testing.T) {
 	// startBackground refuses a busy manager, so a queued background job is
 	// placed under the lock the way a start racing the worker would leave it.
 	d.sync.mu.Lock()
-	d.sync.enqueueLocked(20, syncRef(20), store.SyncProgress{}, rpc.HistorySyncBackground, nil, historyDepth{}, false)
+	d.sync.enqueueLocked(20, syncRef(20), store.SyncProgress{}, rpc.HistorySyncBackground, nil, historyDepth{}, false, laneBackground)
 	d.sync.mu.Unlock()
 	if job := startSync(t, d, 30); job.State != rpc.HistorySyncQueued {
 		t.Fatalf("manual start: %+v", job)
@@ -255,7 +255,7 @@ func TestBackgroundSyncStartOnBusyManagerReturnsBusy(t *testing.T) {
 		"current job": func() {},
 		"queued job": func() {
 			d.sync.mu.Lock()
-			d.sync.enqueueLocked(11, syncRef(11), store.SyncProgress{}, rpc.HistorySyncManual, nil, historyDepth{}, false)
+			d.sync.enqueueLocked(11, syncRef(11), store.SyncProgress{}, rpc.HistorySyncManual, nil, historyDepth{}, false, laneManual)
 			d.sync.mu.Unlock()
 		},
 	} {

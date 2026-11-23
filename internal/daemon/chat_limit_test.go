@@ -20,7 +20,7 @@ func seedLimitedChat(t *testing.T, db *store.DB, id int64, n int) {
 	for m := 1; m <= n; m++ {
 		messages = append(messages, store.Message{ChatID: id, ID: m, Date: int64(m), Text: "m", Raw: []byte(`{}`)})
 	}
-	if _, err := db.SaveHistoryPage(ctx, id, messages, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, id, messages, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -41,6 +41,8 @@ type ChatsOverviewRow struct {
 	// set when the history load reaches the start of the chat. Unlike
 	// FirstMessage it does not move when that message is deleted locally.
 	HistoryFirstMessageDate *int64 `json:"history_first_message_date,omitempty"`
+	HistoryGapFrom          *int   `json:"history_gap_from,omitempty"`
+	HistoryGapTo            *int   `json:"history_gap_to,omitempty"`
 }
 
 // overviewLimits bound the rows one overview call returns, so a caller cannot ask
@@ -70,7 +72,7 @@ func (db *DB) ChatsOverview(ctx context.Context, filter ChatFilter, limit int, c
 	       messages, my_messages,
 	       first_message_id, first_message_date, first_message_text,
 	       last_message_id, last_message_date, last_message_text,
-	       history_complete, history_first_message_date,
+	       history_complete, history_first_message_date, history_gap_from, history_gap_to,
  COALESCE((SELECT is_contact FROM people WHERE id=chats_state.chat_id),0)
 	FROM chats_state
 	WHERE (? = '' OR type = ?)` + cond + `
@@ -93,7 +95,7 @@ func (db *DB) ChatsOverview(ctx context.Context, filter ChatFilter, limit int, c
 		err := rows.Scan(&row.ChatID, &row.Type, &row.Title, &row.Username, &row.CreatedAt, &row.Muted,
 			&row.MuteUntil, &row.Archived, &row.Pinned, &row.Unread, &row.UnreadMentions, &row.UnreadMark,
 			&row.StateSyncedAt, &row.Messages, &row.MyMessages,
-			&firstID, &firstDate, &firstText, &lastID, &lastDate, &lastText, &row.HistoryComplete, &row.HistoryFirstMessageDate, &row.Contact)
+			&firstID, &firstDate, &firstText, &lastID, &lastDate, &lastText, &row.HistoryComplete, &row.HistoryFirstMessageDate, &row.HistoryGapFrom, &row.HistoryGapTo, &row.Contact)
 		if err != nil {
 			return nil, fmt.Errorf("read chat overview: %w", err)
 		}

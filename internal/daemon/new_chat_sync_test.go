@@ -9,6 +9,7 @@ import (
 	"tg-cli/internal/chatref"
 	"tg-cli/internal/config"
 	"tg-cli/internal/rpc"
+	"tg-cli/internal/store"
 )
 
 // newChatFixture is a daemon with the scheduled load switched on and a fake
@@ -80,7 +81,7 @@ func TestNewChatLoadSkipsAClosedChatAndAChatWithProgress(t *testing.T) {
 		return rpc.HistoryPage{}, ctx.Err()
 	}
 	// A chat that already has load progress is not new.
-	if _, err := d.store.SaveHistoryPage(context.Background(), 701, nil, nil, true); err != nil {
+	if _, err := d.store.SaveHistoryPage(context.Background(), 701, nil, nil, true, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	newChatEvent(t, d, 701, 1)

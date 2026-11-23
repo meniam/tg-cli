@@ -36,14 +36,14 @@ tg chat sync cancel --all           # every queued job and the running one; answ
 ## Notes
 
 - Every load goes through this one queue: `chat sync start`, `chat sync queue` and the Daemon itself. A new chat gets its latest 100 messages queued automatically on its first live message (`new_chat_sync.messages`), shown with `source: background`; do not queue it again. The Daemon loads one chat at a time.
-- States: `queued` waits, `running` loads, `waiting_flood` waits out a Telegram pause by itself (`wait_seconds`), `done`, `failed` (`error_code`, `error`), `cancelled`. `source` is `manual` for a command and `background` for the schedule.
+- States: `queued` waits, `running` loads, `waiting_flood` waits out a Telegram pause by itself (`wait_seconds`), `done`, `failed` (`error_code`, `error`), `cancelled`. `source` is `manual` for a command, `background` for scheduled and new-chat loads, and `catchup` for catchup. Manual jobs go first, then catchup and new-chat jobs in arrival order, then scheduled jobs. A manual `start` that queues work cancels background jobs but not catchup.
 - `cancel --all` also cancels a scheduled job; the schedule goes on at its next run. It needs no login and no connection.
-- The queue lives in Daemon memory: a Daemon restart empties it, and nothing resumes by itself.
+- The queue lives in Daemon memory: a restart empties the previous jobs. Catchup may be queued separately after downtime.
 
 ## Pitfalls
 
 - A cancel does not lift a `FLOOD_WAIT` pause that the account already has.
-- `cancelled` and `failed` are not finished loads. To continue, run `start` or `queue` again: it goes on from the saved `oldest_id`.
+- `cancelled` and `failed` are not finished loads. To continue, run `start` or `queue` again: a chat with a gap starts at `gap_to`; otherwise it continues from `oldest_id`.
 - Chat names are not in the JSON of `chat sync status`; the human `tg status` shows them.
 - To see progress, read `chat sync status`; do not start a second load of the same chat or a script to "check" it.
 

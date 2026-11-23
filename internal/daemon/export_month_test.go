@@ -3,6 +3,7 @@ package daemon
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -177,7 +178,7 @@ func TestExportMonthDeletedAndCoverage(t *testing.T) {
 	d, db, _, p := monthFixture(t)
 	ctx := context.Background()
 	old := store.Message{ChatID: 42, ID: 3, Date: time.Date(2023, 10, 31, 23, 59, 59, 0, time.UTC).Unix(), Text: "older", Raw: []byte(`{}`)}
-	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{old}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{old}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.MarkMessagesDeleted(ctx, 42, []int{1}); err != nil {
@@ -254,7 +255,7 @@ func TestExportMonthMultipleChatsDeterministic(t *testing.T) {
 	if err := db.UpsertChats(ctx, []store.Chat{{ID: 7, Type: "group"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.SaveHistoryPage(ctx, 7, nil, nil, true); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 7, nil, nil, true, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	p.Chats = []string{"42", "7"}
@@ -304,7 +305,7 @@ func TestExportMonthChatCount(t *testing.T) {
 func TestExportMonthLimitCompleteChatCoversTheMonthStartOnlyWithOlderMessages(t *testing.T) {
 	d, db, _, p := monthFixture(t)
 	ctx := context.Background()
-	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 11, 1, 0, 0, 0, 0, time.UTC).Unix(), Text: "first saved", Raw: []byte(`{}`)}}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 11, 1, 0, 0, 0, 0, time.UTC).Unix(), Text: "first saved", Raw: []byte(`{}`)}}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.MarkHistoryLimitReached(ctx, 42); err != nil {
@@ -323,7 +324,7 @@ func TestExportMonthLimitCompleteChatCoversTheMonthStartOnlyWithOlderMessages(t 
 		t.Fatalf("a limit-complete chat claimed the month start: %+v", file)
 	}
 	// Message 1, the oldest by id, now dates from before the month: the start is covered.
-	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 10, 31, 23, 59, 59, 0, time.UTC).Unix(), Text: "older", Raw: []byte(`{}`)}}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 10, 31, 23, 59, 59, 0, time.UTC).Unix(), Text: "older", Raw: []byte(`{}`)}}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	p.Output = filepath.Join(p.Output, "second")
@@ -332,5 +333,68 @@ func TestExportMonthLimitCompleteChatCoversTheMonthStartOnlyWithOlderMessages(t 
 	}
 	if file := export(); !file.MonthStartCovered {
 		t.Fatalf("an older saved message must cover the month start: %+v", file)
+	}
+}
+
+func TestExportMonthGapCoverage(t *testing.T) {
+	d, db, _, p := monthFixture(t)
+	ctx := context.Background()
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC).Unix(), Raw: []byte(`{}`)}}, nil, true, store.GapPass{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MarkCatchupGap(ctx, 42, 2, time.Date(2023, 11, 1, 0, 0, 0, 0, time.UTC).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		month string
+		want  bool
+	}{{"2023-09", true}, {"2023-11", false}, {"2023-12", false}, {"2024-01", true}} {
+		p.Month = tc.month
+		got, err := d.messageExportMonth(ctx, params(t, p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		f := got.(rpc.ExportMonthResult).Files[0]
+		if f.MonthStartCovered != tc.want {
+			t.Fatalf("%s: %+v", tc.month, f)
+		}
+	}
+}
+
+func TestExportMonthGapUnknownLowerBound(t *testing.T) {
+	for _, mode := range []string{"zero", "missing"} {
+		t.Run(mode, func(t *testing.T) {
+			d, db, _, p := monthFixture(t)
+			ctx := context.Background()
+			lower := time.Date(2023, 10, 1, 0, 0, 0, 0, time.UTC).Unix()
+			if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: lower, Raw: []byte(`{}`)}}, nil, true, store.GapPass{}); err != nil {
+				t.Fatal(err)
+			}
+			alive := lower
+			if mode == "zero" {
+				alive--
+			}
+			if err := db.MarkCatchupGap(ctx, 42, 2, alive); err != nil {
+				t.Fatal(err)
+			}
+			if mode == "missing" {
+				raw, err := sql.Open("sqlite", filepath.Join(d.opts.Paths.Dir, "store.db"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer raw.Close()
+				if _, err := raw.ExecContext(ctx, `DELETE FROM messages WHERE chat_id=42 AND id=1`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			p.Month = "2023-09"
+			got, err := d.messageExportMonth(ctx, params(t, p))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if f := got.(rpc.ExportMonthResult).Files[0]; f.MonthStartCovered {
+				t.Fatalf("unknown lower boundary covered: %+v", f)
+			}
+		})
 	}
 }

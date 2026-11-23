@@ -57,6 +57,7 @@ const (
 	MethodHistorySyncStatus    = "history_sync.status"
 	MethodHistorySyncCancel    = "history_sync.cancel"
 	MethodHistorySyncQueue     = "history_sync.queue"
+	MethodHistorySyncCatchup   = "history_sync.catchup"
 	MethodHistorySyncCancelAll = "history_sync.cancel_all"
 	MethodSubscribe            = "subscribe"
 	MethodUnsubscribe          = "unsubscribe"
@@ -493,6 +494,29 @@ type HistorySyncQueueResult struct {
 	Chats         []HistorySyncQueueChat `json:"chats"`
 }
 
+// HistorySyncCatchupParams selects a dry run of the catchup.
+type HistorySyncCatchupParams struct {
+	DryRun bool `json:"dry_run"`
+}
+
+// HistorySyncCatchupChat is one chat considered for catchup.
+type HistorySyncCatchupChat struct {
+	ChatID          int64  `json:"chat_id"`
+	Title           string `json:"title" untrusted:"true"`
+	LastMessageDate int64  `json:"last_message_date"`
+	Action          string `json:"action"`
+}
+
+// HistorySyncCatchupResult reports the chats considered for catchup.
+type HistorySyncCatchupResult struct {
+	DryRun        bool                     `json:"dry_run"`
+	Since         *int64                   `json:"since"`
+	Queued        int                      `json:"queued"`
+	WouldQueue    int                      `json:"would_queue"`
+	SkippedActive int                      `json:"skipped_active"`
+	Chats         []HistorySyncCatchupChat `json:"chats"`
+}
+
 // HistorySyncCancelAllResult is the result of MethodHistorySyncCancelAll.
 type HistorySyncCancelAllResult struct {
 	Cancelled int `json:"cancelled"`
@@ -517,6 +541,7 @@ const (
 const (
 	HistorySyncManual     = "manual"
 	HistorySyncBackground = "background"
+	HistorySyncCatchup    = "catchup"
 )
 
 // HistorySyncJob is the in-memory state of one background history load.
@@ -525,13 +550,15 @@ const (
 type HistorySyncJob struct {
 	ChatID           int64  `json:"chat_id"`
 	State            string `json:"state"`
-	Source           string `json:"source,omitempty"` // HistorySyncManual or HistorySyncBackground; empty when idle
+	Source           string `json:"source,omitempty"` // manual, background or catchup; empty when idle
 	Pages            int    `json:"pages"`
 	Loaded           int    `json:"loaded"`
 	OldestID         *int   `json:"oldest_id"`
 	NewestID         *int   `json:"newest_id"`
 	Complete         bool   `json:"complete"`
 	FirstMessageDate *int64 `json:"first_message_date"`
+	GapFrom          *int   `json:"gap_from"`
+	GapTo            *int   `json:"gap_to"`
 	WaitSeconds      int    `json:"wait_seconds,omitempty"`
 	ErrorCode        int    `json:"error_code,omitempty"`
 	Error            string `json:"error,omitempty"`

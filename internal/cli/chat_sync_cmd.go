@@ -26,6 +26,7 @@ func (a *app) chatSyncCommand() *cobra.Command {
 		Use: "status [<chat>]", Short: "Show background history load status",
 		Long: "Without a chat, list current daemon jobs; JSONL prints one job per line.\n" +
 			"With a chat, show one job or idle progress from the local database; JSONL is unavailable.\n" +
+			"The source of a job is manual, background or catchup.\n" +
 			"Put -- before a negative chat id.",
 		Args: cobra.MaximumNArgs(1), RunE: a.chatSyncStatus,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.HistorySyncJobs](), ChatResult: typeOf[rpc.HistorySyncJob](), ItemPath: "jobs", Args: []argSpec{{Name: "chat", Required: false}}})
@@ -56,8 +57,27 @@ func (a *app) chatSyncCommand() *cobra.Command {
 	queue.Flags().Int("max-chats", 0, "most chats to queue, 1 to 500 (default 50)")
 	queue.Flags().Bool("dry-run", false, "list the chats and queue nothing")
 	addDepthFlags(queue)
-	cmd.AddCommand(start, status, cancel, queue)
+	catchup := a.annotate(&cobra.Command{
+		Use: "catchup", Short: "Load messages missed during daemon downtime",
+		Long: "Queue catchup for chats with messages missed during daemon downtime.\n--dry-run lists the chats and queues nothing.",
+		Args: cobra.NoArgs, RunE: a.chatSyncCatchup,
+	}, noRisk, commandSpec{Safety: safetyLocalWrite, Result: typeOf[rpc.HistorySyncCatchupResult](), ItemPath: "chats"})
+	catchup.Flags().Bool("dry-run", false, "list the chats and queue nothing")
+	cmd.AddCommand(start, status, cancel, queue, catchup)
 	return cmd
+}
+
+func (a *app) chatSyncCatchup(cmd *cobra.Command, _ []string) error {
+	settings, err := a.outputSettingsFor(cmd)
+	if err != nil {
+		return err
+	}
+	dry, _ := cmd.Flags().GetBool("dry-run")
+	var result rpc.HistorySyncCatchupResult
+	if err := a.callOne(cmd, rpc.MethodHistorySyncCatchup, rpc.HistorySyncCatchupParams{DryRun: dry}, &result); err != nil {
+		return err
+	}
+	return emitList(a, cmd, settings, result, result.Chats, "")
 }
 
 // addDepthFlags adds the flags that stop a history load before the first message.

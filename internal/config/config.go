@@ -35,6 +35,7 @@ type Config struct {
 	Behavior Behavior `toml:"behavior"`
 	// BackgroundSync holds the scheduled history load settings.
 	BackgroundSync BackgroundSync `toml:"background_sync"`
+	CatchupEnabled bool           `toml:"-"`
 	// SemanticSearch holds the local semantic index settings.
 	SemanticSearch SemanticSearch `toml:"semantic_search"`
 	// VoiceTranscription holds the local voice transcription settings.
@@ -246,7 +247,7 @@ func validateBehavior(b Behavior) error {
 }
 
 func defaults(home string) Config {
-	return Config{Web: defaultWeb(), Home: home, DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}, BackgroundSync: defaultBackgroundSync(), SemanticSearch: defaultSemanticSearch(), VoiceTranscription: defaultVoiceTranscription()}
+	return Config{Web: defaultWeb(), Home: home, DefaultProfile: "default", Files: Files{"store.db", "session.json", "daemon.log", "deletions.jsonl", "access.json"}, Behavior: Behavior{ThrottlePercent: 60, FloodAutoWait: "10s"}, BackgroundSync: defaultBackgroundSync(), CatchupEnabled: true, SemanticSearch: defaultSemanticSearch(), VoiceTranscription: defaultVoiceTranscription()}
 }
 
 func validateHome(path string) (string, error) {
