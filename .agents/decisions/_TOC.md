@@ -80,3 +80,4 @@ Index of `.agents/decisions/`. Rules: `decisions.md`.
 - 2026-11-23 — [После простоя Daemon догоняет пропущенные сообщения в общей очереди](20261123_0439_catchup_after_daemon_downtime.md)
 - 2026-11-23 — [Дыра в истории чата хранится в sync_state и проходится ручным start](20261123_0439_history_gap_and_manual_pass.md)
 - 2026-11-24 — [Имя автора живого сообщения берётся из таблицы people, а старые строки дополняет миграция 0015](20261124_0027_live_message_sender_name_comes_from_people.md)
+- 2026-11-24 — [Удалённый аккаунт автора помечается полем sender.deleted, а не выдуманным именем](20261124_0039_deleted_account_is_marked_by_sender_deleted.md)

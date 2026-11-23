@@ -544,3 +544,34 @@ func TestEventFillsSenderNameFromPeople(t *testing.T) {
 		t.Fatalf("stored name of an unknown author = %v err=%v", stored.SenderName, err)
 	}
 }
+
+// Once a deleted account is seen, all its stored messages carry the mark, also
+// the ones saved before and the ones that arrive later without the user's object.
+func TestDeletedSenderMarksStoredMessages(t *testing.T) {
+	d, _, db, _ := accessTestDaemon(t)
+	ctx := context.Background()
+	chat := int64(-8)
+	old, other := testMessage(1, chat, "before"), testMessage(3, chat, "of a living user")
+	old.Sender, other.Sender = &rpc.Sender{ID: 600}, &rpc.Sender{ID: 601}
+	if err := d.persistMessages(ctx, "test", []rpc.Message{old, other}); err != nil {
+		t.Fatal(err)
+	}
+	seen := testMessage(2, chat, "seen with the user's object")
+	seen.Sender = &rpc.Sender{ID: 600, Deleted: true}
+	later := testMessage(4, chat, "later, no user object")
+	later.Sender = &rpc.Sender{ID: 600}
+	for _, batch := range [][]rpc.Message{{seen}, {later}} {
+		if err := d.persistMessages(ctx, "test", batch); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for id, want := range map[int]bool{1: true, 2: true, 3: false, 4: true} {
+		stored, err := db.GetMessage(ctx, chat, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := rpcStoredMessage(stored).Sender.Deleted; got != want {
+			t.Errorf("message %d: sender.deleted = %v, want %v", id, got, want)
+		}
+	}
+}

@@ -207,3 +207,17 @@ func TestServiceKind(t *testing.T) {
 		}
 	}
 }
+
+// Telegram sends a deleted account without a name: the author stays an id, now
+// marked as deleted.
+func TestSenderOfMarksDeletedAccount(t *testing.T) {
+	gone := user(5, "", "", "", false)
+	gone.Deleted = true
+	ent := peer.NewEntities(map[int64]*tg.User{5: gone, 1: user(1, "Ann", "Lee", "ann", false)}, nil, nil)
+	if s := senderOf(&tg.PeerUser{UserID: 5}, ent, nil); s.ID != 5 || s.Name != "" || !s.Deleted {
+		t.Errorf("deleted account: %+v", s)
+	}
+	if s := senderOf(&tg.PeerUser{UserID: 1}, ent, nil); s.Deleted {
+		t.Errorf("a living account is marked deleted: %+v", s)
+	}
+}

@@ -189,8 +189,14 @@ func convertStoredMessages(messages []rpc.Message, strict bool) ([]store.Message
 				item.SenderID = int64Pointer(message.Sender.ID)
 			}
 			item.SenderName = optionalText(message.Sender.Name)
+			if message.Sender.Deleted {
+				item.SenderDeleted = boolPointer(true)
+			}
 			if message.Sender.ID > 0 {
 				if index, exists := personIndex[message.Sender.ID]; exists {
+					if message.Sender.Deleted {
+						people[index].Deleted = boolPointer(true)
+					}
 					if message.Sender.Username != "" {
 						people[index].Username = optionalText(message.Sender.Username)
 					}
@@ -201,7 +207,7 @@ func convertStoredMessages(messages []rpc.Message, strict bool) ([]store.Message
 					personIndex[message.Sender.ID] = len(people)
 					people = append(people, store.Person{
 						ID: message.Sender.ID, Username: optionalText(message.Sender.Username),
-						DisplayName: optionalText(message.Sender.Name),
+						DisplayName: optionalText(message.Sender.Name), Deleted: deletedPointer(message.Sender.Deleted),
 					})
 				}
 			}
@@ -216,4 +222,13 @@ func positiveIntPointer(value int) *int64 {
 		return nil
 	}
 	return int64Pointer(int64(value))
+}
+
+// deletedPointer is true only for a known deleted account; nil keeps what the
+// store already knows, as a message that came without the user's object says nothing.
+func deletedPointer(deleted bool) *bool {
+	if !deleted {
+		return nil
+	}
+	return boolPointer(true)
 }
