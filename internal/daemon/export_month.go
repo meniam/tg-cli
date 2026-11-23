@@ -141,6 +141,25 @@ func (d *daemon) messageExportMonth(ctx context.Context, raw json.RawMessage) (r
 					mf.Sync.MonthStartCovered = true
 				}
 			}
+			if state.GapTo != nil {
+				top, e := d.store.GetMessage(ctx, id, *state.GapTo)
+				if e != nil && !errors.Is(e, store.ErrNotFound) {
+					return nil, e
+				}
+				if errors.Is(e, store.ErrNotFound) || top.Date >= start.Unix() {
+					overlaps := true
+					if state.GapFrom != nil && *state.GapFrom > 0 {
+						bottom, e := d.store.GetMessage(ctx, id, *state.GapFrom)
+						if e != nil && !errors.Is(e, store.ErrNotFound) {
+							return nil, e
+						}
+						overlaps = errors.Is(e, store.ErrNotFound) || bottom.Date < end.Unix()
+					}
+					if overlaps {
+						mf.Sync.MonthStartCovered = false
+					}
+				}
+			}
 		}
 		size, hash, e := ar.Write(ctx, mf.Name, exportMonthLimit-total, func(w io.Writer) error {
 			after := 0
