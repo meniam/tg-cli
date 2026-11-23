@@ -554,98 +554,11 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 			return
 		}
 		if gap {
-			if !page.Empty && (page.RawNextOffsetID <= 0 || page.RawNextOffsetID >= offset) {
-				m.finish(task, rpc.HistorySyncFailed, rpc.CodeTelegram, "history page offset did not advance")
+			state := gapPageState{gap: gap, offset: offset, loaded: loaded}
+			done := m.passGapPage(ctx, task, page, &state)
+			gap, offset, loaded = state.gap, state.offset, state.loaded
+			if done {
 				return
-			}
-			messages, people, _, err := convertStoredMessages(page.Messages, true)
-			if err != nil {
-				fail(err)
-				return
-			}
-			loaded += len(messages)
-			depthMet := task.depth.Messages > 0 && loaded >= task.depth.Messages
-			for _, msg := range messages {
-				if task.depth.Since > 0 && msg.Date <= task.depth.Since {
-					depthMet = true
-				}
-			}
-			progress, err := m.d.store.SaveHistoryPage(ctx, task.ChatID, messages, people, page.Empty, store.GapPass{Active: true, Start: task.gapStart, Top: task.gapStart, Narrow: depthMet})
-			if err != nil {
-				fail(err)
-				return
-			}
-			m.recordPage(task, &progress, len(messages))
-			m.d.voiceSyncPage(ctx, task.ChatID, messages, m.clock.Now())
-			if progress.GapFrom == nil || progress.GapTo == nil {
-				gap = false
-				if progress.Complete {
-					m.finish(task, rpc.HistorySyncDone, 0, "")
-					return
-				}
-				if depthMet {
-					m.finishDepth(task)
-					return
-				}
-				if task.depth.Since > 0 {
-					count, oldest, err := m.d.store.MessageBounds(ctx, task.ChatID)
-					if err != nil {
-						fail(err)
-						return
-					}
-					if task.depth.satisfied(count, oldest) {
-						m.finishDepth(task)
-						return
-					}
-				} else if !task.depth.active() {
-					limit := m.d.historyLimitFor(ctx, task.ChatID)
-					if limit.Messages > 0 || limit.Since > 0 {
-						count, oldest, err := m.d.store.MessageBounds(ctx, task.ChatID)
-						if err != nil {
-							fail(err)
-							return
-						}
-						if limit.reached(count, oldest) {
-							progress, err := m.d.store.MarkHistoryLimitReached(ctx, task.ChatID)
-							if err != nil {
-								fail(err)
-								return
-							}
-							m.recordProgress(task, progress)
-							m.finish(task, rpc.HistorySyncDone, 0, "")
-							return
-						}
-					}
-				}
-				if progress.OldestID != nil {
-					offset = *progress.OldestID
-				} else if page.Empty {
-					progress, err = m.d.store.SaveHistoryPage(ctx, task.ChatID, nil, nil, true, store.GapPass{})
-					if err != nil {
-						fail(err)
-						return
-					}
-					m.recordProgress(task, progress)
-					m.finish(task, rpc.HistorySyncDone, 0, "")
-					return
-				} else {
-					offset = page.RawNextOffsetID
-				}
-			} else {
-				if depthMet {
-					m.finishDepth(task)
-					return
-				}
-				offset = page.RawNextOffsetID
-			}
-			timer := m.clock.NewTimer(task.pause())
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				m.finish(task, rpc.HistorySyncCancelled, 0, "")
-				return
-			case <-timer.C():
-				timer.Stop()
 			}
 			continue
 		}
@@ -720,6 +633,117 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 			timer.Stop()
 		}
 	}
+}
+
+type gapPageState struct {
+	gap            bool
+	offset, loaded int
+}
+
+func (m *historySyncManager) passGapPage(ctx context.Context, task *historySyncTask, page rpc.HistoryPage, state *gapPageState) bool {
+	gap, offset, loaded := state.gap, state.offset, state.loaded
+	defer func() { state.gap, state.offset, state.loaded = gap, offset, loaded }()
+	fail := func(err error) {
+		if ctx.Err() != nil {
+			m.finish(task, rpc.HistorySyncCancelled, 0, "")
+			return
+		}
+		m.fail(task, err)
+	}
+	if !page.Empty && (page.RawNextOffsetID <= 0 || page.RawNextOffsetID >= offset) {
+		m.finish(task, rpc.HistorySyncFailed, rpc.CodeTelegram, "history page offset did not advance")
+		return true
+	}
+	messages, people, _, err := convertStoredMessages(page.Messages, true)
+	if err != nil {
+		fail(err)
+		return true
+	}
+	loaded += len(messages)
+	depthMet := task.depth.Messages > 0 && loaded >= task.depth.Messages
+	for _, msg := range messages {
+		if task.depth.Since > 0 && msg.Date <= task.depth.Since {
+			depthMet = true
+		}
+	}
+	progress, err := m.d.store.SaveHistoryPage(ctx, task.ChatID, messages, people, page.Empty, store.GapPass{Active: true, Start: task.gapStart, Top: task.gapStart, Narrow: depthMet})
+	if err != nil {
+		fail(err)
+		return true
+	}
+	m.recordPage(task, &progress, len(messages))
+	m.d.voiceSyncPage(ctx, task.ChatID, messages, m.clock.Now())
+	if progress.GapFrom == nil || progress.GapTo == nil {
+		gap = false
+		if progress.Complete {
+			m.finish(task, rpc.HistorySyncDone, 0, "")
+			return true
+		}
+		if depthMet {
+			m.finishDepth(task)
+			return true
+		}
+		if task.depth.Since > 0 {
+			count, oldest, err := m.d.store.MessageBounds(ctx, task.ChatID)
+			if err != nil {
+				fail(err)
+				return true
+			}
+			if task.depth.satisfied(count, oldest) {
+				m.finishDepth(task)
+				return true
+			}
+		} else if !task.depth.active() {
+			limit := m.d.historyLimitFor(ctx, task.ChatID)
+			if limit.Messages > 0 || limit.Since > 0 {
+				count, oldest, err := m.d.store.MessageBounds(ctx, task.ChatID)
+				if err != nil {
+					fail(err)
+					return true
+				}
+				if limit.reached(count, oldest) {
+					progress, err := m.d.store.MarkHistoryLimitReached(ctx, task.ChatID)
+					if err != nil {
+						fail(err)
+						return true
+					}
+					m.recordProgress(task, progress)
+					m.finish(task, rpc.HistorySyncDone, 0, "")
+					return true
+				}
+			}
+		}
+		if progress.OldestID != nil {
+			offset = *progress.OldestID
+		} else if page.Empty {
+			progress, err = m.d.store.SaveHistoryPage(ctx, task.ChatID, nil, nil, true, store.GapPass{})
+			if err != nil {
+				fail(err)
+				return true
+			}
+			m.recordProgress(task, progress)
+			m.finish(task, rpc.HistorySyncDone, 0, "")
+			return true
+		} else {
+			offset = page.RawNextOffsetID
+		}
+	} else {
+		if depthMet {
+			m.finishDepth(task)
+			return true
+		}
+		offset = page.RawNextOffsetID
+	}
+	timer := m.clock.NewTimer(task.pause())
+	select {
+	case <-ctx.Done():
+		timer.Stop()
+		m.finish(task, rpc.HistorySyncCancelled, 0, "")
+		return true
+	case <-timer.C():
+		timer.Stop()
+	}
+	return false
 }
 
 func (d *daemon) resolveHistorySyncChat(ctx context.Context, name string) (chatref.Ref, int64, error) {
