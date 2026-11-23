@@ -217,3 +217,29 @@ func TestChatSyncGapRelativeDepthMatchesSince(t *testing.T) {
 		}
 	}
 }
+
+func TestChatSyncCatchupRequestAndOutput(t *testing.T) {
+	reply := func(method string, _ json.RawMessage) (any, error) {
+		since := int64(123)
+		return rpc.HistorySyncCatchupResult{DryRun: true, Since: &since, WouldQueue: 1, Chats: []rpc.HistorySyncCatchupChat{{ChatID: 42, Title: "Alice", LastMessageDate: 200, Action: rpc.HistorySyncActionWouldQueue}}}, nil
+	}
+	run := runSyncCLI(t, []string{"chat", "sync", "catchup", "--dry-run"}, reply)
+	var p rpc.HistorySyncCatchupParams
+	if run.code != exitcode.OK || run.method != rpc.MethodHistorySyncCatchup || json.Unmarshal(run.params, &p) != nil || !p.DryRun || !strings.Contains(run.stdout, `"would_queue":1`) {
+		t.Fatalf("run: %+v", run)
+	}
+	run = runSyncCLI(t, []string{"chat", "sync", "catchup", "--dry-run", "--format", "jsonl"}, reply)
+	if run.code != exitcode.OK || !strings.Contains(run.stdout, `"chat_id":42`) || !strings.Contains(run.stdout, `"action":"would_queue"`) {
+		t.Fatalf("jsonl: %+v", run)
+	}
+	invalid := runSyncCLI(t, []string{"chat", "sync", "catchup", "--since", "2023-01-01"}, reply)
+	if invalid.code != exitcode.Usage || invalid.method != "" {
+		t.Fatalf("unexpected --since: %+v", invalid)
+	}
+	for _, tc := range []struct{ rpcCode, exit int }{{rpc.CodeInvalidParams, exitcode.Usage}, {rpc.CodeNotAuthorized, exitcode.NotAuthorized}, {rpc.CodeFloodWait, exitcode.FloodWait}} {
+		failed := runSyncCLI(t, []string{"chat", "sync", "catchup"}, func(string, json.RawMessage) (any, error) { return nil, rpc.NewError(tc.rpcCode, "failure") })
+		if failed.code != tc.exit {
+			t.Fatalf("RPC code %d: %+v", tc.rpcCode, failed)
+		}
+	}
+}

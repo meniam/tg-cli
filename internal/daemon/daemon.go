@@ -568,7 +568,8 @@ func (d *daemon) handle(method string, h rpc.Handler) {
 		if method != rpc.MethodPing && method != rpc.MethodStatus && method != rpc.MethodDashboard && method != rpc.MethodShutdown {
 			ctx = rpc.WithConnectionWait(ctx)
 		}
-		if needsTelegram(method) && d.opts.NewTelegram != nil {
+		// Catchup checks its switches before acquiring a client.
+		if needsTelegram(method) && method != rpc.MethodHistorySyncCatchup && d.opts.NewTelegram != nil {
 			leasedCtx, client, release, err := d.acquireTelegram(ctx)
 			if err != nil {
 				return nil, err
@@ -664,6 +665,7 @@ func (d *daemon) register() {
 	d.handle(rpc.MethodHistorySyncStatus, d.historySyncStatus)
 	d.handle(rpc.MethodHistorySyncCancel, d.historySyncCancel)
 	d.handle(rpc.MethodHistorySyncQueue, d.historySyncQueue)
+	d.handle(rpc.MethodHistorySyncCatchup, d.historySyncCatchup)
 	d.handle(rpc.MethodHistorySyncCancelAll, d.historySyncCancelAll)
 	d.handle(rpc.MethodSearchIndexStart, d.searchIndexStart)
 	d.handle(rpc.MethodSearchIndexStatus, d.searchIndexStatus)
@@ -950,6 +952,9 @@ func needsTelegram(method string) bool {
 
 // guardRequest rejects account operations after authorization loss.
 func (d *daemon) guardRequest(req rpc.Request) error {
+	if req.Method == rpc.MethodHistorySyncCatchup && (!d.opts.CatchupEnabled || d.background == nil) {
+		return nil
+	}
 	if accountMethod(req.Method) || strings.HasPrefix(req.Method, "settings.") {
 		d.accessMu.RLock()
 		hasSnapshot := d.accessSnapshot != nil

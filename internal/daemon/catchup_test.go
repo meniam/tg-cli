@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -160,6 +162,10 @@ func TestCatchupDialogSelection(t *testing.T) {
 	}
 	if result.WouldQueue != 2 || len(result.Chats) != 2 || result.Chats[0].Chat.ID != 1 || result.Chats[1].Chat.ID != 3 {
 		t.Fatalf("result: %+v", result)
+	}
+	result, err = d.queueCatchup(ctx, time.Unix(100, 0), false)
+	if err != nil || result.Queued != 2 || len(result.Chats) != 2 || d.sync.activeJob(4) {
+		t.Fatalf("closed chat in queue: %+v, %v", result, err)
 	}
 }
 
@@ -375,4 +381,108 @@ func TestCatchupWaitsForRunningBackground(t *testing.T) {
 		t.Fatalf("third: %+v", call)
 	}
 	gate.open(30)
+}
+
+func TestCatchupRPC(t *testing.T) {
+	ctx := context.Background()
+	t.Run("disabled", func(t *testing.T) {
+		d, tg, _, _, _ := syncFixture(t)
+		d.background = newBackgroundSync(d, BackgroundSyncConfig{}, nil, nil)
+		_, err := d.historySyncCatchup(ctx, params(t, rpc.HistorySyncCatchupParams{DryRun: true}))
+		if rpcCode(t, err) != rpc.CodeInvalidParams || !strings.Contains(err.Error(), "catchup.enabled") {
+			t.Fatalf("error: %v", err)
+		}
+		d.opts.CatchupEnabled = true
+		d.background = nil
+		_, err = d.historySyncCatchup(ctx, nil)
+		if rpcCode(t, err) != rpc.CodeInvalidParams || !strings.Contains(err.Error(), "background_sync.enabled") {
+			t.Fatalf("error: %v", err)
+		}
+		tg.mu.Lock()
+		defer tg.mu.Unlock()
+		if tg.chatsCalls != 0 || d.sync.hasActive() {
+			t.Fatal("disabled catchup made requests")
+		}
+	})
+	t.Run("no downtime", func(t *testing.T) {
+		d, tg, _, _, _ := syncFixture(t)
+		d.opts.CatchupEnabled = true
+		d.background = newBackgroundSync(d, BackgroundSyncConfig{}, nil, nil)
+		v, err := d.historySyncCatchup(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := v.(rpc.HistorySyncCatchupResult)
+		if r.Since != nil || len(r.Chats) != 0 {
+			t.Fatalf("result: %+v", r)
+		}
+		tg.mu.Lock()
+		defer tg.mu.Unlock()
+		if tg.chatsCalls != 0 {
+			t.Fatal("read dialogs")
+		}
+	})
+	t.Run("no login", func(t *testing.T) {
+		d, tg, _, _, _ := syncFixture(t)
+		d.opts.CatchupEnabled = true
+		d.background = newBackgroundSync(d, BackgroundSyncConfig{}, nil, nil)
+		tg.mu.Lock()
+		tg.user = nil
+		tg.mu.Unlock()
+		_, err := d.historySyncCatchup(ctx, nil)
+		if rpcCode(t, err) != rpc.CodeNotAuthorized {
+			t.Fatalf("error: %v", err)
+		}
+	})
+	t.Run("dry run", func(t *testing.T) {
+		d, tg, db, _, _ := syncFixture(t)
+		d.opts.CatchupEnabled = true
+		d.background = newBackgroundSync(d, BackgroundSyncConfig{}, nil, nil)
+		since := time.Unix(100, 0)
+		d.catchupSince = &since
+		tg.chats = []rpc.Chat{{ID: 42, Title: "Test", LastMessageDate: 200}}
+		if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: 1, Raw: []byte(`{}`)}}, nil, false, store.GapPass{}); err != nil {
+			t.Fatal(err)
+		}
+		v, err := d.historySyncCatchup(ctx, params(t, rpc.HistorySyncCatchupParams{DryRun: true}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := v.(rpc.HistorySyncCatchupResult)
+		if r.Since == nil || *r.Since != 100 || r.WouldQueue != 1 || len(r.Chats) != 1 || r.Chats[0].Action != rpc.HistorySyncActionWouldQueue || d.sync.hasActive() {
+			t.Fatalf("result: %+v", r)
+		}
+	})
+	t.Run("queue", func(t *testing.T) {
+		d, tg, db, clock, _ := syncFixture(t)
+		d.opts.CatchupEnabled = true
+		d.background = newBackgroundSync(d, BackgroundSyncConfig{PagePauseMin: time.Second, PagePauseMax: time.Second}, nil, nil)
+		since := time.Unix(100, 0)
+		d.catchupSince = &since
+		tg.chats = []rpc.Chat{{ID: 42, Title: "Test", LastMessageDate: 200}}
+		if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: 1, Raw: []byte(`{}`)}}, nil, false, store.GapPass{}); err != nil {
+			t.Fatal(err)
+		}
+		v, err := d.historySyncCatchup(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := v.(rpc.HistorySyncCatchupResult)
+		if r.Queued != 1 || len(r.Chats) != 1 || r.Chats[0].Action != rpc.HistorySyncActionQueued {
+			t.Fatalf("result: %+v", r)
+		}
+		clock.awaitPause(t)
+	})
+}
+
+func TestCatchupRPCDisabledBeforeClientAdmission(t *testing.T) {
+	d, client, _ := settingsFixture(t)
+	d.opts.CatchupEnabled = true
+	d.background = nil
+	d.opts.NewTelegram = func(context.Context, TelegramConfig) (Telegram, error) { return nil, errors.New("unexpected client") }
+	var result rpc.HistorySyncCatchupResult
+	err := client.Call(context.Background(), rpc.MethodHistorySyncCatchup, rpc.HistorySyncCatchupParams{DryRun: true}, &result)
+	if rpcCode(t, err) != rpc.CodeInvalidParams || !strings.Contains(err.Error(), "background_sync.enabled") {
+		t.Fatalf("error: %v", err)
+	}
 }

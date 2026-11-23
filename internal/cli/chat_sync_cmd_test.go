@@ -32,7 +32,7 @@ func runSyncCLI(t *testing.T, args []string, reply func(string, json.RawMessage)
 		method string
 		params json.RawMessage
 	}, 1)
-	for _, method := range []string{rpc.MethodHistorySyncStart, rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel, rpc.MethodHistorySyncQueue, rpc.MethodHistorySyncCancelAll} {
+	for _, method := range []string{rpc.MethodHistorySyncStart, rpc.MethodHistorySyncStatus, rpc.MethodHistorySyncCancel, rpc.MethodHistorySyncQueue, rpc.MethodHistorySyncCatchup, rpc.MethodHistorySyncCancelAll} {
 		method := method
 		server.Handle(method, func(_ context.Context, raw json.RawMessage) (any, error) {
 			calls <- struct {

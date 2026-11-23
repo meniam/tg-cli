@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"tg-cli/internal/chatref"
@@ -228,4 +229,43 @@ func (d *daemon) autoCatchup(ctx context.Context) {
 		return
 	}
 	d.log.Info("catchup queued", "chats", result.Queued, "since", d.catchupSince.Unix())
+}
+
+func (d *daemon) historySyncCatchup(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p rpc.HistorySyncCatchupParams
+	if err := decodeParams(raw, &p); err != nil {
+		return nil, err
+	}
+	if !d.opts.CatchupEnabled {
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "catchup.enabled is off: run tg settings set catchup.enabled true and restart the Daemon")
+	}
+	if d.background == nil {
+		return nil, rpc.NewError(rpc.CodeInvalidParams, "background_sync.enabled is off: run tg settings set background_sync.enabled true and restart the Daemon")
+	}
+	if d.opts.NewTelegram != nil {
+		lease, client, release, err := d.acquireTelegram(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+		ctx = context.WithValue(lease, telegramContextKey{}, client)
+	}
+	if err := d.requireAccount(ctx); err != nil {
+		return nil, err
+	}
+	result := rpc.HistorySyncCatchupResult{DryRun: p.DryRun, Chats: []rpc.HistorySyncCatchupChat{}}
+	if d.catchupSince == nil {
+		return result, nil
+	}
+	since := d.catchupSince.Unix()
+	result.Since = &since
+	picked, err := d.queueCatchup(ctx, *d.catchupSince, p.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	result.Queued, result.WouldQueue, result.SkippedActive = picked.Queued, picked.WouldQueue, picked.SkippedActive
+	for _, item := range picked.Chats {
+		result.Chats = append(result.Chats, rpc.HistorySyncCatchupChat{ChatID: item.Chat.ID, Title: item.Chat.Title, LastMessageDate: item.Chat.LastMessageDate, Action: item.Action})
+	}
+	return result, nil
 }

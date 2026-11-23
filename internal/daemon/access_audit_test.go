@@ -36,7 +36,7 @@ var audit03NoChatMethods = map[string]bool{
 	rpc.MethodVoiceStatus: true, rpc.MethodVoiceBackfill: true, rpc.MethodVoiceList: true,
 	// The history queue picks chats from the dialog list through the policy and takes
 	// no chat; cancelling every job takes none either.
-	rpc.MethodHistorySyncQueue: true, rpc.MethodHistorySyncCancelAll: true,
+	rpc.MethodHistorySyncQueue: true, rpc.MethodHistorySyncCatchup: true, rpc.MethodHistorySyncCancelAll: true,
 	// The list of chat marks takes no chat and leaves the closed ones out.
 	rpc.MethodChatVoiceList: true, rpc.MethodChatLimitList: true,
 }

@@ -48,4 +48,6 @@ type ChatOverview struct {
 	// saved when the history load reached the start of the chat. It survives a
 	// local deletion of that message; FirstMessage does not.
 	HistoryFirstMessageDate *int64 `json:"history_first_message_date,omitempty"`
+	HistoryGapFrom          *int   `json:"history_gap_from,omitempty"`
+	HistoryGapTo            *int   `json:"history_gap_to,omitempty"`
 }
