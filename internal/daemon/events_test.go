@@ -507,3 +507,40 @@ func TestEventRawPersistsMessageWithoutChangingPayload(t *testing.T) {
 	d.handleEvent(duplicate)
 	noEvent(t, sub)
 }
+
+// A basic group sends a short update with the author's id only. The name comes
+// from the people table, in the stored message and in the delivered event.
+func TestEventFillsSenderNameFromPeople(t *testing.T) {
+	d, _, db, _ := accessTestDaemon(t)
+	sub := d.hub.Subscribe()
+	defer sub.Close()
+	ctx := context.Background()
+	name, username := "Mila Test", "mila_test"
+	if err := db.UpsertPeople(ctx, []store.Person{{ID: 500, DisplayName: &name, Username: &username}}); err != nil {
+		t.Fatal(err)
+	}
+	chat := int64(-7)
+	known, unknown := testMessage(1, chat, "from a known person"), testMessage(2, chat, "from a stranger")
+	known.Sender, unknown.Sender = &rpc.Sender{ID: 500}, &rpc.Sender{ID: 501}
+
+	d.handleEvent(testEvent(t, rpc.EventMessageNew, &chat, known, "new:-7:1"))
+	delivered := nextEvent(t, sub)
+	var got rpc.Message
+	if err := json.Unmarshal(delivered.Data, &got); err != nil || got.Sender == nil || got.Sender.Name != name || got.Sender.Username != username {
+		t.Fatalf("delivered sender = %+v err=%v", got.Sender, err)
+	}
+	stored, err := db.GetMessage(ctx, chat, 1)
+	if err != nil || stored.SenderName == nil || *stored.SenderName != name {
+		t.Fatalf("stored name = %v err=%v", stored.SenderName, err)
+	}
+
+	event := testEvent(t, rpc.EventMessageNew, &chat, unknown, "new:-7:2")
+	d.handleEvent(event)
+	if delivered := nextEvent(t, sub); !bytes.Equal(delivered.Data, event.Data) {
+		t.Fatalf("payload of an unknown author changed: %s", delivered.Data)
+	}
+	stored, err = db.GetMessage(ctx, chat, 2)
+	if err != nil || stored.SenderName != nil {
+		t.Fatalf("stored name of an unknown author = %v err=%v", stored.SenderName, err)
+	}
+}
