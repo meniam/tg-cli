@@ -418,6 +418,10 @@ func (db *DB) UpsertPeople(ctx context.Context, people []Person) error {
 func upsertPeopleTx(ctx context.Context, tx *sql.Tx, people []Person, now int64) error {
 	const insert = `INSERT INTO people (` + personColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,first_name=excluded.first_name,last_name=excluded.last_name,phone=excluded.phone,bio=excluded.bio,is_bot=excluded.is_bot,is_contact=excluded.is_contact,deleted=excluded.deleted,raw=excluded.raw,last_seen_at=excluded.last_seen_at`
 	for _, incoming := range people {
+		if rawDeleted(incoming.Raw) {
+			deleted := true
+			incoming.Deleted = &deleted
+		}
 		old, err := scanPerson(tx.QueryRowContext(ctx, `SELECT `+personColumns+` FROM people WHERE id=?`, incoming.ID))
 		exists := err == nil
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {

@@ -51,3 +51,28 @@ func oneRawKey(raw []byte) (string, any) {
 	}
 	return "", nil
 }
+
+// rawDeleted tells whether a stored user object says the account is deleted.
+// The object is plain or keyed by the method that returned it
+// (`{"messages.getDialogs":{"_":"user","deleted":true}}`).
+func rawDeleted(raw []byte) bool {
+	var fields map[string]json.RawMessage
+	if len(raw) == 0 || json.Unmarshal(raw, &fields) != nil {
+		return false
+	}
+	isDeleted := func(object json.RawMessage) bool {
+		var flag struct {
+			Deleted bool `json:"deleted"`
+		}
+		return json.Unmarshal(object, &flag) == nil && flag.Deleted
+	}
+	if value, ok := fields["deleted"]; ok {
+		return string(value) == "true"
+	}
+	for _, value := range fields {
+		if isDeleted(value) {
+			return true
+		}
+	}
+	return false
+}
