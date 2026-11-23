@@ -8,9 +8,9 @@ PR: —
 
 ## Status
 
-- Current status: in_progress (код, тесты, документы и `just check` готовы; деплой и живая проверка гипотезы впереди)
+- Current status: done (код, тесты, деплой и живая проверка 2026-11-24)
 - Last update: 2026-11-24
-- Next safe step: по команде КПД деплой (миграция 0016), затем `tg message get -- -1001667018946 742364`: ожидаем `sender.deleted: true`.
+- Next safe step: нет; хвост закрыт планом 20261124_0049_deleted_people_from_dialogs.
 
 ## Context and sources
 
@@ -42,13 +42,13 @@ PR: —
 - [x] Тесты `TestSenderOfMarksDeletedAccount`, `TestDeletedSenderMarksStoredMessages`; миграция проверена на копии живой базы.
 - [x] `docs/cli/messages-read.md`, навык `docs/skill/tg/references/history.md`, решение и changelog.
 - [x] `just check`, `just skill-check` зелёные.
-- [ ] По КПД: бэкап, деплой, живая проверка гипотезы.
+- [x] По КПД: бэкап `store.pre-0016-20261124_0041.db`, деплой, схема 16. Живая проверка: `tg message get -- -1001667018946 742364` вернул `sender.deleted: true`, все 725 сообщений пользователя 7918158229 помечены.
 
 ## Verification
 
 | Check | Command | Expected result | Status |
 | --- | --- | --- | --- |
-| Гипотеза | после деплоя `tg message get -- -1001667018946 742364` | `sender.deleted: true` | not_run |
+| Гипотеза | после деплоя `tg message get -- -1001667018946 742364` | `sender.deleted: true` | ok |
 | Полная проверка | `just check`, `just skill-check` | зелёные | ok |
 
 ## Run log
