@@ -89,3 +89,17 @@ func checkPositiveDuration(value string) error {
 	_, err := config.ParsePositiveDuration(value)
 	return err
 }
+
+func (a *app) daemonCatchup() (bool, error) {
+	value := strings.TrimSpace(a.deps.Getenv("TG_CLI_CATCHUP_ENABLED"))
+	switch value {
+	case "":
+		return a.config.CatchupEnabled, nil
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fail(exitcode.Usage, "TG_CLI_CATCHUP_ENABLED must be true or false")
+	}
+}

@@ -37,6 +37,7 @@ var settingSpecs = []settingSpec{
 	{"behavior.throttle_percent", "number", `60`, "TG_CLI_THROTTLE_PERCENT", "", "live", false, false},
 	{"behavior.flood_autowait", "duration", `"10s"`, "TG_CLI_FLOOD_AUTOWAIT", "", "live", false, false},
 	{"behavior.expect_user", "string", `""`, "TG_CLI_EXPECT_USER", "--expect-user", "live", false, false},
+	{"catchup.enabled", "bool", `true`, "TG_CLI_CATCHUP_ENABLED", "", "restart", false, false},
 	{"background_sync.enabled", "bool", `true`, "TG_CLI_BACKGROUND_SYNC_ENABLED", "", "restart", false, false},
 	{"background_sync.window_start", "clock", `"08:00"`, "TG_CLI_BACKGROUND_SYNC_WINDOW_START", "", "live", false, false},
 	{"background_sync.window_end", "clock", `"20:00"`, "TG_CLI_BACKGROUND_SYNC_WINDOW_END", "", "live", false, false},

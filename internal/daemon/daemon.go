@@ -69,6 +69,7 @@ type Options struct {
 	// BackgroundSync holds the settings of the scheduled history load; the
 	// zero value is off.
 	BackgroundSync BackgroundSyncConfig
+	CatchupEnabled bool
 	// SemanticSearch holds the settings of the local semantic index; the zero
 	// value is off.
 	SemanticSearch SemanticSearchConfig
@@ -126,6 +127,8 @@ type daemon struct {
 	voice                *voiceWorker     // nil only in handler tests; its goroutine runs when voice transcription is on or a manual job asks
 	modelInfo            modelInfoCache   // the model name and digest a search read from Ollama a moment ago
 	cancel               context.CancelFunc
+	catchupSince         *time.Time
+	downtime             time.Duration
 	startedAt            time.Time // the start of the process; zero in handler tests
 	once                 sync.Once
 	eventMu              sync.Mutex
@@ -251,6 +254,9 @@ func Run(ctx context.Context, opts Options) error {
 	// Runtime access comes from the database, never from the legacy file.
 	opts.Access = nil
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore, startedAt: time.Now()}
+	if err := d.loadLastAlive(runCtx, d.startedAt); err != nil {
+		return err
+	}
 	d.thumbSlots = make(chan struct{}, 3)
 	d.chatLimitKick = make(chan struct{}, 1)
 	d.ownerSecrets = NewOwnerSecrets(ownedStore)
@@ -300,6 +306,9 @@ func Run(ctx context.Context, opts Options) error {
 	pruneDone := make(chan struct{})
 	go func() { defer close(pruneDone); d.pruneEvents(runCtx, eventPruneEvery, eventRetention, eventKeep) }()
 	d.startBackgroundSync(runCtx, nil, nil)
+	aliveCtx, cancelAlive := context.WithCancel(runCtx)
+	aliveDone := make(chan struct{})
+	go func() { defer close(aliveDone); d.runAlive(aliveCtx, realHistorySyncClock{}) }()
 
 	var tgDone <-chan error
 	switchDone := make(chan struct{})
@@ -459,6 +468,13 @@ func Run(ctx context.Context, opts Options) error {
 	runErr, tgFinished := d.waitForShutdown(runCtx, tgDone, serveDone)
 
 	log.Info("daemon stopping")
+	cancelAlive()
+	<-aliveDone
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), stopGrace)
+	defer stopCancel()
+	if runErr == nil {
+		d.writeAlive(stopCtx, time.Now())
+	}
 	cancel()
 	d.sync.close()
 	if d.full != nil {
@@ -483,8 +499,6 @@ func Run(ctx context.Context, opts Options) error {
 	<-contactsDone
 	<-idempotencyDone
 	<-accountDone
-	stopCtx, stopCancel := context.WithTimeout(context.Background(), stopGrace)
-	defer stopCancel()
 	if err := d.srv.Shutdown(stopCtx); err != nil {
 		log.Warn("forced server close", "err", err)
 	}
@@ -979,6 +993,45 @@ func (d *daemon) waitForShutdown(ctx context.Context, tgDone, serveDone <-chan e
 				return fmt.Errorf("serve: %w", err), tgFinished
 			}
 			return nil, tgFinished
+		}
+	}
+}
+
+func (d *daemon) loadLastAlive(ctx context.Context, now time.Time) error {
+	lastAlive, found, err := d.store.LastAliveAt(ctx)
+	if err != nil {
+		return fmt.Errorf("read last alive: %w", err)
+	}
+	if found {
+		alive := time.Unix(lastAlive, 0)
+		d.downtime = now.Sub(alive)
+		if d.downtime > 10*time.Minute {
+			since := alive.Add(-10 * time.Minute)
+			d.catchupSince = &since
+		}
+	}
+	return nil
+}
+
+func (d *daemon) writeAlive(ctx context.Context, now time.Time) {
+	if d.getAuthLost() != "" || !d.backgroundSyncReady() {
+		return
+	}
+	if err := d.store.SetLastAliveAt(ctx, now.Unix()); err != nil && !errors.Is(err, context.Canceled) {
+		d.log.Warn("save last alive failed", "err", err)
+	}
+}
+
+func (d *daemon) runAlive(ctx context.Context, clock historySyncClock) {
+	d.writeAlive(ctx, clock.Now())
+	for {
+		timer := clock.NewTimer(time.Minute)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C():
+			d.writeAlive(ctx, clock.Now())
 		}
 	}
 }

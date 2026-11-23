@@ -7,7 +7,7 @@ import (
 )
 
 // syncProgressColumns lists the sync_state columns scanSyncProgress reads.
-const syncProgressColumns = `chat_id,oldest_id,newest_id,complete,synced_at,first_message_date`
+const syncProgressColumns = `chat_id,oldest_id,newest_id,complete,synced_at,first_message_date,gap_from,gap_to`
 
 // SyncProgress is durable history coverage for one chat. Nil IDs mean that no
 // storable message has been seen; a completed empty history can have nil IDs.
@@ -21,12 +21,14 @@ type SyncProgress struct {
 	Complete         bool
 	SyncedAt         *int64
 	FirstMessageDate *int64
+	GapFrom          *int
+	GapTo            *int
 }
 
 func scanSyncProgress(row rowScanner) (SyncProgress, error) {
 	var state SyncProgress
-	var oldest, newest, syncedAt, firstDate sql.NullInt64
-	err := row.Scan(&state.ChatID, &oldest, &newest, &state.Complete, &syncedAt, &firstDate)
+	var oldest, newest, syncedAt, firstDate, gapFrom, gapTo sql.NullInt64
+	err := row.Scan(&state.ChatID, &oldest, &newest, &state.Complete, &syncedAt, &firstDate, &gapFrom, &gapTo)
 	if err != nil {
 		return SyncProgress{}, err
 	}
@@ -43,6 +45,14 @@ func scanSyncProgress(row rowScanner) (SyncProgress, error) {
 	}
 	if firstDate.Valid {
 		state.FirstMessageDate = &firstDate.Int64
+	}
+	if gapFrom.Valid {
+		id := int(gapFrom.Int64)
+		state.GapFrom = &id
+	}
+	if gapTo.Valid {
+		id := int(gapTo.Int64)
+		state.GapTo = &id
 	}
 	return state, nil
 }
@@ -65,7 +75,7 @@ func (db *DB) SyncState(ctx context.Context, chatID int64) (state SyncProgress, 
 // The transaction that sets complete also saves first_message_date, the earliest
 // date among the stored messages of the chat, deleted ones included; a chat that
 // was already complete keeps its date.
-func (db *DB) SaveHistoryPage(ctx context.Context, chatID int64, messages []Message, people []Person, complete bool) (SyncProgress, error) {
+func (db *DB) SaveHistoryPage(ctx context.Context, chatID int64, messages []Message, people []Person, complete bool, gapPass ...GapPass) (SyncProgress, error) {
 	if chatID == 0 {
 		return SyncProgress{}, fmt.Errorf("history page chat id must be nonzero")
 	}
@@ -97,6 +107,11 @@ func (db *DB) SaveHistoryPage(ctx context.Context, chatID int64, messages []Mess
 		return SyncProgress{}, fmt.Errorf("begin history page: %w", err)
 	}
 	defer tx.Rollback()
+	var gapFrom, gapTo sql.NullInt64
+	err = tx.QueryRowContext(ctx, `SELECT gap_from,gap_to FROM sync_state WHERE chat_id=?`, chatID).Scan(&gapFrom, &gapTo)
+	if err != nil && err != sql.ErrNoRows {
+		return SyncProgress{}, fmt.Errorf("read gap: %w", err)
+	}
 	now := db.now().Unix()
 	if len(messages) > 0 {
 		if err := upsertMessagesTx(ctx, tx, messages, last, now); err != nil {
@@ -108,6 +123,21 @@ func (db *DB) SaveHistoryPage(ctx context.Context, chatID int64, messages []Mess
 			return SyncProgress{}, err
 		}
 	}
+	pass := len(gapPass) > 0 && gapFrom.Valid && gapTo.Valid && (gapPass[0].Start == 0 || gapPass[0].Start >= int(gapTo.Int64))
+	closed := pass && (complete || oldest != nil && *oldest <= int(gapFrom.Int64))
+	pageOldest, pageNewest := oldest, newest
+	if pass {
+		pageOldest = nil
+		pageNewest = nil
+	}
+	if gapFrom.Valid && pageNewest != nil && *pageNewest > int(gapFrom.Int64) {
+		if gapFrom.Int64 == 0 {
+			pageNewest = nil
+		} else {
+			id := int(gapFrom.Int64)
+			pageNewest = &id
+		}
+	}
 	const upsert = `INSERT INTO sync_state(chat_id,oldest_id,newest_id,complete,synced_at) VALUES(?,?,?,?,?)
 		ON CONFLICT(chat_id) DO UPDATE SET
 		oldest_id=CASE WHEN excluded.oldest_id IS NULL THEN sync_state.oldest_id
@@ -117,10 +147,20 @@ func (db *DB) SaveHistoryPage(ctx context.Context, chatID int64, messages []Mess
 			WHEN sync_state.newest_id IS NULL THEN excluded.newest_id
 			ELSE MAX(sync_state.newest_id,excluded.newest_id) END,
 		complete=MAX(sync_state.complete,excluded.complete),synced_at=excluded.synced_at`
-	if _, err := tx.ExecContext(ctx, upsert, chatID, oldest, newest, complete, now); err != nil {
+	if _, err := tx.ExecContext(ctx, upsert, chatID, pageOldest, pageNewest, complete && !pass, now); err != nil {
 		return SyncProgress{}, fmt.Errorf("save sync state %d: %w", chatID, err)
 	}
-	if complete {
+	if closed {
+		top := max(gapPass[0].Top, gapPass[0].Start)
+		if _, err := tx.ExecContext(ctx, `UPDATE sync_state SET gap_from=NULL,gap_to=NULL,newest_id=CASE WHEN ?>0 THEN MAX(COALESCE(newest_id,0),?) ELSE newest_id END WHERE chat_id=?`, top, top, chatID); err != nil {
+			return SyncProgress{}, fmt.Errorf("close gap: %w", err)
+		}
+	} else if pass && gapPass[0].Narrow && oldest != nil && *oldest < int(gapTo.Int64) && *oldest > int(gapFrom.Int64) {
+		if _, err := tx.ExecContext(ctx, `UPDATE sync_state SET gap_to=? WHERE chat_id=?`, *oldest, chatID); err != nil {
+			return SyncProgress{}, fmt.Errorf("narrow gap: %w", err)
+		}
+	}
+	if complete && !pass {
 		const firstDate = `UPDATE sync_state
 			SET first_message_date=(SELECT MIN(date) FROM messages WHERE chat_id=sync_state.chat_id)
 			WHERE chat_id=? AND first_message_date IS NULL`
@@ -187,4 +227,69 @@ func (db *DB) MarkHistoryLimitReached(ctx context.Context, chatID int64) (SyncPr
 		return SyncProgress{}, fmt.Errorf("read saved sync state %d: %w", chatID, err)
 	}
 	return state, nil
+}
+
+// GapPass describes a continuous pass through a gap. Start is its initial
+// offset; Top is the greatest ID covered by the pass. Narrow marks its last page.
+type GapPass struct {
+	Start  int
+	Top    int
+	Narrow bool
+}
+
+// SaveCatchupPage stores messages and people without changing history coverage.
+func (db *DB) SaveCatchupPage(ctx context.Context, chatID int64, messages []Message, people []Person) error {
+	if chatID == 0 {
+		return fmt.Errorf("history page chat id must be nonzero")
+	}
+	last, err := messageLastIndexes(messages, true)
+	if err != nil {
+		return err
+	}
+	for _, m := range messages {
+		if m.ChatID != chatID || m.ID <= 0 || m.Date <= 0 {
+			return fmt.Errorf("invalid history message %d/%d", m.ChatID, m.ID)
+		}
+	}
+	for _, p := range people {
+		if err := validateOptionalJSON(p.Raw); err != nil {
+			return fmt.Errorf("person %d raw: %w", p.ID, err)
+		}
+	}
+	tx, err := db.write.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin catchup page: %w", err)
+	}
+	defer tx.Rollback()
+	now := db.now().Unix()
+	if len(messages) > 0 {
+		if err := upsertMessagesTx(ctx, tx, messages, last, now); err != nil {
+			return err
+		}
+	}
+	if len(people) > 0 {
+		if err := upsertPeopleTx(ctx, tx, people, now); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit catchup page: %w", err)
+	}
+	return nil
+}
+
+// MarkCatchupGap records the missing interval and merges an existing gap.
+func (db *DB) MarkCatchupGap(ctx context.Context, chatID int64, gapTo int, aliveAt int64) error {
+	if chatID == 0 || gapTo <= 0 {
+		return fmt.Errorf("invalid catchup gap")
+	}
+	_, err := db.write.ExecContext(ctx, `INSERT INTO sync_state(chat_id,gap_from,gap_to,complete)
+		VALUES(?,COALESCE((SELECT MAX(id) FROM messages WHERE chat_id=? AND id<? AND date<=?),0),?,0)
+		ON CONFLICT(chat_id) DO UPDATE SET
+		gap_from=CASE WHEN sync_state.gap_from IS NULL THEN excluded.gap_from ELSE MIN(sync_state.gap_from,excluded.gap_from) END,
+		gap_to=CASE WHEN sync_state.gap_to IS NULL THEN excluded.gap_to ELSE MAX(sync_state.gap_to,excluded.gap_to) END`, chatID, chatID, gapTo, aliveAt, gapTo)
+	if err != nil {
+		return fmt.Errorf("mark catchup gap: %w", err)
+	}
+	return nil
 }

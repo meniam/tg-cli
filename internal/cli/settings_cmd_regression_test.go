@@ -254,7 +254,7 @@ func TestSettingsSchemaContract(t *testing.T) {
 	if err := json.Unmarshal(parse(t, r).Data, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc.SchemaVersion != 4 || len(doc.Settings) != 47 {
+	if doc.SchemaVersion != 4 || len(doc.Settings) != 48 {
 		t.Fatalf("schema version %d settings %d", doc.SchemaVersion, len(doc.Settings))
 	}
 	for _, key := range doc.Settings {

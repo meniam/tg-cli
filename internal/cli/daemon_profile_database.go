@@ -27,6 +27,7 @@ func (a *app) applyDatabaseSettings(paths daemon.Paths, values map[string]json.R
 		"web.cache_bytes": &a.config.Web.CacheBytes, "web.cache_ttl": &a.config.Web.CacheTTL,
 		"profile.client": &profile.Client, "profile.device": &profile.Device, "profile.transport": &profile.Transport, "profile.proxy": &profile.Proxy,
 		"behavior.throttle_percent": &a.config.Behavior.ThrottlePercent, "behavior.flood_autowait": &a.config.Behavior.FloodAutoWait, "behavior.expect_user": &a.config.Behavior.ExpectUser,
+		"catchup.enabled":         &a.config.CatchupEnabled,
 		"background_sync.enabled": &a.config.BackgroundSync.Enabled, "background_sync.window_start": &a.config.BackgroundSync.WindowStart, "background_sync.window_end": &a.config.BackgroundSync.WindowEnd,
 		"background_sync.interval_min": &a.config.BackgroundSync.IntervalMin, "background_sync.interval_max": &a.config.BackgroundSync.IntervalMax, "background_sync.page_pause_min": &a.config.BackgroundSync.PagePauseMin, "background_sync.page_pause_max": &a.config.BackgroundSync.PagePauseMax,
 		"semantic_search.enabled": &a.config.SemanticSearch.Enabled, "semantic_search.ollama_url": &a.config.SemanticSearch.OllamaURL, "semantic_search.model": &a.config.SemanticSearch.Model, "semantic_search.batch": &a.config.SemanticSearch.Batch, "semantic_search.interval": &a.config.SemanticSearch.Interval, "semantic_search.min_similarity": &a.config.SemanticSearch.MinSimilarity,
@@ -86,6 +87,10 @@ func (a *app) prepareDaemonSettings(ctx context.Context, cmd *cobra.Command, pat
 		return err
 	}
 	background, err := a.daemonBackgroundSync()
+	if err != nil {
+		return err
+	}
+	catchup, err := a.daemonCatchup()
 	if err != nil {
 		return err
 	}
@@ -212,6 +217,7 @@ func (a *app) prepareDaemonSettings(ctx context.Context, cmd *cobra.Command, pat
 	}
 	opts.WebCacheBytes = a.config.Web.CacheBytes
 	opts.BackgroundSync = background
+	opts.CatchupEnabled = catchup
 	opts.SemanticSearch = semantic
 	opts.VoiceTranscription = voice
 	if createClient {
