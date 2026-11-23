@@ -73,24 +73,25 @@ type Person struct {
 // Message contains locally stored Telegram message data. Raw must be valid JSON.
 // SearchText, DeletedAt, and timestamps are store-owned.
 type Message struct {
-	ChatID      int64
-	ID          int
-	Date        int64
-	SenderID    *int64
-	SenderName  *string
-	Text        string
-	Out         *bool
-	ReplyTo     *int64
-	TopicID     *int64
-	MediaType   *string
-	EditedAt    *int64
-	Pinned      *bool
-	Service     *string
-	Raw         json.RawMessage
-	SearchText  string
-	DeletedAt   *int64
-	FirstSeenAt int64
-	LastSeenAt  int64
+	ChatID        int64
+	ID            int
+	Date          int64
+	SenderID      *int64
+	SenderName    *string
+	SenderDeleted *bool
+	Text          string
+	Out           *bool
+	ReplyTo       *int64
+	TopicID       *int64
+	MediaType     *string
+	EditedAt      *int64
+	Pinned        *bool
+	Service       *string
+	Raw           json.RawMessage
+	SearchText    string
+	DeletedAt     *int64
+	FirstSeenAt   int64
+	LastSeenAt    int64
 }
 
 // MessageVersion preserves a message before a text change.
@@ -136,14 +137,14 @@ func scanPerson(row rowScanner) (Person, error) {
 func scanMessage(row rowScanner) (Message, error) {
 	var m Message
 	var raw string
-	err := row.Scan(&m.ChatID, &m.ID, &m.Date, &m.SenderID, &m.SenderName, &m.Text, &m.Out, &m.ReplyTo, &m.TopicID, &m.MediaType, &m.EditedAt, &m.Pinned, &m.Service, &raw, &m.SearchText, &m.DeletedAt, &m.FirstSeenAt, &m.LastSeenAt)
+	err := row.Scan(&m.ChatID, &m.ID, &m.Date, &m.SenderID, &m.SenderName, &m.SenderDeleted, &m.Text, &m.Out, &m.ReplyTo, &m.TopicID, &m.MediaType, &m.EditedAt, &m.Pinned, &m.Service, &raw, &m.SearchText, &m.DeletedAt, &m.FirstSeenAt, &m.LastSeenAt)
 	m.Raw = json.RawMessage(raw)
 	return m, err
 }
 
 const chatColumns = `id,type,title,username,about,members,forum,verified,unread,settings,raw,search_text,created_at,scam,fake,restricted,restriction_reason,full_synced_at,full_error,first_seen_at,last_seen_at`
 const personColumns = `id,username,first_name,last_name,phone,bio,is_bot,is_contact,deleted,raw,search_text,first_seen_at,last_seen_at`
-const messageColumns = `chat_id,id,date,sender_id,sender_name,text,out,reply_to,topic_id,media_type,edited_at,pinned,service,raw,search_text,deleted_at,first_seen_at,last_seen_at`
+const messageColumns = `chat_id,id,date,sender_id,sender_name,sender_deleted,text,out,reply_to,topic_id,media_type,edited_at,pinned,service,raw,search_text,deleted_at,first_seen_at,last_seen_at`
 
 // GetChat returns a chat or ErrNotFound.
 func (db *DB) GetChat(ctx context.Context, id int64) (Chat, error) {
@@ -417,6 +418,10 @@ func (db *DB) UpsertPeople(ctx context.Context, people []Person) error {
 func upsertPeopleTx(ctx context.Context, tx *sql.Tx, people []Person, now int64) error {
 	const insert = `INSERT INTO people (` + personColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,first_name=excluded.first_name,last_name=excluded.last_name,phone=excluded.phone,bio=excluded.bio,is_bot=excluded.is_bot,is_contact=excluded.is_contact,deleted=excluded.deleted,raw=excluded.raw,last_seen_at=excluded.last_seen_at`
 	for _, incoming := range people {
+		if rawDeleted(incoming.Raw) {
+			deleted := true
+			incoming.Deleted = &deleted
+		}
 		old, err := scanPerson(tx.QueryRowContext(ctx, `SELECT `+personColumns+` FROM people WHERE id=?`, incoming.ID))
 		exists := err == nil
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -431,6 +436,13 @@ func upsertPeopleTx(ctx context.Context, tx *sql.Tx, people []Person, now int64)
 		if err != nil {
 			return fmt.Errorf("upsert person %d: %w", p.ID, err)
 		}
+		if p.Deleted != nil && *p.Deleted {
+			// Every stored message of a deleted account is marked at once, so the
+			// old rows do not wait for a history read to learn it.
+			if _, err = tx.ExecContext(ctx, `UPDATE messages SET sender_deleted=1 WHERE sender_id=? AND sender_deleted=0`, p.ID); err != nil {
+				return fmt.Errorf("mark messages of deleted person %d: %w", p.ID, err)
+			}
+		}
 	}
 	return nil
 }
@@ -440,6 +452,7 @@ func mergeMessage(old, incoming Message, exists bool, now int64) Message {
 	if exists {
 		m.SenderID = mergeInt(old.SenderID, incoming.SenderID)
 		m.SenderName = mergeText(old.SenderName, incoming.SenderName)
+		m.SenderDeleted = mergeBool(old.SenderDeleted, incoming.SenderDeleted)
 		m.Out = mergeBool(old.Out, incoming.Out)
 		m.ReplyTo = mergeInt(old.ReplyTo, incoming.ReplyTo)
 		m.TopicID = mergeInt(old.TopicID, incoming.TopicID)
@@ -491,13 +504,13 @@ func messageLastIndexes(messages []Message, strict bool) (map[[2]int64]int, erro
 }
 
 func upsertMessagesTx(ctx context.Context, tx *sql.Tx, messages []Message, last map[[2]int64]int, now int64) error {
-	const insertNew = `INSERT INTO messages (` + messageColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,id) DO NOTHING`
+	const insertNew = `INSERT INTO messages (` + messageColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,id) DO NOTHING`
 	newStmt, err := tx.PrepareContext(ctx, insertNew)
 	if err != nil {
 		return fmt.Errorf("prepare message insert: %w", err)
 	}
 	defer newStmt.Close()
-	const insert = `INSERT INTO messages (` + messageColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,id) DO UPDATE SET date=excluded.date,sender_id=excluded.sender_id,sender_name=excluded.sender_name,text=excluded.text,out=excluded.out,reply_to=excluded.reply_to,topic_id=excluded.topic_id,media_type=excluded.media_type,edited_at=excluded.edited_at,pinned=excluded.pinned,service=excluded.service,raw=excluded.raw,deleted_at=NULL,last_seen_at=excluded.last_seen_at`
+	const insert = `INSERT INTO messages (` + messageColumns + `) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,id) DO UPDATE SET date=excluded.date,sender_id=excluded.sender_id,sender_name=excluded.sender_name,sender_deleted=excluded.sender_deleted,text=excluded.text,out=excluded.out,reply_to=excluded.reply_to,topic_id=excluded.topic_id,media_type=excluded.media_type,edited_at=excluded.edited_at,pinned=excluded.pinned,service=excluded.service,raw=excluded.raw,deleted_at=NULL,last_seen_at=excluded.last_seen_at`
 	for i, incoming := range messages {
 		if last[[2]int64{incoming.ChatID, int64(incoming.ID)}] != i {
 			continue
@@ -506,7 +519,7 @@ func upsertMessagesTx(ctx context.Context, tx *sql.Tx, messages []Message, last 
 		if err := applyTranscript(ctx, tx, &fresh); err != nil {
 			return err
 		}
-		result, err := newStmt.ExecContext(ctx, fresh.ChatID, fresh.ID, fresh.Date, fresh.SenderID, fresh.SenderName, fresh.Text, boolInt(fresh.Out), fresh.ReplyTo, fresh.TopicID, fresh.MediaType, fresh.EditedAt, boolInt(fresh.Pinned), fresh.Service, string(fresh.Raw), fresh.SearchText, nil, fresh.FirstSeenAt, fresh.LastSeenAt)
+		result, err := newStmt.ExecContext(ctx, fresh.ChatID, fresh.ID, fresh.Date, fresh.SenderID, fresh.SenderName, boolInt(fresh.SenderDeleted), fresh.Text, boolInt(fresh.Out), fresh.ReplyTo, fresh.TopicID, fresh.MediaType, fresh.EditedAt, boolInt(fresh.Pinned), fresh.Service, string(fresh.Raw), fresh.SearchText, nil, fresh.FirstSeenAt, fresh.LastSeenAt)
 		if err != nil {
 			return fmt.Errorf("insert message %d/%d: %w", incoming.ChatID, incoming.ID, err)
 		}
@@ -538,7 +551,7 @@ func upsertMessagesTx(ctx context.Context, tx *sql.Tx, messages []Message, last 
 		if m.SearchText != old.SearchText {
 			query += `,search_text=excluded.search_text`
 		}
-		_, err = tx.ExecContext(ctx, query, m.ChatID, m.ID, m.Date, m.SenderID, m.SenderName, m.Text, boolInt(m.Out), m.ReplyTo, m.TopicID, m.MediaType, m.EditedAt, boolInt(m.Pinned), m.Service, string(m.Raw), m.SearchText, nil, m.FirstSeenAt, m.LastSeenAt)
+		_, err = tx.ExecContext(ctx, query, m.ChatID, m.ID, m.Date, m.SenderID, m.SenderName, boolInt(m.SenderDeleted), m.Text, boolInt(m.Out), m.ReplyTo, m.TopicID, m.MediaType, m.EditedAt, boolInt(m.Pinned), m.Service, string(m.Raw), m.SearchText, nil, m.FirstSeenAt, m.LastSeenAt)
 		if err != nil {
 			return fmt.Errorf("upsert message %d/%d: %w", m.ChatID, m.ID, err)
 		}

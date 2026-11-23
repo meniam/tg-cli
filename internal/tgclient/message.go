@@ -93,6 +93,7 @@ func senderOf(from tg.PeerClass, ent peer.Entities, fallback *rpc.Sender) *rpc.S
 		if u, ok := ent.User(p.UserID); ok {
 			s.Name = displayName(u)
 			s.Username, _ = u.GetUsername()
+			s.Deleted = u.Deleted
 		}
 		return s
 	case *tg.PeerChannel:

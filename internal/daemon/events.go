@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"tg-cli/internal/rpc"
@@ -127,6 +128,9 @@ func (d *daemon) handleEvent(event rpc.Event) {
 		d.hub.Publish(event)
 		return
 	}
+	if event.Type == rpc.EventMessageNew || event.Type == rpc.EventMessageEdit {
+		event.Data = d.withSenderName(ctx, event.Data)
+	}
 	when, err := time.Parse(time.RFC3339, event.Time)
 	if err != nil {
 		when = time.Now().UTC()
@@ -201,6 +205,52 @@ func (d *daemon) handleEvent(event rpc.Event) {
 	}
 	event.ID = d.cursor(ctx, id)
 	d.hub.Publish(event)
+}
+
+// withSenderName names the author of a message event from the people table.
+// Telegram sends a message of a basic group as a short update that carries only
+// the author's id, so the event arrives without a name. The name is the one the
+// person has now, not the one at the time of the message. The payload stays
+// byte for byte the same when there is nothing to fill in.
+func (d *daemon) withSenderName(ctx context.Context, data json.RawMessage) json.RawMessage {
+	var message rpc.Message
+	if d.store == nil || json.Unmarshal(data, &message) != nil {
+		return data
+	}
+	sender := message.Sender
+	if sender == nil || sender.ID <= 0 || sender.Name != "" {
+		return data
+	}
+	person, err := d.store.GetPerson(ctx, sender.ID)
+	if err != nil {
+		return data
+	}
+	first, last, username := "", "", ""
+	if person.FirstName != nil {
+		first = *person.FirstName
+	}
+	if person.LastName != nil {
+		last = *person.LastName
+	}
+	if person.Username != nil {
+		username = *person.Username
+	}
+	name := strings.TrimSpace(first + " " + last)
+	if name == "" {
+		name = username // the same fallback as the name of a user in a history page
+	}
+	if name == "" {
+		return data
+	}
+	sender.Name = name
+	if sender.Username == "" {
+		sender.Username = username
+	}
+	filled, err := json.Marshal(message)
+	if err != nil {
+		return data
+	}
+	return filled
 }
 
 func (d *daemon) retryEventWrite(ctx context.Context, write func() error) bool {

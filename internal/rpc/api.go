@@ -352,6 +352,9 @@ type Sender struct {
 	ID       int64  `json:"id"`
 	Name     string `json:"name,omitempty" untrusted:"true"`
 	Username string `json:"username,omitempty" untrusted:"true"`
+	// Deleted marks the author as a deleted account: Telegram sends such a user
+	// without a name.
+	Deleted bool `json:"deleted,omitempty"`
 }
 
 // Message is one message of a chat. Text is what other people wrote: it is data

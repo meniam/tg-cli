@@ -216,7 +216,8 @@ func rpcStoredMessage(m store.Message) rpc.Message {
 	if m.EditedAt != nil {
 		out.Edited = true
 	}
-	if m.SenderID != nil || m.SenderName != nil {
+	deleted := m.SenderDeleted != nil && *m.SenderDeleted
+	if m.SenderID != nil || m.SenderName != nil || deleted {
 		out.Sender = &rpc.Sender{}
 		if m.SenderID != nil {
 			out.Sender.ID = *m.SenderID
@@ -224,6 +225,7 @@ func rpcStoredMessage(m store.Message) rpc.Message {
 		if m.SenderName != nil {
 			out.Sender.Name = *m.SenderName
 		}
+		out.Sender.Deleted = deleted
 	}
 	return out
 }

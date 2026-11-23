@@ -507,3 +507,71 @@ func TestEventRawPersistsMessageWithoutChangingPayload(t *testing.T) {
 	d.handleEvent(duplicate)
 	noEvent(t, sub)
 }
+
+// A basic group sends a short update with the author's id only. The name comes
+// from the people table, in the stored message and in the delivered event.
+func TestEventFillsSenderNameFromPeople(t *testing.T) {
+	d, _, db, _ := accessTestDaemon(t)
+	sub := d.hub.Subscribe()
+	defer sub.Close()
+	ctx := context.Background()
+	name, username := "Mila Test", "mila_test"
+	if err := db.UpsertPeople(ctx, []store.Person{{ID: 500, DisplayName: &name, Username: &username}}); err != nil {
+		t.Fatal(err)
+	}
+	chat := int64(-7)
+	known, unknown := testMessage(1, chat, "from a known person"), testMessage(2, chat, "from a stranger")
+	known.Sender, unknown.Sender = &rpc.Sender{ID: 500}, &rpc.Sender{ID: 501}
+
+	d.handleEvent(testEvent(t, rpc.EventMessageNew, &chat, known, "new:-7:1"))
+	delivered := nextEvent(t, sub)
+	var got rpc.Message
+	if err := json.Unmarshal(delivered.Data, &got); err != nil || got.Sender == nil || got.Sender.Name != name || got.Sender.Username != username {
+		t.Fatalf("delivered sender = %+v err=%v", got.Sender, err)
+	}
+	stored, err := db.GetMessage(ctx, chat, 1)
+	if err != nil || stored.SenderName == nil || *stored.SenderName != name {
+		t.Fatalf("stored name = %v err=%v", stored.SenderName, err)
+	}
+
+	event := testEvent(t, rpc.EventMessageNew, &chat, unknown, "new:-7:2")
+	d.handleEvent(event)
+	if delivered := nextEvent(t, sub); !bytes.Equal(delivered.Data, event.Data) {
+		t.Fatalf("payload of an unknown author changed: %s", delivered.Data)
+	}
+	stored, err = db.GetMessage(ctx, chat, 2)
+	if err != nil || stored.SenderName != nil {
+		t.Fatalf("stored name of an unknown author = %v err=%v", stored.SenderName, err)
+	}
+}
+
+// Once a deleted account is seen, all its stored messages carry the mark, also
+// the ones saved before and the ones that arrive later without the user's object.
+func TestDeletedSenderMarksStoredMessages(t *testing.T) {
+	d, _, db, _ := accessTestDaemon(t)
+	ctx := context.Background()
+	chat := int64(-8)
+	old, other := testMessage(1, chat, "before"), testMessage(3, chat, "of a living user")
+	old.Sender, other.Sender = &rpc.Sender{ID: 600}, &rpc.Sender{ID: 601}
+	if err := d.persistMessages(ctx, "test", []rpc.Message{old, other}); err != nil {
+		t.Fatal(err)
+	}
+	seen := testMessage(2, chat, "seen with the user's object")
+	seen.Sender = &rpc.Sender{ID: 600, Deleted: true}
+	later := testMessage(4, chat, "later, no user object")
+	later.Sender = &rpc.Sender{ID: 600}
+	for _, batch := range [][]rpc.Message{{seen}, {later}} {
+		if err := d.persistMessages(ctx, "test", batch); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for id, want := range map[int]bool{1: true, 2: true, 3: false, 4: true} {
+		stored, err := db.GetMessage(ctx, chat, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := rpcStoredMessage(stored).Sender.Deleted; got != want {
+			t.Errorf("message %d: sender.deleted = %v, want %v", id, got, want)
+		}
+	}
+}
