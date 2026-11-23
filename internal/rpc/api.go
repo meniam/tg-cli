@@ -533,6 +533,8 @@ type HistorySyncJob struct {
 	NewestID         *int   `json:"newest_id"`
 	Complete         bool   `json:"complete"`
 	FirstMessageDate *int64 `json:"first_message_date"`
+	GapFrom          *int   `json:"gap_from"`
+	GapTo            *int   `json:"gap_to"`
 	WaitSeconds      int    `json:"wait_seconds,omitempty"`
 	ErrorCode        int    `json:"error_code,omitempty"`
 	Error            string `json:"error,omitempty"`

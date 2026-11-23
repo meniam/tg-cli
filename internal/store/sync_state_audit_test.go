@@ -23,11 +23,11 @@ func TestAudit08_SaveHistoryPageRejectsInvalidInput(t *testing.T) {
 			db := openTestDB(t)
 			ctx := context.Background()
 			setClock(db, 100)
-			if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(7, "existing")}, nil, false); err != nil {
+			if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(7, "existing")}, nil, false, GapPass{}); err != nil {
 				t.Fatal(err)
 			}
 			setClock(db, 200)
-			if _, err := db.SaveHistoryPage(ctx, tc.chatID, tc.page, nil, true); err == nil {
+			if _, err := db.SaveHistoryPage(ctx, tc.chatID, tc.page, nil, true, GapPass{}); err == nil {
 				t.Fatal("invalid page succeeded")
 			}
 			requireSyncProgress(t, db, 7, 7, false, 100)

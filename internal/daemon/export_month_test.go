@@ -177,7 +177,7 @@ func TestExportMonthDeletedAndCoverage(t *testing.T) {
 	d, db, _, p := monthFixture(t)
 	ctx := context.Background()
 	old := store.Message{ChatID: 42, ID: 3, Date: time.Date(2023, 10, 31, 23, 59, 59, 0, time.UTC).Unix(), Text: "older", Raw: []byte(`{}`)}
-	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{old}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{old}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.MarkMessagesDeleted(ctx, 42, []int{1}); err != nil {
@@ -254,7 +254,7 @@ func TestExportMonthMultipleChatsDeterministic(t *testing.T) {
 	if err := db.UpsertChats(ctx, []store.Chat{{ID: 7, Type: "group"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.SaveHistoryPage(ctx, 7, nil, nil, true); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 7, nil, nil, true, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	p.Chats = []string{"42", "7"}
@@ -304,7 +304,7 @@ func TestExportMonthChatCount(t *testing.T) {
 func TestExportMonthLimitCompleteChatCoversTheMonthStartOnlyWithOlderMessages(t *testing.T) {
 	d, db, _, p := monthFixture(t)
 	ctx := context.Background()
-	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 11, 1, 0, 0, 0, 0, time.UTC).Unix(), Text: "first saved", Raw: []byte(`{}`)}}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 11, 1, 0, 0, 0, 0, time.UTC).Unix(), Text: "first saved", Raw: []byte(`{}`)}}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.MarkHistoryLimitReached(ctx, 42); err != nil {
@@ -323,7 +323,7 @@ func TestExportMonthLimitCompleteChatCoversTheMonthStartOnlyWithOlderMessages(t 
 		t.Fatalf("a limit-complete chat claimed the month start: %+v", file)
 	}
 	// Message 1, the oldest by id, now dates from before the month: the start is covered.
-	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 10, 31, 23, 59, 59, 0, time.UTC).Unix(), Text: "older", Raw: []byte(`{}`)}}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: time.Date(2023, 10, 31, 23, 59, 59, 0, time.UTC).Unix(), Text: "older", Raw: []byte(`{}`)}}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	p.Output = filepath.Join(p.Output, "second")

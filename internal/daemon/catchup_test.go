@@ -25,12 +25,12 @@ func TestCatchupPriorityAndCancel(t *testing.T) {
 	d, _, _, _, _ := syncFixture(t)
 	m := d.sync
 	m.mu.Lock()
-	m.enqueueLocked(1, syncRef(1), store.SyncProgress{}, rpc.HistorySyncBackground, nil, historyDepth{}, false)
-	m.enqueueLocked(2, syncRef(2), store.SyncProgress{}, rpc.HistorySyncCatchup, nil, historyDepth{}, false)
-	m.enqueueLocked(3, syncRef(3), store.SyncProgress{}, rpc.HistorySyncCatchup, nil, historyDepth{}, false)
+	m.enqueueLocked(1, syncRef(1), store.SyncProgress{}, rpc.HistorySyncBackground, nil, historyDepth{}, false, laneBackground)
+	m.enqueueLocked(2, syncRef(2), store.SyncProgress{}, rpc.HistorySyncCatchup, nil, historyDepth{}, false, laneCatchup)
+	m.enqueueLocked(3, syncRef(3), store.SyncProgress{}, rpc.HistorySyncCatchup, nil, historyDepth{}, false, laneCatchup)
 	m.enqueueLocked(4, syncRef(4), store.SyncProgress{}, rpc.HistorySyncBackground, nil, historyDepth{}, false, laneCatchup)
-	m.enqueueLocked(5, syncRef(5), store.SyncProgress{}, rpc.HistorySyncCatchup, nil, historyDepth{}, false)
-	m.enqueueLocked(6, syncRef(6), store.SyncProgress{}, rpc.HistorySyncManual, nil, historyDepth{}, false)
+	m.enqueueLocked(5, syncRef(5), store.SyncProgress{}, rpc.HistorySyncCatchup, nil, historyDepth{}, false, laneCatchup)
+	m.enqueueLocked(6, syncRef(6), store.SyncProgress{}, rpc.HistorySyncManual, nil, historyDepth{}, false, laneManual)
 	want := []int64{6, 2, 3, 4, 5, 1}
 	for i, id := range want {
 		if m.queue[i].ChatID != id {
@@ -52,8 +52,8 @@ func TestCatchupAndManualSameChat(t *testing.T) {
 	d, _, _, _, _ := syncFixture(t)
 	m := d.sync
 	m.mu.Lock()
-	m.enqueueLocked(42, syncRef(42), store.SyncProgress{}, rpc.HistorySyncCatchup, nil, historyDepth{}, false)
-	m.enqueueLocked(42, syncRef(42), store.SyncProgress{}, rpc.HistorySyncManual, nil, historyDepth{}, false)
+	m.enqueueLocked(42, syncRef(42), store.SyncProgress{}, rpc.HistorySyncCatchup, nil, historyDepth{}, false, laneCatchup)
+	m.enqueueLocked(42, syncRef(42), store.SyncProgress{}, rpc.HistorySyncManual, nil, historyDepth{}, false, laneManual)
 	m.cancel()
 	m.mu.Unlock()
 	if s := m.snapshot(42); s == nil || s.Source != rpc.HistorySyncManual {
@@ -119,7 +119,7 @@ func TestCatchupAutoSwitchesAndDowntime(t *testing.T) {
 				t.Error("unexpected history page")
 				return rpc.HistoryPage{}, nil
 			}
-			if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: 1, Raw: json.RawMessage(`{}`)}}, nil, false); err != nil {
+			if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: 1, Raw: json.RawMessage(`{}`)}}, nil, false, store.GapPass{}); err != nil {
 				t.Fatal(err)
 			}
 			if err := db.SetLastAliveAt(ctx, now.Add(-tc.downtime).Unix()); err != nil {
@@ -147,7 +147,7 @@ func TestCatchupDialogSelection(t *testing.T) {
 	writeAccess(t, path, `{"block":[4]}`)
 	tg.chats = []rpc.Chat{{ID: 9, Pinned: true, LastMessageDate: 90}, {ID: 4, LastMessageDate: 300}, {ID: 1, LastMessageDate: 250}, {ID: 2, LastMessageDate: 230}, {ID: 3, LastMessageDate: 180}, {ID: 5, LastMessageDate: 99}, {ID: 6, LastMessageDate: 200}}
 	for _, id := range []int64{1, 3, 4, 6} {
-		if _, err := db.SaveHistoryPage(ctx, id, []store.Message{{ChatID: id, ID: 1, Date: 1, Raw: json.RawMessage(`{}`)}}, nil, false); err != nil {
+		if _, err := db.SaveHistoryPage(ctx, id, []store.Message{{ChatID: id, ID: 1, Date: 1, Raw: json.RawMessage(`{}`)}}, nil, false, store.GapPass{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -166,7 +166,7 @@ func TestCatchupDialogSelection(t *testing.T) {
 func TestCatchupLimitMarksGap(t *testing.T) {
 	d, tg, db, clock, _ := syncFixture(t)
 	ctx := context.Background()
-	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: 1, Raw: json.RawMessage(`{}`)}}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: 1, Raw: json.RawMessage(`{}`)}}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	tg.page = func(_ context.Context, _ chatref.Ref, offset int) (rpc.HistoryPage, error) {
@@ -310,7 +310,7 @@ func TestCatchupSelectionReportsActive(t *testing.T) {
 	d.opts.CatchupEnabled = true
 	d.background = newBackgroundSync(d, BackgroundSyncConfig{}, nil, nil)
 	tg.chats = []rpc.Chat{{ID: 42, LastMessageDate: 200}}
-	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: 1, Raw: json.RawMessage(`{}`)}}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: 1, Raw: json.RawMessage(`{}`)}}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	d.sync.startCatchup(42, store.SyncProgress{}, time.Unix(1, 0), 1, func() time.Duration { return time.Second })
@@ -327,7 +327,7 @@ func TestCatchupRunsForSkippedHistoryMode(t *testing.T) {
 	d.opts.CatchupEnabled = true
 	d.background = newBackgroundSync(d, BackgroundSyncConfig{PagePauseMin: time.Second, PagePauseMax: time.Second}, nil, nil)
 	tg.chats = []rpc.Chat{{ID: 42, LastMessageDate: 2000}}
-	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: 1, Raw: json.RawMessage(`{}`)}}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{{ChatID: 42, ID: 1, Date: 1, Raw: json.RawMessage(`{}`)}}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.SetHistoryMode(ctx, 42, "skip"); err != nil {
@@ -344,4 +344,35 @@ func TestCatchupRunsForSkippedHistoryMode(t *testing.T) {
 	if err != nil || job.State != rpc.HistorySyncDone || job.Loaded != 1 {
 		t.Fatalf("job: %+v %v", job, err)
 	}
+}
+
+func TestCatchupWaitsForRunningBackground(t *testing.T) {
+	d, tg, _, clock, _ := syncFixture(t)
+	gate := newGatedPages(tg, 10, 20, 30)
+	if _, err := d.sync.startBackground(10, syncRef(10), store.SyncProgress{}, func() time.Duration { return time.Second }); err != nil {
+		t.Fatal(err)
+	}
+	if call := gate.next(t); call.chat != 10 {
+		t.Fatalf("first: %+v", call)
+	}
+	d.sync.mu.Lock()
+	d.sync.enqueueLocked(30, syncRef(30), store.SyncProgress{}, rpc.HistorySyncBackground, nil, historyDepth{}, false, laneBackground)
+	d.sync.mu.Unlock()
+	if !d.sync.startCatchup(20, store.SyncProgress{}, time.Unix(1, 0), 1, func() time.Duration { return time.Second }) {
+		t.Fatal("catchup not queued")
+	}
+	if job := d.sync.snapshot(10); job == nil || job.State != rpc.HistorySyncRunning {
+		t.Fatalf("background interrupted: %+v", job)
+	}
+	gate.open(10)
+	clock.awaitPause(t)
+	clock.Advance(time.Second)
+	if call := gate.next(t); call.chat != 20 {
+		t.Fatalf("second: %+v", call)
+	}
+	gate.open(20)
+	if call := gate.next(t); call.chat != 30 {
+		t.Fatalf("third: %+v", call)
+	}
+	gate.open(30)
 }

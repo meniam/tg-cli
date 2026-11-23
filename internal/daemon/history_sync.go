@@ -54,10 +54,12 @@ type historySyncTask struct {
 	// pause returns the wait before the next page; it is called once per page.
 	pause func() time.Duration
 	// depth is the limit of a depth-limited load; the zero value is no limit.
-	depth   historyDepth
-	lane    historySyncLane
-	since   time.Time
-	aliveAt int64
+	depth    historyDepth
+	lane     historySyncLane
+	since    time.Time
+	aliveAt  int64
+	gapStart int
+	hadGap   bool
 	// final is closed, under the manager mutex, when the job reaches done,
 	// failed or cancelled.
 	final chan struct{}
@@ -144,10 +146,10 @@ func (m *historySyncManager) startDepth(chatID int64, ref chatref.Ref, state sto
 	if existing := m.jobs[chatID]; existing != nil && existing.active() && existing.Source == rpc.HistorySyncManual {
 		return existing.HistorySyncJob, nil
 	}
-	if !state.Complete && !depthMet {
+	if state.GapFrom != nil && state.GapTo != nil || !state.Complete && !depthMet {
 		m.cancelBackgroundLocked()
 	}
-	return m.enqueueLocked(chatID, ref, state, rpc.HistorySyncManual, nil, depth, depthMet), nil
+	return m.enqueueLocked(chatID, ref, state, rpc.HistorySyncManual, nil, depth, depthMet, laneManual), nil
 }
 
 // startBackground queues a background load only when the manager is idle.
@@ -162,10 +164,10 @@ func (m *historySyncManager) startBackground(chatID int64, ref chatref.Ref, stat
 	if m.current != nil || len(m.queue) > 0 {
 		return rpc.HistorySyncJob{}, rpc.NewError(rpc.CodeBusy, "history sync is busy")
 	}
-	return m.enqueueLocked(chatID, ref, state, rpc.HistorySyncBackground, pause, historyDepth{}, false), nil
+	return m.enqueueLocked(chatID, ref, state, rpc.HistorySyncBackground, pause, historyDepth{}, false, laneBackground), nil
 }
 
-func (m *historySyncManager) enqueueLocked(chatID int64, ref chatref.Ref, state store.SyncProgress, source string, pause func() time.Duration, depth historyDepth, depthMet bool, lanes ...historySyncLane) rpc.HistorySyncJob {
+func (m *historySyncManager) enqueueLocked(chatID int64, ref chatref.Ref, state store.SyncProgress, source string, pause func() time.Duration, depth historyDepth, depthMet bool, lane historySyncLane) rpc.HistorySyncJob {
 	if pause == nil {
 		pause = defaultHistorySyncPause
 	}
@@ -176,25 +178,22 @@ func (m *historySyncManager) enqueueLocked(chatID int64, ref chatref.Ref, state 
 			ChatID: chatID, State: rpc.HistorySyncQueued, Source: source,
 			OldestID: state.OldestID, NewestID: state.NewestID, Complete: state.Complete,
 			FirstMessageDate: state.FirstMessageDate,
-			StartedAt:        when, UpdatedAt: when,
+			GapFrom:          state.GapFrom, GapTo: state.GapTo,
+			StartedAt: when, UpdatedAt: when,
 		},
 		ref: ref, ctx: jobCtx, cancel: cancel, pause: pause, depth: depth, final: make(chan struct{}),
 	}
 	task.Messages, task.Since = depth.Messages, depth.sinceText()
-	task.lane = laneManual
-	if source == rpc.HistorySyncBackground {
-		task.lane = laneBackground
-	}
-	if source == rpc.HistorySyncCatchup {
-		task.lane = laneCatchup
-	}
-	if len(lanes) > 0 {
-		task.lane = lanes[0]
-	}
+	task.lane = lane
 	if state.OldestID != nil {
 		task.offset = *state.OldestID
 	}
-	if source != rpc.HistorySyncCatchup && (state.Complete || depthMet) {
+	if source == rpc.HistorySyncManual && state.GapFrom != nil && state.GapTo != nil {
+		task.hadGap = true
+		task.gapStart = *state.GapTo
+		task.offset = task.gapStart
+	}
+	if source != rpc.HistorySyncCatchup && !task.hadGap && (state.Complete || depthMet) {
 		task.DepthReached = depthMet && !state.Complete
 		m.setStateLocked(task, rpc.HistorySyncDone, 0, "")
 		cancel()
@@ -504,6 +503,7 @@ func (m *historySyncManager) recordPage(task *historySyncTask, progress *store.S
 		task.NewestID = progress.NewestID
 		task.Complete = progress.Complete
 		task.FirstMessageDate = progress.FirstMessageDate
+		task.GapFrom, task.GapTo = progress.GapFrom, progress.GapTo
 	}
 	task.UpdatedAt = m.now()
 }
@@ -529,6 +529,8 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 		m.fail(task, err)
 	}
 	offset := task.offset
+	gap := task.hadGap
+	loaded := 0
 	for {
 		if ctx.Err() != nil {
 			m.finish(task, rpc.HistorySyncCancelled, 0, "")
@@ -551,8 +553,104 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 			m.finish(task, rpc.HistorySyncFailed, rpc.CodeNotFound, rpc.ErrChatNotFound().Message)
 			return
 		}
+		if gap {
+			if !page.Empty && (page.RawNextOffsetID <= 0 || page.RawNextOffsetID >= offset) {
+				m.finish(task, rpc.HistorySyncFailed, rpc.CodeTelegram, "history page offset did not advance")
+				return
+			}
+			messages, people, _, err := convertStoredMessages(page.Messages, true)
+			if err != nil {
+				fail(err)
+				return
+			}
+			loaded += len(messages)
+			depthMet := task.depth.Messages > 0 && loaded >= task.depth.Messages
+			for _, msg := range messages {
+				if task.depth.Since > 0 && msg.Date <= task.depth.Since {
+					depthMet = true
+				}
+			}
+			progress, err := m.d.store.SaveHistoryPage(ctx, task.ChatID, messages, people, page.Empty, store.GapPass{Active: true, Start: task.gapStart, Top: task.gapStart, Narrow: depthMet})
+			if err != nil {
+				fail(err)
+				return
+			}
+			m.recordPage(task, &progress, len(messages))
+			m.d.voiceSyncPage(ctx, task.ChatID, messages, m.clock.Now())
+			if progress.GapFrom == nil || progress.GapTo == nil {
+				gap = false
+				if progress.Complete {
+					m.finish(task, rpc.HistorySyncDone, 0, "")
+					return
+				}
+				if depthMet {
+					m.finishDepth(task)
+					return
+				}
+				if task.depth.Since > 0 {
+					count, oldest, err := m.d.store.MessageBounds(ctx, task.ChatID)
+					if err != nil {
+						fail(err)
+						return
+					}
+					if task.depth.satisfied(count, oldest) {
+						m.finishDepth(task)
+						return
+					}
+				} else if !task.depth.active() {
+					limit := m.d.historyLimitFor(ctx, task.ChatID)
+					if limit.Messages > 0 || limit.Since > 0 {
+						count, oldest, err := m.d.store.MessageBounds(ctx, task.ChatID)
+						if err != nil {
+							fail(err)
+							return
+						}
+						if limit.reached(count, oldest) {
+							progress, err := m.d.store.MarkHistoryLimitReached(ctx, task.ChatID)
+							if err != nil {
+								fail(err)
+								return
+							}
+							m.recordProgress(task, progress)
+							m.finish(task, rpc.HistorySyncDone, 0, "")
+							return
+						}
+					}
+				}
+				if progress.OldestID != nil {
+					offset = *progress.OldestID
+				} else if page.Empty {
+					progress, err = m.d.store.SaveHistoryPage(ctx, task.ChatID, nil, nil, true, store.GapPass{})
+					if err != nil {
+						fail(err)
+						return
+					}
+					m.recordProgress(task, progress)
+					m.finish(task, rpc.HistorySyncDone, 0, "")
+					return
+				} else {
+					offset = page.RawNextOffsetID
+				}
+			} else {
+				if depthMet {
+					m.finishDepth(task)
+					return
+				}
+				offset = page.RawNextOffsetID
+			}
+			timer := m.clock.NewTimer(task.pause())
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				m.finish(task, rpc.HistorySyncCancelled, 0, "")
+				return
+			case <-timer.C():
+				timer.Stop()
+			}
+			continue
+		}
 		if page.Empty {
-			progress, err := m.d.store.SaveHistoryPage(ctx, task.ChatID, nil, nil, true)
+			progress, err := m.d.store.SaveHistoryPage(ctx, task.ChatID, nil, nil, true, store.GapPass{})
 			if err != nil {
 				fail(err)
 				return
@@ -571,12 +669,13 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 				fail(err)
 				return
 			}
-			progress, err := m.d.store.SaveHistoryPage(ctx, task.ChatID, messages, people, false)
+			progress, err := m.d.store.SaveHistoryPage(ctx, task.ChatID, messages, people, false, store.GapPass{})
 			if err != nil {
 				fail(err)
 				return
 			}
 			m.recordPage(task, &progress, len(messages))
+			loaded += len(messages)
 			// The page is saved: queue its recent voice messages (no Telegram call).
 			m.d.voiceSyncPage(ctx, task.ChatID, messages, m.clock.Now())
 		} else {
@@ -588,7 +687,7 @@ func (m *historySyncManager) runTask(task *historySyncTask) {
 				fail(err)
 				return
 			}
-			if task.depth.satisfied(count, oldest) {
+			if task.hadGap && task.depth.Messages > 0 && loaded >= task.depth.Messages || (!task.hadGap || task.depth.Messages == 0) && task.depth.satisfied(count, oldest) {
 				m.finishDepth(task)
 				return
 			}
@@ -689,7 +788,7 @@ func (d *daemon) historySyncStart(ctx context.Context, params json.RawMessage) (
 		return nil, err
 	}
 	depthMet := false
-	if depth.active() && !progress.Complete {
+	if depth.active() && !progress.Complete && progress.GapFrom == nil {
 		count, oldest, err := d.store.MessageBounds(ctx, chatID)
 		if err != nil {
 			return nil, err
@@ -754,6 +853,7 @@ func (d *daemon) idleHistorySyncJob(ctx context.Context, chat string) (rpc.Histo
 		ChatID: chatID, State: rpc.HistorySyncIdle,
 		OldestID: progress.OldestID, NewestID: progress.NewestID, Complete: progress.Complete,
 		FirstMessageDate: progress.FirstMessageDate,
+		GapFrom:          progress.GapFrom, GapTo: progress.GapTo,
 	}, nil
 }
 
@@ -766,6 +866,7 @@ func (m *historySyncManager) recordProgress(task *historySyncTask, progress stor
 	task.NewestID = progress.NewestID
 	task.Complete = progress.Complete
 	task.FirstMessageDate = progress.FirstMessageDate
+	task.GapFrom, task.GapTo = progress.GapFrom, progress.GapTo
 	task.UpdatedAt = m.now()
 }
 

@@ -22,7 +22,7 @@ func audit05ExportArchive(t *testing.T, d *daemon, db *store.DB, p rpc.ExportMon
 	if err := db.UpsertChats(ctx, []store.Chat{{ID: 7, Type: "group"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.SaveHistoryPage(ctx, 7, nil, nil, true); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 7, nil, nil, true, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	p.Chats = []string{"42", "7"}
@@ -46,7 +46,7 @@ func TestAudit05_ExportMonthStartNotCoveredByIncompleteSync(t *testing.T) {
 	d, db, _, p := monthFixture(t)
 	ctx := context.Background()
 	inside := store.Message{ChatID: 42, ID: 1, Date: time.Date(2023, 11, 1, 0, 0, 0, 0, time.UTC).Unix(), Text: "<test &>", Raw: []byte(`{}`)}
-	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{inside}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []store.Message{inside}, nil, false, store.GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := d.messageExportMonth(ctx, params(t, p))

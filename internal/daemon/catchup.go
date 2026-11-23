@@ -32,7 +32,7 @@ func (m *historySyncManager) startCatchup(chatID int64, progress store.SyncProgr
 	if t := m.catchups[chatID]; t != nil && t.active() {
 		return false
 	}
-	m.enqueueLocked(chatID, chatref.Ref{Kind: chatref.ID, ID: chatID}, progress, rpc.HistorySyncCatchup, pause, historyDepth{}, false)
+	m.enqueueLocked(chatID, chatref.Ref{Kind: chatref.ID, ID: chatID}, progress, rpc.HistorySyncCatchup, pause, historyDepth{}, false, laneCatchup)
 	task := m.catchups[chatID]
 	task.offset = 0
 	task.since = since

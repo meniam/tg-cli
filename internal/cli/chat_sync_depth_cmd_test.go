@@ -197,3 +197,23 @@ func TestChatSyncQueueTakesChatsAsAList(t *testing.T) {
 		t.Fatalf("101 chats: %+v", run)
 	}
 }
+
+func TestChatSyncGapRelativeDepthMatchesSince(t *testing.T) {
+	for _, args := range [][]string{{"--days", "30"}, {"--months", "2"}} {
+		relative := runSyncCLI(t, append([]string{"chat", "sync", "start", "42"}, args...), syncDepthReply)
+		if relative.code != exitcode.OK {
+			t.Fatalf("relative: %+v", relative)
+		}
+		var a, b rpc.HistorySyncParams
+		if err := json.Unmarshal(relative.params, &a); err != nil {
+			t.Fatal(err)
+		}
+		absolute := runSyncCLI(t, []string{"chat", "sync", "start", "42", "--since", a.Since}, syncDepthReply)
+		if absolute.code != exitcode.OK {
+			t.Fatalf("absolute: %+v", absolute)
+		}
+		if err := json.Unmarshal(absolute.params, &b); err != nil || a != b {
+			t.Fatalf("params: %+v %+v %v", a, b, err)
+		}
+	}
+}

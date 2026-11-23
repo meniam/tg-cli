@@ -43,7 +43,7 @@ func TestCatchupMigration(t *testing.T) {
 func TestCatchupPagesAndGap(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
-	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(10, "old")}, nil, true); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(10, "old")}, nil, true, GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	before, _, _ := db.SyncState(ctx, 42)
@@ -70,15 +70,15 @@ func TestCatchupPagesAndGap(t *testing.T) {
 	if *s.GapFrom != 10 || *s.GapTo != 50 {
 		t.Fatalf("merged gap: %+v", s)
 	}
-	s, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(45, "page")}, nil, false)
+	s, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(45, "page")}, nil, false, GapPass{})
 	if err != nil || s.GapTo == nil || *s.NewestID != 10 {
 		t.Fatalf("ceiling: %+v %v", s, err)
 	}
-	s, err = db.SaveHistoryPage(ctx, 42, []Message{historyMessage(30, "page")}, nil, false, GapPass{Start: 50, Top: 50, Narrow: true})
+	s, err = db.SaveHistoryPage(ctx, 42, []Message{historyMessage(30, "page")}, nil, false, GapPass{Active: true, Start: 50, Top: 50, Narrow: true})
 	if err != nil || *s.GapTo != 30 || *s.NewestID != 10 {
 		t.Fatalf("narrow: %+v %v", s, err)
 	}
-	s, err = db.SaveHistoryPage(ctx, 42, []Message{historyMessage(10, "old")}, nil, false, GapPass{Start: 30, Top: 50})
+	s, err = db.SaveHistoryPage(ctx, 42, []Message{historyMessage(10, "old")}, nil, false, GapPass{Active: true, Start: 30, Top: 50})
 	if err != nil || s.GapTo != nil || s.GapFrom != nil || *s.NewestID != 50 || !s.Complete || *s.FirstMessageDate != 10 {
 		t.Fatalf("closed: %+v %v", s, err)
 	}
@@ -117,7 +117,7 @@ func TestCatchupPageRollback(t *testing.T) {
 	if err := db.MarkCatchupGap(ctx, 42, 50, 10); err != nil {
 		t.Fatal(err)
 	}
-	_, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(20, "new")}, []Person{{ID: 3, Raw: raw(`invalid`)}}, false, GapPass{Start: 50, Top: 50, Narrow: true})
+	_, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(20, "new")}, []Person{{ID: 3, Raw: raw(`invalid`)}}, false, GapPass{Active: true, Start: 50, Top: 50, Narrow: true})
 	if err == nil {
 		t.Fatal("invalid person accepted")
 	}
@@ -149,8 +149,40 @@ func TestCatchupGapFromTop(t *testing.T) {
 	if err := db.MarkCatchupGap(ctx, 42, 30, 1); err != nil {
 		t.Fatal(err)
 	}
-	s, err := db.SaveHistoryPage(ctx, 42, nil, nil, true, GapPass{Start: 0, Top: 60})
+	s, err := db.SaveHistoryPage(ctx, 42, nil, nil, true, GapPass{Active: true, Start: 0, Top: 60})
 	if err != nil || s.GapTo != nil || s.GapFrom != nil || s.NewestID == nil || *s.NewestID != 60 || s.Complete {
 		t.Fatalf("closed from top: %+v %v", s, err)
+	}
+}
+
+func TestGapNarrowRepeatedAndAbsent(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(10, "old")}, nil, true, GapPass{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MarkCatchupGap(ctx, 42, 100, 10); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ start, id int }{{100, 70}, {70, 40}} {
+		s, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(tc.id, "new")}, nil, false, GapPass{Active: true, Start: tc.start, Top: tc.start, Narrow: true})
+		if err != nil || *s.GapTo != tc.id || *s.GapFrom != 10 || *s.NewestID != 10 || !s.Complete {
+			t.Fatalf("narrow: %+v %v", s, err)
+		}
+	}
+	s, err := db.SaveHistoryPage(ctx, 43, []Message{{ChatID: 43, ID: 20, Date: 20, Raw: raw(`{}`)}}, nil, false, GapPass{Active: true, Start: 100, Narrow: true})
+	if err != nil || s != (SyncProgress{}) {
+		t.Fatalf("absent: %+v %v", s, err)
+	}
+	if _, found, err := db.SyncState(ctx, 43); err != nil || found {
+		t.Fatalf("created sync row: %v %v", found, err)
+	}
+	if _, err := db.SaveHistoryPage(ctx, 44, []Message{{ChatID: 44, ID: 1, Date: 1, Raw: raw(`{}`)}}, nil, false, GapPass{}); err != nil {
+		t.Fatal(err)
+	}
+	before, _, _ := db.SyncState(ctx, 44)
+	after, err := db.SaveHistoryPage(ctx, 44, []Message{{ChatID: 44, ID: 20, Date: 20, Raw: raw(`{}`)}}, nil, false, GapPass{Active: true, Start: 100, Narrow: true})
+	if err != nil || *before.OldestID != *after.OldestID || *before.NewestID != *after.NewestID || after.GapTo != nil {
+		t.Fatalf("no gap altered: %+v %v", after, err)
 	}
 }

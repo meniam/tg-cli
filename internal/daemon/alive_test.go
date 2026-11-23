@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -124,5 +125,83 @@ func TestAliveStartupSnapshot(t *testing.T) {
 	}
 	if d.catchupSince.Unix() != 400 {
 		t.Fatal("snapshot moved after heartbeat")
+	}
+}
+
+type aliveRunTelegram struct {
+	*fakeTelegram
+	contacts chan struct{}
+	once     sync.Once
+}
+
+func (f *aliveRunTelegram) Contacts(context.Context) ([]rpc.Contact, error) {
+	f.once.Do(func() { close(f.contacts) })
+	return nil, nil
+}
+
+func TestAliveRunShutdown(t *testing.T) {
+	for _, mode := range []string{"context", "shutdown", "idle"} {
+		t.Run(mode, func(t *testing.T) {
+			paths, err := ResolvePaths(shortTempDir(t), dbRoot(t), "test", DefaultFileNames())
+			if err != nil {
+				t.Fatal(err)
+			}
+			db, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			tg := &aliveRunTelegram{fakeTelegram: audit05LoggedInFake(), contacts: make(chan struct{})}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			done := make(chan error, 1)
+			listening := make(chan struct{})
+			opts := Options{Profile: "test", Paths: paths, Store: db, Telegram: tg, OnListening: func() { close(listening) }}
+			if mode == "idle" {
+				opts.IdleTimeout = 2 * time.Second
+			}
+			go func() { done <- Run(ctx, opts) }()
+			select {
+			case <-listening:
+			case err := <-done:
+				t.Fatalf("start: %v", err)
+			case <-time.After(5 * time.Second):
+				t.Fatal("start timeout")
+			}
+			select {
+			case <-tg.contacts:
+			case <-time.After(5 * time.Second):
+				t.Fatal("login timeout")
+			}
+			if err := db.SetLastAliveAt(context.Background(), 1); err != nil {
+				t.Fatal(err)
+			}
+			switch mode {
+			case "context":
+				cancel()
+			case "shutdown":
+				client, err := rpc.Dial(context.Background(), "unix", paths.Socket)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer client.Close()
+				var result rpc.ShutdownResult
+				if err := client.Call(ctxTimeout(t), rpc.MethodShutdown, nil, &result); err != nil {
+					t.Fatal(err)
+				}
+			}
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(8 * time.Second):
+				t.Fatal("stop timeout")
+			}
+			stamp, found, err := db.LastAliveAt(context.Background())
+			if err != nil || !found || stamp <= 1 {
+				t.Fatalf("last alive: %d %v %v", stamp, found, err)
+			}
+		})
 	}
 }

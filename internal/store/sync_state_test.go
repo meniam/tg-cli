@@ -36,7 +36,7 @@ func TestSyncStateAbsentAndReset(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.reset {
-				if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(7, "a")}, nil, false); err != nil {
+				if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(7, "a")}, nil, false, GapPass{}); err != nil {
 					t.Fatal(err)
 				}
 				if err := db.ResetSyncState(ctx, 42); err != nil {
@@ -56,7 +56,7 @@ func TestSyncStateAbsentAndReset(t *testing.T) {
 func TestSaveEmptyHistoryPage(t *testing.T) {
 	db := openTestDB(t)
 	setClock(db, 123)
-	state, err := db.SaveHistoryPage(context.Background(), 42, nil, nil, true)
+	state, err := db.SaveHistoryPage(context.Background(), 42, nil, nil, true, GapPass{})
 	if err != nil || state.OldestID != nil || state.NewestID != nil || !state.Complete || state.SyncedAt == nil || *state.SyncedAt != 123 {
 		t.Fatalf("empty history: state=%+v err=%v", state, err)
 	}
@@ -83,7 +83,7 @@ func TestSaveHistoryPageProgress(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setClock(db, tc.now)
-			state, err := db.SaveHistoryPage(ctx, 42, tc.messages, nil, tc.complete)
+			state, err := db.SaveHistoryPage(ctx, 42, tc.messages, nil, tc.complete, GapPass{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -106,13 +106,13 @@ func TestSaveHistoryPageTextVersionAndNotes(t *testing.T) {
 	ctx := context.Background()
 	setClock(db, 100)
 	first := historyMessage(7, "first")
-	if _, err := db.SaveHistoryPage(ctx, 42, []Message{first}, []Person{{ID: 3, FirstName: stringPtr("Owner")}}, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []Message{first}, []Person{{ID: 3, FirstName: stringPtr("Owner")}}, false, GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	schemaExec(t, db.write, `INSERT INTO notes(id,kind,chat_id,target_id,body,author,created_at,updated_at) VALUES(1,'message',42,7,'keep','owner',1,1)`)
 	setClock(db, 200)
 	changed := historyMessage(7, "changed")
-	if _, err := db.SaveHistoryPage(ctx, 42, []Message{changed}, []Person{{ID: 3, FirstName: stringPtr("Updated")}}, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []Message{changed}, []Person{{ID: 3, FirstName: stringPtr("Updated")}}, false, GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	versions, err := db.MessageVersions(ctx, 42, 7)
@@ -152,14 +152,14 @@ func TestSaveHistoryPageRollback(t *testing.T) {
 			db := openTestDB(t)
 			ctx := context.Background()
 			setClock(db, 100)
-			if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(7, "existing")}, nil, false); err != nil {
+			if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(7, "existing")}, nil, false, GapPass{}); err != nil {
 				t.Fatal(err)
 			}
 			if tc.prepare != nil {
 				tc.prepare(t, db)
 			}
 			setClock(db, 200)
-			if _, err := db.SaveHistoryPage(ctx, 42, tc.page, tc.people, false); err == nil {
+			if _, err := db.SaveHistoryPage(ctx, 42, tc.page, tc.people, false, GapPass{}); err == nil {
 				t.Fatal("invalid page succeeded")
 			}
 			requireSyncProgress(t, db, 7, 7, false, 100)
@@ -177,7 +177,7 @@ func TestSyncStateReadsDuringWrite(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
 	setClock(db, 100)
-	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(7, "old")}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(7, "old")}, nil, false, GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := db.write.BeginTx(ctx, nil)
@@ -200,7 +200,7 @@ func TestMarkHistoryLimitReachedCompletesWithoutFirstMessageDate(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
 	setClock(db, 200)
-	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(9, "a"), historyMessage(8, "b")}, nil, false); err != nil {
+	if _, err := db.SaveHistoryPage(ctx, 42, []Message{historyMessage(9, "a"), historyMessage(8, "b")}, nil, false, GapPass{}); err != nil {
 		t.Fatal(err)
 	}
 	setClock(db, 300)
