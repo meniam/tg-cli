@@ -85,6 +85,7 @@ type Options struct {
 const idleCheckEvery = 100 * time.Millisecond
 
 type daemon struct {
+	chatLimitKick        chan struct{}
 	chatCursors          chatCursorCodec
 	thumbMu              sync.Mutex
 	thumbSlots           chan struct{}
@@ -251,6 +252,7 @@ func Run(ctx context.Context, opts Options) error {
 	opts.Access = nil
 	d := &daemon{opts: opts, log: log, srv: rpc.NewServer(log), hub: rpc.NewHub(), cancel: cancel, store: ownedStore, startedAt: time.Now()}
 	d.thumbSlots = make(chan struct{}, 3)
+	d.chatLimitKick = make(chan struct{}, 1)
 	d.ownerSecrets = NewOwnerSecrets(ownedStore)
 	d.refreshAccess(runCtx)
 	if err := d.initSettings(runCtx); err != nil {
@@ -293,6 +295,8 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	idempotencyDone := make(chan struct{})
 	go func() { defer close(idempotencyDone); d.pruneIdempotency(runCtx) }()
+	chatLimitDone := make(chan struct{})
+	go func() { defer close(chatLimitDone); d.runChatLimits(runCtx, chatLimitEvery) }()
 	pruneDone := make(chan struct{})
 	go func() { defer close(pruneDone); d.pruneEvents(runCtx, eventPruneEvery, eventRetention, eventKeep) }()
 	d.startBackgroundSync(runCtx, nil, nil)
@@ -466,6 +470,7 @@ func Run(ctx context.Context, opts Options) error {
 	<-switchDone
 	<-autoDone
 	<-pruneDone
+	<-chatLimitDone
 	if d.background != nil {
 		d.background.wait()
 	}
@@ -586,6 +591,7 @@ func (d *daemon) register() {
 	// The local queue waits up to 600 seconds for the job, plus a margin.
 	d.srv.SetMethodTimeout(rpc.MethodMessageTranscribe, 630*time.Second)
 	d.registerVoice()
+	d.registerChatLimit()
 	d.handle(rpc.MethodAccountProfile, d.accountProfile)
 	d.handle(rpc.MethodAccountPrivacyGet, d.accountPrivacyGet)
 	d.handle(rpc.MethodAccountPrivacySet, d.accountPrivacySet)

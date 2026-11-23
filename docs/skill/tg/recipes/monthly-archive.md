@@ -17,7 +17,7 @@ You need a repeatable archive of a finished month (UTC) for one or several chats
 ## Prepare
 
 - The owner added the archive directory to `access.downloads`.
-- The history of each chat is loaded and shows `complete: true` ([load-full-history](load-full-history.md)).
+- The history of each chat is loaded and shows `complete: true`: one chat through [load-full-history](load-full-history.md), several through one `tg chat sync queue <chat>...` ([sync-active-chats](sync-active-chats.md)), never through a loop or a script.
 - The month is over in UTC. The Daemon is running and knows the account.
 
 ## Commands
@@ -25,12 +25,12 @@ You need a repeatable archive of a finished month (UTC) for one or several chats
 Check completeness first. Every requested chat must show `complete: true` (with `state: done`, or `idle` after a Daemon restart):
 
 ```bash
-tg chat sync status --fields state,complete,newest_id -- <chat_id>   # numeric id of each requested chat (see `tg chat resolve`)
+tg chat sync status --fields state,complete,first_message_date,newest_id -- <chat_id>   # numeric id of each requested chat (see `tg chat resolve`)
 ```
 
-The `complete` check covers only the start of the chat; it cannot prove that the end of the month is covered (a load that finished before the month ended lacks its last days, a repeated sync does not fetch newer messages, and a running Daemon is no evidence either: its stream can emit `gap` after a storage failure). Confirm the end of the month with the user, or by comparing the saved messages of the last days with Telegram (`message history --since --until --fields messages.id,messages.date`). Then decide:
+`complete: true` without a `first_message_date` (and with saved messages) means a history limit stopped the load (by default nothing before 2022-02-02 is loaded): a month before that date is not covered, whatever `complete` says, unless a saved message is older than the month. The `month_start_covered` field of the export answer is the machine check for this. The `complete` check covers only the start of the chat; it cannot prove that the end of the month is covered (a load that finished before the month ended lacks its last days, a repeated sync does not fetch newer messages, and a running Daemon is no evidence either: its stream can emit `gap` after a storage failure). Confirm the end of the month with the user, or by comparing the saved messages of the last days with Telegram (`message history --since --until --fields messages.id,messages.date`). Then decide:
 
-- Confirmed and every chat `complete: true`: publish.
+- Confirmed and every chat `complete: true` with a `first_message_date` (or `month_start_covered: true` in the answer): publish.
 - Unconfirmed: tell the user what you could not confirm and wait for their decision. Do not publish.
 - Not covered, or a chat is not complete: stop and tell the user.
 

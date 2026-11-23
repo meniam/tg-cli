@@ -12,7 +12,7 @@ tags: [stream, events, reading]
 
 ## When to use
 
-You need to react to new messages, edits, deletions and reactions as they appear. For a one-off read, use `message history`.
+You need to react to new messages, edits, deletions and reactions as they appear, or to wait for an answer without asking Telegram again and again. For a one-off read, use `message history`. To write to someone and wait for the reply, see [talk-to-contact](talk-to-contact.md). Watching is the replacement for a polling loop: a `while` that repeats `message history` every few seconds sends a request each time and ends in `FLOOD_WAIT`.
 
 ## Prepare
 

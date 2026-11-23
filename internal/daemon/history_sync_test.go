@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"runtime"
 	"strconv"
 	"sync"
@@ -200,6 +201,8 @@ func syncFixture(t *testing.T) (*daemon, *syncTelegram, *store.DB, *syncTestCloc
 	tg := &syncTelegram{fakeTelegram: base}
 	d.opts.Telegram = tg
 	clock := newSyncTestClock()
+	// The test messages are dated in 1970: the default limits would end every load.
+	setHistoryLimit(d, "", 0)
 	d.sync = newHistorySyncManager(context.Background(), d, clock)
 	t.Cleanup(func() { d.sync.close() })
 	return d, tg, db, clock, accessPath
@@ -738,4 +741,16 @@ func TestHistorySyncAdmissionDrainsAfterCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitSyncState(t, d, 42, rpc.HistorySyncCancelled)
+}
+
+// setHistoryLimit sets the live history limits of a test daemon: since is
+// YYYY-MM-DD or empty, messages 0 turns the count limit off.
+func setHistoryLimit(d *daemon, since string, messages int) {
+	d.liveMu.Lock()
+	defer d.liveMu.Unlock()
+	if d.liveValues == nil {
+		d.liveValues = make(map[string]json.RawMessage)
+	}
+	d.liveValues["history_limit.since"], _ = json.Marshal(since)
+	d.liveValues["history_limit.messages"], _ = json.Marshal(messages)
 }

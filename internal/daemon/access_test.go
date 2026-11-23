@@ -123,6 +123,7 @@ func registeredAccessClasses() map[string]string {
 		rpc.MethodSearchIndexStart: "local-write", rpc.MethodSearchIndexStatus: "none", rpc.MethodSearchIndexCancel: "local-write",
 		rpc.MethodVoiceList: "chat-search", rpc.MethodVoiceStatus: "none", rpc.MethodVoiceCancel: "local-write", rpc.MethodVoiceRetry: "local-write", rpc.MethodVoiceBackfill: "local-write",
 		rpc.MethodChatVoiceOn: "local-write", rpc.MethodChatVoiceOff: "local-write", rpc.MethodChatVoiceList: "chat-list",
+		rpc.MethodChatLimitSet: "local-write", rpc.MethodChatLimitOff: "local-write", rpc.MethodChatLimitList: "chat-list",
 		rpc.MethodSubscribe: "chat-stream", rpc.MethodUnsubscribe: "none",
 	}
 }

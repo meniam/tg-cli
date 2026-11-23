@@ -38,7 +38,7 @@ var audit03NoChatMethods = map[string]bool{
 	// no chat; cancelling every job takes none either.
 	rpc.MethodHistorySyncQueue: true, rpc.MethodHistorySyncCancelAll: true,
 	// The list of chat marks takes no chat and leaves the closed ones out.
-	rpc.MethodChatVoiceList: true,
+	rpc.MethodChatVoiceList: true, rpc.MethodChatLimitList: true,
 }
 
 // audit03ParamsFirst validate other parameters before the chat is looked at,

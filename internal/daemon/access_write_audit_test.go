@@ -162,7 +162,9 @@ func TestRegisteredWritesHideClosedAndUnknownIDs(t *testing.T) {
 					p["action"] = "typing"
 				case rpc.MethodChatAutoDelete:
 					p["period"] = "1d"
-				case rpc.MethodChatDraftClear, rpc.MethodChatMarkRead, rpc.MethodChatVoiceOn, rpc.MethodChatVoiceOff, rpc.MethodChatFullStart, rpc.MethodHistorySyncStart, rpc.MethodHistorySyncCancel:
+				case rpc.MethodChatLimitSet:
+					p["messages"] = 1000
+				case rpc.MethodChatDraftClear, rpc.MethodChatMarkRead, rpc.MethodChatVoiceOn, rpc.MethodChatVoiceOff, rpc.MethodChatLimitOff, rpc.MethodChatFullStart, rpc.MethodHistorySyncStart, rpc.MethodHistorySyncCancel:
 				default:
 					t.Fatalf("missing write probe for %s", method)
 				}

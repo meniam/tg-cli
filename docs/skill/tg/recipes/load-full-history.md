@@ -12,7 +12,7 @@ tags: [history, loading, background]
 
 ## When to use
 
-The task needs the whole chat history or a long period: searching old messages, an export, a digest over months. For recent messages, `message history` with a cursor is enough: deep loading is slow. To save only a recent slice into the database use [sync-recent-history](sync-recent-history.md) (`--messages`, `--days`, `--months`, `--since`), and for many chats [sync-active-chats](sync-active-chats.md).
+The task needs the whole chat history or a long period: searching old messages, an export, a digest over months. For recent messages, `message history` with a cursor is enough: deep loading is slow. To save only a recent slice into the database use [sync-recent-history](sync-recent-history.md) (`--messages`, `--days`, `--months`, `--since`), and for two or more chats [sync-active-chats](sync-active-chats.md): never repeat `chat sync start` in a loop or a script.
 
 ## Prepare
 
@@ -41,11 +41,12 @@ tg chat sync cancel @release_team
 
 ## Pitfalls
 
+- `chat sync start` is for exactly one chat. Two or more chats (named by the user or picked by a filter) go in one `tg chat sync queue` ([sync-active-chats](sync-active-chats.md)); a script that calls `start` per chat bypasses the queue and ends in `FLOOD_WAIT`.
 - Poll `status` with a pause of tens of seconds, not in a tight loop. Poll by the numeric `chat_id` from the `start` response.
 - While a `FLOOD_WAIT` pause is longer than the auto-wait threshold (10 seconds by default), other commands that use Telegram get exit code 6 at once (unless the Daemon was started with `TG_CLI_FLOOD_AUTOWAIT=0`: then they queue and a waiting command is not hung). Work locally.
 - After `daemon stop`, tasks vanish from memory. Only a new `start` can continue: it takes `oldest_id` from the database.
-- Do not present the result as the full history until you have `complete: true`.
+- Do not present the result as the full history until you have `complete: true` and a `first_message_date`. `complete: true` with `first_message_date: null` (and saved messages) means a history limit stopped the load (`history_limit.since`, by default 2022-02-02, `history_limit.messages`, 200000, or a limit of this chat): say so, and do not claim the older history is there.
 
 ## Verify
 
-`tg chat sync status <chat>` shows `complete: true` with `state: done` (or `idle` after a Daemon restart). `oldest_id` equals the start of the chat. After stopping an active job, `status` shows `state: cancelled`, which is not a finished load. A cancel that races with completion can return `done`, and a cancel for a chat with no retained job returns `idle`, while a retained finished job keeps its own state (`done`, `failed` or `cancelled`).
+`tg chat sync status <chat>` shows `complete: true` with `state: done` (or `idle` after a Daemon restart) and `first_message_date` set: `oldest_id` is then the start of the chat. With `first_message_date: null` the load stopped at a limit. After stopping an active job, `status` shows `state: cancelled`, which is not a finished load. A cancel that races with completion can return `done`, and a cancel for a chat with no retained job returns `idle`, while a retained finished job keeps its own state (`done`, `failed` or `cancelled`).

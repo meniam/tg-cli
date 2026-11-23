@@ -4,6 +4,9 @@
 
 Safety class `account_write`, so run these only on an explicit user request. Writing is off by default: a chat accepts it only if the owner added it to `access.write`, it is visible under the read rules and it is not in `access.block`. No permitted `access.write` entry means writing is off everywhere. No permission: code 9 `write_disabled`, and a chat closed for reading returns the usual `not_found` (code 7).
 
+
+A conversation on the user's behalf (write, wait for the answer, reply within an agreed goal): [recipes/talk-to-contact.md](../recipes/talk-to-contact.md).
+
 Every example below that writes carries `--dry-run`, except `chat draft clear`, which has no preview and runs only on explicit request. `scheduled list` and `chat draft get|list` only read. To send, edit or delete for real, get the user's confirmation of the exact recipient, ids and text, remove `--dry-run` (for `edit` and `delete` add `--yes`), and keep the `--idempotency-key` from the preview where the command has one (add a new one if the preview had none). `message scheduled delete|send-now` act at once: run them only on request.
 
 ```bash
@@ -110,4 +113,12 @@ List the buttons with `message buttons`, preview the press with `message press -
 ```bash
 tg message buttons <chat> <id>
 tg message press <chat> <id> --dry-run
+```
+
+## Stickers
+
+`message send-sticker <chat> --set NAME (--index N | --emoji EMOJI)` sends a sticker from a set. The chat must be in `write`; run `--dry-run` first: it picks the sticker without sending. Find sets with `sticker search` and `sticker installed`.
+
+```bash
+tg message send-sticker <chat> --set fixture --index 0 --dry-run
 ```

@@ -38,7 +38,7 @@ func (a *app) chatCommand() *cobra.Command {
 		RunE:  a.chatInviteInfo,
 	}, noRisk, commandSpec{Safety: safetyRead, Result: typeOf[rpc.InviteInfo](), Args: []argSpec{{Name: "link", Required: true}}})
 
-	cmd.AddCommand(list, resolve, info, invite, a.chatOverviewCommand(), a.chatFullCommand(), a.chatMembersCommand(), a.chatTopicsCommand(), a.chatCommonCommand(), a.chatMarkReadCommand(), a.chatTypingCommand(), a.chatDraftCommand(), a.chatSyncCommand(), a.chatVoiceCommand(), a.chatStateCommand(), a.chatUnreadCommand(), a.chatChangesCommand())
+	cmd.AddCommand(list, resolve, info, invite, a.chatOverviewCommand(), a.chatFullCommand(), a.chatMembersCommand(), a.chatTopicsCommand(), a.chatCommonCommand(), a.chatMarkReadCommand(), a.chatTypingCommand(), a.chatDraftCommand(), a.chatSyncCommand(), a.chatVoiceCommand(), a.chatLimitCommand(), a.chatStateCommand(), a.chatUnreadCommand(), a.chatChangesCommand())
 	cmd.AddCommand(a.chatAdminCommands()...)
 	cmd.AddCommand(a.dialogCommands()...)
 	cmd.AddCommand(a.chatJoinRequestCommands()...)

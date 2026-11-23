@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -104,7 +105,7 @@ func TestChatSyncQueueRequestAndOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := rpc.HistorySyncQueueParams{Type: "user", ActiveDays: 60, Unsynced: true, MaxChats: 50, Messages: 100, DryRun: true}
-	if p != want {
+	if !reflect.DeepEqual(p, want) {
 		t.Fatalf("params=%+v, want %+v", p, want)
 	}
 	if !strings.Contains(run.stdout, `"would_queue":2`) || !strings.Contains(run.stdout, `"title":"Anna"`) {
@@ -134,7 +135,7 @@ func TestChatSyncQueueFlagsAreChecked(t *testing.T) {
 		return rpc.HistorySyncQueueResult{Chats: []rpc.HistorySyncQueueChat{}}, nil
 	})
 	var p rpc.HistorySyncQueueParams
-	if bare.code != exitcode.OK || json.Unmarshal(bare.params, &p) != nil || p != (rpc.HistorySyncQueueParams{}) {
+	if bare.code != exitcode.OK || json.Unmarshal(bare.params, &p) != nil || !reflect.DeepEqual(p, rpc.HistorySyncQueueParams{}) {
 		t.Fatalf("a queue without flags must send no filters: %+v params=%s", bare, bare.params)
 	}
 }
@@ -156,5 +157,43 @@ func TestChatSyncCancelAll(t *testing.T) {
 				t.Fatalf("%v: %+v", args, bad)
 			}
 		})
+	}
+}
+
+func TestChatSyncQueueTakesChatsAsAList(t *testing.T) {
+	reply := func(string, json.RawMessage) (any, error) {
+		return rpc.HistorySyncQueueResult{Queued: 2, SkippedLoaded: 1, Chats: []rpc.HistorySyncQueueChat{
+			{ChatID: 11, Title: "Anna", Action: rpc.HistorySyncActionQueued},
+			{ChatID: 12, Title: "Boris", Action: rpc.HistorySyncActionQueued},
+			{ChatID: -100, Title: "Team", Action: rpc.HistorySyncActionSkippedLoaded},
+		}}, nil
+	}
+	run := runSyncCLI(t, []string{"chat", "sync", "queue", "--months", "1", "@anna", "12", "--", "-100"}, reply)
+	if run.code != exitcode.OK || run.method != rpc.MethodHistorySyncQueue {
+		t.Fatalf("run=%+v", run)
+	}
+	var p rpc.HistorySyncQueueParams
+	if err := json.Unmarshal(run.params, &p); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(p.Chats, []string{"@anna", "12", "-100"}) || p.Since == "" || p.Type != "" || p.MaxChats != 0 {
+		t.Fatalf("params=%+v", p)
+	}
+	if !strings.Contains(run.stdout, `"action":"skipped_loaded"`) {
+		t.Fatalf("stdout=%s", run.stdout)
+	}
+	// The filters pick chats from the dialog list; they do not go with named chats.
+	for _, flag := range [][]string{{"--type", "user"}, {"--active-days", "5"}, {"--unsynced"}, {"--max-chats", "5"}} {
+		run = runSyncCLI(t, append([]string{"chat", "sync", "queue", "@anna"}, flag...), reply)
+		if run.code != exitcode.Usage || run.method != "" {
+			t.Fatalf("%v with a chat: %+v", flag, run)
+		}
+	}
+	many := []string{"chat", "sync", "queue"}
+	for i := 0; i < 101; i++ {
+		many = append(many, "@c"+strings.Repeat("x", 4)+string(rune('a'+i%26)))
+	}
+	if run = runSyncCLI(t, many, reply); run.code != exitcode.Usage || run.method != "" {
+		t.Fatalf("101 chats: %+v", run)
 	}
 }

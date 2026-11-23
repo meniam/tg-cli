@@ -36,14 +36,14 @@ Narrowed or resumed exports, each into its own new file:
 
 For a resume, repeat the filters of the first run; if it had `--limit`, pass only the remaining count, not the original.
 
-Only when the user asked for the complete history, load it first (this sends requests to Telegram and grows the database), then export:
+Only when the user asked for the complete history, load it first (this sends requests to Telegram and grows the database), then export. For several chats use one `tg chat sync queue` ([sync-active-chats](sync-active-chats.md)), not a loop of `start` calls:
 
 ```bash
 tg chat sync start @release_team
 tg chat sync status --fields state,complete,newest_id -- <chat_id>   # numeric id from the start response
 ```
 
-Repeat the status call until `complete` is true (see [load-full-history](load-full-history.md)). Stop and report `failed`, `cancelled` or `idle` with `complete: false` instead of polling on. Then run the export above. `complete: true` proves only that the backward load reached the start of the chat. `newest_id` is the newest message that load saw: a repeated sync does not fetch anything newer, and the export contains whatever is saved locally (newer rows saved by reads or the live stream included). Do not call the newest interval complete unless you checked it with `message history`.
+Repeat the status call until `complete` is true (see [load-full-history](load-full-history.md)). Stop and report `failed`, `cancelled` or `idle` with `complete: false` instead of polling on. Then run the export above. `complete: true` with a `first_message_date` proves only that the backward load reached the start of the chat; without the date (a history limit or a chat limit stopped it) the older history is not saved. `newest_id` is the newest message that load saw: a repeated sync does not fetch anything newer, and the export contains whatever is saved locally (newer rows saved by reads or the live stream included). Do not call the newest interval complete unless you checked it with `message history`.
 
 ## Notes
 

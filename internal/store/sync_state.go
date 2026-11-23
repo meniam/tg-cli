@@ -163,3 +163,28 @@ func (db *DB) MessageBounds(ctx context.Context, chatID int64) (count int, oldes
 	}
 	return count, oldest, nil
 }
+
+// MarkHistoryLimitReached marks the history of a chat as completely loaded
+// because a limit of the load was met, not because the first message was
+// reached. first_message_date stays as it is (null for a chat that was not
+// complete), since the oldest saved message is not the first one of the chat.
+// A chat without a sync_state row gets one.
+func (db *DB) MarkHistoryLimitReached(ctx context.Context, chatID int64) (SyncProgress, error) {
+	if chatID == 0 {
+		return SyncProgress{}, fmt.Errorf("history limit chat id must be nonzero")
+	}
+	// A new row takes its bounds from the saved messages: a row without them would
+	// read as a chat with no message at all.
+	const upsert = `INSERT INTO sync_state(chat_id,oldest_id,newest_id,complete,synced_at)
+		SELECT ?, MIN(id), MAX(id), 1, ? FROM messages WHERE chat_id=? AND true
+		ON CONFLICT(chat_id) DO UPDATE SET complete=1,synced_at=excluded.synced_at`
+	if _, err := db.write.ExecContext(ctx, upsert, chatID, db.now().Unix(), chatID); err != nil {
+		return SyncProgress{}, fmt.Errorf("save history limit %d: %w", chatID, err)
+	}
+	state, err := scanSyncProgress(db.write.QueryRowContext(ctx,
+		`SELECT `+syncProgressColumns+` FROM sync_state WHERE chat_id=?`, chatID))
+	if err != nil {
+		return SyncProgress{}, fmt.Errorf("read saved sync state %d: %w", chatID, err)
+	}
+	return state, nil
+}

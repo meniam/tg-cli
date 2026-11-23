@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -431,5 +433,201 @@ func TestHistorySyncQueueRejectsBadParameters(t *testing.T) {
 	tg.mu.Unlock()
 	if calls != 0 {
 		t.Fatalf("a rejected request read the dialog list %d times", calls)
+	}
+}
+
+func TestHistoryLimitReached(t *testing.T) {
+	since := time.Date(2022, 2, 2, 0, 0, 0, 0, time.UTC).Unix()
+	tests := []struct {
+		name   string
+		limit  historyLimit
+		count  int
+		oldest int64
+		want   bool
+	}{
+		{"both off", historyLimit{}, 1000000, 1, false},
+		{"count below", historyLimit{Messages: 200000}, 199999, since + 1, false},
+		{"count reached", historyLimit{Messages: 200000}, 200000, since + 1, true},
+		{"date not reached", historyLimit{Since: since}, 10, since + 1, false},
+		{"date reached", historyLimit{Since: since}, 10, since, true},
+		{"date older", historyLimit{Since: since}, 10, since - 1, true},
+		{"no messages never reaches the date", historyLimit{Since: since}, 0, 0, false},
+		{"either is enough", historyLimit{Messages: 5, Since: since}, 5, since + 100, true},
+	}
+	for _, tt := range tests {
+		if got := tt.limit.reached(tt.count, tt.oldest); got != tt.want {
+			t.Errorf("%s: reached=%v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestHistoryLimitDefaultsAndSettings(t *testing.T) {
+	d, _, _, _, _ := syncFixture(t)
+	d.liveMu.Lock()
+	d.liveValues = nil
+	d.liveMu.Unlock()
+	got := d.historyLimit()
+	if got.Messages != 200000 || got.Since != time.Date(2022, 2, 2, 0, 0, 0, 0, time.UTC).Unix() {
+		t.Fatalf("defaults: %+v", got)
+	}
+	setHistoryLimit(d, "2020-01-01", 50)
+	got = d.historyLimit()
+	if got.Messages != 50 || got.Since != time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).Unix() {
+		t.Fatalf("set: %+v", got)
+	}
+	setHistoryLimit(d, "", 0)
+	if got = d.historyLimit(); got != (historyLimit{}) {
+		t.Fatalf("off: %+v", got)
+	}
+}
+
+func TestHistorySyncFullLoadStopsAtMessageLimitAndCompletesTheChat(t *testing.T) {
+	d, tg, db, clock, _ := syncFixture(t)
+	setHistoryLimit(d, "", 5)
+	pages := &depthPages{pages: []rpc.HistoryPage{syncPage(42, 12, 11, 10), syncPage(42, 9, 8, 7), syncPage(42, 6, 5, 4), syncPage(42)}}
+	tg.page = pages.fetch
+	startSync(t, d, 42)
+	job := finishPages(t, d, clock, 42, rpc.HistorySyncDone)
+	if job.Pages != 2 || !job.Complete || job.DepthReached || job.FirstMessageDate != nil {
+		t.Fatalf("stopped job: %+v", job)
+	}
+	state, found, err := db.SyncState(context.Background(), 42)
+	if err != nil || !found || !state.Complete || state.FirstMessageDate != nil || state.OldestID == nil || *state.OldestID != 7 {
+		t.Fatalf("saved progress: %+v found=%v err=%v", state, found, err)
+	}
+	if got := pages.requests(); len(got) != 2 {
+		t.Fatalf("requests=%v, want two", got)
+	}
+	// The chat is complete now: a new start makes no request.
+	if next := startSync(t, d, 42); next.State != rpc.HistorySyncDone || len(pages.requests()) != 2 {
+		t.Fatalf("restart: %+v requests=%v", next, pages.requests())
+	}
+}
+
+func datedPage(chatID int64, date time.Time, ids ...int) rpc.HistoryPage {
+	page := syncPage(chatID, ids...)
+	for i := range page.Messages {
+		page.Messages[i].Date = date.Format(time.RFC3339)
+	}
+	return page
+}
+
+func TestHistorySyncFullLoadStopsAtDateLimit(t *testing.T) {
+	d, tg, db, clock, _ := syncFixture(t)
+	setHistoryLimit(d, "2022-02-02", 0)
+	pages := &depthPages{pages: []rpc.HistoryPage{
+		datedPage(42, time.Date(2022, 3, 1, 12, 0, 0, 0, time.UTC), 12, 11, 10),
+		// A message of the limit day itself, after 00:00 UTC, does not reach the limit.
+		datedPage(42, time.Date(2022, 2, 2, 12, 0, 0, 0, time.UTC), 9, 8, 7),
+		datedPage(42, time.Date(2022, 2, 1, 12, 0, 0, 0, time.UTC), 6, 5, 4),
+		syncPage(42),
+	}}
+	tg.page = pages.fetch
+	startSync(t, d, 42)
+	job := finishPages(t, d, clock, 42, rpc.HistorySyncDone)
+	if job.Pages != 3 || !job.Complete || job.FirstMessageDate != nil {
+		t.Fatalf("job: %+v", job)
+	}
+	state, _, err := db.SyncState(context.Background(), 42)
+	if err != nil || !state.Complete || state.FirstMessageDate != nil || state.OldestID == nil || *state.OldestID != 4 {
+		t.Fatalf("state: %+v err=%v", state, err)
+	}
+	if got := pages.requests(); len(got) != 3 {
+		t.Fatalf("requests=%v, want three", got)
+	}
+}
+
+func TestHistorySyncDepthLimitedLoadIgnoresTheFullLimit(t *testing.T) {
+	d, tg, db, clock, _ := syncFixture(t)
+	setHistoryLimit(d, "", 2)
+	pages := &depthPages{pages: []rpc.HistoryPage{syncPage(42, 12, 11, 10), syncPage(42, 9, 8, 7), syncPage(42)}}
+	tg.page = pages.fetch
+	if _, err := startDepthSync(t, d, 42, 4, ""); err != nil {
+		t.Fatal(err)
+	}
+	job := finishPages(t, d, clock, 42, rpc.HistorySyncDone)
+	if job.Pages != 2 || !job.DepthReached || job.Complete {
+		t.Fatalf("job: %+v", job)
+	}
+	state, _, err := db.SyncState(context.Background(), 42)
+	if err != nil || state.Complete {
+		t.Fatalf("state: %+v err=%v", state, err)
+	}
+}
+
+func TestHistorySyncQueueNamedChatsQueuesThemWithoutTheDialogList(t *testing.T) {
+	d, tg, db, _ := queueFixture(t)
+	ctx := context.Background()
+	if err := db.UpsertChats(ctx, []store.Chat{{ID: 1, Type: "user", Title: "Anna"}, {ID: 2, Type: "user", Title: "Boris"}, {ID: 3, Type: "user", Title: "Carol"}, {ID: 4, Type: "group", Title: "Team"}}); err != nil {
+		t.Fatal(err)
+	}
+	// Chat 3 is loaded, chat 4 already has a job.
+	if _, err := db.SaveHistoryPage(ctx, 3, nil, nil, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.sync.startDepth(4, chatref.Ref{Kind: chatref.ID, ID: 4}, store.SyncProgress{}, historyDepth{}, false); err != nil {
+		t.Fatal(err)
+	}
+	tg.mu.Lock()
+	tg.lastType = "untouched"
+	tg.mu.Unlock()
+	result, err := runQueue(t, d, rpc.HistorySyncQueueParams{Chats: []string{"1", "2", "3", "4", "1"}, Messages: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []rpc.HistorySyncQueueChat{
+		{ChatID: 1, Title: "Anna", Action: rpc.HistorySyncActionQueued},
+		{ChatID: 2, Title: "Boris", Action: rpc.HistorySyncActionQueued},
+		{ChatID: 3, Title: "Carol", Action: rpc.HistorySyncActionSkippedLoaded},
+		{ChatID: 4, Title: "Team", Action: rpc.HistorySyncActionSkippedActive},
+	}
+	if !reflect.DeepEqual(result.Chats, want) || result.Queued != 2 || result.SkippedLoaded != 1 || result.SkippedActive != 1 {
+		t.Fatalf("result: %+v", result)
+	}
+	for _, id := range []int64{1, 2} {
+		if job := d.sync.snapshot(id); job == nil || job.Messages != 100 || job.Source != rpc.HistorySyncManual {
+			t.Fatalf("job %d: %+v", id, job)
+		}
+	}
+	tg.mu.Lock()
+	untouched := tg.lastType == "untouched"
+	tg.mu.Unlock()
+	if !untouched {
+		t.Fatal("a request with named chats read the dialog list")
+	}
+	// A dry run queues nothing.
+	dry, err := runQueue(t, d, rpc.HistorySyncQueueParams{Chats: []string{"6"}, DryRun: true})
+	if err == nil && (dry.WouldQueue != 1 || dry.Chats[0].Action != rpc.HistorySyncActionWouldQueue || d.sync.snapshot(6) != nil) {
+		t.Fatalf("dry run: %+v", dry)
+	}
+}
+
+func TestHistorySyncQueueNamedChatsFailAsAWholeAndRejectFilters(t *testing.T) {
+	d, _, db, _, accessPath := syncFixture(t)
+	ctx := context.Background()
+	if err := db.UpsertChats(ctx, []store.Chat{{ID: 1, Type: "user", Title: "Anna"}}); err != nil {
+		t.Fatal(err)
+	}
+	// A closed chat after a good one: nothing is queued.
+	writeAccess(t, accessPath, `{"block":[99999]}`)
+	if _, err := runQueue(t, d, rpc.HistorySyncQueueParams{Chats: []string{"1", "99999"}}); err == nil {
+		t.Fatal("a closed chat was accepted")
+	}
+	if d.sync.snapshot(1) != nil {
+		t.Fatal("the good chat was queued although the call failed")
+	}
+	var re *rpc.Error
+	for name, p := range map[string]rpc.HistorySyncQueueParams{
+		"type":     {Chats: []string{"1"}, Type: "user"},
+		"active":   {Chats: []string{"1"}, ActiveDays: 3},
+		"unsynced": {Chats: []string{"1"}, Unsynced: true},
+		"max":      {Chats: []string{"1"}, MaxChats: 5},
+		"empty":    {Chats: []string{""}},
+		"limit":    {Chats: make([]string, 101)},
+		"two":      {Chats: []string{"1"}, Messages: 5, Since: "2020-01-01T00:00:00Z"},
+	} {
+		if _, err := runQueue(t, d, p); !errors.As(err, &re) || re.Code != rpc.CodeInvalidParams {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }

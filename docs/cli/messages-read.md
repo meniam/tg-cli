@@ -447,8 +447,7 @@ directory component used to publish a file is opened with `O_NOFOLLOW`, so a
 directory substituted with a symbolic link cannot receive the file. Other
 platforms reject archive writes.
 
-`sync.month_start_covered` is true when the stored history load is complete, or
-when its oldest locally loaded message predates the month. It does not prove that
+`sync.month_start_covered` is true when the stored history load reached the first message of the chat (a complete load with a saved `first_message_date`, or a chat with no message at all), or when its oldest locally loaded message predates the month. A chat that a history limit marked complete (`history_limit.since`, `history_limit.messages` or a chat limit) has no `first_message_date`: it covers the month start only through an older saved message, so an archive of a month before the limit date reports `false`. It does not prove that
 Telegram has no unseen messages or changes. An empty month still creates an
 empty JSONL file with the SHA-256 of empty input.
 

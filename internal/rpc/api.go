@@ -451,19 +451,25 @@ type HistorySyncParams struct {
 
 // HistorySyncQueueParams select a batch of chats for MethodHistorySyncQueue.
 type HistorySyncQueueParams struct {
-	Type       string `json:"type,omitempty"`
-	ActiveDays int    `json:"active_days,omitempty"`
-	Unsynced   bool   `json:"unsynced,omitempty"`
-	MaxChats   int    `json:"max_chats,omitempty"`
-	Messages   int    `json:"messages,omitempty"`
-	Since      string `json:"since,omitempty"`
-	DryRun     bool   `json:"dry_run,omitempty"`
+	// Chats names the chats to queue, up to 100. With it the Daemon does not walk
+	// the dialog list, and Type, ActiveDays, Unsynced and MaxChats must be empty.
+	Chats      []string `json:"chats,omitempty"`
+	Type       string   `json:"type,omitempty"`
+	ActiveDays int      `json:"active_days,omitempty"`
+	Unsynced   bool     `json:"unsynced,omitempty"`
+	MaxChats   int      `json:"max_chats,omitempty"`
+	Messages   int      `json:"messages,omitempty"`
+	Since      string   `json:"since,omitempty"`
+	DryRun     bool     `json:"dry_run,omitempty"`
 }
 
 // Actions of one chat in a HistorySyncQueueResult.
 const (
 	HistorySyncActionQueued     = "queued"
 	HistorySyncActionWouldQueue = "would_queue"
+	// Only a request with Chats lists the chats it skipped.
+	HistorySyncActionSkippedLoaded = "skipped_loaded"
+	HistorySyncActionSkippedActive = "skipped_active"
 )
 
 // HistorySyncQueueChat is one chat picked by the batch.

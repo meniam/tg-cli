@@ -12,7 +12,7 @@ tags: [history, loading, depth, background]
 
 ## When to use
 
-The task needs a recent slice of one chat: the last 100 messages, the last week or month, or everything since a date. The whole history is not needed, and loading it would take much longer. For the whole history use [load-full-history](load-full-history.md); for many chats at once use [sync-active-chats](sync-active-chats.md).
+The task needs a recent slice of one chat: the last 100 messages, the last week or month, or everything since a date. The whole history is not needed, and loading it would take much longer. For the whole history use [load-full-history](load-full-history.md); for two or more chats use `tg chat sync queue` ([sync-active-chats](sync-active-chats.md)), never a loop of `start` calls or a script.
 
 ## Prepare
 
@@ -48,6 +48,7 @@ tg chat sync cancel @release_team
 
 ## Pitfalls
 
+- `chat sync start` is for exactly one chat. Several chats go in one `tg chat sync queue`, with the same depth flags ([sync-active-chats](sync-active-chats.md)); a loop over `start` bypasses the queue and ends in `FLOOD_WAIT`.
 - Poll `status` by the numeric `chat_id` from the `start` response, with a pause of tens of seconds, not in a tight loop.
 - Do not call the result the full history: it is `depth_reached`, not `complete`.
 - `--since` in the future, a value out of range, or two limits together is exit code 2 and no job.

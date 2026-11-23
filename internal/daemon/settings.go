@@ -155,7 +155,7 @@ func (d *daemon) applyLiveSetting(key config.SettingKey, stored map[string]json.
 		if err != nil || d.opts.TelegramConfig.Throttle.SetFloodAutoWait(duration) != nil {
 			return false
 		}
-	case "web.listen", "web.open", "semantic_search.min_similarity", "behavior.expect_user":
+	case "web.listen", "web.open", "semantic_search.min_similarity", "behavior.expect_user", "history_limit.since", "history_limit.messages", "new_chat_sync.messages":
 	case "background_sync.window_start", "background_sync.window_end", "background_sync.interval_min", "background_sync.interval_max", "background_sync.page_pause_min", "background_sync.page_pause_max":
 	default:
 		return false
