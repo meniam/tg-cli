@@ -1,0 +1,14 @@
+    Copies the agent skill from docs/skill/tg into ~/.agents/skills/tg, where Claude Code, Codex and pi read it.
+    Run it after every change of the skill: agents read the installed copy, not the repository.
+    The check runs first, so a skill that drifted from `tg schema` is not installed.
+
+  What runs
+    1. python3 bin/skill_check.py docs/skill/tg
+    2. mkdir -p ~/.agents/skills/tg
+    3. rsync -a --delete docs/skill/tg/ ~/.agents/skills/tg/, without meta.json and .skill-lint-ignore
+
+  What it leaves alone
+    - meta.json and .skill-lint-ignore of the installed copy describe this machine and are not touched.
+    - A file removed from docs/skill/tg is removed from the installed copy.
+
+    TG_SKILL_DIR overrides the destination. Exit code 1 means check findings, 2 means the schema could not be read.

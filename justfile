@@ -135,6 +135,19 @@ skill-check help="":
     set -x
     python3 bin/skill_check.py docs/skill/tg
 
+# Install the agent skill docs/skill/tg into ~/.agents/skills/tg
+[group('maintenance')]
+[arg("help", long="help", short="h", value="1")]
+skill-install help="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ -z "{{ help }}" ]] || exec bash bin/lib/recipe-help.sh skill-install
+    set -x
+    python3 bin/skill_check.py docs/skill/tg
+    dest="${TG_SKILL_DIR:-$HOME/.agents/skills/tg}"
+    mkdir -p "$dest"
+    rsync -a --delete --exclude=meta.json --exclude=.skill-lint-ignore docs/skill/tg/ "$dest"/
+
 # Tidy go.mod and go.sum
 [group('maintenance')]
 [arg("help", long="help", short="h", value="1")]

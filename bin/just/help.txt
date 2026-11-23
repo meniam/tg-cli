@@ -26,6 +26,7 @@
   Maintenance
     just docs                   Rebuild generated CLI documentation tables
     just skill-check            Check the agent skill docs/skill/tg against tg schema
+    just skill-install          Install the agent skill into ~/.agents/skills/tg
     just tidy                   Tidy go.mod and go.sum
     just clean                  Remove build output from dist/
 
