@@ -132,6 +132,12 @@ func (m *historySyncManager) runCatchupTask(task *historySyncTask) {
 				fail(err)
 				return
 			}
+			progress, _, err := m.d.store.SyncState(ctx, task.ChatID)
+			if err != nil {
+				fail(err)
+				return
+			}
+			m.recordProgress(task, progress)
 			m.finish(task, rpc.HistorySyncDone, 0, "")
 			return
 		}

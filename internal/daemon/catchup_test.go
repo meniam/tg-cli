@@ -92,6 +92,9 @@ func TestCatchupFirstPauseAndDate(t *testing.T) {
 	if err != nil || job.State != rpc.HistorySyncDone || job.Loaded != 2 {
 		t.Fatalf("job: %+v %v", job, err)
 	}
+	if snapshot := d.sync.snapshot(42); snapshot == nil || snapshot.GapFrom != nil || snapshot.GapTo != nil {
+		t.Fatalf("catchup without gap: %+v", snapshot)
+	}
 	count, err := db.CountChatMessages(context.Background(), 42)
 	if err != nil || count != 2 {
 		t.Fatalf("saved: %d %v", count, err)
@@ -201,6 +204,10 @@ func TestCatchupLimitMarksGap(t *testing.T) {
 	state, _, err := db.SyncState(ctx, 42)
 	if err != nil || state.GapFrom == nil || *state.GapFrom != 1 || state.GapTo == nil || *state.GapTo != 1001 {
 		t.Fatalf("gap: %+v %v", state, err)
+	}
+	snapshot := d.sync.snapshot(42)
+	if snapshot == nil || snapshot.State != rpc.HistorySyncDone || snapshot.GapFrom == nil || snapshot.GapTo == nil || *snapshot.GapFrom != *state.GapFrom || *snapshot.GapTo != *state.GapTo {
+		t.Fatalf("catchup gap snapshot: %+v, stored: %+v", snapshot, state)
 	}
 }
 
