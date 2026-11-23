@@ -9,7 +9,6 @@
       "docs",
       "README.md",
       "AGENTS.md",
-      "INTENT.md",
       "FEATURES.md",
       ".agents/rules",
       ".agents/skills"

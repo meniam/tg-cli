@@ -65,4 +65,4 @@ A session string gives full access: import only a string from the owner, keep it
 
 ## Build and install
 
-`just build` builds the binary into `dist/tg`. Put it in `PATH` under the name `tg`. If the old npm `tg` (`@miolamio/tg-cli`, gramjs) is installed nearby, it is a different tool with a different contract: check which of them answers `tg version` (this one has the `revision` field).
+`just build` builds the binary into `dist/tg`. Put it in `PATH` under the name `tg`. If another `tg` binary stands nearby, check which one answers `tg version` (this one has the `revision` field).

@@ -17,7 +17,7 @@ Whoever reads only code sees the conditions but not the intent, and takes a priv
 Where to look for documents:
 
 - `bin/atlas query "<topic>" --scope documentation`: a targeted search over `docs/`, `README.md`,
-  `INTENT.md`, `FEATURES.md`;
+  `FEATURES.md`;
 - `docs/cli/` (every command, flag and exit code) and `docs/contracts.md` (behavior contracts: journal,
   throttle, history load, export, access lists, events, writes, media);
 - `--scope agent`: `AGENTS.md`, rules from `.agents/rules` and skills from `.agents/skills`;
@@ -30,7 +30,7 @@ Two rules follow:
 - a mismatch between a document and the code is a finding, not a trifle: the truth is in the code, the
   document needs a fix.
 
-`INTENT.md`, `FEATURES.md`, decisions and `docs/skill/` are written in Russian, code and the other
+`FEATURES.md`, decisions and `docs/skill/` are written in Russian, code and the other
 documents in English. Search in both languages: a Russian question finds Russian documents, English
 names find code. `meta.missing_words` of `query` shows which word is nowhere.
 

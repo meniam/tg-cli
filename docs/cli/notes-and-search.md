@@ -370,7 +370,7 @@ tg version --human
 
 **Exit codes.** 0.
 
-**Version.** A build with `just build` reports `dev`; `revision` distinguishes it from the old npm `tg`.
+**Version.** A build with `just build` reports `dev`; `revision` is the git revision of the build.
 
 ### tg schema
 

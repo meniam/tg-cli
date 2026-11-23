@@ -166,7 +166,7 @@ func TestDocsCommandsAndFlags(t *testing.T) {
 
 func TestDocsRelativeLinks(t *testing.T) {
 	root := docsRoot(t)
-	files := []string{"AGENTS.md", "README.md", "INTENT.md"}
+	files := []string{"AGENTS.md", "README.md"}
 	err := filepath.WalkDir(filepath.Join(root, "docs"), func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr

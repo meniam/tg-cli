@@ -28,7 +28,6 @@ Every command of `tg schema` has its own section in `docs/cli/` with a heading `
 
 | You want | Read |
 | --- | --- |
-| why the tool exists, what the agent must get, what is not a goal, open questions (Russian) | [INTENT.md](../INTENT.md) |
 | the feature list as an FRD with tags, acceptance lines and the implementation status of every requirement, including what is checked on a live account (Russian) | [FEATURES.md](../FEATURES.md) |
 | detailed contracts of the behavior of shipped features: request journal, throttle, deep history load, local export, access lists, live event stream, message writing and the rest | [contracts.md](contracts.md) |
 | the decisions with their alternatives (Russian) | [.agents/decisions/_TOC.md](../.agents/decisions/_TOC.md) |
@@ -38,7 +37,7 @@ Every command of `tg schema` has its own section in `docs/cli/` with a heading `
 
 ## Languages
 
-`docs/cli/` and the contracts are in English, the same as the help of the tool, the schema and `AGENTS.md`. `docs/skill/` is an agent skill in English; only its trigger phrases (the `description` and the `task` field of recipes) are Russian. `INTENT.md`, `FEATURES.md`, the plans and the decisions are in Russian. Commands, flags and identifiers stay in the original in every document.
+`docs/cli/` and the contracts are in English, the same as the help of the tool, the schema and `AGENTS.md`. `docs/skill/` is an agent skill in English; only its trigger phrases (the `description` and the `task` field of recipes) are Russian. `FEATURES.md`, the plans and the decisions are in Russian. Commands, flags and identifiers stay in the original in every document.
 
 ## Keeping the pages true
 

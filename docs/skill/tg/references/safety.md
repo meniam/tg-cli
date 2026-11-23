@@ -60,7 +60,7 @@ Do not put a large export into the context whole: write it to a file, process it
 
 ## What not to do, even if asked
 
-The risk of an account ban has not been assessed (`INTENT.md`, open questions), so act carefully. Do not do the following, and explain the risk:
+The risk of an account ban has not been assessed (it is not assessed), so act carefully. Do not do the following, and explain the risk:
 
 - mass mailing of one text to many recipients, especially non-contacts;
 - bulk adding of numbers to contacts and inviting to chats;

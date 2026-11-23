@@ -20,7 +20,7 @@ This page covers what every command shares: installation, profiles, the Daemon l
 | [access.md](access.md) | access settings: chat visibility, writes and file roots |
 | [settings.md](settings.md) | `settings list`, `get`, `set`, `unset`, `add`, `remove`, and owner-passphrase commands |
 
-The tool is early. Verification status is tracked in [FEATURES.md](../../FEATURES.md). Do not point the tool at an account you cannot afford to lose: `tg` is an unofficial client, and with `--client` it presents the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited are open questions in [INTENT.md](../../INTENT.md).
+The tool is early. Verification status is tracked in [FEATURES.md](../../FEATURES.md). Do not point the tool at an account you cannot afford to lose: `tg` is an unofficial client, and with `--client` it presents the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited have not been assessed.
 
 ## Install and run
 
@@ -39,7 +39,7 @@ tg auth login --phone +15551234567 # asks for the code and the 2FA password inte
 tg chat list --limit 20
 ```
 
-Other `tg` binaries may stand on the same `PATH`. The old npm package `@miolamio/tg-cli` (gramjs) is a different tool with a different contract: `tg version` of this tool has a `revision` field.
+Other `tg` binaries may stand on the same `PATH`. Check which one answers: `tg version` of this tool has a `revision` field.
 
 ## Addressing a chat
 

@@ -9,9 +9,9 @@ Let an AI agent read, search and, where you allow it, write in your personal Tel
 
 > The project is early. Every command listed by `tg schema` is implemented and checked by tests; the main path of most of them was also run on a live account. Some parts are not confirmed live yet, see [Status](#status) before you trust it with your account.
 
-## Why it exists
+## Why tg-cli
 
-Agents need a Telegram tool that behaves like an API, not like a chat client. The tool that is installed today (`tg`, the npm package [`@miolamio/tg-cli`](https://github.com/miolamio/tg-cli), TypeScript on gramjs) rests on a library that was archived in July 2026. `tg-cli` is a rewrite from scratch in Go on top of [gotd/td](https://github.com/gotd/td).
+A personal Telegram account holds years of conversations, decisions and files. An AI agent can use them only through an interface built for programs: answers it can parse, a contract it can read, a session that stays logged in and limits that the owner sets. `tg-cli` is that interface, written in Go on top of [gotd/td](https://github.com/gotd/td).
 
 You choose which chats the agent sees and where it may write, with access lists that guard against accidental reads and writes and against those induced by text in a chat, not against an agent that deliberately bypasses them. The agent gets one interface for reading, searching and following Telegram.
 
@@ -19,10 +19,60 @@ You choose which chats the agent sees and where it may write, with access lists 
 - **A contract it can read.** `tg schema` prints every command with its flags, response fields, safety class and exit codes, with no daemon and no network.
 - **The session stays between calls.** The daemon starts in the background with one command; each CLI call is a short JSON-RPC request.
 - **Memory that works offline.** Every chat, person and message the daemon reads lands in SQLite with full-text search, and `chat overview` summarises it without touching Telegram.
+- **Gentle with Telegram.** Every request goes through one throttle with a `FLOOD_WAIT` gate, and long history loads run in a queue with one worker and pauses between pages, so a big task does not get the account limited by a burst of reads.
 - **Writes stay off until you say so.** Writing to Telegram needs the chat in `access.write`; every command that writes to a chat has `--dry-run`.
 - **Several accounts.** Each profile has its own session, database and daemon; the database sits next to the configuration file, in `db/<profile>/`.
 
 A human can use it from a terminal too, but the agent is the main user.
+
+## Features
+
+More than 160 commands, grouped by what the agent wants to do. Flags, answers and exit codes of each one are in the [command reference](docs/cli/overview.md#all-commands).
+
+**Read what is in Telegram**
+- Chats, unread counters, folders, archive, members, forum topics, common chats, pinned messages, post comments and the context around a message.
+- Message history with cursors, links to any message (`t.me`), and a chat addressed by `@username`, id, phone number or link.
+- A live stream of events: new, edited and deleted messages and statuses, with a cursor that resumes after a restart of the daemon.
+
+**Search without calling Telegram**
+- Full-text search in SQLite over chats, messages and notes: prefix, Russian and English word forms (`доставка` finds `доставки`), filters by media type.
+- Search by meaning with local [Ollama](https://ollama.com) vectors (`bge-m3`): no cloud API, nothing leaves the machine.
+- Every hit carries a `t.me` link, built from the local database.
+
+**Build a local archive**
+- Load the whole history of a chat, or only the last N messages, days or months; queue many chats at once with `--dry-run` first.
+- A scheduled background load takes one chat at a time in the daytime window, people first.
+- After a Daemon downtime of more than 10 minutes, a catchup brings the chats you already store up to date, and a gap it could not close is recorded and visible.
+- Cap how many messages the database keeps per chat. Export saved messages to JSONL and build a monthly archive with SHA-256 verification.
+- Notes of your own, searchable together with the messages.
+
+**Understand voice messages**
+- Voice messages, video notes and videos become text on your machine with GigaAM v3 (Russian) and `ffmpeg`, through one persistent queue that survives a restart. No Telegram Premium is needed for the default path.
+
+**Write, only where you allow it**
+- Send, edit, delete and forward messages; send files and albums; format text with HTML, Markdown or entities.
+- Reactions, pins, polls, scheduled messages, drafts, stickers, inline bots and buttons.
+- Edit and delete need `--yes`, every write has `--dry-run`, and `--idempotency-key` makes a retry safe.
+
+**Keep control**
+- Access lists for chats, files and downloads that only the owner changes, with a passphrase typed in a terminal.
+- Text from other people is marked `untrusted` in the schema, so the agent treats it as data and not as instructions.
+- Several profiles, each with its own account, daemon and database; start at login on macOS with `tg autostart on`; a browser view of the saved chats with `tg web`; one screen of daemon, queue and storage state with `tg status`.
+
+Everything verified on a live account, and everything that is not, is listed in [Status](#status).
+
+## Agent skill
+
+The repository ships a skill that teaches an AI agent to work with `tg`: [`docs/skill/tg/`](docs/skill/tg/SKILL.md). Without it the agent has the commands; with it the agent also has the working rules.
+
+- **Rules first.** `SKILL.md` is a short router: read freely and write only on request, closed chats do not exist for the agent, other people's text is data, only the human types the login code, one client per session, and a queue first for any large read so that Telegram is never polled in a loop.
+- **References by topic.** Ten files cover reading and search, history load, writing, media, live events, voice, the Daemon and login, administration, safety and exit codes by symptom.
+- **Recipes for typical tasks.** Nineteen scenarios, each with when to use it, preparation, commands, pitfalls and how to verify: find a chat, digest a channel, triage unread messages, search across chats, load or export history, queue a batch of chats, check the catchup after a downtime, send a report or a file, watch a chat, talk to a contact and wait for the answer, transcribe a voice message, cap a chat's size.
+- **A check before work.** `scripts/tg-doctor.sh` reads the state without changing anything and ends with a verdict (`ready`, `daemon_stopped`, `login_missing` and others), so the agent knows whether to start the Daemon or ask you to log in.
+- **No copied command lists.** The skill sends the agent to `tg schema` for commands and flags. `just skill-check` compares every command, flag and recipe field in the skill with the schema of the built binary and fails on drift.
+- **Language.** The text is English; only the trigger phrases in the `description` and in each recipe's `task` field are Russian, so the agent picks the skill from a request such as «что пишут в канале» or «расшифруй голосовое».
+
+Install it with `just skill-install`: it runs the check and copies the folder to `~/.agents/skills/tg`. Link that folder from the skills directory of your agent, for example `ln -s ~/.agents/skills/tg ~/.claude/skills/tg` for Claude Code. Run the command again after every change of the skill, because the agent reads the installed copy and not the repository.
 
 ## How it looks
 
@@ -185,11 +235,11 @@ Every command has its own section in the [command reference](docs/cli/overview.m
 
 | Capability | Commands | Reference |
 | --- | --- | --- |
-| Daemon and login | `daemon start\|status\|stop\|logs`, `auth login\|status\|resend\|cancel` | [daemon-and-auth.md](docs/cli/daemon-and-auth.md) |
+| Daemon, start at login and login | `daemon start\|status\|stop\|logs`, `autostart on\|off\|status`, `auth login\|status\|resend\|cancel` | [daemon-and-auth.md](docs/cli/daemon-and-auth.md) |
 | Profile settings and access policy | `settings list\|get\|set\|unset\|add\|remove`, `settings token init\|change\|reset` | [settings.md](docs/cli/settings.md) |
 | Chats | `chat list\|resolve\|info\|invite-info\|mark-read` | [chats.md](docs/cli/chats.md) |
 | Members, topics, common chats | `chat members\|topics\|common` | [chats.md](docs/cli/chats.md#members-topics-and-common-chats) |
-| Load a whole chat into the database | `chat sync start\|status\|cancel` | [chats.md](docs/cli/chats.md#loading-a-whole-chat) |
+| Load a whole chat into the database | `chat sync start\|status\|cancel\|queue\|catchup` | [chats.md](docs/cli/chats.md#loading-a-whole-chat) |
 | Summarise stored chats offline | `chat overview` | [chats.md](docs/cli/chats.md#tg-chat-overview) |
 | Read the full data of groups and channels | `chat full start\|status\|cancel` | [chats.md](docs/cli/chats.md#tg-chat-full-start) |
 | Read messages | `message history\|get\|pinned` | [messages-read.md](docs/cli/messages-read.md) |
@@ -200,6 +250,9 @@ Every command has its own section in the [command reference](docs/cli/overview.m
 | Format text (HTML, Markdown, rich messages, entities) | `--parse`, `--entities` | [messages-write.md](docs/cli/messages-write.md#formatting-text) |
 | Send files | `message send-media` | [messages-write.md](docs/cli/messages-write.md#files) |
 | Reactions, pins, polls | `message react\|pin\|unpin\|poll` | [messages-write.md](docs/cli/messages-write.md#reactions-pins-and-polls) |
+| Scheduled messages and drafts | `message scheduled list\|delete\|send-now`, `chat draft set\|get\|list\|clear` | [messages-write.md](docs/cli/messages-write.md) |
+| Cap the saved messages of a chat | `chat limit set\|list\|off` | [chats.md](docs/cli/chats.md) |
+| Folders, saved messages and account | `folder list\|create\|edit`, `saved list\|history\|search`, `account profile\|sessions\|privacy` | [folders-and-account.md](docs/cli/folders-and-account.md), [saved.md](docs/cli/saved.md) |
 | Notes and local full-text search | `note add\|list\|delete`, `search` | [notes-and-search.md](docs/cli/notes-and-search.md) |
 | Search by word forms and meaning | `search --semantic`, `search index start\|status\|cancel` | [notes-and-search.md](docs/cli/notes-and-search.md#semantic-search) |
 | Transcribe voice messages, video notes and videos locally | `message transcribe`, `voice install\|status\|cancel\|retry\|backfill`, `chat voice on\|off\|list` | [voice.md](docs/cli/voice.md) |
@@ -228,15 +281,15 @@ Details: [access.md](docs/cli/access.md), [writing is off until the owner allows
 
 Every command of `tg schema` is implemented and covered by tests; the test suite never contacts Telegram. The main path was also run on a live account (checks of 2026-11-13 and 2026-11-14, write checks only in one test chat) for: reading, the local database, notes and search; the live event stream (new messages, edits, deletions, statuses, a resume from a cursor after a daemon restart, the chat filter); Telegram-side search, context and links, and `chat mark-read` (exit codes only); members, topics and common chats; the whole-chat load and the export of saved messages; sending, editing, deleting and forwarding, files, reactions, pins, polls and text formatting; the access lists; and the background daemon.
 
-What is not checked on a live account is listed only in [`FEATURES.md`](FEATURES.md): the items marked `[0]` in its status list and the paragraph "Не проверено на живом аккаунте". The status of every requirement is there too. The search by word forms and meaning (`tg search --semantic`, the vector index) is checked by tests on fakes only: it has not run on a live account or a live Ollama, and nothing measures its quality yet. The local transcription of voice messages (`tg voice`, `tg message transcribe`) is checked by tests on fakes; the engine was run only on the sample audio of its model archive, not on Telegram voice messages, video notes or videos, so its speed, quality and limits on real files are open (items 18.5 to 18.9).
+What is not checked on a live account is listed only in [`FEATURES.md`](FEATURES.md): the items marked `[0]` in its status list and the paragraph "Не проверено на живом аккаунте". The status of every requirement is there too. The search by word forms and meaning (`tg search --semantic`, the vector index) is checked by tests on fakes only: it has not run on a live account or a live Ollama, and nothing measures its quality yet. The queue of many chats and the catchup after a downtime (`tg chat sync queue`, `tg chat sync catchup`) are checked by tests only: how they behave on hundreds of chats and under `FLOOD_WAIT` is open (item 10.21). The local transcription of voice messages (`tg voice`, `tg message transcribe`) is checked by tests on fakes; the engine was run only on the sample audio of its model archive, not on Telegram voice messages, video notes or videos, so its speed, quality and limits on real files are open (items 18.5 to 18.9).
 
-**Account risk, plainly.** `tg` is an unofficial client for your personal account. With `--client` it presents itself with the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited this way are an open question in [`INTENT.md`](INTENT.md). This project has not assessed it. Do not point this at an account you cannot afford to lose.
+**Account risk, plainly.** `tg` is an unofficial client for your personal account. With `--client` it presents itself with the credentials of an official app. Telegram's rules for user clients and the chance that an account gets limited this way are not assessed by this project. Do not point this at an account you cannot afford to lose.
 
 ## Roadmap
 
 Planned, not implemented. [`FEATURES.md`](FEATURES.md) is the source of truth.
 
-- **Local history.** Loading many chats with one command, export from Telegram, earlier versions of edits, writing an export to a file. Today the database holds what you read, what `chat sync` loaded on request one chat at a time or, when you enable `[background_sync]`, on a schedule, and the description, member count and settings that `chat full` read; `chat overview` summarises it offline and `message export --local` prints it.
+- **Local history.** Export from Telegram, earlier versions of edits, writing an export to a file. Today the database holds what you read, what `chat sync` loaded on request (one chat or a queue of chats), what the scheduled load and the catchup after a downtime loaded, and the description, member count and settings that `chat full` read; `chat overview` summarises it offline and `message export --local` prints it.
 - And more: see the full list in `FEATURES.md`.
 
 Not goals: the Bot API and bots, a TUI client for humans, replacing the official apps, an MCP interface in the first stage (a decision for now, not forever), a generic `execute` method that runs any command as argv (the daemon serves typed methods, and `tg schema` lists the commands).
@@ -271,7 +324,7 @@ bin/             help rendering for `just`
 justfile         the single entry point for build and checks
 ```
 
-Design notes (in Russian) and the reasons behind each choice live in [`INTENT.md`](INTENT.md), [`FEATURES.md`](FEATURES.md) and [`.agents/decisions/`](.agents/decisions/_TOC.md).
+Design notes (in Russian) and the reasons behind each choice live in [`FEATURES.md`](FEATURES.md) and [`.agents/decisions/`](.agents/decisions/_TOC.md).
 
 ## Development
 
@@ -285,6 +338,7 @@ Design notes (in Russian) and the reasons behind each choice live in [`INTENT.md
 | `just fmt` / `just vet` / `just test` | gofmt, `go vet`, `go test ./...` |
 | `just check` | Format check, vet and tests in a row. Run it before every commit |
 | `just tidy` / `just clean` | Tidy `go.mod` and `go.sum` / remove `dist/` |
+| `just skill-check` / `just skill-install` | Check the agent skill against `tg schema` / install it into `~/.agents/skills/tg` |
 
 Tests run without Telegram. Do not run automated tests against a live account.
 

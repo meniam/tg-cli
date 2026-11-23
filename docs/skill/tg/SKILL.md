@@ -140,5 +140,5 @@ One scenario per file in [recipes/](recipes/): when to use, prepare, commands, n
 
 ## Boundaries
 
-- Bot API bots, Telegram Desktop, GUI automation and the old npm `@miolamio/tg-cli` (gramjs) are out of scope.
+- Bot API bots, Telegram Desktop and GUI automation are out of scope.
 - Feature status: `FEATURES.md`. Commands, flags and formats: `docs/cli/` and `tg schema`.
